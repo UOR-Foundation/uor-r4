@@ -13,7 +13,7 @@ This section is a target/plan linkage only. **No row below changes status in thi
 | Document | Role | Status at this unit |
 |---|---|---|
 | Cursor report | Corrected public-source research, 2026-11-09 | Reference; authenticated UI unverified |
-| Cursor design | Browser-owned task runtime and IndexedDB store; optional tool-only companion; second builder REVISE corrections applied | **Design only; owner approval and owner acceptance-item choice pending** |
+| Cursor design | Browser-owned task runtime and IndexedDB store; optional tool-only companion; two builder REVISE rounds and current delivery-review consistency corrections applied | **Design only; fresh exact-head approval, owner approval and owner acceptance-item choice pending** |
 | Cursor plan | 23 tasks in 6 executable stages, plus checkbox-free gated appendices | **Not started; implementation not authorized** |
 
 ## Baseline findings, 8 November 2026

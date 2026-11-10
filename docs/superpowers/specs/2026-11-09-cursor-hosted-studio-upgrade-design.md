@@ -2,7 +2,7 @@
 
 **Status:** design only, revised 2026-11-09 after the independent builder check returned **REVISE**. **Owner approval is required before any implementation.** This document does not authorize code, dependencies, compute, credentials, service deployment or a capability claim.
 
-**Date:** 2026-11-09. **Item:** [`studio-ide-harness`](../../roadmap/items/studio-ide-harness.md) (#3569). **Base:** `452615bc52a0186c1c01007986ff5c1a767eb068` (worktree `kimi-cursor-hosted-research`).
+**Date:** 2026-11-09. **Item:** [`studio-ide-harness`](../../roadmap/items/studio-ide-harness.md) (#3569). **PR base:** `6fcf57f7822286e5b6bd7bcfe42d668116b23afa`. **ORDER/worktree commit:** `452615bc52a0186c1c01007986ff5c1a767eb068` (not the PR base).
 
 **Research:** [Cursor hosted experience](../../research/reports/Cursor%20hosted%20experience.md) and its six notes plus [source audit](../../research/research_notes/Cursor%20hosted%20experience/source-audit.md). **Executable plan:** [2026-11-09-cursor-hosted-studio-upgrade.md](../plans/2026-11-09-cursor-hosted-studio-upgrade.md).
 
@@ -38,7 +38,7 @@ The owner's latest direction is the **Cursor hosted experience**. The Cursor rep
 - the owner's checkout, roadmap metadata (`docs/roadmap/README.md`, `docs/roadmap/issues.json`), rendered STATE/HANDOFF, or `.github/**`;
 - the model, engine, worker, tokenizer, `crates/uor-r4-api/**` or any current API path.
 
-**Approval gate — owner-only.** Before Task 1 of the plan starts, **the owner** must approve this design and the plan in a new ORDER for `studio-ide-harness`. The lead cannot substitute a delegated approval for this gate, even though CHARTER §5.1 normally allows delegation; this ORDER requires owner approval. Until that approval exists, every implementation task is `BLOCKED`. Approval of the research report, or of the first design, is not approval of this revision.
+**Approval gate — owner-only.** Before Task 1 of the plan starts, **the owner** must approve this design and the plan in a new ORDER that names the correct item: the **new Cursor-hosted Studio item** if the recommended route is chosen, or `studio-ide-harness` **only** if the owner also explicitly supersedes its same-Rust-runtime `Done when`. The lead cannot substitute a delegated approval for this gate, even though CHARTER §5.1 normally allows delegation; this ORDER requires owner approval. Until that approval exists, every implementation task is `BLOCKED`. Approval of the research report, or of the first design, is not approval of this revision.
 
 **Owner acceptance item — required before Task 1.** The roadmap item's existing `Done when` line still requires "the same Rust runtime in Tauri/local and hosted-service modes" and is **not edited** by this revision. Before Task 1, the owner must either (recommended) create a **new Cursor-hosted Studio roadmap item** whose acceptance names the browser-owned runtime, leaving #3569's Rust-runtime bar untouched, or explicitly supersede that `Done when` in the approval ORDER. This is an owner-only decision; the lead cannot settle it by documentation. Until it is recorded, no implementation is authorized and #3569 cannot be closed by this plan.
 
@@ -586,7 +586,7 @@ The typed shell must keep the baseline test surface valid:
 - `[data-control=…]`, `[data-pane-target=…]`, `[data-action="toggle-projects"]`
 - the existing single skip link (retarget it at typed mount; do not add a second)
 
-The new task-workspace class is `.task-workspace`, not `.studio-shell`. Do not rename existing selectors to fit the redesign. The existing `AppShell` threshold stays as-is; the task rail's narrow behavior is a drawer: below 1024 it is hidden only when the drawer is closed, `[data-action="toggle-projects"]` reopens it, and exactly 1024 remains uncollapsed. The test asserts: **1023 starts closed, toggle reopens; 1024 does not collapse**.
+The new task-workspace class is `.task-workspace`, not `.studio-shell`. Do not rename existing selectors to fit the redesign. The existing `AppShell` threshold stays as-is; the task rail's narrow behavior is a drawer: below 1024 it is hidden only when the drawer is closed, `[data-action="toggle-projects"]` reopens it, and exactly 1024 does not auto-collapse. The test asserts: **1023 closes and reopens; 1024 does not auto-collapse**. At 1024 a user may still close the rail manually; that is not an automatic collapse.
 
 ### 11.3 Task rail
 
@@ -646,7 +646,7 @@ Rules: near-black/near-white canvas, one surface step, hairline borders, 4/8 px 
 
 ### 11.9 Responsive, keyboard, IME, accessibility
 
-- **Viewports:** 390, 1024, 1440 CSS px. No horizontal overflow. The task rail collapses **below 1024**; at exactly 1024 it does not collapse. Single column with sticky composer below 520; work surface replaces detail on narrow screens with a back control.
+- **Viewports:** 390, 1024, 1440 CSS px. No horizontal overflow. The task rail collapses **below 1024**; at exactly 1024 it does **not auto-collapse** (the user may still close it manually). Single column with sticky composer below 520; work surface replaces detail on narrow screens with a back control.
 - **Layout:** CSS Grid for the shell, Flexbox for rows, container queries for the detail/composer, media queries for global layout and `prefers-reduced-motion`.
 - **Keyboard:** scoped shortcuts only. No global `Tab`; no global `Cmd+K`. The palette button is primary; the UOR `Cmd/Ctrl+Shift+P` binding is scoped to the app shell and is a UOR choice, not a Cursor fact. Install `legacyShortcutGuard` in the protected baseline **before** the typed workflow wait/render: it closes/cancels any existing legacy palette, clears `#command-palette`/`#palette`, and suppresses later `Meta/Ctrl+K`/hash opens. A delayed legacy `setTimeout(150)` open must not beat the guard. The 1023 drawer is reopened only by `[data-action="toggle-projects"]`.
 - **IME:** reuse `createComposerInput`; existing composition handling is **regression acceptance**, not a new red test. Add genuinely new dead-key, RTL paste, long-paste and caret-preservation tests with expected failures where the current behavior is insufficient. `Shift+Enter` newline; never submit on composition confirmation.
@@ -814,7 +814,7 @@ No credentials, account, task or repository are used now. If a later owner-appro
 ## 17. Execution handoff
 
 1. **Owner review of this revised design.** Record owner approval in a new ORDER. No code before that. The lead cannot substitute a delegated approval for this gate.
-2. **Second independent builder check.** Dispatch the `brainstorming/builder-check-prompt.md` prompt with this document; collect the questions; resolve them in a design revision or record them as assumptions. The first builder check returned REVISE; this revision is not approved until the second check and owner review complete.
+2. **Fresh exact-head delivery review.** Two independent builder checks returned **REVISE**; neither approved the work. The current delivery review returned **CHANGES** for research-record consistency, and those corrections are being applied. Do not dispatch an unnamed third builder check. After the corrections, the remaining review gate is a **fresh exact-head delivery review**, followed by owner acceptance/design approval. No approval is implied by this revision.
 3. **Choose execution.** Subagent-driven (recommended: fresh implementer + fresh reviewer per task; interface-heavy work benefits from independent checks) or native (one session, one whole-branch review at the end).
 4. **Execute the plan.** Each executable stage has checkbox tasks and a stage acceptance. The appendices have no checkboxes and are not executable tasks.
 5. **Deliver.** Exact-head review, protected merge, fresh-main verification, delete branch/worktree. Service and real-R4 work remain gated.
@@ -841,4 +841,4 @@ These are **lead rulings**, not user decisions. They resolve the builder's unans
 14. **Fetch streaming** is the loopback transport; no EventSource. Sequence 0 `run.queued` fixtures are mandatory.
 15. **UOR-only bindings** (palette, local pins, local comments) are UOR choices, not Cursor facts.
 
-**Remaining owner-only decisions for the second builder review:** whether to accept this architecture revision; whether the browser-owned IndexedDB store is the right long-term durability boundary; whether the optional companion should be packaged at all in the first implementation unit; and the owner acceptance item. The recommended default is a **new Cursor-hosted Studio item** with browser-owned-runtime acceptance, leaving #3569's Rust-runtime `Done when` untouched; the alternative is an explicit owner ORDER superseding that `Done when`. This revision does not edit the old acceptance text, and no implementation is authorized until the owner records one of those choices.
+**Remaining owner-only decisions for owner approval:** two independent builder checks returned **REVISE**, and the current fresh delivery review returned **CHANGES**; neither approved this revision. The remaining gates are this fresh delivery review and owner acceptance/design approval. The owner must decide whether to accept this architecture revision; whether the browser-owned IndexedDB store is the right long-term durability boundary; whether the optional companion should be packaged at all in the first implementation unit; and the owner acceptance item. The recommended default is a **new Cursor-hosted Studio item** with browser-owned-runtime acceptance, leaving #3569's Rust-runtime `Done when` untouched; the alternative is an explicit owner ORDER superseding that `Done when`. This revision does not edit the old acceptance text, and no implementation is authorized until the owner records one of those choices.

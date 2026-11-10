@@ -24,7 +24,7 @@ Cursor documents a wide first-party integration surface, but nearly every integr
 | Linear | Delegate issue or `@Cursor` comment; status; auto-PR | OAuth workspace connection by a Cursor admin; account linking on first use | ([linear.md](https://cursor.com/docs/integrations/linear.md)) |
 | Notion | Delegate specs/tasks/comments to an agent | Cursor **User API key** entered into Notion; GitHub connected for PRs | Beta; Notion Business or Enterprise plans only ([notion.md](https://cursor.com/docs/integrations/notion.md)) |
 | Tailscale | Lets **Rollouts** reach tailnet-only MCP servers | Tagged ephemeral device (`tag:cursor`), OAuth client with `auth_keys` scope, ACL to MCP server tag/port | Beta on Teams and Enterprise; HTTPS MCP only (stdio has no tailnet address) ([tailscale.md](https://cursor.com/docs/integrations/tailscale.md)) |
-| MCP servers | Tools/resources/prompts/roots/elicitation/MCP Apps | `stdio` (local, manual auth), `SSE` and `Streamable HTTP` (remote, OAuth); static OAuth client credentials supported | SSE and `mcp-remote` are **not supported inside cloud agents** ([mcp.md](https://cursor.com/docs/mcp.md), [capabilities.md](https://cursor.com/docs/cloud-agent/capabilities.md)) |
+| MCP servers | Tools/resources/prompts/roots/elicitation/MCP Apps | `stdio` (local, manual auth), `SSE` and `Streamable HTTP` (remote, OAuth); static OAuth client credentials supported | Capabilities say SSE and `mcp-remote` are **not supported inside cloud agents**, but the API schema enumerates `sse`; cloud SSE is **unverified**. HTTP/stdio are the documented supported transports ([mcp.md](https://cursor.com/docs/mcp.md), [capabilities.md](https://cursor.com/docs/cloud-agent/capabilities.md), [api/endpoints.md](https://cursor.com/docs/cloud-agent/api/endpoints.md)) |
 | Plugins / Skills / Hooks / Subagents / Rules | Extensibility packages and policy hooks | Cursor Plugins (`.cursor-plugin/plugin.json`) and Agent Plugins (`plugin.json`); marketplaces reviewed; install modes Default Off / Default On / Required | Team marketplaces: 1 on Teams, unlimited on Enterprise ([plugins.md](https://cursor.com/docs/plugins.md)) |
 | CLI (`agent`) | Interactive, print/headless, CI | Browser login or `CURSOR_API_KEY`; permission tokens in `~/.cursor/cli-config.json` or `.cursor/cli.json` | ([cli/overview.md](https://cursor.com/docs/cli/overview.md), [cli/reference/authentication.md](https://cursor.com/docs/cli/reference/authentication.md)) |
 | Cloud Agents API | Programmatic agents, runs, environments, secrets, workers/pools, models, repos | Basic or Bearer with user or service-account API key | **v1 public beta**; webhooks "coming soon" on v1, legacy v0 supports them ([api/endpoints.md](https://cursor.com/docs/cloud-agent/api/endpoints.md)) |
@@ -174,7 +174,7 @@ A cloud agent is a **stateful, per-agent Ubuntu VM** built from a snapshot ("Bui
 ## 3. What GitHub/GitLab/Slack/Linear/API/MCP/CLI/mobile surfaces and actions exist, and what is not supported?
 
 ### Takeaway
-GitHub is the reference provider and the only one with the full trigger, CI-autofix and Security Agents feature set; GitLab, Bitbucket Cloud and Azure DevOps are partial, and each has an explicit exclusion list. The API, MCP, CLI and mobile surfaces are real but bounded: the Cloud Agents API v1 is public beta without webhooks, MCP in cloud agents excludes SSE/`mcp-remote`, and mobile is iOS-only native (Android via PWA).
+GitHub is the reference provider and the only one with the full trigger, CI-autofix and Security Agents feature set; GitLab, Bitbucket Cloud and Azure DevOps are partial, and each has an explicit exclusion list. The API, MCP, CLI and mobile surfaces are real but bounded: the Cloud Agents API v1 is public beta without webhooks; MCP in cloud agents documents HTTP/stdio, while SSE is contested (capabilities say unsupported, API schema enumerates `sse`) and therefore **unverified**; mobile is iOS-only native (Android via PWA).
 
 ### Cited Findings
 
@@ -216,7 +216,7 @@ GitHub is the reference provider and the only one with the full trigger, CI-auto
 
 **MCP** `[official-documented]`
 - Supported transports in the IDE: stdio, SSE, Streamable HTTP; protocol features Tools, Prompts, Resources, Roots, Elicitation, MCP Apps extension ([mcp.md](https://cursor.com/docs/mcp.md)).
-- Cloud agents: HTTP (recommended; config never in VM, tool calls proxied through backend) and stdio (server runs in VM; agent can read its config/env); **SSE and `mcp-remote` not supported**; OAuth is per-user even for team servers; `env`, `headers`, `CLIENT_SECRET` are write-only/redacted after save ([capabilities.md](https://cursor.com/docs/cloud-agent/capabilities.md)).
+- Cloud agents: HTTP (recommended; config never in VM, tool calls proxied through backend) and stdio (server runs in VM; agent can read its config/env) are the documented supported transports. The capabilities page says **SSE and `mcp-remote` are not supported**, while the API schema enumerates `sse`; **cloud SSE support is unverified**. OAuth is per-user even for team servers; `env`, `headers`, `CLIENT_SECRET` are write-only/redacted after save ([capabilities.md](https://cursor.com/docs/cloud-agent/capabilities.md), [api/endpoints.md](https://cursor.com/docs/cloud-agent/api/endpoints.md)).
 - OAuth: authorization code + PKCE; RFC 9728 protected-resource metadata; RFC 8707 resource indicator; dynamic client registration as a public client; fixed redirects `https://www.cursor.com/agents/mcp/oauth/callback` (web/agents) and `http://localhost:8787/callback` (desktop); refresh-token renewal; `offline_access` may be needed ([mcp.md](https://cursor.com/docs/mcp.md)).
 - Cloud MCP sign-ins are stored on Cursor servers, separate from local sign-ins ([mcp.md](https://cursor.com/docs/mcp.md)).
 
@@ -231,7 +231,7 @@ GitHub is the reference provider and the only one with the full trigger, CI-auto
 
 **Explicitly not supported (consolidated)** `[official-documented]`
 - Legacy Privacy Mode for Cloud Agents; Cloud Agents need cloud code storage ([security-network.md](https://cursor.com/docs/cloud-agent/security-network.md)).
-- SSE and `mcp-remote` inside cloud agents ([capabilities.md](https://cursor.com/docs/cloud-agent/capabilities.md)).
+- SSE inside cloud agents is **unverified**: the capabilities page says unsupported while the API schema enumerates `sse`; `mcp-remote` is not documented as supported ([capabilities.md](https://cursor.com/docs/cloud-agent/capabilities.md), [api/endpoints.md](https://cursor.com/docs/cloud-agent/api/endpoints.md)).
 - Azure DevOps Server; ADO Automations/autofix/Security Agents; ADO personal-scope repos ([azure-devops.md](https://cursor.com/docs/integrations/azure-devops.md)).
 - Bitbucket Data Center Cloud Agents; Bitbucket DC comment commands and Autofix ([bitbucket.md](https://cursor.com/docs/integrations/bitbucket.md)).
 - GitLab Free (no project access tokens) ([gitlab.md](https://cursor.com/docs/integrations/gitlab.md)).

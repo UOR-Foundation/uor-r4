@@ -101,7 +101,7 @@ The deployed Studio is a single-window, single-active-session workbench over the
 ## 2. What shared state, adapters and host contracts can be reused instead of creating a second frontend or authority channel?
 
 ### Takeaway
-Reuse the existing single Vite/Preact frontend, the typed lifecycle/adapters as the presentation-side guard layer, the legacy workflow APIs as the current browser services, the Tauri command + loopback RPC contract as the only host authority, the `uor-r4-object-store` for durable snapshots, and the `uor-chat` sidecar's OpenAI-compatible text stream behind a narrow adapter. Do **not** introduce a second state owner, a second shell, a second model API, or a page-supplied approval boolean.
+Reuse the existing single Vite/Preact frontend, the typed lifecycle/adapters as the presentation-side guard layer, the legacy workflow APIs as the current browser services, the Tauri command + loopback RPC contract as the only host authority, the `uor-r4-object-store` only for existing Tauri session snapshots and optional bounded exports, and the `uor-chat` sidecar's OpenAI-compatible text stream behind a narrow adapter. Browser task/event persistence is IndexedDB, not object-store. Do **not** introduce a second state owner, a second shell, a second model API, or a page-supplied approval boolean.
 
 ### Cited findings
 
@@ -133,7 +133,7 @@ Reuse the existing single Vite/Preact frontend, the typed lifecycle/adapters as 
 **Durable persistence (observed code)**
 - `uor-r4-object-store` provides a content-addressed `Store` with `fold`/`range`/manifests (`crates/uor-r4-object-store/src/lib.rs:15-24`; `src/store.rs:170`, `:262-270`) and a scoped durable-session consumer with `IdentityScope` (`user/project/session`), `set_ur4sess1_snapshot`, `export_scope` and restore (`src/durable_consumer.rs:46`, `:283`, `:569`).
 - The Tauri backend already uses it for `native_save_session_durable` / `native_restore_session_durable` with user/project/conversation ids (`src-tauri/src/lib.rs:3285-3329`).
-- This is the right storage primitive for Cursor-like task snapshots and event records, but the draft correctly requires serialized writers because the store does not promise concurrent writers or directory-metadata crash durability (`local/kimi/studio-agent-order-draft.md:22`).
+- Object-store is scoped to existing Tauri session snapshots and optional bounded exports only; it is not the task authority or the browser run log. Future Cursor task/event persistence belongs in browser IndexedDB with per-run event records and verified snapshot manifests. The serialized-writer constraint remains relevant only to any Tauri export (`local/kimi/studio-agent-order-draft.md:22`).
 
 **Streaming/transport reuse (observed code)**
 - The browser already has an SSE parser and cancellable fetch (`web/studio/assets/js/studio_api.js:205-217`, `:357-...`; `AbortController` at `:205`). Stop aborts the API request or posts worker `cancel` (`index.html:1846-1854`).
@@ -148,14 +148,14 @@ Reuse the existing single Vite/Preact frontend, the typed lifecycle/adapters as 
 - The retained loopback/packaged acceptance records exact arithmetic `42`, a real `uor-chat` text stream with usage `19/16/35`, two-session create/resume, current-file/pasted attachments, a real approved `pwd`, exact edit/save bytes, and reopen restoring transcript/attachment/editor while resetting grants (`docs/products/desktop-client.md:61-65`; `docs/integration/current-state.md:787-793`). These are **development** host results on synthetic fixtures.
 
 ### Inferences
-- The cheapest correct path is to add the agent runtime as a new Rust crate and a new typed client/state layer, then adapt the existing presentation components to render its events. Reusing the lifecycle store as the per-task UI store is possible, but it must not become the authority for task/event identity.
+- The cheapest correct path is a browser TypeScript task runtime/state layer (page or worker) with per-run IndexedDB event records and verified snapshot manifests. Rust is limited to an optional schema/canonical reference (`crates/uor-r4-studio-agent`) and existing host adapters; it is not a host-owned agent runtime. Adapt the existing presentation components to render browser events. Reusing the lifecycle store as the per-task UI store is possible, but it must not become the authority for task/event identity.
 - The Tauri command + loopback RPC contract is the only host authority worth extending. A second HTTP service, a second MCP client, or a page-side "approval" flag would duplicate or weaken it.
-- The object store is a good fit for snapshots and content-addressed event records; the sidecar is a good fit only for text generation. A tool loop must live in the harness runtime and call host tools, not pretend the model emitted host authority.
+- The object store is scoped to existing Tauri session snapshots and optional bounded exports, not the browser task/event log. The sidecar is a good fit only for text generation. A tool loop runs in the browser task runtime and calls host tools through the approved adapter; it must not pretend the model emitted host authority.
 
 ### Gaps
 - There is no shared event schema, no generated TypeScript contract, and no `AgentClient`. The current cross-module events are untyped `CustomEvent`s: `uor-generation-finished` (`generation.ts:4`), `uor-files-changed`/`uor-workspace-changed` (`WorkspaceEditor.tsx:44-50`), `uor-view-changed`/`uor-attachments-changed` (`StudioApp.tsx:52-60`; `AgentComposer.tsx:139`). A Cursor-like runtime needs a typed event contract, not more DOM events.
 - The loopback RPC is request/response only. Server push today is polling (terminal, 50 ms) or Tauri IPC channels for chat (native only). A hosted browser client would need an authenticated SSE/WebSocket service, which does not exist.
-- No object-store schema for agent events/tasks exists; the current durable APIs store model-session snapshots, not task transcripts.
+- No object-store schema for agent events/tasks exists; the current durable APIs store model-session snapshots, not task transcripts. No browser IndexedDB task/event schema exists either.
 
 ---
 
@@ -207,7 +207,7 @@ The compiled `uor-r4-api` library is a 17-line re-export shim over `uor_r4_core:
 ## 4. What does `/Users/casey.allard/uor-r4/local/kimi/studio-agent-order-draft.md` already specify for the shared runtime, events/snapshots, tasks, stop/redirect, approvals, persistence and acceptance?
 
 ### Takeaway
-The draft is a precise, non-implemented ORDER for the next protected unit. It specifies a new `crates/uor-r4-studio-agent` runtime, narrow `src-tauri` adapters, a typed `agentClient.ts`/`state/agent.ts`, a versioned event schema, independent task cursors, generation-scoped cancellation, next-safe-boundary redirection, host-consumed approvals, object-store snapshots with serialized writers, one schema for Tauri and authenticated HTTP/SSE, and red-first acceptance. It explicitly says the current `complete_stream` façade is not a verified streaming/tool contract and that the real R4 API test remains NOT_RUN until Claude's merged surface exists.
+The draft is a precise, non-implemented ORDER for the next protected unit. It proposes a new `crates/uor-r4-studio-agent` runtime, narrow `src-tauri` adapters, a typed `agentClient.ts`/`state/agent.ts`, a versioned event schema, independent task cursors, generation-scoped cancellation, next-safe-boundary redirection, host-consumed approvals, proposed object-store snapshots with serialized writers, one schema for Tauri and authenticated HTTP/SSE, and red-first acceptance. It explicitly says the current `complete_stream` façade is not a verified streaming/tool contract and that the real R4 API test remains NOT_RUN until Claude's merged surface exists. The draft's Rust-runtime and object-store task persistence is not adopted in §5; this baseline recommends a browser TypeScript runtime with per-run IndexedDB event records, with `crates/uor-r4-studio-agent` retained only as an optional schema/canonical reference.
 
 ### Cited findings (all are draft text, not implemented code)
 - **Base and status:** base `fbf15e56f3ab1961b30610893392e7a97fd0ab18`; "local preparation draft, not a claim that the runtime exists" (`local/kimi/studio-agent-order-draft.md:1-3`).
@@ -238,35 +238,39 @@ The draft is a precise, non-implemented ORDER for the next protected unit. It sp
 ## 5. Which exact files and tests should later tasks create or modify for Cursor-like UI, runtime, integrations, account/settings and acceptance, without changing model/API implementation or owner metadata?
 
 ### Takeaway
-The following is a **proposed file map** derived from the baseline, not approved scope. It respects the owning item's rules: no edits to `crates/uor-r4-api/**`, model/engine/worker/tokenizer, owner roadmap metadata (`docs/roadmap/README.md`, `docs/roadmap/issues.json`), `.github/**`, or the owner's checkout. New runtime work goes in a new crate; new UI work goes in `web/studio/src`; new host work goes in `src-tauri/src` adapters; acceptance goes in tests and the existing product/loop records.
+The following is a **proposed file map** derived from the baseline, not approved scope. It respects the owning item's rules: no edits to `crates/uor-r4-api/**`, model/engine/worker/tokenizer, owner roadmap metadata (`docs/roadmap/README.md`, `docs/roadmap/issues.json`), `.github/**`, or the owner's checkout. Browser runtime/state work goes in `web/studio/src/runtime/agent` and `web/studio/src/state`; the Rust crate is optional schema/canonical reference only; host tool adapters go in `src-tauri/src`; acceptance goes in tests and the existing product/loop records.
 
 ### Proposed create/modify map
 
-**Runtime crate (create)**
+**Browser task runtime (create; primary)**
+- `web/studio/src/runtime/agent/taskRuntime.ts` — task/run state machine, queue/steer/stop/retry, generation-scoped cancellation, next-safe-boundary redirect.
+- `web/studio/src/runtime/agent/eventLog.ts` — per-run append-only event records in IndexedDB, cursor encoding, stale-generation rejection, restart recovery.
+- `web/studio/src/runtime/agent/snapshot.ts` — verified snapshot manifests in IndexedDB; restore by manifest/event identity, not filename trust; optional bounded export to the Tauri object store.
+- `web/studio/src/runtime/agent/scheduler.ts` — recurring tasks only if scheduling is in scope; otherwise omit and mark NOT_RUN.
+- `web/studio/src/state/agent.ts` — per-task stores and event cursor; do not reuse the global `LifecycleStore` as the task authority.
+- `web/studio/src/adapters/agentClient.ts` — transport-neutral client over Tauri IPC or optional HTTPS/SSE; consumes the generated schema.
+- `web/studio/src/generated/agentContract.ts` — generated from the schema; no hand-forked event union.
+- `web/studio/src/runtime/agent/{taskRuntime,eventLog,snapshot}.test.ts`, `web/studio/src/state/agent.test.ts` — hostile event, cursor, restart, isolation and snapshot tests.
+- `web/studio/src/runtime/agent/fixtures/{model_streams,events,snapshots}/` — malformed, partial, duplicate, out-of-order, stale-generation, truncated/corrupt.
+
+**Schema/canonical reference crate (optional; create only if needed)**
 - `crates/uor-r4-studio-agent/Cargo.toml`
 - `crates/uor-r4-studio-agent/src/lib.rs`
-- `crates/uor-r4-studio-agent/src/model.rs` — narrow `ModelApi`/`ModelRequest`/`ModelEvent` boundary **only if the owner/Claude surface is available**; otherwise an explicit `Unavailable` adapter.
-- `crates/uor-r4-studio-agent/src/events.rs` — versioned `AgentEvent` enum, sequencing, cursor encoding, error taxonomy.
-- `crates/uor-r4-studio-agent/src/runtime.rs` — `create_task`, `steer`, `stop`, `approve`, `resume`, `schedule`; generation-scoped cancellation; next-safe-boundary redirect.
-- `crates/uor-r4-studio-agent/src/persistence.rs` — object-store event/snapshot records, serialized writer, verified restore.
-- `crates/uor-r4-studio-agent/src/scheduler.rs` — recurring tasks only if scheduling is in scope; otherwise omit and mark NOT_RUN.
+- `crates/uor-r4-studio-agent/src/events.rs` — versioned `AgentEvent` enum/JSON schema, sequencing, cursor encoding and error taxonomy; canonical reference only, not a runtime.
 - `crates/uor-r4-studio-agent/src/contract.rs` — exported JSON schema/version consumed by TypeScript generation.
-- `crates/uor-r4-studio-agent/tests/{contract_events.rs,runtime_tasks.rs,persistence_restart.rs,parallel_tasks.rs,transport_hostile.rs}`
-- `crates/uor-r4-studio-agent/tests/fixtures/{model_streams,events,snapshots}/` — malformed, partial, duplicate, out-of-order, stale-generation, truncated/corrupt.
-- Root `Cargo.toml` — add workspace member only (observed workspace list at `Cargo.toml:2-22`).
+- `crates/uor-r4-studio-agent/tests/contract_events.rs` — schema/validation conformance.
+- Root `Cargo.toml` — add workspace member only if the schema crate is added (observed workspace list at `Cargo.toml:2-22`).
 
 **Host adapters (create/modify)**
-- `src-tauri/src/agent_host.rs` (create) — translates host grants/tools into the runtime's host trait; consumes approvals; no new authority.
-- `src-tauri/src/agent_server.rs` (create) — authenticated HTTP/SSE transport for a hosted client; loopback default, explicit HTTPS remote config; static unsupported.
-- `src-tauri/src/lib.rs` (modify) — register new commands in `generate_handler!`, extend `dispatch_rpc_command`, keep existing commands unchanged.
+- `src-tauri/src/agent_host.rs` (create) — translates host grants/tools into the browser runtime's host-tool contract; consumes approvals; no task authority.
+- `src-tauri/src/agent_server.rs` (optional; only if a hosted service is in scope) — authenticated event/export transport; not the local runtime and not task authority.
+- `src-tauri/src/lib.rs` (modify) — register new host commands in `generate_handler!`, extend `dispatch_rpc_command`, keep existing commands unchanged.
 - `src-tauri/capabilities/default.json` (modify only if a new window/permission is genuinely required; currently `core:default` and `windows:["main"]` at `:5-8`).
-- `src-tauri/tests/{agent_host.rs,agent_server.rs,agent_authority.rs}` (create) — approval forgery, out-of-grant path, stale task, restart cursor, concurrent tasks, transport auth.
+- `src-tauri/tests/{agent_host.rs,agent_authority.rs}` (create) — approval forgery, out-of-grant path, stale task, concurrent host calls, authority checks; add `agent_server.rs` tests only if the optional service exists.
 - `src-tauri/tests/desktop_client_controls.rs` (modify only to add regression coverage for shared authority; do not weaken existing tests).
 
-**Typed client/state (create/modify)**
-- `web/studio/src/adapters/agentClient.ts` (create) — transport-neutral client over Tauri IPC or HTTP/SSE; consumes the generated schema.
-- `web/studio/src/state/agent.ts` (create) — per-task stores, event cursor, stale-generation rejection; do not reuse the global `LifecycleStore` as the task authority.
-- `web/studio/src/adapters/agentSchema.ts` or `web/studio/src/generated/agentContract.ts` (create, generated) — one schema, no hand-forked event union.
+**Presentation integration (create/modify)**
+- The client, task state and generated contract are listed under the browser runtime above; do not create a second copy.
 - `web/studio/src/adapters/workflow.ts` (modify) — widen `WorkspaceApi` only as needed for a file tree/search; keep the legacy seam.
 - `web/studio/src/state/lifecycle.ts` (modify cautiously) — add only presentation state needed by the new shell; do not encode task/event identity here.
 - `web/studio/src/persistence/migration.ts` and `web/studio/assets/js/lifecycle_persistence.js` (modify) — add a new versioned key for agent/task UI state; preserve copy-forward, marker and rollback; do not rewrite existing keys in place.
@@ -344,7 +348,7 @@ There are three distinct execution environments, and only two exist in executabl
 **Hosted service**
 - No hosted agent service, account system, auth, scheduling, notifications, Dispatch or cross-device resume exists. The parity matrix marks all of these NOT_RUN (`docs/products/harness-parity.md:19-37`), and the kimi-17 REPORT says they "remain unbuilt" (`kimi-17/REPORT.md:41`).
 - Hosted production is NOT_RUN until an owner-provided remote host is verified (`docs/products/harness-parity.md:41`; `docs/roadmap/items/studio-ide-harness.md:31`).
-- The roadmap item's "done when" requires one versioned agent contract driving the same Rust runtime in Tauri/local and hosted-service modes, durable event/snapshot persistence and explicit static-preview limits (`docs/roadmap/items/studio-ide-harness.md:27`). That is the target, not current state.
+- The roadmap item's "done when" requires one versioned agent contract driving the same runtime in Tauri/local and hosted-service modes, durable event/snapshot persistence and explicit static-preview limits (`docs/roadmap/items/studio-ide-harness.md:27`). This note reads "same runtime" as the browser task runtime: Rust supplies the schema/canonical reference, Tauri supplies host tools and optional bounded export, and the hosted service, if any, relays events. That is the target, not current state.
 - The only loopback service that exists is the native `uor-chat` runner (`127.0.0.1:8000`), which is local, token-protected, and text-only (`docs/products/web-client.md:31`). It is not a hosted multi-user service.
 
 **Evidence limits**
@@ -356,7 +360,7 @@ There are three distinct execution environments, and only two exist in executabl
 
 ### Inferences
 - Static Pages can host a **Cursor-like shell preview** and a local WASM model path, but not the Cursor-like hosted agent experience. The honest static product is a demo/explorer with explicit "service required" states.
-- The Tauri app is the correct first home for a real local agent runtime: it already has the authority boundaries, grants, PTY, MCP and sidecar. The missing piece is the runtime and the UI, not a new host.
+- The Tauri app is the correct first home for host tool authority (grants, PTY, MCP, sidecar); the browser is the first home for the task runtime. The missing pieces are the browser runtime, the typed event contract and the UI, not a new host.
 - A hosted service would need a separate authenticated server, durable storage, per-user identity and an event transport. None of that should be simulated in the static page. If the owner wants hosted production, that is a new service item with its own security review, not a frontend change.
 - The current single-user/local-first model (`docs/superpowers/specs/2026-11-08-claude-cowork-parity-design.md:159`) is the safest boundary for the first Cursor-like slice; cross-device/account features should remain NOT_RUN until a service exists.
 
@@ -375,7 +379,7 @@ There are three distinct execution environments, and only two exist in executabl
 2. Typed lifecycle + adapters as presentation guards: stale-operation refusal, save serialization, verified session mutations, artifact SHA/capability checks (`operations.ts:5-20`; `fileSave.ts:4-48`; `agentSession.ts:59-148`; `modelSourceAdapter.ts:185-238`).
 3. Tauri command + loopback `/__tauri_invoke` + stdio JSON-RPC as the only host authority, with Host/Origin/Content-Type/token checks (`lib.rs:2590-2651`, `:3677-3714`; `main.rs:1-12`).
 4. Existing grants, PTY, Git, MCP and sidecar boundaries (`lib.rs:1024-1073`, `:3559-3645`; `terminal.rs:369-...`; `mcp.rs:555-...`; `sidecar.rs:261-383`).
-5. `uor-r4-object-store` `IdentityScope` + manifests for durable task snapshots (`durable_consumer.rs:46`, `:283`, `:569`; `lib.rs:15-24`).
+5. `uor-r4-object-store` `IdentityScope` + manifests for existing Tauri session snapshots and optional bounded exports; browser task/event records live in IndexedDB (`durable_consumer.rs:46`, `:283`, `:569`; `lib.rs:15-24`).
 6. The browser's OpenAI-compatible SSE client and the native SSE relay for text only (`studio_api.js:357-...`; `lib.rs:3106-3152`).
 
 **Gaps (do not paper over)**

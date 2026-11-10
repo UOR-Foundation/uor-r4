@@ -1,6 +1,6 @@
 # Cursor-hosted Studio Upgrade Implementation Plan (revised after builder check)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Do not start Task 1 until the owner has approved the revised [design](../specs/2026-11-09-cursor-hosted-studio-upgrade-design.md) in a new ORDER.** The lead cannot substitute a delegated approval for this gate. Before Task 1 the owner must also resolve the roadmap-item acceptance conflict: either create a new Cursor-hosted Studio item with browser-owned-runtime acceptance (recommended) or explicitly supersede the old Rust-runtime `Done when` in the approval ORDER. Every implementation task below is `BLOCKED` until both owner actions exist.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Do not start Task 1 until the owner has approved the revised [design](../specs/2026-11-09-cursor-hosted-studio-upgrade-design.md) in a new ORDER.** The lead cannot substitute a delegated approval for this gate. Before Task 1 the owner must also resolve the roadmap-item acceptance conflict: either create a new Cursor-hosted Studio item with browser-owned-runtime acceptance (recommended), with the approval ORDER naming that new item, or explicitly supersede the old Rust-runtime `Done when` in an ORDER that names `studio-ide-harness`. Every implementation task below is `BLOCKED` until both owner actions exist.
 
 **Goal:** Upgrade the existing UOR-R4 Studio into a Cursor-grade, browser-first task workspace: one Preact/Vite shell, the R4 model local in the browser, a browser-owned task runtime and IndexedDB task log, one versioned Studio event contract, an optional host-approved companion for real tools, and a gated future service boundary.
 
@@ -10,18 +10,18 @@
 
 **Spec:** [`docs/superpowers/specs/2026-11-09-cursor-hosted-studio-upgrade-design.md`](../specs/2026-11-09-cursor-hosted-studio-upgrade-design.md). Read it before Task 1. The spec is authority for every interface, field, state and acceptance condition; the [research report](../../research/reports/Cursor%20hosted%20experience.md) is background evidence only.
 
-**Base:** `452615bc52a0186c1c01007986ff5c1a767eb068`. Line anchors are from this base; re-read a file before editing if the base has moved.
+**PR base:** `6fcf57f7822286e5b6bd7bcfe42d668116b23afa`. **ORDER/worktree commit:** `452615bc52a0186c1c01007986ff5c1a767eb068` (not the PR base). Line anchors are from the ORDER/worktree commit; re-read a file before editing if it has moved.
 
 ---
 
 ## Global Constraints
 
-- **Owner-only gate.** No code before **owner** approval of the revised design in a new ORDER. The lead cannot delegate this approval for this ORDER. Before Task 1 the owner must also either create a new Cursor-hosted Studio item with browser-owned-runtime acceptance (recommended) or explicitly supersede #3569's old Rust-runtime `Done when`; until then no implementation is authorized and #3569 cannot be closed by this plan. This plan does not authorize dependencies, compute, credentials, deployment or a capability claim.
+- **Owner-only gate.** No code before **owner** approval of the revised design in a new ORDER. The lead cannot delegate this approval for this ORDER. Before Task 1 the owner must also either create a new Cursor-hosted Studio item with browser-owned-runtime acceptance (recommended), with the approval ORDER naming that new item, or explicitly supersede #3569's old Rust-runtime `Done when` in an ORDER naming `studio-ide-harness`; until then no implementation is authorized and #3569 cannot be closed by this plan. This plan does not authorize dependencies, compute, credentials, deployment or a capability claim.
 - **Browser owns the loop.** The task runtime, reducer, cursor, queue/steer/force/stop, approvals and durable task/event storage live in the page/Web Worker. IndexedDB is the task/event store. There is no host-owned task runtime, host task store or host loop.
 - **Companion is optional.** The Tauri companion executes approved tools and holds grants/approvals. Static browser supports the local model, task loop, transcript and user-mediated files/uploads; real terminal/Git/MCP stdio requires the companion.
 - **Service is separate.** A full hosted service is a separate future owner item/security review. Do not add `services/**` code in this plan.
 - **Protected selector/name block.** Preserve `nav[aria-label="Studio"]`, `textarea[aria-label="Prompt"]`, a visible `Send` button, `.agent-workspace`, `.agent-transcript`, `.agent-composer`, `.workspace-grid`, `.pane-dock`, `.session-list`, `[data-control=…]`, `[data-pane-target=…]`, `[data-action="toggle-projects"]`, and the existing single skip link. Do not create a second skip link; retarget the existing one at typed mount or hide it in typed mode. Keep baseline tests valid rather than renaming tests to fit a redesign.
-- **1024 boundary exact.** The task rail collapses below 1024 and does **not** collapse at exactly 1024. Do not change the existing `AppShell` threshold to force a match; use the shell CSS/mount behavior.
+- **1024 boundary exact.** The task rail collapses below 1024 and does **not auto-collapse** at exactly 1024; a user may still close it manually. Do not change the existing `AppShell` threshold to force a match; use the shell CSS/mount behavior.
 - **Distinct class.** Use `.task-workspace`, not `.studio-shell`, to avoid the existing class collision.
 - **Contract values (exact):** event schema `uor-r4.studio.agent-event/1`; error schema `uor-r4.studio.agent-error/1`; canonical JSON `uor-r4.canonical-json/1`; cursor prefix `uorse1`; event id `evt_<run_id>_<generation>_<sequence:012>`; `run.queued` sequence 0, `run.started` sequence 1; limits from spec §10.5 (1 MiB event, 10,000 events/run, 8 MiB snapshot, 10 MiB image, 4 MiB document, 5 attachments, 25 MiB total, 10-minute approval, 30-second stop/boundary waits, 30-second lease heartbeat).
 - **Canonical JSON.** ASCII `[a-z0-9_.-]` keys sorted by ASCII code unit; non-negative safe integers only; no floats; minimal JSON string escaping; SHA-256 over canonical bytes. Different insertion order must produce the same digest in Rust and TS.
@@ -311,7 +311,7 @@ git commit -m "feat(studio): add browser agent client and reducer skeleton"
 - Consumes: existing `bootstrap.ts`, `vite.config.ts`, `index.html`, `typed_entry.js`.
 - Produces: a browser guard for the protected selector/name block, one skip link, and the exact 1024 boundary.
 
-**Depends on:** Task 3. **Cost:** 2–3 sittings. **Acceptance:** baseline selectors pass; exactly one visible skip link; exactly 1024 stays uncollapsed; at 1023 a closed drawer hides the rail and `[data-action="toggle-projects"]` reopens it; the delayed legacy `setTimeout(150)` palette cannot open; `?legacy=1`/`?typed=0` unchanged.
+**Depends on:** Task 3. **Cost:** 2–3 sittings. **Acceptance:** baseline selectors pass; exactly one visible skip link; at 1024 the rail does not auto-collapse (a user may close it manually); at 1023 a closed drawer hides the rail and `[data-action="toggle-projects"]` reopens it; the delayed legacy `setTimeout(150)` palette cannot open; `?legacy=1`/`?typed=0` unchanged.
 
 - [ ] **Step 1: Write the failing baseline tests.**
 
@@ -333,7 +333,7 @@ test('only_one_skip_link_and_it_targets_active_main', async ({ page }) => {
   const href = await page.locator('a.skip-link').getAttribute('href');
   await expect(page.locator(href!)).toBeVisible();
 });
-test('1024_does_not_collapse', async ({ page }) => {
+test('1024_does_not_auto_collapse', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 900 }); await page.goto('/');
   await expect(page.locator('[data-region="task-rail"]')).toBeVisible();
 });
@@ -358,7 +358,7 @@ Expected: FAIL on protected selectors, duplicate skip link or the 1024 assertion
 
 - [ ] **Step 3: Implement only the guards/hooks.**
 
-Add `data-region="task-rail"`/`"task-detail"` hooks without renaming existing selectors. Create `legacyShortcutGuard.ts` with `installLegacyShortcutGuard(root)`. In `bootstrap.ts`, install it **before** `waitForWorkflowApis`/`render(StudioApp, root)` and before any legacy listener or delayed `setTimeout(150)` can fire; at mount it closes/cancels any existing legacy palette, clears `#command-palette`/`#palette` from the URL/hash, and suppresses later opens. Retarget the existing `a.skip-link` to `#harness-main`; do not append a new skip link. Keep `AppShell` threshold as-is; at 1023 the rail is hidden only while the drawer is closed, and `[data-action="toggle-projects"]` reopens it; exactly 1024 stays uncollapsed. Fix the `AppShell.test.tsx` `children` prop so the test compiles. Do not change `vite.config.ts` or `typed_entry.js`.
+Add `data-region="task-rail"`/`"task-detail"` hooks without renaming existing selectors. Create `legacyShortcutGuard.ts` with `installLegacyShortcutGuard(root)`. In `bootstrap.ts`, install it **before** `waitForWorkflowApis`/`render(StudioApp, root)` and before any legacy listener or delayed `setTimeout(150)` can fire; at mount it closes/cancels any existing legacy palette, clears `#command-palette`/`#palette` from the URL/hash, and suppresses later opens. Retarget the existing `a.skip-link` to `#harness-main`; do not append a new skip link. Keep `AppShell` threshold as-is; at 1023 the rail is hidden only while the drawer is closed, and `[data-action="toggle-projects"]` reopens it; exactly 1024 does not auto-collapse (manual close remains possible). Fix the `AppShell.test.tsx` `children` prop so the test compiles. Do not change `vite.config.ts` or `typed_entry.js`.
 
 - [ ] **Step 4: Run the baseline and legacy suites.**
 
@@ -568,7 +568,7 @@ git commit -m "feat(studio): add scoped send modes and suppress legacy palette r
 
 **Interfaces:** acceptance only.
 
-**Depends on:** Task 8. **Cost:** 1–2 sittings. **Acceptance:** 390/1024/1440; 1024 visible, 1023 collapsed; 24/44 px targets; focus return; reduced motion; existing IME regression plus new dead-key/RTL/long-paste/caret cases.
+**Depends on:** Task 8. **Cost:** 1–2 sittings. **Acceptance:** 390/1024/1440; 1024 does not auto-collapse, 1023 closes/reopens; 24/44 px targets; focus return; reduced motion; existing IME regression plus new dead-key/RTL/long-paste/caret cases.
 
 - [ ] **Step 1: Write the IME/a11y tests.**
 
@@ -1021,7 +1021,7 @@ git commit -m "feat(studio): add browser runtime with sequence-zero runs and saf
 - **Contract:** run-scoped envelope, `run.queued` seq0/`run.started` seq1, no `task.created`, `retry_of_run_id`, `runtime_unavailable`, canonical JSON, cross-runtime digests.
 - **Runtime:** browser-owned loop; one task many runs; queue/steer/force/stop/retry; force fallback; stop timeout; terminal vs status; two live tasks; reload/corruption.
 - **Companion:** optional tool executor; data APIs; approval identity; existing listener/token/Origin; NDJSON fetch; no EventSource/TLS/second listener; no host runtime.
-- **UI:** protected selectors/names; one skip link; 1024 exact; `.task-workspace`; task rail/search/pins/groups; composer media/`@`/`/`; send modes; editor hidden until Stage 4; changes/comments/PR/artifacts; 390/1024/1440; a11y/IME regression.
+- **UI:** protected selectors/names; one skip link; 1024 does not auto-collapse; `.task-workspace`; task rail/search/pins/groups; composer media/`@`/`/`; send modes; editor hidden until Stage 4; changes/comments/PR/artifacts; 390/1024/1440; a11y/IME regression.
 - **Privacy:** local model; zero external requests at load; no agent secret in `localStorage`; documented `modelSources.v1` exception; no signing key in page.
 - **Static honesty:** terminal/Git/account/background explicit; no fake task log; no useful-agent claim.
 - **Delivery:** owner approval, exact-head review, protected merge, fresh-main verification, no owner metadata edits, no out-of-scope files.
@@ -1038,6 +1038,6 @@ git commit -m "feat(studio): add browser runtime with sequence-zero runs and saf
 
 **Plan complete and saved to `docs/superpowers/plans/2026-11-09-cursor-hosted-studio-upgrade.md`.** The revised design is `docs/superpowers/specs/2026-11-09-cursor-hosted-studio-upgrade-design.md`.
 
-**Owner approval is required before Task 1.** The second builder check also returned REVISE with bounded corrections; this plan is not approved until the owner reviews this revision and either creates a new Cursor-hosted Studio item with browser-owned-runtime acceptance (recommended) or explicitly supersedes #3569's old Rust-runtime `Done when`. #3569 cannot be closed by this plan. Recommended execution: **subagent-driven** — a fresh implementer per task and a fresh reviewer before the next task, then a whole-branch review. Native execution is acceptable if the owner/lead prefers one session.
+**Owner approval is required before Task 1.** Two independent builder checks returned **REVISE**; neither approved this plan. The current delivery review returned **CHANGES** for research-record consistency, and those corrections are being applied. Final exact-head approval remains required. The plan is not approved until the owner reviews this revision and either creates a new Cursor-hosted Studio item with browser-owned-runtime acceptance (recommended), with the approval ORDER naming that new item, or explicitly supersedes #3569's old Rust-runtime `Done when` in an ORDER naming `studio-ide-harness`. #3569 cannot be closed by this plan. Recommended execution: **subagent-driven** — a fresh implementer per task and a fresh reviewer before the next task, then a whole-branch review. Native execution is acceptable if the owner/lead prefers one session.
 
 **Does the revised design capture what you want?** If yes, record owner approval in a new ORDER. If not, revise the design first; do not start a task.
