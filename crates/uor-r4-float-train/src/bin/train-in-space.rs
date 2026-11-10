@@ -926,6 +926,14 @@ fn main() -> Result<()> {
         }
         (None, None) => None,
     };
+    // claude-345: the chain count is part of the reply bound and reads both folders, so a tail
+    // given without them would be ignored in silence.
+    if reply_chain_tail > 0 && (!reply || reply_dirs.0.is_none() || reply_dirs.1.is_none()) {
+        return Err(FloatTrainError::Invalid(
+            "--reply-chain-tail needs --reply-bound 1, --reply-bound-train and --reply-bound-dev"
+                .to_owned(),
+        ));
+    }
     if past_window.is_some() && score.is_none() {
         return Err(FloatTrainError::Invalid(
             "--past-window applies to --score-rows only".to_owned(),
@@ -1262,12 +1270,6 @@ fn main() -> Result<()> {
         return Ok(());
     }
     if reply {
-        if reply_chain_tail > 0 && (reply_dirs.0.is_none() || reply_dirs.1.is_none()) {
-            return Err(FloatTrainError::Invalid(
-                "--reply-chain-tail needs --reply-bound-train and --reply-bound-dev".to_owned(),
-            )
-            .into());
-        }
         let rows = match &reply_dirs {
             (Some(train), Some(dev)) => {
                 // claude-345: the trainer's own table, without a tail and with this one.

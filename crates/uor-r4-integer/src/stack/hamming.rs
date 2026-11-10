@@ -427,8 +427,6 @@ fn vocab_codes(units: &[[i64; 4]], table: &[i16], vocab: usize, width: usize, al
     codes
 }
 
-/// The `min(kept, t − 1)` positions `1 ≤ s < t` nearest to `query` by `popcount(query XOR key(s))`,
-/// with their distances, in ascending distance and then ascending `s` (the design's tie rule).
 /// The one position a latest rule reads at row `t`: over every `1 ≤ s < t`, the latest `s` whose
 /// key is at distance 0 from `query` when `exact`, else the latest `s` at the smallest distance.
 /// Empty when there is no such position.
@@ -446,6 +444,8 @@ fn latest_of(query: u64, t: usize, exact: bool, key: impl Fn(usize) -> u64) -> V
     best.into_iter().collect()
 }
 
+/// The `min(kept, t − 1)` positions `1 ≤ s < t` nearest to `query` by `popcount(query XOR key(s))`,
+/// with their distances, in ascending distance and then ascending `s` (the design's tie rule).
 fn nearest(query: u64, t: usize, kept: usize, key: impl Fn(usize) -> u64) -> Vec<(usize, u32)> {
     let mut candidates: Vec<(u32, usize)> = (1..t)
         // The SWAR popcount, not `count_ones`, which lowers to a NEON `cnt` and `fmov` on arm64
