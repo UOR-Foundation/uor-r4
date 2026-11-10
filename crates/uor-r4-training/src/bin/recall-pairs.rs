@@ -88,6 +88,22 @@ struct Counts {
     pair_noline_complete: usize,
     control_pairs: usize,
     pair_control_exact: usize,
+    pair_reference_names_value: usize,
+    pair_line_names_value: usize,
+    pair_noline_names_value: usize,
+    pair_control_names_value: usize,
+}
+
+/// Whether `ids`, up to its end marker, holds the line's value as one run.
+/// The value's last id (the full stop that closes the line) is left out when
+/// the value has more than one id, so "is Maya." and "Maya, right?" both count.
+fn names_value(ids: &[u32], value: &[u32], eos: u32) -> bool {
+    let core = if value.len() > 1 {
+        &value[..value.len() - 1]
+    } else {
+        value
+    };
+    !core.is_empty() && cut(ids, eos).windows(core.len()).any(|run| run == core)
 }
 
 /// The ids up to and including the first end marker, or all of them.
@@ -216,10 +232,16 @@ fn count(
         counts.pair_noline_exact += usize::from(exact(partner, eos));
         counts.pair_line_complete += usize::from(complete(sample, eos));
         counts.pair_noline_complete += usize::from(complete(partner, eos));
+        counts.pair_reference_names_value +=
+            usize::from(names_value(&sample.reference, value, eos));
+        counts.pair_line_names_value += usize::from(names_value(&sample.reply, value, eos));
+        counts.pair_noline_names_value += usize::from(names_value(&partner.reply, value, eos));
         if let (Some(samples), Some(map)) = (control, control_by_key.as_ref()) {
             if let Some(&at) = map.get(&key(&partner.prompt, &partner.reference, eos)) {
                 counts.control_pairs += 1;
                 counts.pair_control_exact += usize::from(exact(&samples[at], eos));
+                counts.pair_control_names_value +=
+                    usize::from(names_value(&samples[at].reply, value, eos));
             }
         }
     }
@@ -297,6 +319,9 @@ fn run(arguments: &[String]) -> Result<String, String> {
     let e_line = share(counts.pair_line_exact, counts.matched_pairs);
     let e_noline = share(counts.pair_noline_exact, counts.matched_pairs);
     let e_control = share(counts.pair_control_exact, counts.control_pairs);
+    let v_line = share(counts.pair_line_names_value, counts.matched_pairs);
+    let v_noline = share(counts.pair_noline_names_value, counts.matched_pairs);
+    let v_control = share(counts.pair_control_names_value, counts.control_pairs);
     let minus = |left: Option<f64>, right: Option<f64>| Some(left? - right?);
     let report = serde_json::json!({
         "counts": counts,
@@ -305,6 +330,12 @@ fn run(arguments: &[String]) -> Result<String, String> {
         "D": minus(e_line, e_noline),
         "E_control": e_control,
         "G": minus(e_line, e_control),
+        "V_reference": share(counts.pair_reference_names_value, counts.matched_pairs),
+        "V_line": v_line,
+        "V_noline": v_noline,
+        "V_D": minus(v_line, v_noline),
+        "V_control": v_control,
+        "V_G": minus(v_line, v_control),
         "control_covers_every_pair": control.is_some() && counts.control_pairs == counts.matched_pairs,
         "markers": markers,
     });
@@ -440,6 +471,10 @@ mod tests {
                 pair_noline_complete: 2,
                 control_pairs: 1,
                 pair_control_exact: 1,
+                pair_reference_names_value: 2,
+                pair_line_names_value: 2,
+                pair_noline_names_value: 1,
+                pair_control_names_value: 1,
             }
         );
         assert_eq!(
@@ -451,6 +486,20 @@ mod tests {
             Some(0.5)
         );
         assert_eq!(share(0, 0), None);
+    }
+
+    #[test]
+    fn a_reply_names_the_value_in_any_wording() {
+        // The line's value is [30, 31, 3]; its last id closes the line.
+        let value = [30, 31, 3];
+        assert!(names_value(&[70, 30, 31, 3, 1], &value, 1));
+        assert!(names_value(&[71, 72, 30, 31, 73, 1], &value, 1));
+        assert!(!names_value(&[30, 72, 31, 1], &value, 1));
+        // Ids after the end marker do not count.
+        assert!(!names_value(&[70, 1, 30, 31], &value, 1));
+        // A one-id value is looked for whole.
+        assert!(names_value(&[70, 40, 1], &[40], 1));
+        assert!(!names_value(&[70, 1], &[], 1));
     }
 
     #[test]
