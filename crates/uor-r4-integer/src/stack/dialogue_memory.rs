@@ -179,6 +179,16 @@ fn answer_kind(query: &[String]) -> AnswerKind {
     }
 }
 
+/// The stems that name the kind of answer a question wants, not its subject.
+fn relation_atoms(kind: AnswerKind) -> &'static [&'static str] {
+    match kind {
+        AnswerKind::Name => &["name", "call"],
+        AnswerKind::When => &["day", "date", "time"],
+        AnswerKind::Age => &["old"],
+        AnswerKind::Where | AnswerKind::Value => &[],
+    }
+}
+
 fn trim_answer(words: &[String], kind: AnswerKind) -> Option<String> {
     let mut start = 0;
     if words
@@ -291,6 +301,13 @@ pub fn recall_value(history: &[&str], query: &str) -> Option<String> {
     }
 
     let kind = answer_kind(&query_words);
+    // The words that say what kind of answer is wanted are not what the
+    // question is about: when the question names a subject as well, a clause
+    // has to share it ("my cat called" is not answered by "a dog called Rex").
+    let subject: BTreeSet<&String> = atoms
+        .iter()
+        .filter(|atom| !relation_atoms(kind).contains(&atom.as_str()))
+        .collect();
     let mut best: Option<((usize, usize, usize), String)> = None;
     for (turn_index, turn) in history.iter().enumerate() {
         for (clause_index, clause) in clauses(turn).into_iter().enumerate() {
@@ -300,6 +317,13 @@ pub fn recall_value(history: &[&str], query: &str) -> Option<String> {
                 .filter_map(|(index, word)| atoms.contains(&stem(word)).then_some(index))
                 .collect();
             if shared.is_empty() {
+                continue;
+            }
+            if !subject.is_empty()
+                && !shared
+                    .iter()
+                    .any(|&index| subject.contains(&stem(&clause[index])))
+            {
                 continue;
             }
             let rank = (shared.len(), turn_index, clause_index);
@@ -346,6 +370,26 @@ mod tests {
         for form in [SieveLine::Value, SieveLine::Reply] {
             assert_eq!(SieveRecall::NotRequested.line(form), None);
         }
+    }
+
+    #[test]
+    fn a_kind_word_alone_does_not_answer_a_question_about_another_subject() {
+        let history = ["I have a dog called Rex.", "My name is Sam."];
+        // The question names a cat; only "called" is shared, so nothing answers it.
+        assert_eq!(recall(&history, "What is my cat called?"), SieveRecall::Absent);
+        assert_eq!(
+            recall(&history, "What is my dog called?"),
+            SieveRecall::Value("Rex".to_owned())
+        );
+        // With no subject beside the kind word, the kind word still matches.
+        assert_eq!(
+            recall(&history, "What is my name?"),
+            SieveRecall::Value("Sam".to_owned())
+        );
+        assert_eq!(
+            recall(&["My dog is old."], "How old is Tom?"),
+            SieveRecall::Absent
+        );
     }
 
     #[test]
