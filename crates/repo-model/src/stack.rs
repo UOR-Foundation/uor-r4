@@ -1767,13 +1767,28 @@ statement = "This contract is not a proof of language capability."
             serde_json::from_slice(&fs::read(&path).expect("fixture read")).expect("fixture json");
         for (expectation, expected_error) in [
             (json!({"turn_count": "1"}), "positive integer"),
+            (json!({"turns": "1"}), "positive integer"),
+            (json!({"distinct_replies_min": "1"}), "positive integer"),
             (json!({"all_reply_ids_nonempty": "true"}), "must be true"),
             (json!({"same_as": 7}), "slug string"),
             (
                 json!({"status": "error", "stderr_contains": 42}),
                 "non-empty text",
             ),
+            (
+                json!({"turns": 1, "stderr_contains": "boom"}),
+                "needs status = error",
+            ),
+            (json!({"turns": 1, "status": 7}), "status must be"),
+            (json!({"turns": 1, "status": "maybe"}), "status must be"),
             (json!({"stops": ["eos", 7]}), "array of strings"),
+            (json!({"memory": 7}), "array of strings"),
+            (json!({"memory": ["none", 7]}), "array of strings"),
+            (json!({"reply_text_contains": 7}), "array of strings"),
+            (
+                json!({"reply_text_contains": ["47", 7]}),
+                "array of strings",
+            ),
         ] {
             let mut fixture = valid.clone();
             fixture["cases"][0]["expect"] = expectation;
