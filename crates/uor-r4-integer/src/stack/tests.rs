@@ -7678,9 +7678,19 @@ fn hamming_ask_tables_quantize_as_stored() {
     }
 }
 
-/// claude-345: a turn-memory artifact whose reply table holds exactly `entries` (sorted here), the
-/// base export without the memory chain's record.
+/// claude-345: a turn-memory artifact whose reply table holds exactly `entries`, the plain export
+/// without the memory chain's record.
 fn chain_memory_artifact(entries: &[(Vec<u32>, u32)], reply_turn: usize) -> Vec<u8> {
+    super::export_fbs_trunk_uorlut01(&chain_memory_snap(entries, reply_turn)).expect("export")
+}
+
+/// claude-345: the same memory exported with the memory chain's record at `tail`.
+fn chain_export(entries: &[(Vec<u32>, u32)], reply_turn: usize, tail: usize) -> Result<Vec<u8>, StackError> {
+    super::export_fbs_trunk_uorlut01_chain(&chain_memory_snap(entries, reply_turn), super::FbsExportSnaps::SNAPPED, None, tail)
+}
+
+/// claude-345: a turn-memory snapshot whose reply table holds exactly `entries` (sorted here).
+fn chain_memory_snap(entries: &[(Vec<u32>, u32)], reply_turn: usize) -> super::FbsTrunkSnapshot {
     let mut snap = synthetic_fbs_trunk(20261110);
     let mut memory = synthetic_memory(snap.vocab, snap.width, 8, true, 345);
     let reply = memory.reply.as_mut().expect("a reply table");
@@ -7691,7 +7701,7 @@ fn chain_memory_artifact(entries: &[(Vec<u32>, u32)], reply_turn: usize) -> Vec<
         .collect();
     reply.entries.sort();
     snap.memory = Some(memory);
-    super::export_fbs_trunk_uorlut01(&snap).expect("export")
+    snap
 }
 
 /// claude-345: serve `tokens` through the artifact's memory, stepping the opening row (the
@@ -7740,7 +7750,7 @@ fn a_memory_chain_asks_ends_then_tail_then_head() {
         ("none stored", vec![(vec![super::MEMORY_PAD, 2, super::MEMORY_PAD, 7], 14)], &head, None),
     ];
     for (what, entries, key, stored) in cases {
-        let bytes = super::set_memory_chain_uorlut01(&chain_memory_artifact(&entries, 8), 9).expect(what);
+        let bytes = chain_export(&entries, 8, 9).expect(what);
         let (anchors, moved) = chain_serve(&bytes, &tokens, 19, 20);
         assert_eq!(anchors.reply, (10..=17).collect::<Vec<u32>>(), "{what}");
         assert_eq!(anchors.tail, (19..=27).collect::<Vec<u32>>(), "{what}");
@@ -7752,24 +7762,27 @@ fn a_memory_chain_asks_ends_then_tail_then_head() {
     }
 }
 
-/// claude-345: without the record a tail or ends key is not a key this engine reads, and an
-/// artifact of head keys alone reads and serves the same with the record and without it.
+/// claude-345: the plain exporter refuses a tail or ends key as not a key this engine reads, the
+/// chain exporter at the right tail writes and serves the same memory, and an artifact of head
+/// keys alone reads and serves the same with the record and without it.
 #[test]
 fn without_a_memory_chain_record_chain_keys_are_refused_and_head_keys_serve_unchanged() {
     let (tokens, head, tail, ends) = chain_long_turn();
-    for (what, key) in [("a tail key", &tail), ("an ends key", &ends)] {
-        let bytes = chain_memory_artifact(&[(key.clone(), 12), (head.clone(), 13)], 8);
-        match super::read_memory_uorlut01(&bytes) {
-            Err(StackError::Numerics(e)) => assert!(e.contains("not a key this engine reads"), "{what}: {e}"),
+    for (what, key, stored) in [("a tail key", &tail, 12), ("an ends key", &ends, 11)] {
+        let entries = [(key.clone(), stored), (head.clone(), 13)];
+        match super::export_fbs_trunk_uorlut01(&chain_memory_snap(&entries, 8)) {
+            Err(StackError::Numerics(e)) => assert!(e.contains("is not a key this engine reads"), "{what}: {e}"),
             other => panic!("{what}: {other:?}"),
         }
-        assert!(IntegerStackModel::parse(&bytes).is_err(), "{what}");
-        let chained = super::set_memory_chain_uorlut01(&bytes, 9).expect(what);
+        let chained = chain_export(&entries, 8, 9).expect(what);
         assert!(super::read_memory_uorlut01(&chained).is_ok(), "{what}");
+        IntegerStackModel::parse(&chained).expect(what);
+        let (_, moved) = chain_serve(&chained, &tokens, 19, 20);
+        assert_eq!((&moved.key, moved.stored), (key, Some(stored)), "{what}");
     }
     let plain = chain_memory_artifact(&[(head.clone(), 13)], 8);
     assert_eq!(header_and_data(&plain).0["schema"], super::STACK_FBS_MEMORY_SCHEMA);
-    let chained = super::set_memory_chain_uorlut01(&plain, 9).expect("chain");
+    let chained = chain_export(&[(head.clone(), 13)], 8, 9).expect("chain");
     assert_eq!(
         super::read_memory_uorlut01(&plain).expect("read"),
         super::read_memory_uorlut01(&chained).expect("read")
@@ -7782,15 +7795,15 @@ fn without_a_memory_chain_record_chain_keys_are_refused_and_head_keys_serve_unch
     assert_eq!(chain_serve(&plain, &tokens, 19, 20).1.stored, Some(13));
 }
 
-/// claude-345: the record round-trips as a `/9` header over the same data, and the setter and the
-/// parser refuse a chain without a reply table, a bad tail, a turn whose ends key does not fit,
-/// a second record, and a schema that disagrees with the record.
+/// claude-345: the record round-trips as a `/9` header over the same data, and the chain exporter
+/// and the parser refuse a chain without a reply table, a bad tail, a turn whose ends key does not
+/// fit, and a schema that disagrees with the record.
 #[test]
 fn a_memory_chain_record_round_trips_in_lut_stack_9_and_bad_records_are_refused() {
     let (_, head, _, _) = chain_long_turn();
     let plain = chain_memory_artifact(&[(head.clone(), 13)], 8);
-    let chained = super::set_memory_chain_uorlut01(&plain, 9).expect("chain");
-    assert_eq!(super::set_memory_chain_uorlut01(&plain, 9).expect("chain"), chained);
+    let chained = chain_export(&[(head.clone(), 13)], 8, 9).expect("chain");
+    assert_eq!(chain_export(&[(head.clone(), 13)], 8, 9).expect("chain"), chained);
     let (header, data) = header_and_data(&chained);
     assert_eq!(header["schema"], super::STACK_FBS_CHAIN_SCHEMA);
     assert_eq!(header["memory_chain"], json!({ "tail": 9 }));
@@ -7798,19 +7811,20 @@ fn a_memory_chain_record_round_trips_in_lut_stack_9_and_bad_records_are_refused(
     let parsed = super::format::Container::parse(&chained).expect("parse");
     assert_eq!(parsed.memory_chain, Some(super::StackMemoryChain { tail: 9 }));
     assert!(super::format::Container::parse(&plain).expect("parse").memory_chain.is_none());
-    super::set_memory_chain_uorlut01(&plain, 15).expect("a tail of 15 fits the row");
-    let refused = |what: &str, bytes: &[u8], tail: usize| {
-        assert!(matches!(super::set_memory_chain_uorlut01(bytes, tail), Err(StackError::Shape(_))), "{what}");
+    chain_export(&[(head.clone(), 13)], 8, 15).expect("a tail of 15 fits the row");
+    let refused = |what: &str, snap: &super::FbsTrunkSnapshot, tail: usize| {
+        let out = super::export_fbs_trunk_uorlut01_chain(snap, super::FbsExportSnaps::SNAPPED, None, tail);
+        assert!(matches!(out, Err(StackError::Shape(_))), "{what}");
     };
-    refused("a second record", &chained, 9);
-    refused("a tail of 0", &plain, 0);
-    refused("a tail past the row", &plain, 16);
-    refused("an ends key past the row", &chain_memory_artifact(&[(head.clone(), 13)], 9), 9);
+    let snap = chain_memory_snap(&[(head.clone(), 13)], 8);
+    refused("a tail of 0", &snap, 0);
+    refused("a tail past the row", &snap, 16);
+    refused("an ends key past the row", &chain_memory_snap(&[(head.clone(), 13)], 9), 9);
     let mut snap = synthetic_fbs_trunk(20261110);
     snap.memory = Some(synthetic_memory(snap.vocab, snap.width, 8, false, 345));
-    refused("no reply table", &super::export_fbs_trunk_uorlut01(&snap).expect("export"), 9);
+    refused("no reply table", &snap, 9);
     snap.memory = None;
-    refused("no turn memory", &super::export_fbs_trunk_uorlut01(&snap).expect("export"), 9);
+    refused("no turn memory", &snap, 9);
     let schema_refused = |what: &str, bytes: &[u8]| {
         assert!(matches!(super::format::Container::parse(bytes), Err(StackError::Schema(_))), "{what}");
     };
@@ -7832,7 +7846,7 @@ fn a_memory_chain_short_turn_ends_as_head_and_a_left_block_empties_every_chain_f
     short.extend(10..=14u32);
     short.extend([100, 101]);
     let head: Vec<u32> = (10..=14).chain([MEMORY_PAD, 2, MEMORY_PAD, 101]).collect();
-    let bytes = super::set_memory_chain_uorlut01(&chain_memory_artifact(&[(head.clone(), 13)], 8), 9).expect("chain");
+    let bytes = chain_export(&[(head.clone(), 13)], 8, 9).expect("chain");
     let (anchors, moved) = chain_serve(&bytes, &short, 6, 7);
     assert_eq!(anchors.ends, anchors.reply);
     assert_eq!(anchors.tail, anchors.reply);
@@ -7850,7 +7864,7 @@ fn a_memory_chain_short_turn_ends_as_head_and_a_left_block_empties_every_chain_f
         ("tail and head stored", vec![(empty_tail.clone(), 12), (empty_head.clone(), 13)], &empty_head, 13),
     ];
     for (what, entries, key, stored) in cases {
-        let bytes = super::set_memory_chain_uorlut01(&chain_memory_artifact(&entries, 8), 9).expect(what);
+        let bytes = chain_export(&entries, 8, 9).expect(what);
         let (anchors, moved) = chain_serve(&bytes, &long, 19, 193);
         assert_eq!(anchors.tail.len(), 9, "{what}: the anchors keep the turn");
         assert_eq!(moved.key, *key, "{what}");

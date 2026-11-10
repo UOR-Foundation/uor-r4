@@ -41,15 +41,7 @@ pub fn read_memory_uorlut01(bytes: &[u8]) -> Result<Option<MemoryImage>, StackEr
 /// forms the container's memory chain record (claude-345) admits, or the head form alone without
 /// one.
 pub(crate) fn memory_image(artifact: &Container<'_>) -> Result<Option<MemoryImage>, StackError> {
-    memory_image_keyed(artifact, artifact.memory_chain.as_ref().map(|chain| chain.tail))
-}
-
-/// The turn memory of a parsed container with its reply keys read as the memory chain of tail
-/// `chain_tail` admits them, or as head keys alone for `None`.
-pub(crate) fn memory_image_keyed(
-    artifact: &Container<'_>,
-    chain_tail: Option<usize>,
-) -> Result<Option<MemoryImage>, StackError> {
+    let chain_tail = artifact.memory_chain.as_ref().map(|chain| chain.tail);
     let Some(record) = artifact.memory.clone() else {
         return Ok(None);
     };

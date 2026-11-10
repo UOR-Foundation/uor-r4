@@ -1747,7 +1747,7 @@ pub fn export_fbs_trunk_uorlut01_with(
     snap: &FbsTrunkSnapshot,
     snaps: FbsExportSnaps,
 ) -> Result<Vec<u8>, StackError> {
-    export_fbs_trunk(snap, snaps, None)
+    export_fbs_trunk(snap, snaps, None, None)
 }
 
 /// [`export_fbs_trunk_uorlut01_with`] served past the trained window (claude-288): the shape's
@@ -1759,20 +1759,48 @@ pub fn export_fbs_trunk_uorlut01_carry(
     snaps: FbsExportSnaps,
     context: usize,
 ) -> Result<Vec<u8>, StackError> {
+    check_carry_context(snap, context)?;
+    export_fbs_trunk(snap, snaps, Some(context), None)
+}
+
+/// [`export_fbs_trunk_uorlut01_with`] (`context: None`) or [`export_fbs_trunk_uorlut01_carry`]
+/// (`Some(context)`) with the memory chain's record (claude-345) written into the header under
+/// [`STACK_FBS_CHAIN_SCHEMA`]: the reply table's keys may take the head, tail (at most `tail` turn
+/// ids) and ends forms, and the read-back reads them at exactly that tail. A tail of 0, a snapshot
+/// without a reply table, or a record [`StackMemoryChain::check`] refuses is refused.
+pub fn export_fbs_trunk_uorlut01_chain(
+    snap: &FbsTrunkSnapshot,
+    snaps: FbsExportSnaps,
+    context: Option<usize>,
+    tail: usize,
+) -> Result<Vec<u8>, StackError> {
+    if tail == 0 {
+        return Err(StackError::Shape("a memory chain's tail must be at least 1"));
+    }
+    if let Some(context) = context {
+        check_carry_context(snap, context)?;
+    }
+    export_fbs_trunk(snap, snaps, context, Some(tail))
+}
+
+/// A carry context runs from the trained context to [`MAX_CONTEXT`].
+fn check_carry_context(snap: &FbsTrunkSnapshot, context: usize) -> Result<(), StackError> {
     if context < snap.context {
         return Err(StackError::Shape("a carry context must be at least the trained context"));
     }
     if context > MAX_CONTEXT {
         return Err(StackError::Shape("a carry context must be at most MAX_CONTEXT (65,536)"));
     }
-    export_fbs_trunk(snap, snaps, Some(context))
+    Ok(())
 }
 
-/// The FBS export; `carry` is the served context of a carry export, `None` the trained one.
+/// The FBS export; `carry` is the served context of a carry export, `None` the trained one, and
+/// `chain` the memory chain's tail, `None` for a stack without the record.
 fn export_fbs_trunk(
     snap: &FbsTrunkSnapshot,
     snaps: FbsExportSnaps,
     carry: Option<usize>,
+    chain: Option<usize>,
 ) -> Result<Vec<u8>, StackError> {
     let shape = StackShape {
         vocab: snap.vocab,
@@ -1954,6 +1982,12 @@ fn export_fbs_trunk(
             Some(record)
         }
     };
+    // The memory chain (claude-345) is written with the export, so the read-back below reads the
+    // reply keys at its exact tail and a plain export stays strict.
+    let chain = chain.map(|tail| StackMemoryChain { tail });
+    if let Some(record) = &chain {
+        record.check(memory.as_ref())?;
+    }
 
     let eps_exp = -48i32;
     let eps_mantissa = (snap.rms_eps * 2f64.powi(-eps_exp)).round() as i64;
@@ -1980,6 +2014,7 @@ fn export_fbs_trunk(
         roots_sha256: super::ICOSIAN_ROOTS_SHA256.to_owned(),
     };
     let schema = match (&memory, &hamming) {
+        _ if chain.is_some() => STACK_FBS_CHAIN_SCHEMA,
         (Some(_), _) => STACK_FBS_MEMORY_SCHEMA,
         (None, Some(_)) => STACK_FBS_HAMMING_SCHEMA,
         (None, None) => stack_schema_for(&shape),
@@ -2010,6 +2045,10 @@ fn export_fbs_trunk(
     if let Some(record) = &memory {
         header["memory"] = json!(record);
     }
+    // And only a chain export has the memory chain's record.
+    if let Some(record) = &chain {
+        header["memory_chain"] = json!(record);
+    }
     // And only a carry export records its trained window (claude-288).
     if carry.is_some() {
         header["source"]["trained_context"] = json!(snap.context);
@@ -2023,10 +2062,9 @@ fn export_fbs_trunk(
     out.extend_from_slice(&b.data);
     // The export never writes a memory the reader would refuse (claude-198): its keys in strictly
     // ascending order, of the forms the session keys by, and every id inside the vocabulary. The
-    // reply keys may take any of the memory chain's forms (claude-345), whose record
-    // `set_memory_chain_uorlut01` adds after this export and checks at its exact tail.
+    // reply keys take the memory chain's forms (claude-345) only under its record, at its tail.
     if memory.is_some() {
-        super::memory::memory_image_keyed(&Container::parse(&out)?, Some(MEMORY_REPLY_KEY_LEN - 5))?;
+        super::memory::memory_image(&Container::parse(&out)?)?;
     }
     Ok(out)
 }
@@ -2161,37 +2199,6 @@ pub fn set_hamming_copy_latest_uorlut01(artifact: &[u8]) -> Result<Vec<u8>, Stac
     out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
     out.extend_from_slice(data);
     super::hamming::hamming_image(&Container::parse(&out)?)?;
-    Ok(out)
-}
-
-/// The same turn-memory artifact with the memory chain's record added (claude-345): its reply
-/// table's tail keys hold at most `tail` turn ids, and the session asks the ends, tail and head
-/// keys in that order. Only the header changes, gaining `memory_chain` and the
-/// [`STACK_FBS_CHAIN_SCHEMA`]: every matrix and table keeps its bytes and its offset from the data
-/// start. An artifact without a reply table, or with the record already, is refused, and the
-/// result is read back, its memory included, before it is returned.
-pub fn set_memory_chain_uorlut01(artifact: &[u8], tail: usize) -> Result<Vec<u8>, StackError> {
-    let container = Container::parse(artifact)?;
-    if container.memory_chain.is_some() {
-        return Err(StackError::Shape("the stack already has a memory chain"));
-    }
-    let record = StackMemoryChain { tail };
-    record.check(container.memory.as_ref())?;
-    let declared = u64::from_le_bytes(artifact[8..16].try_into().map_err(|_| StackError::MissingData)?);
-    let header_end = 16 + usize::try_from(declared).map_err(|_| StackError::MissingData)?;
-    let data = artifact.get(header_end.div_ceil(ALIGN) * ALIGN..).ok_or(StackError::MissingData)?;
-    let mut header: serde_json::Value =
-        serde_json::from_slice(&artifact[16..header_end]).map_err(StackError::Header)?;
-    header["memory_chain"] = json!(record);
-    header["schema"] = json!(STACK_FBS_CHAIN_SCHEMA);
-    let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
-    let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + data.len());
-    out.extend_from_slice(MAGIC);
-    out.extend_from_slice(&(header_bytes.len() as u64).to_le_bytes());
-    out.extend_from_slice(&header_bytes);
-    out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
-    out.extend_from_slice(data);
-    super::memory::read_memory_uorlut01(&out)?;
     Ok(out)
 }
 

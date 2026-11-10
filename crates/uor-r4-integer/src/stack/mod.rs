@@ -88,11 +88,11 @@ pub use flock::{
 };
 pub use format::{
     add_hamming_ask_uorlut01, add_point_key_uorlut01, drop_hamming_carry_uorlut01,
-    set_hamming_copy_latest_uorlut01, set_memory_chain_uorlut01,
+    set_hamming_copy_latest_uorlut01,
     StackMemoryChain, StackPointKey, POINT_KEY_EXP, STACK_FBS_CHAIN_SCHEMA, STACK_FBS_POINT_SCHEMA,
 };
 pub use format::{
-    decode_grid_code, encode_grid_code, export_fbs_trunk_uorlut01, export_fbs_trunk_uorlut01_carry,
+    decode_grid_code, encode_grid_code, export_fbs_trunk_uorlut01, export_fbs_trunk_uorlut01_carry, export_fbs_trunk_uorlut01_chain,
     export_fbs_trunk_uorlut01_with, export_float_trunk_uorlut01, stack_schema_for, FbsExportSnaps,
     FbsQuatMode, FbsReferenceSnaps, FbsRoutes, FbsTieMargins, FbsTrunkLayer, FbsTrunkSnapshot,
     FbsWriterOutput, Fixed, FloatTrunkLayer, FloatTrunkMixer, FloatTrunkRead, FloatTrunkRecurrence,
