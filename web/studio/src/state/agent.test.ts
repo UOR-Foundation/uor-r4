@@ -249,6 +249,105 @@ describe('AgentStore reducer', () => {
         expect(store.snapshot().tasks[0].state).toBe('running');
     });
 
+    test('changes_snapshot_missing_files_is_atomic_rejection', () => {
+        const store = createAgentStore();
+        store.apply(queued(0));
+        store.apply(started(1));
+        const digest = `sha256:${'c'.repeat(64)}`;
+        const malformed = makeEvent(2, 'changes.snapshot', {
+            scope: 'last_turn',
+            head_digest: digest,
+            captured_at_ms: 2,
+        });
+
+        const rejected = store.apply(malformed);
+        expect(rejected.status).toBe('rejected');
+        expect(rejected.code).toBe('invalid_event');
+        expect(store.apply(malformed).status).toBe('rejected');
+
+        let run = store.snapshot().runs[0];
+        expect(run.lastSequence).toBe(1);
+        expect(run.events).toHaveLength(2);
+        expect(run.changesSnapshots).toHaveLength(0);
+        expect(run.state).toBe('running');
+
+        const valid = store.apply(
+            makeEvent(2, 'changes.snapshot', {
+                scope: 'last_turn',
+                files: [{ path: 'src/a.ts' }],
+                head_digest: digest,
+                captured_at_ms: 2,
+            }),
+        );
+        expect(valid.status).toBe('applied');
+
+        run = store.snapshot().runs[0];
+        expect(run.lastSequence).toBe(2);
+        expect(run.changesSnapshots).toHaveLength(1);
+    });
+
+    test('required_tool_payloads_are_rejected_atomically', () => {
+        const store = createAgentStore();
+        store.apply(queued(0));
+        store.apply(started(1));
+        const digest = `sha256:${'d'.repeat(64)}`;
+        const malformed = [
+            makeEvent(2, 'tool.requested', {
+                tool_call_id: 'tc_02',
+                tool: 'file.read',
+                arguments_preview: '{}',
+            }),
+            makeEvent(2, 'tool.started', {}),
+            makeEvent(2, 'tool.completed', {
+                tool_call_id: 'tc_02',
+                status: 'ok',
+                output_preview: 'ok',
+                truncated: false,
+            }),
+            makeEvent(2, 'tool.failed', {
+                tool_call_id: 'tc_02',
+                code: 'io',
+            }),
+            makeEvent(2, 'tool.approval_required', {
+                approval_id: 'apr_5c2e8a1f9b7d3e40',
+                tool_call_id: 'tc_02',
+                tool: 'git.commit',
+                scope: 'write',
+                request_digest: digest,
+            }),
+            makeEvent(2, 'error', {
+                code: 'model_protocol_error',
+                message: 'bad',
+            }),
+        ];
+
+        for (const event of malformed) {
+            const result = store.apply(event);
+            expect(result.status).toBe('rejected');
+            expect(result.code).toBe('invalid_event');
+        }
+
+        const run = store.snapshot().runs[0];
+        expect(run.lastSequence).toBe(1);
+        expect(run.events).toHaveLength(2);
+        expect(run.toolCalls).toHaveLength(0);
+        expect(run.approvals).toHaveLength(0);
+        expect(run.error).toBeNull();
+        expect(run.state).toBe('running');
+
+        const valid = store.apply(
+            makeEvent(2, 'tool.requested', {
+                tool_call_id: 'tc_02',
+                tool: 'file.read',
+                arguments_digest: digest,
+                arguments_preview: '{}',
+            }),
+        );
+        expect(valid.status).toBe('applied');
+        expect(store.snapshot().runs[0].lastSequence).toBe(2);
+        expect(store.snapshot().runs[0].toolCalls).toHaveLength(1);
+    });
+
     test('reducer_marks_stale_generation', async () => {
         const store = createAgentStore();
         await store.appendEvent(queued(0));

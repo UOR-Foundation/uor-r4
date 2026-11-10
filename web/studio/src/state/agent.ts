@@ -270,6 +270,10 @@ function isObject(value: unknown): value is Record<string, unknown> {
     return prototype === Object.prototype || prototype === null;
 }
 
+function isNonEmptyString(value: unknown): value is string {
+    return typeof value === 'string' && value.length > 0;
+}
+
 function isSafeNonNegativeInteger(value: unknown): value is number {
     return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
@@ -486,7 +490,111 @@ export function validateAgentEvent(value: unknown): AgentValidationResult {
             return invalid('assistant.delta requires message_id and text_delta strings');
         }
     }
+    if (type === 'changes.snapshot') {
+        if (data.scope !== 'last_turn' && data.scope !== 'branch') {
+            return invalid('changes.snapshot scope must be last_turn | branch');
+        }
+        if (
+            !Array.isArray(data.files) ||
+            !data.files.every((file) => isObject(file))
+        ) {
+            return invalid('changes.snapshot files must be an array of objects');
+        }
+        if (
+            typeof data.head_digest !== 'string' ||
+            !DIGEST_PATTERN.test(data.head_digest)
+        ) {
+            return invalid(
+                'changes.snapshot head_digest must be sha256:<64 lowercase hex>',
+            );
+        }
+        const captured = requireSafeField(data, 'captured_at_ms');
+        if (captured) return captured;
+    }
+    if (type === 'tool.requested') {
+        if (
+            !isNonEmptyString(data.tool_call_id) ||
+            !isNonEmptyString(data.tool)
+        ) {
+            return invalid('tool.requested requires tool_call_id and tool strings');
+        }
+        if (
+            typeof data.arguments_digest !== 'string' ||
+            !DIGEST_PATTERN.test(data.arguments_digest)
+        ) {
+            return invalid(
+                'tool.requested arguments_digest must be sha256:<64 lowercase hex>',
+            );
+        }
+        if (typeof data.arguments_preview !== 'string') {
+            return invalid('tool.requested arguments_preview must be a string');
+        }
+    }
+    if (type === 'tool.started') {
+        if (!isNonEmptyString(data.tool_call_id)) {
+            return invalid('tool.started requires tool_call_id');
+        }
+    }
+    if (type === 'tool.completed') {
+        if (!isNonEmptyString(data.tool_call_id)) {
+            return invalid('tool.completed requires tool_call_id');
+        }
+        if (
+            data.status !== 'ok' &&
+            data.status !== 'error' &&
+            data.status !== 'cancelled'
+        ) {
+            return invalid('tool.completed status is not valid');
+        }
+        if (
+            typeof data.output_digest !== 'string' ||
+            !DIGEST_PATTERN.test(data.output_digest)
+        ) {
+            return invalid(
+                'tool.completed output_digest must be sha256:<64 lowercase hex>',
+            );
+        }
+        if (typeof data.output_preview !== 'string') {
+            return invalid('tool.completed output_preview must be a string');
+        }
+        if (typeof data.truncated !== 'boolean') {
+            return invalid('tool.completed truncated must be a boolean');
+        }
+    }
+    if (type === 'tool.failed') {
+        if (!isNonEmptyString(data.tool_call_id) || !isNonEmptyString(data.code)) {
+            return invalid('tool.failed requires tool_call_id and code strings');
+        }
+        if (typeof data.message !== 'string') {
+            return invalid('tool.failed message must be a string');
+        }
+    }
+    if (type === 'tool.approval_required') {
+        if (
+            !isNonEmptyString(data.approval_id) ||
+            !isNonEmptyString(data.tool_call_id) ||
+            !isNonEmptyString(data.tool) ||
+            !isNonEmptyString(data.scope)
+        ) {
+            return invalid(
+                'tool.approval_required requires approval_id, tool_call_id, tool and scope strings',
+            );
+        }
+        if (
+            typeof data.request_digest !== 'string' ||
+            !DIGEST_PATTERN.test(data.request_digest)
+        ) {
+            return invalid(
+                'tool.approval_required request_digest must be sha256:<64 lowercase hex>',
+            );
+        }
+        const expires = requireSafeField(data, 'expires_at_ms');
+        if (expires) return expires;
+    }
     if (type === 'tool.approval_resolved') {
+        if (!isNonEmptyString(data.approval_id)) {
+            return invalid('tool.approval_resolved requires approval_id');
+        }
         if (
             data.decision !== 'approved' &&
             data.decision !== 'denied' &&
@@ -496,6 +604,17 @@ export function validateAgentEvent(value: unknown): AgentValidationResult {
         }
         if (data.resolver !== 'host') {
             return invalid('tool.approval_resolved resolver must be host');
+        }
+    }
+    if (type === 'error') {
+        if (!isNonEmptyString(data.code)) {
+            return invalid('error requires a code string');
+        }
+        if (typeof data.message !== 'string') {
+            return invalid('error message must be a string');
+        }
+        if (typeof data.retryable !== 'boolean') {
+            return invalid('error retryable must be a boolean');
         }
     }
 
@@ -1233,7 +1352,10 @@ export class AgentStore {
             task.branch = record.branch ?? null;
             task.archived = record.archived ?? task.archived;
             task.pinnedLocal = record.pinnedLocal ?? task.pinnedLocal;
-            if (record.latestRunId !== undefined) {
+            if (
+                record.latestRunId !== undefined &&
+                !this.hasRunsForTask(task.taskId)
+            ) {
                 task.latestRunId = record.latestRunId;
             }
         }
@@ -1243,9 +1365,19 @@ export class AgentStore {
         )!;
     }
 
+    private hasRunsForTask(taskId: string): boolean {
+        for (const run of this.runs.values()) {
+            if (run.taskId === taskId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     latestChangesSnapshot(
         taskId: string,
         runId?: string,
+        scope?: 'last_turn' | 'branch',
     ): AgentChangeSnapshotView | null {
         for (let index = this.runOrder.length - 1; index >= 0; index -= 1) {
             const run = this.runs.get(this.runOrder[index]!);
@@ -1256,11 +1388,18 @@ export class AgentStore {
             ) {
                 continue;
             }
-            const latest = run.changesSnapshots.at(-1);
-            if (latest !== undefined) {
+            for (
+                let snapshotIndex = run.changesSnapshots.length - 1;
+                snapshotIndex >= 0;
+                snapshotIndex -= 1
+            ) {
+                const snapshot = run.changesSnapshots[snapshotIndex]!;
+                if (scope !== undefined && snapshot.scope !== scope) {
+                    continue;
+                }
                 return {
-                    ...latest,
-                    files: cloneJson(latest.files),
+                    ...snapshot,
+                    files: cloneJson(snapshot.files),
                 };
             }
         }

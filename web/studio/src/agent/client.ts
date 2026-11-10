@@ -350,7 +350,22 @@ export class AgentClient {
         for (const task of tasks) {
             this.store.upsertTask(this.toTaskRecord(task));
         }
-        return tasks;
+        const snapshot = this.store.snapshot();
+        return tasks.map((task) => {
+            const view = snapshot.tasks.find(
+                (candidate) => candidate.taskId === task.taskId,
+            );
+            if (view === undefined) {
+                return task;
+            }
+            return {
+                ...task,
+                state: view.state,
+                latestRunId: view.latestRunId,
+                archived: view.archived,
+                pinned: view.pinnedLocal,
+            };
+        });
     }
 
     async createTask(input: CreateTaskInput): Promise<TaskSummary> {
@@ -510,7 +525,11 @@ export class AgentClient {
         input: ChangesSnapshotInput,
     ): Promise<ChangesSnapshot | null> {
         const local: AgentChangeSnapshotView | null =
-            this.store.latestChangesSnapshot(input.taskId, input.runId);
+            this.store.latestChangesSnapshot(
+                input.taskId,
+                input.runId,
+                input.scope,
+            );
         if (local !== null) {
             return {
                 scope: local.scope,
