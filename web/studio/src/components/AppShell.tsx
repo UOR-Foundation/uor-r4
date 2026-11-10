@@ -29,6 +29,7 @@ interface AppShellProps {
 
 export function AppShell({ activeSection, onSection, status, sessions, children, primary, secondarySection, secondaryChildren, onSplit, onCloseSplit, onPalette, onSettings, onInspector, inspectorOpen = false, onModels, onOpenFolder, alert }: AppShellProps) {
     const [drawerOpen, setDrawerOpen] = useState(() => window.innerWidth > 800);
+    const [taskRailOpen, setTaskRailOpen] = useState(() => window.innerWidth >= 1024);
     const [projectOpen, setProjectOpen] = useState(false);
     const [projectName, setProjectName] = useState('uor-r4');
     const [projectDraft, setProjectDraft] = useState('uor-r4');
@@ -36,10 +37,19 @@ export function AppShell({ activeSection, onSection, status, sessions, children,
     const [projectError, setProjectError] = useState('');
     const [choosingFolder, setChoosingFolder] = useState(false);
     useEffect(() => {
-        const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setDrawerOpen(false); };
+        const close = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            setDrawerOpen(false);
+            setTaskRailOpen(false);
+        };
         document.addEventListener('keydown', close);
         return () => document.removeEventListener('keydown', close);
     }, []);
+    const toggleTaskRail = () => {
+        const next = !taskRailOpen;
+        setTaskRailOpen(next);
+        setDrawerOpen(next);
+    };
     const openProject = () => { setProjectDraft(projectName); setProjectFolder(''); setProjectError(''); setProjectOpen(true); };
     const chooseFolder = async () => {
         setChoosingFolder(true); setProjectError('');
@@ -48,10 +58,12 @@ export function AppShell({ activeSection, onSection, status, sessions, children,
         finally { setChoosingFolder(false); }
     };
     return <div class="harness-shell studio-shell">
-        <SessionToolbar status={status} projectName={projectName} drawerOpen={drawerOpen} onToggleProjects={() => setDrawerOpen(!drawerOpen)} onNewProject={openProject} onModels={onModels || (() => onSection('models'))} onPalette={onPalette} onSettings={onSettings} onInspector={onInspector} inspectorOpen={inspectorOpen} />
+        <SessionToolbar status={status} projectName={projectName} drawerOpen={taskRailOpen} onToggleProjects={toggleTaskRail} onNewProject={openProject} onModels={onModels || (() => onSection('models'))} onPalette={onPalette} onSettings={onSettings} onInspector={onInspector} inspectorOpen={inspectorOpen} />
         <div class="harness-body">
-            <ProjectSidebar activeSection={activeSection} onSection={onSection} onNewProject={openProject} drawerOpen={drawerOpen} sessions={sessions} />
-            <main id="harness-main" tabindex={-1}>{alert}<PaneDock activeSection={activeSection} onSection={onSection} onSplit={onSplit} onCloseSplit={onCloseSplit} secondarySection={secondarySection} secondaryChildren={secondaryChildren}>{primary ?? children}</PaneDock></main>
+            <div data-region="task-rail" hidden={!taskRailOpen} style={{ display: taskRailOpen ? 'flex' : 'none' }}>
+                <ProjectSidebar activeSection={activeSection} onSection={onSection} onNewProject={openProject} drawerOpen={drawerOpen} sessions={sessions} />
+            </div>
+            <main id="harness-main" data-region="task-detail" tabindex={-1}>{alert}<PaneDock activeSection={activeSection} onSection={onSection} onSplit={onSplit} onCloseSplit={onCloseSplit} secondarySection={secondarySection} secondaryChildren={secondaryChildren}>{primary ?? children}</PaneDock></main>
         </div>
         {children !== primary && children}
         {projectOpen && <Modal title="New project" onClose={() => setProjectOpen(false)}><form class="project-form" onSubmit={(event) => { event.preventDefault(); if (!projectDraft.trim() || !projectFolder) return; setProjectName(projectDraft.trim()); setProjectOpen(false); onSection('workspace'); }}>

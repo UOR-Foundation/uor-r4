@@ -6,9 +6,18 @@ import type { LegacyWorkflowApis } from './adapters/workflow.js';
 import { ModelSources } from '../assets/js/model_sources.js';
 import { StudioApp } from './components/StudioApp.js';
 import { activateStudioMigration, studioMigrationStatus } from './persistence/migration.js';
+import { installLegacyShortcutGuard } from './agent/legacyShortcutGuard.js';
 
 interface LegacyAppWindow extends Window {
     __studioApp?: { worker: Worker | null };
+}
+
+function retargetSkipLink(href: string): string | null {
+    const link = document.querySelector<HTMLAnchorElement>('a.skip-link');
+    if (!link) return null;
+    const previous = link.getAttribute('href');
+    link.setAttribute('href', href);
+    return previous;
 }
 
 export function typedPreviewRequested(search: string): boolean {
@@ -41,6 +50,7 @@ export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?:
     const migration = studioMigrationStatus();
     if (migration.state === 'error') throw new Error(`Browser-state migration failed: ${migration.error || 'unknown error'}`);
     root.hidden = false;
+    const shortcutGuard = installLegacyShortcutGuard(root);
     const apis = await waitForWorkflowApis(options.timeoutMs ?? 5000);
     const requestedTheme = new URLSearchParams(window.location.search).get('theme')
         || (window.location.hash === '#theme=light' ? 'light' : (window.location.hash === '#theme=dark' ? 'dark' : null));
@@ -59,6 +69,7 @@ export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?:
         sessions: apis.sessions,
         ui: apis.ui,
     }), root);
+    const previousSkipHref = retargetSkipLink('#harness-main');
     root.dataset.active = 'true';
     return {
         store,
@@ -68,11 +79,13 @@ export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?:
         sessions: apis.sessions,
         ui: apis.ui,
         dispose() {
+            shortcutGuard.dispose();
             worker.removeEventListener('message', forwardMessage);
             if (!legacyWorker) worker.terminate();
             root.dataset.active = 'false';
             root.hidden = true;
             render(null, root);
+            if (previousSkipHref !== null) retargetSkipLink(previousSkipHref);
         },
     };
 }
