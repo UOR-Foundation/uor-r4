@@ -580,6 +580,13 @@
     "lab": "deepseek",
     "note": ""
   },
+  "deepseek/stack-overhaul": {
+    "branch": "deepseek/stack-overhaul",
+    "claimed_at": "2026-11-10T16:22:29-05:00",
+    "head": "ce3c3e57b",
+    "lab": "deepseek",
+    "note": ""
+  },
   "deepseek/stop-density": {
     "branch": "deepseek/stop-density",
     "claimed_at": "2026-11-04T15:40:21-05:00",
