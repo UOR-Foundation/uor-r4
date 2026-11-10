@@ -22,12 +22,12 @@ async function targetViolations(page: Page, minimum: number, scope = '#studio-ty
         };
         const violations: TargetViolation[] = [];
         const seen = new Set<Element>();
-        for (const element of Array.from(root.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, summary, [tabindex]'))) {
+        for (const element of Array.from(root.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, summary, [tabindex], [role="option"], [role="menuitem"], [role="tab"]'))) {
             if ((element as HTMLButtonElement).disabled || element.hasAttribute('disabled')) continue;
             if (element.getAttribute('tabindex') === '-1') continue;
             if (element.classList.contains('visually-hidden') || element.closest('.visually-hidden')) continue;
             if (element.classList.contains('skip-link')) continue;
-            if (element.matches('input[type="hidden"], input[type="file"]')) continue;
+            if (element.matches('input[type="hidden"]')) continue;
             if (!visible(element)) continue;
             let target: HTMLElement = element;
             const type = (element as HTMLInputElement).type;
@@ -308,6 +308,11 @@ test('every_visible_interactive_target_is_at_least_24_css_pixels', async ({ page
     await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible();
     await audit('1440 palette', 'dialog[open]');
     await page.keyboard.press('Escape');
+    const prompt = promptLocator(page);
+    await prompt.fill('/');
+    await expect(page.locator('#studio-typed-root [role="listbox"][aria-label="Build task commands"]')).toBeVisible();
+    await audit('1440 composer menu');
+    await page.keyboard.press('Escape');
 
     await openTypedAt(page, 390, 844);
     await audit('390 agent');
@@ -321,6 +326,15 @@ test('every_visible_interactive_target_is_at_least_24_css_pixels', async ({ page
     await expect(page.getByRole('dialog', { name: 'Studio settings', exact: true })).toBeVisible();
     await audit('390 settings', 'dialog[open]');
     await page.keyboard.press('Escape');
+    await prompt.fill('/');
+    await expect(page.locator('#studio-typed-root [role="listbox"][aria-label="Build task commands"]')).toBeVisible();
+    await audit('390 composer menu');
+    await page.keyboard.press('Escape');
+    await root.locator('[data-action="toggle-projects"]').click();
+    await root.locator('nav[aria-label="Studio"]').getByRole('button', { name: 'Models', exact: true }).click();
+    await root.locator('[data-action="toggle-projects"]').click();
+    await expect(root.locator('.models-panel')).toBeVisible();
+    await audit('390 models');
 
     await openTypedAt(page, 1024);
     await audit('1024 agent');
@@ -350,6 +364,17 @@ test('coarse_pointer_targets_are_at_least_44_css_pixels', async ({ browser }) =>
     await root.locator('.toolbar-command').click();
     await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible();
     violations.push(...(await targetViolations(page, 44, 'dialog[open]')).map((row) => ({ ...row, label: '390 coarse palette' })));
+    await page.keyboard.press('Escape');
+    const prompt = promptLocator(page);
+    await prompt.fill('/');
+    await expect(page.locator('#studio-typed-root [role="listbox"][aria-label="Build task commands"]')).toBeVisible();
+    violations.push(...(await targetViolations(page, 44)).map((row) => ({ ...row, label: '390 coarse menu' })));
+    await page.keyboard.press('Escape');
+    await root.locator('[data-action="toggle-projects"]').click();
+    await root.locator('nav[aria-label="Studio"]').getByRole('button', { name: 'Models', exact: true }).click();
+    await root.locator('[data-action="toggle-projects"]').click();
+    await expect(root.locator('.models-panel')).toBeVisible();
+    violations.push(...(await targetViolations(page, 44)).map((row) => ({ ...row, label: '390 coarse models' })));
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
     await context.close();
 
@@ -377,6 +402,19 @@ test('mobile_form_text_is_at_least_16px', async ({ page }) => {
     await root.locator('.session-toolbar-actions button[aria-label="Settings"]').click();
     await expect(page.getByRole('dialog', { name: 'Studio settings', exact: true })).toBeVisible();
     violations.push(...(await mobileFormFontViolations(page)).map((row) => ({ ...row, label: '390 settings' })));
+    await page.keyboard.press('Escape');
+    await root.locator('[data-pane-target="editor"]').click();
+    await root.getByRole('button', { name: 'Open demo', exact: true }).first().click();
+    const file = root.locator('.code-input textarea[aria-label="File contents"]');
+    await expect(file).toBeEnabled();
+    await expect(file).toHaveCSS('font-size', '16px');
+    violations.push(...(await mobileFormFontViolations(page)).map((row) => ({ ...row, label: '390 workspace' })));
+    await root.locator('.session-toolbar-actions button[aria-label="Settings"]').click();
+    const editorFontSize = page.getByRole('dialog', { name: 'Studio settings', exact: true }).getByLabel('Editor font size');
+    await editorFontSize.fill('20');
+    await editorFontSize.press('Tab');
+    await page.keyboard.press('Escape');
+    await expect(file).toHaveCSS('font-size', '20px');
     expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);
 });
 
