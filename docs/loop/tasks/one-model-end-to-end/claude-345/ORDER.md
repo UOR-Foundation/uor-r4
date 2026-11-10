@@ -62,7 +62,7 @@ Casey, in this lab's chat, after T0 was run and reported: "T0 is not a track tha
 
 **What stays as it was.** T0's sheet, runs, seals and REPORT are kept unchanged as the record of a configuration that was run; no bar of T0 is moved. T0's follow-on steps in the design are not started.
 
-**Files in scope, added:** `docs/harness/prep/one-model-end-to-end-memory-line-2026-11-10.md`.
+**Files in scope, added:** `docs/harness/prep/one-model-end-to-end-memory-line-2026-11-10.md`; `crates/uor-r4-training/src/bin/recall-pairs.rs` and its entry in `crates/uor-r4-training/Cargo.toml` (the sheet's reader for the matched recall pairs: a new binary with no new dependency).
 
 **Done when, added:**
 5. The memory-line sheet carries a FIT from a fresh non-author review and this lab's pre-run review before any pod is created.
