@@ -1,14 +1,14 @@
 import type { ShellStatus } from './types.js';
 import { Icon } from './ui/Icon.js';
 
-interface SessionToolbarProps { status: ShellStatus; projectName: string; drawerOpen: boolean; onToggleProjects(): void; onNewProject(): void; onModels(): void; onPalette?(): void; onSettings?(): void; onInspector?(): void; inspectorOpen?: boolean }
+interface SessionToolbarProps { status: ShellStatus; projectName: string; environment: string; railOpen: boolean; onToggleProjects(): void; onNewProject(): void; onModels(): void; onPalette?(): void; onSettings?(): void; onInspector?(): void; inspectorOpen?: boolean }
 
-export function SessionToolbar({ status, projectName, drawerOpen, onToggleProjects, onNewProject, onModels, onPalette, onSettings, onInspector, inspectorOpen = false }: SessionToolbarProps) {
+export function SessionToolbar({ status, projectName, environment, railOpen, onToggleProjects, onNewProject, onModels, onPalette, onSettings, onInspector, inspectorOpen = false }: SessionToolbarProps) {
     return <header class="session-toolbar">
         <div class="session-toolbar-main">
-            <button type="button" class="toolbar-icon" data-action="toggle-projects" aria-label="Toggle projects" aria-controls="studio-navigation" aria-expanded={drawerOpen} onClick={onToggleProjects}><Icon name="workspace" /></button>
+            <button type="button" class="toolbar-icon" data-action="toggle-projects" aria-label="Toggle projects" aria-controls="studio-navigation" aria-expanded={railOpen} onClick={onToggleProjects}><Icon name="workspace" /></button>
             <span class="session-wordmark">UOR <span>Harness</span></span>
-            <label class="toolbar-selector"><span>Environment</span><select data-control="environment" aria-label="Environment"><option>Local browser</option><option disabled>Harness service (not connected)</option></select></label>
+            <label class="toolbar-selector"><span>Environment</span><select data-control="environment" aria-label="Environment"><option>{environment}</option><option disabled>Harness service (not connected)</option></select></label>
             <button type="button" class="toolbar-selector" data-control="project" onClick={onNewProject}><span>Project</span><strong>{projectName}</strong><Icon name="chevron" /></button>
             <label class="toolbar-selector"><span>Permission</span><select data-control="permission" aria-label="Permission"><option>Ask before write</option><option disabled>Autonomous (requires service)</option></select></label>
             <button type="button" class="toolbar-selector" data-control="model" onClick={onModels}><span>Model</span><strong>{status.source === 'No source selected' ? 'Choose model' : status.source}</strong><Icon name="chevron" /></button>

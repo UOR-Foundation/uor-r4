@@ -28,6 +28,7 @@ interface AppShellProps {
 }
 
 export function AppShell({ activeSection, onSection, status, sessions, children, primary, secondarySection, secondaryChildren, onSplit, onCloseSplit, onPalette, onSettings, onInspector, inspectorOpen = false, onModels, onOpenFolder, alert }: AppShellProps) {
+    const environment = 'Local browser';
     const [drawerOpen, setDrawerOpen] = useState(() => window.innerWidth > 800);
     const [taskRailOpen, setTaskRailOpen] = useState(() => window.innerWidth >= 1024);
     const [projectOpen, setProjectOpen] = useState(false);
@@ -57,13 +58,13 @@ export function AppShell({ activeSection, onSection, status, sessions, children,
         catch (error) { setProjectError(String(error instanceof Error ? error.message : error)); }
         finally { setChoosingFolder(false); }
     };
-    return <div class="harness-shell studio-shell">
-        <SessionToolbar status={status} projectName={projectName} drawerOpen={taskRailOpen} onToggleProjects={toggleTaskRail} onNewProject={openProject} onModels={onModels || (() => onSection('models'))} onPalette={onPalette} onSettings={onSettings} onInspector={onInspector} inspectorOpen={inspectorOpen} />
-        <div class="harness-body">
-            <div data-region="task-rail" hidden={!taskRailOpen} style={{ display: taskRailOpen ? 'flex' : 'none' }}>
-                <ProjectSidebar activeSection={activeSection} onSection={onSection} onNewProject={openProject} drawerOpen={drawerOpen} sessions={sessions} />
+    return <div class="harness-shell studio-shell task-workspace">
+        <SessionToolbar status={status} projectName={projectName} environment={environment} railOpen={taskRailOpen} onToggleProjects={toggleTaskRail} onNewProject={openProject} onModels={onModels || (() => onSection('models'))} onPalette={onPalette} onSettings={onSettings} onInspector={onInspector} inspectorOpen={inspectorOpen} />
+        <div class="harness-body" data-rail-open={taskRailOpen ? 'true' : 'false'}>
+            <div data-region="task-rail" hidden={!taskRailOpen}>
+                <ProjectSidebar activeSection={activeSection} onSection={onSection} onNewProject={openProject} projectName={projectName} environment={environment} railOpen={taskRailOpen} sessions={sessions} />
             </div>
-            <main id="harness-main" data-region="task-detail" tabindex={-1}>{alert}<PaneDock activeSection={activeSection} onSection={onSection} onSplit={onSplit} onCloseSplit={onCloseSplit} secondarySection={secondarySection} secondaryChildren={secondaryChildren}>{primary ?? children}</PaneDock></main>
+            <main id="harness-main" data-region="task-detail" tabindex={-1}>{alert}<PaneDock activeSection={activeSection} onSection={onSection} onSplit={onSplit} onCloseSplit={onCloseSplit} secondarySection={secondarySection} secondaryChildren={secondaryChildren ? <div class="task-work-surface" data-region="work-surface">{secondaryChildren}</div> : secondaryChildren}>{primary ?? children}</PaneDock></main>
         </div>
         {children !== primary && children}
         {projectOpen && <Modal title="New project" onClose={() => setProjectOpen(false)}><form class="project-form" onSubmit={(event) => { event.preventDefault(); if (!projectDraft.trim() || !projectFolder) return; setProjectName(projectDraft.trim()); setProjectOpen(false); onSection('workspace'); }}>

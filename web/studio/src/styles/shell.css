@@ -1,0 +1,25 @@
+.harness-shell.task-workspace {
+    --uor-rail-width: 268px;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    background: var(--uor-canvas);
+    color: var(--uor-text);
+}
+.task-workspace .session-toolbar { background: var(--uor-surface); border-block-end-color: var(--uor-border); }
+.task-workspace .harness-body { display: grid; grid-template-columns: minmax(0, 1fr); min-inline-size: 0; }
+.task-workspace .harness-body[data-rail-open="true"] { grid-template-columns: auto minmax(0, 1fr); }
+.task-workspace [data-region="task-rail"] { display: flex; min-inline-size: 0; }
+.task-workspace [data-region="task-rail"][hidden] { display: none; }
+.task-workspace [data-region="task-detail"] { display: block; min-inline-size: 0; }
+.task-workspace [data-region="work-surface"] { min-inline-size: 0; min-block-size: 100%; }
+.harness-shell.task-workspace button:focus-visible,
+.harness-shell.task-workspace input:focus-visible,
+.harness-shell.task-workspace select:focus-visible,
+.harness-shell.task-workspace textarea:focus-visible,
+.harness-shell.task-workspace summary:focus-visible,
+.harness-shell.task-workspace a:focus-visible { outline: 2px solid var(--uor-focus); outline-offset: 2px; }
+
+.project-home { display: grid; gap: .25rem; padding: .75rem; border-block-end: 1px solid var(--uor-border); }
+.project-home h2 { margin: 0; overflow: hidden; font-size: .95rem; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+.project-home-environment { margin: 0; color: var(--uor-muted); font-size: .75rem; }
+.project-home-empty { margin: .4rem 0 0; padding: .55rem .6rem; border: 1px dashed var(--uor-border); border-radius: var(--uor-radius-sm); color: var(--uor-muted); font-size: .78rem; }

@@ -48,6 +48,44 @@ describe('AppShell', () => {
         expect(host.textContent).toContain('Session list');
     });
 
+    it('renders the task workspace with rail, detail and work-surface regions', () => {
+        act(() => {
+            render(<AppShell
+                activeSection="agent"
+                onSection={vi.fn()}
+                status={{ source: 'none', artifact: 'none', privacy: 'local', file: 'none', session: 'new' }}
+                secondarySection="workspace"
+                secondaryChildren={<p>Work surface content</p>}
+                primary={<h1>Agent</h1>}
+            ><p>Overlays</p></AppShell>, host);
+        });
+        const shell = host.querySelector<HTMLElement>('.harness-shell')!;
+        expect(shell.classList.contains('studio-shell')).toBe(true);
+        expect(shell.classList.contains('task-workspace')).toBe(true);
+        expect(host.querySelector('[data-region="task-rail"]')).not.toBeNull();
+        expect(host.querySelector('main[data-region="task-detail"]')).not.toBeNull();
+        const workSurface = host.querySelector('[data-region="work-surface"]');
+        expect(workSurface).not.toBeNull();
+        expect(workSurface?.closest('.pane-secondary')).not.toBeNull();
+        expect(host.querySelectorAll('h1')).toHaveLength(1);
+    });
+
+    it('does not render a green placeholder treatment for the task workspace', () => {
+        act(() => { render(<AppShell activeSection="agent" onSection={vi.fn()} status={{ source: 'none', artifact: 'none', privacy: 'local', file: 'none', session: 'new' }}><p>Content</p></AppShell>, host); });
+        const shell = host.querySelector<HTMLElement>('.harness-shell')!;
+        expect(shell.className.split(/\s+/)).toEqual(['harness-shell', 'studio-shell', 'task-workspace']);
+        expect(shell.outerHTML.toLowerCase()).not.toMatch(/green|placeholder/);
+    });
+
+    it('shows the actual project name and environment with a normal empty task state', () => {
+        act(() => { render(<AppShell activeSection="agent" onSection={vi.fn()} status={{ source: 'none', artifact: 'none', privacy: 'local', file: 'none', session: 'new' }}><p>Content</p></AppShell>, host); });
+        const rail = host.querySelector<HTMLElement>('[data-region="task-rail"]')!;
+        expect(rail.textContent).toContain('uor-r4');
+        expect(rail.textContent).toContain('Local browser');
+        expect(rail.textContent).toContain('No tasks yet');
+        expect(rail.textContent).not.toMatch(/runtime_unavailable|runtime is not initialized|hosted|connected/i);
+    });
+
     it('creates a project through the real folder callback and enters its workspace', async () => {
         Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value(this: HTMLDialogElement) { this.open = true; } });
         Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value(this: HTMLDialogElement) { this.open = false; this.dispatchEvent(new Event('close')); } });
