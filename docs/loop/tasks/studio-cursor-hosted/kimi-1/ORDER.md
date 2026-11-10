@@ -8,7 +8,7 @@ The owner said verbatim: **"I approve of this plan, please implement it end to e
 
 ## Cancel probe
 
-Confirm no competing ORDER overlaps these paths, the contract crate is absent, and typed-shell/PTY evidence remains. Official issue must exist before product code. Cancel only a complete duplicate; missing hooks/tests are work. Class: instrument/host, no model compute.
+Confirm no competing ORDER overlaps these paths, the contract crate is absent, and typed-shell/PTY evidence remains. Official issue must exist before product code. Cancel only a complete duplicate; missing hooks/tests are work.
 
 ## Scope
 
