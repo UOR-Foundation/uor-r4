@@ -1,10 +1,10 @@
 # ORDER: Stage 0 contract and protected baseline, kimi-1
 
-Lab: kimi. Item: [studio-cursor-hosted](../../../../roadmap/items/studio-cursor-hosted.md). Issue: pending official sync; bind its number before product code. Base: `4265dc3d6c94015ba97bcb1505ed8d57e339a39a`. References #3569; leaves its status and acceptance unchanged.
+Lab: kimi. Item: [studio-cursor-hosted](../../../../roadmap/items/studio-cursor-hosted.md) (#3917). Base: `993bfd36cc4ef4660d482d0f65238361d7126e12`. References #3569; leaves its status and acceptance unchanged.
 
 ## Owner approval and outcome
 
-The owner said verbatim: **"I approve of this plan, please implement it end to end autonomously"** (2026-11-09). Complete official issue sync, then Tasks 1–4 with red-first tests and independent reviews: Rust contract, generated TypeScript, browser client/reducer, and protected baseline guards. Fixtures are not model evidence.
+The owner said verbatim: **"I approve of this plan, please implement it end to end autonomously"** (2026-11-09). Official issue #3917 is synced. Execute Tasks 1–4 with red-first tests and independent reviews: Rust contract, generated TypeScript, browser client/reducer, and protected baseline guards. Fixtures are not model evidence.
 
 ## Cancel probe
 
@@ -31,4 +31,4 @@ Stage acceptance: official issue number and generated metadata land through `roa
 
 ## Stop and re-scope if
 
-A requirement needs a new dependency, host task store, model/API support, second runtime authority, renamed protected selectors, changed legacy behavior, or unsupported capability claim. Roadmap check/render/sync is BLOCKED/NOT_RUN on four unchanged base errors in `float-kernel-fusion` and `infra-desktop-client-tauri`; never manually create the issue, edit generated metadata, or repair those unrelated items under this ORDER.
+A requirement needs a new dependency, host task store, model/API support, second runtime authority, renamed protected selectors, changed legacy behavior, or unsupported capability claim. Official sync created #3917 after separate PR #3916 repaired base validation; never manually create issues or hand-edit generated metadata. Stop on any unexpected sync write or unmet task acceptance.
