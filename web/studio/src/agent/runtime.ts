@@ -487,8 +487,8 @@ export class AgentRuntime {
             this.timers.clearInterval(this.heartbeatHandle);
             this.heartbeatHandle = null;
         }
-        await this.heartbeatTask;
-        for (const control of [...this.active.values()]) {
+        const controls = [...this.active.values()];
+        for (const control of controls) {
             control.terminal = true;
             control.cancelRequested = true;
             this.clearTimers(control);
@@ -496,8 +496,14 @@ export class AgentRuntime {
             control.pendingApproval = null;
             control.stopDeferred?.resolve(false);
             control.stopDeferred = null;
+        }
+        // Controls are terminal; close the host before any chain/iterator wait
+        // so a pending tool call can be rejected instead of holding cleanup.
+        let hostClosed = this.hostClientInstance === null;
+        if (!hostClosed) {
             try {
-                await control.modelIterator?.return?.();
+                this.hostClientInstance?.close();
+                hostClosed = true;
             } catch (error) {
                 if (this.persistenceError === null) {
                     this.persistenceError = new AgentClientError(
@@ -506,16 +512,43 @@ export class AgentRuntime {
                     );
                 }
             }
-            this.active.delete(control.taskId);
-            await this.releaseLease(control.taskId);
         }
-        this.taskQueues.clear();
-        await Promise.allSettled([...this.chains.values()]);
-        for (const stream of [...this.eventStreams]) stream.close();
-        this.listeners.clear();
-        this.hostClientInstance?.close();
-        this.taskStore?.close();
-        this.opened = false;
+        try {
+            await this.heartbeatTask;
+            for (const control of controls) {
+                try {
+                    await control.modelIterator?.return?.();
+                } catch (error) {
+                    if (this.persistenceError === null) {
+                        this.persistenceError = new AgentClientError(
+                            errorCode(error),
+                            errorMessage(error),
+                        );
+                    }
+                }
+                this.active.delete(control.taskId);
+                await this.releaseLease(control.taskId);
+            }
+            this.taskQueues.clear();
+            await Promise.allSettled([...this.chains.values()]);
+            for (const stream of [...this.eventStreams]) stream.close();
+            this.listeners.clear();
+        } finally {
+            if (!hostClosed) {
+                try {
+                    this.hostClientInstance?.close();
+                } catch (error) {
+                    if (this.persistenceError === null) {
+                        this.persistenceError = new AgentClientError(
+                            errorCode(error),
+                            errorMessage(error),
+                        );
+                    }
+                }
+            }
+            this.taskStore?.close();
+            this.opened = false;
+        }
     }
 
     async listTasks(input: ListTasksInput = {}): Promise<TaskSummary[]> {

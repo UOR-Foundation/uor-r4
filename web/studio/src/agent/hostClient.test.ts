@@ -16,6 +16,7 @@ import {
     HOST_RESULT_SCHEMA,
     HostClient,
     sha256Canonical,
+    type HostExecuteOptions,
     type HostSubscribeOptions,
     type HostSubscription,
     type HostToolIntent,
@@ -35,6 +36,7 @@ import {
 import { AgentRuntime } from './runtime.js';
 import { ReplayModelPort } from './modelPort.js';
 import { FixtureTransport } from './fixtureTransport.js';
+import type { AgentTaskStore } from './store.js';
 import { createAgentStore } from '../state/agent.js';
 
 const ALL_FALSE: HostCapabilities = {
@@ -1664,7 +1666,11 @@ describe('HostClient fix-1 pending failure', () => {
             pendingTimeoutMs: 10,
         });
         const pending = client.execute(await validIntent());
-        await flush();
+        await until(
+            () => scheduler.pending === 1,
+            'pending timeout scheduled',
+            500,
+        );
         expect(scheduler.runNext()).toBe(true);
         await expect(pending).rejects.toMatchObject({
             code: 'transport_closed',
@@ -1854,8 +1860,7 @@ describe('HostClient fix-2 ownership and recovery', () => {
         });
         const second = client.execute(secondIntent);
         void second.catch(() => undefined);
-        await flush();
-        expect(polls).toBe(2);
+        await until(() => polls === 2, 'poll resubscribe', 500);
         await expect(second).resolves.toMatchObject({
             intent_id: secondIntent.intent_id,
         });
@@ -1920,8 +1925,7 @@ describe('HostClient fix-2 ownership and recovery', () => {
         });
         const second = client.execute(secondIntent);
         void second.catch(() => undefined);
-        await flush();
-        expect(gets).toBe(2);
+        await until(() => gets === 2, 'loopback resubscribe', 500);
         await expect(second).resolves.toMatchObject({
             intent_id: secondIntent.intent_id,
         });
@@ -1951,8 +1955,11 @@ describe('HostClient fix-2 ownership and recovery', () => {
 
         const second = client.execute(secondIntent);
         void second.catch(() => undefined);
-        await flush();
-        expect(transport.subscriptions).toHaveLength(2);
+        await until(
+            () => transport.subscriptions.length === 2,
+            'stream resubscribe',
+            500,
+        );
         let settled = false;
         void second.then(
             () => {
@@ -2137,6 +2144,331 @@ describe('HostClient fix-2 ownership and recovery', () => {
             intent_id: intent.intent_id,
         });
         expect(polls).toBe(1);
+        client.close();
+    });
+});
+
+class ThrowingCloseTransport implements HostTransport {
+    readonly kind = 'bridge' as const;
+    readonly supportsStream = true;
+    readonly subscriptions: Array<{
+        options: HostSubscribeOptions;
+    }> = [];
+
+    async capabilities(): Promise<HostTransportCapabilities> {
+        return {
+            kind: 'bridge',
+            hostAvailable: true,
+            streaming: 'channel',
+            ...ALL_FALSE,
+        };
+    }
+
+    async invoke(): Promise<{ accepted: true }> {
+        return { accepted: true };
+    }
+
+    subscribe(
+        _listener: (result: HostToolResult) => void,
+        options: HostSubscribeOptions = {},
+    ): HostSubscription {
+        this.subscriptions.push({ options });
+        return {
+            close: () => {
+                throw new Error('subscription close failed');
+            },
+            cursor: () => null,
+        };
+    }
+
+    async approve(input: {
+        approvalId: string;
+        decision: 'approved' | 'denied';
+    }) {
+        return { approvalId: input.approvalId, decision: input.decision };
+    }
+}
+
+describe('HostClient fix-3 disposal and hardening', () => {
+    test('runtime_dispose_closes_host_before_awaiting_a_pending_tool_chain', async () => {
+        const scheduler = new ManualScheduler();
+        let polls = 0;
+        const bridge: TauriHostBridge = {
+            hasChannel: false,
+            async invoke(command) {
+                if (command === 'agent_host_invoke') return { accepted: true };
+                if (command === 'agent_host_poll') {
+                    polls += 1;
+                    return { cursor: 'c1', results: [] };
+                }
+                throw new Error(`unexpected Tauri command ${command}`);
+            },
+            channel(): TauriChannelHandle {
+                throw new Error('the offline shim has no Channel');
+            },
+        };
+        const host = new HostClient({
+            transport: new TauriHostTransport({
+                bridge,
+                scheduler,
+                pollIntervalMs: 10,
+            }),
+            timers: scheduler,
+        });
+        const originalExecute = host.execute.bind(host);
+        let hostPending: Promise<HostToolResult> | null = null;
+        vi.spyOn(host, 'execute').mockImplementation(((
+            input: unknown,
+            options?: HostExecuteOptions,
+        ) => {
+            const pending = originalExecute(
+                input as HostToolIntent,
+                options,
+            );
+            hostPending = pending;
+            return pending;
+        }) as typeof host.execute);
+        const model = new ReplayModelPort({
+            script: [
+                [
+                    {
+                        type: 'tool-call',
+                        toolCallId: 'tc_host_dispose',
+                        tool: 'file.read',
+                        arguments: { path: 'a.ts' },
+                    },
+                    { type: 'finished', reason: 'tool' },
+                ],
+                [
+                    { type: 'text-delta', text: 'unused' },
+                    { type: 'finished', reason: 'stop' },
+                ],
+            ],
+        });
+        const runtime = new AgentRuntime({
+            store: createAgentStore(),
+            modelPort: model,
+            hostClient: host,
+        });
+        await runtime.open();
+        const task = await runtime.createTask({ title: 'host dispose' });
+        await runtime.startRun({ taskId: task.taskId, prompt: 'read' });
+        await until(() => hostPending !== null, 'runtime host call', 500);
+        await until(() => polls >= 1, 'runtime host poll', 500);
+        const pendingHost = hostPending as unknown as Promise<HostToolResult>;
+        void pendingHost.catch(() => undefined);
+        // Test-only: hold one runtime chain open so the old dispose ordering
+        // (chains before host close) is observable. The model tool call above
+        // is still the real ReplayModelPort call awaiting the host.
+        const chains = (
+            runtime as unknown as { chains: Map<string, Promise<void>> }
+        ).chains;
+        let releaseChain!: () => void;
+        chains.set(
+            'fix3-held-chain',
+            new Promise<void>((resolve) => {
+                releaseChain = resolve;
+            }),
+        );
+        const dispose = runtime.dispose();
+        await expect(disposition(pendingHost)).resolves.toBe(
+            'rejected:transport_closed',
+        );
+        const pollsAtDispose = polls;
+        scheduler.runNext();
+        await flush();
+        expect(polls).toBe(pollsAtDispose);
+        releaseChain();
+        await expect(dispose).resolves.toBeUndefined();
+    });
+
+    test('client_dispose_closes_task_store_when_owned_host_close_throws', async () => {
+        const close = vi
+            .spyOn(HostClient.prototype, 'close')
+            .mockImplementation(() => {
+                throw new Error('host close failed');
+            });
+        const taskStoreClose = vi.fn();
+        const taskStore = {
+            close: taskStoreClose,
+            isOpen: true,
+            defaultWriterId: 'writer-fix3',
+        } as unknown as AgentTaskStore;
+        const client = new AgentClient({
+            transport: new FixtureTransport(),
+            taskStore,
+        });
+        try {
+            await expect(client.dispose()).rejects.toThrow('host close failed');
+            expect(taskStoreClose).toHaveBeenCalledTimes(1);
+        } finally {
+            close.mockRestore();
+        }
+    });
+
+    test('plain_value_invoke_settles_directly', async () => {
+        const intent = await validIntent();
+        const result = await validResult(intent);
+        const transport: HostTransport = {
+            kind: 'bridge',
+            supportsStream: true,
+            async capabilities() {
+                return {
+                    kind: 'bridge',
+                    hostAvailable: true,
+                    streaming: 'channel',
+                    ...ALL_FALSE,
+                };
+            },
+            invoke: (() => result) as unknown as HostTransport['invoke'],
+            subscribe: () => ({
+                close: () => undefined,
+                cursor: () => null,
+            }),
+            async approve(input) {
+                return {
+                    approvalId: input.approvalId,
+                    decision: input.decision,
+                };
+            },
+        };
+        const client = new HostClient({
+            transport,
+            timers: new ManualScheduler(),
+        });
+        await expect(client.execute(intent)).resolves.toMatchObject({
+            intent_id: intent.intent_id,
+        });
+        client.close();
+    });
+
+    test('accepted_invoke_without_stream_support_rejects_without_timeout', async () => {
+        const transport: HostTransport = {
+            kind: 'bridge',
+            async capabilities() {
+                return {
+                    kind: 'bridge',
+                    hostAvailable: true,
+                    streaming: 'none',
+                    ...ALL_FALSE,
+                };
+            },
+            async invoke() {
+                return { accepted: true };
+            },
+            subscribe: () => ({
+                close: () => undefined,
+                cursor: () => null,
+            }),
+            async approve(input) {
+                return {
+                    approvalId: input.approvalId,
+                    decision: input.decision,
+                };
+            },
+        };
+        const client = new HostClient({
+            transport,
+            timers: new ManualScheduler(),
+        });
+        const pending = client.execute(await validIntent());
+        void pending.catch(() => undefined);
+        await expect(disposition(pending)).resolves.toBe(
+            'rejected:host_unavailable',
+        );
+        client.close();
+    });
+
+    test('throwing_subscription_close_does_not_block_pending_cleanup', async () => {
+        const transport = new ThrowingCloseTransport();
+        const client = new HostClient({
+            transport,
+            timers: new ManualScheduler(),
+        });
+        const pending = client.execute(await validIntent());
+        void pending.catch(() => undefined);
+        await until(
+            () => transport.subscriptions.length === 1,
+            'throwing close subscription',
+            500,
+        );
+        let thrown: unknown = null;
+        try {
+            transport.subscriptions[0]!.options.onError?.(
+                new AgentClientError('internal', 'stream failed'),
+            );
+        } catch (error) {
+            thrown = error;
+        }
+        expect(thrown).toBeNull();
+        await expect(pending).rejects.toMatchObject({ code: 'internal' });
+
+        const second = client.execute(await validIntent());
+        void second.catch(() => undefined);
+        await until(
+            () => transport.subscriptions.length === 2,
+            'throwing close second subscription',
+            500,
+        );
+        let closeThrown: unknown = null;
+        try {
+            client.close();
+        } catch (error) {
+            closeThrown = error;
+        }
+        expect(closeThrown).toBeNull();
+        await expect(second).rejects.toMatchObject({
+            code: 'transport_closed',
+        });
+    });
+
+    test('data_artifact_omits_task_when_context_is_absent', async () => {
+        const recording = new RecordingAgentTransport();
+        const client = new AgentClient({
+            hostClient: new HostClient({
+                transport: new AgentTransportHostTransport(recording),
+            }),
+        });
+        await client.readArtifact({ path: 'a.txt' });
+        expect(recording.artifactInputs).toHaveLength(1);
+        expect(recording.artifactInputs[0]?.taskId).toBeUndefined();
+        expect('taskId' in (recording.artifactInputs[0] ?? {})).toBe(false);
+    });
+
+    test('subscribe_notifies_on_error_and_resync', async () => {
+        const transport = new ManualStreamTransport();
+        const client = new HostClient({
+            transport,
+            timers: new ManualScheduler(),
+        });
+        const errors: AgentClientError[] = [];
+        const resyncs: string[] = [];
+        const first = client.subscribe(() => undefined, {
+            onError: (error) => errors.push(error),
+        });
+        await until(
+            () => transport.subscriptions.length === 1,
+            'subscriber subscription',
+            500,
+        );
+        transport.subscriptions[0]!.options.onError?.(
+            new AgentClientError('internal', 'stream failed'),
+        );
+        expect(errors).toHaveLength(1);
+        expect(errors[0]?.code).toBe('internal');
+
+        const second = client.subscribe(() => undefined, {
+            onResync: (reason) => resyncs.push(reason),
+        });
+        await until(
+            () => transport.subscriptions.length === 2,
+            'subscriber resubscription',
+            500,
+        );
+        transport.subscriptions[1]!.options.onResync?.('cursor_expired');
+        expect(resyncs).toEqual(['cursor_expired']);
+        first.close();
+        second.close();
         client.close();
     });
 });

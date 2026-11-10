@@ -731,14 +731,14 @@ export class HostClient {
             return entry.promise;
         }
         if (entry.settled) return entry.promise;
-        let invocation: Promise<HostInvokeResponse>;
+        let invocation: HostInvokeResponse | Promise<HostInvokeResponse>;
         try {
             invocation = this.transport.invoke(intent, dataContext);
         } catch (error) {
             this.rejectPending(entry, toClientError(error));
             return entry.promise;
         }
-        void invocation.then(
+        void Promise.resolve(invocation).then(
             (response) => {
                 if (entry.settled) return;
                 const direct = asHostToolResult(response);
@@ -752,7 +752,7 @@ export class HostClient {
                             'host invoke returned an invalid response',
                         ),
                     );
-                } else if (this.transport.supportsStream === false) {
+                } else if (this.transport.supportsStream !== true) {
                     this.rejectPending(
                         entry,
                         new AgentClientError(
@@ -779,7 +779,7 @@ export class HostClient {
                 'host client is closed',
             );
         }
-        if (this.transport.supportsStream === false) {
+        if (this.transport.supportsStream !== true) {
             throw new AgentClientError(
                 'host_unavailable',
                 'the host transport has no result stream',
@@ -811,15 +811,21 @@ export class HostClient {
         if (this.closed) return;
         this.closed = true;
         this.subscriptionGeneration += 1;
-        this.subscription?.close();
+        const subscription = this.subscription;
         this.subscription = null;
-        this.failAll(
-            new AgentClientError(
-                'transport_closed',
-                'host client closed before the result arrived',
-            ),
-        );
-        this.streamListeners.clear();
+        try {
+            subscription?.close();
+        } catch {
+            // A transport close failure must not block pending cleanup.
+        } finally {
+            this.failAll(
+                new AgentClientError(
+                    'transport_closed',
+                    'host client closed before the result arrived',
+                ),
+            );
+            this.streamListeners.clear();
+        }
     }
 
     async approve(input: HostApprovalInput): Promise<ApprovalReceipt> {
@@ -913,7 +919,7 @@ export class HostClient {
 
     private ensureSubscription(): void {
         if (this.subscription !== null || this.closed) return;
-        if (this.transport.supportsStream === false) return;
+        if (this.transport.supportsStream !== true) return;
         const generation = ++this.subscriptionGeneration;
         const subscription = this.transport.subscribe(
             (result) => {
@@ -951,8 +957,13 @@ export class HostClient {
         this.subscriptionGeneration += 1;
         const subscription = this.subscription;
         this.subscription = null;
-        subscription?.close();
-        this.failAll(error, reason);
+        try {
+            subscription?.close();
+        } catch {
+            // A transport close failure must not block pending cleanup.
+        } finally {
+            this.failAll(error, reason);
+        }
     }
 
     private async onStreamResult(result: HostToolResult): Promise<void> {

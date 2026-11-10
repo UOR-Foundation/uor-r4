@@ -763,10 +763,13 @@ export class AgentClient {
             }
             return;
         }
-        if (this.ownsHostClient) {
-            this.hostClient.close();
+        try {
+            if (this.ownsHostClient) {
+                this.hostClient.close();
+            }
+        } finally {
+            this.taskStore?.close();
         }
-        this.taskStore?.close();
     }
 
     private requireResolvedTask(taskId: string): void {
