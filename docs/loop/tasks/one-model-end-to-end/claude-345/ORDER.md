@@ -51,3 +51,20 @@ The rows are checked in that order and the first match owns the cell; the sheet 
 2. Both seeds are trained and scored, or recorded NOT_RUN with the reason, and each run is sealed in the store and read back.
 3. The REPORT gives the negatives first, the row of the table above that was read, the counts at both seeds, and at least twenty decoded replies beside their true replies.
 4. The notebook has one row for T0.
+
+## Redirect (owner, 10 Nov 2026)
+
+Casey, in this lab's chat, after T0 was run and reported: "T0 is not a track that will advance the project at all", "you need to find the right one", "we have every [...] mechanism we need, we just have decided to keep NOT USING THEM". The lab then ran the saved 29 Oct model on the laptop and found that it talks and that the value is what fails, recommended one run, and Casey answered: "Run it".
+
+**The work from here: the memory-line run.** The recipe that produced the talking model, trained on the same controlled world with the memory line written before each recall reply, then exported and served on the laptop with `/memory auto`, and read as a conversation beside today's model. The sheet is [one-model-end-to-end-memory-line-2026-11-10](../../../../harness/prep/one-model-end-to-end-memory-line-2026-11-10.md): three arms at seed 2 (the line; the line with two-token copy keys; the twin without the line), the bars and what each outcome unlocks.
+
+**Why under this unit.** `uor-harness loop claim one-model-end-to-end` was refused on 10 Nov: the item is held by claude-346's worktree. This unit already holds the item's draft PR (#3911), so the run is recorded here and no second claim is made.
+
+**What stays as it was.** T0's sheet, runs, seals and REPORT are kept unchanged as the record of a configuration that was run; no bar of T0 is moved. T0's follow-on steps in the design are not started.
+
+**Files in scope, added:** `docs/harness/prep/one-model-end-to-end-memory-line-2026-11-10.md`.
+
+**Done when, added:**
+5. The memory-line sheet carries a FIT from a fresh non-author review and this lab's pre-run review before any pod is created.
+6. Each arm is trained, sealed in the store and read back, or recorded NOT_RUN with the reason.
+7. The REPORT shows, word for word, the same conversations through today's artifact and through each arm's, with the panel counts and the row of the sheet's table that was read, negatives first.
