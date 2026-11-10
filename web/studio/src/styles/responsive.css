@@ -41,3 +41,27 @@
     .composer-model-button { max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .composer-attachment-name { max-inline-size: 9rem; }
 }
+
+.task-workspace summary { min-block-size: 24px; }
+.task-workspace .pane-splitter {
+    flex: 0 0 24px;
+    inline-size: 24px;
+    min-inline-size: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+.task-workspace .pane-splitter span { inline-size: 2px; }
+
+@media (max-width: 800px) {
+    .task-workspace :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]), select, textarea) { font-size: 16px; }
+}
+
+@media (pointer: coarse) {
+    .task-workspace :is(button, select, summary, a[href]) { min-block-size: 44px; min-inline-size: 44px; }
+    .task-workspace :is(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), textarea) { min-block-size: 44px; }
+    .task-workspace label:has(input[type="checkbox"]),
+    .task-workspace label:has(input[type="radio"]) { min-block-size: 44px; align-items: center; }
+    .task-workspace .pane-splitter { flex-basis: 44px; inline-size: 44px; min-inline-size: 44px; }
+}

@@ -329,6 +329,7 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
                 ref={textareaRef}
                 aria-label="Prompt"
                 placeholder="Ask R4 Harness, or type / for tasks"
+                aria-haspopup="listbox"
                 aria-expanded={menuOpen ? 'true' : 'false'}
                 aria-controls={menuId}
                 aria-activedescendant={menuOpen ? options[activeIndex].id : undefined}

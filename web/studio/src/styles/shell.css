@@ -20,9 +20,12 @@
 .harness-shell.task-workspace a:focus-visible { outline: 2px solid var(--uor-focus); outline-offset: 2px; }
 .harness-shell.task-workspace .agent-composer textarea:focus-visible,
 .harness-shell.task-workspace .code-input textarea:focus-visible { outline: 0; }
+.harness-shell.task-workspace .code-frame:focus-within { outline: 2px solid var(--uor-accent); outline-offset: 2px; }
 @media (forced-colors: active) {
     .harness-shell.task-workspace .agent-composer textarea:focus-visible,
-    .harness-shell.task-workspace .code-input textarea:focus-visible { outline: 2px solid CanvasText; }
+    .harness-shell.task-workspace .code-input textarea:focus-visible,
+    .harness-shell.task-workspace .agent-composer:focus-within,
+    .harness-shell.task-workspace .code-frame:focus-within { outline: 2px solid CanvasText; }
 }
 
 .project-home { display: grid; gap: .25rem; padding: .75rem; border-block-end: 1px solid var(--uor-border); }
