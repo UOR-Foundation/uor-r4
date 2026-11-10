@@ -977,3 +977,131 @@ describe('AgentStore scoped mutation journal', () => {
         expect(store.snapshot().runs[0]?.generation).toBe(2);
     });
 });
+
+describe('AgentStore delivery-error projection', () => {
+    function applyDeliveryEvents(store: ReturnType<typeof createAgentStore>, events: AgentIncomingEvent[]) {
+        for (const event of events) {
+            const result = store.apply(event);
+            expect(result.status, `${event.type} at ${event.sequence}`).toBe('applied');
+        }
+    }
+
+    test('message_not_delivered_is_scoped_to_the_message_and_cleared_from_run_error', () => {
+        const store = createAgentStore();
+        applyDeliveryEvents(store, [
+            queued(0),
+            started(1),
+            makeEvent(2, 'message.queued', {
+                message_id: MESSAGE_ID,
+                delivery: 'queue',
+                boundary: 'next_turn',
+                text_preview: 'queued follow-up',
+            }),
+            makeEvent(3, 'error', {
+                code: 'message_not_delivered',
+                message: `message ${MESSAGE_ID} was not delivered (cancelled)`,
+                retryable: false,
+            }),
+            makeEvent(4, 'run.cancelled', {
+                safe_boundary: true,
+                finished_at_ms: 1_794_283_200_004,
+            }),
+        ]);
+
+        const run = store.snapshot().runs[0]!;
+        expect(run.state).toBe('cancelled');
+        expect(run.error, 'a delivery error is not a run-level failure').toBeNull();
+        expect(run.deliveryErrors).toEqual([
+            {
+                code: 'message_not_delivered',
+                messageId: MESSAGE_ID,
+                message: `message ${MESSAGE_ID} was not delivered (cancelled)`,
+            },
+        ]);
+    });
+
+    test('message_not_delivered_does_not_survive_a_successful_terminal_event', () => {
+        const store = createAgentStore();
+        applyDeliveryEvents(store, [
+            queued(0),
+            started(1),
+            makeEvent(2, 'error', {
+                code: 'message_not_delivered',
+                message: `message ${MESSAGE_ID} was not delivered (finished)`,
+                retryable: false,
+            }),
+            makeEvent(3, 'run.finished', {
+                status: 'finished',
+                finished_at_ms: 1_794_283_200_003,
+                duration_ms: 3,
+            }),
+        ]);
+
+        const run = store.snapshot().runs[0]!;
+        expect(run.state).toBe('finished');
+        expect(run.error).toBeNull();
+        expect(run.deliveryErrors).toHaveLength(1);
+        expect(run.deliveryErrors[0]?.messageId).toBe(MESSAGE_ID);
+    });
+
+    test('genuine_error_and_run_failure_remain_run_level', () => {
+        const errorStore = createAgentStore();
+        applyDeliveryEvents(errorStore, [
+            queued(0),
+            started(1),
+            makeEvent(2, 'error', {
+                code: 'model_protocol_error',
+                message: 'bad model frame',
+                retryable: true,
+            }),
+        ]);
+        const transient = errorStore.snapshot().runs[0]!;
+        expect(transient.error).toEqual({
+            code: 'model_protocol_error',
+            message: 'bad model frame',
+            retryable: true,
+        });
+        expect(transient.deliveryErrors).toEqual([]);
+
+        const failedStore = createAgentStore();
+        applyDeliveryEvents(failedStore, [
+            queued(0),
+            started(1),
+            makeEvent(2, 'run.failed', {
+                code: 'model_unavailable',
+                message: 'synthetic retryable failure',
+                retryable: true,
+            }),
+        ]);
+        const failed = failedStore.snapshot().runs[0]!;
+        expect(failed.error).toEqual({
+            code: 'model_unavailable',
+            message: 'synthetic retryable failure',
+            retryable: true,
+        });
+        expect(failed.deliveryErrors).toEqual([]);
+    });
+
+    test('journal rollback restores the previous delivery-error projection', () => {
+        const store = createAgentStore();
+        applyDeliveryEvents(store, [
+            queued(0),
+            started(1),
+            makeEvent(2, 'error', {
+                code: 'message_not_delivered',
+                message: `message ${MESSAGE_ID} was not delivered (cancelled)`,
+                retryable: false,
+            }),
+        ]);
+        const before = JSON.parse(JSON.stringify(store.snapshot().runs[0]));
+        const journaled = store.applyJournaled(
+            makeEvent(3, 'run.cancelled', {
+                safe_boundary: true,
+                finished_at_ms: 1_794_283_200_003,
+            }),
+        );
+        expect(journaled.result.status).toBe('applied');
+        journaled.rollback();
+        expect(JSON.parse(JSON.stringify(store.snapshot().runs[0]))).toEqual(before);
+    });
+});

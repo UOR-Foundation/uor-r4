@@ -123,6 +123,7 @@ interface LiveRunSnapshot {
     } | null;
     latestRunId: string | null;
     runId: string | null;
+    retryOfRunId: string | null;
     generation: number | null;
     lastSequence: number | null;
     lastEventId: string | null;
@@ -159,8 +160,17 @@ interface ReloadTaskSeed {
     };
 }
 
+export interface StudioAgentOwnerForTest {
+    client: AgentClient;
+    store: AgentStore;
+    taskStore: AgentTaskStore | null;
+    runtime: AgentRuntime | null;
+    modelPort?: ModelPort;
+}
+
 export interface StudioTestApi {
     reset(): Promise<void>;
+    clientForTest(): AgentClient | null;
     open(): Promise<RestoreView>;
     reopen(): Promise<RestoreView>;
     memoryCursor(): CursorView | null;
@@ -214,7 +224,9 @@ export interface StudioTestApi {
         toolCallId: string,
     ): Promise<Outcome>;
     startTwoLiveTasksForTest(): Promise<Outcome>;
+    queueTaskMessageForTest(taskId: string, text: string): Promise<Outcome>;
     liveTextForTest(runId: string, text: string): Promise<Outcome>;
+    failLiveRunForTest(runId: string): Promise<Outcome>;
     liveToolForTest(runId: string, path: string): Promise<Outcome>;
     finishLiveRunForTest(runId: string): Promise<Outcome>;
     resyncLiveRunForTest(runId: string): Promise<Outcome>;
@@ -442,7 +454,7 @@ class DeferredTestModelStream implements AsyncIterable<ModelStreamEvent> {
 
 // Test-only synthetic port. It exposes one live stream per model turn so a
 // gated probe can drive two independent runs from the same runtime.
-class GatedTestModelPort implements ModelPort {
+export class GatedTestModelPort implements ModelPort {
     readonly id = 'test-gated';
     readonly kind = 'synthetic-test';
     readonly synthetic = true;
@@ -463,6 +475,62 @@ class GatedTestModelPort implements ModelPort {
     }
 }
 
+export function createGatedTestModelPort(): GatedTestModelPort {
+    return new GatedTestModelPort();
+}
+
+export function studioTestNow(): number {
+    return state.nowMs;
+}
+
+export function createGatedTestToolExecutor() {
+    return testToolExecutor();
+}
+
+function testToolExecutor() {
+    return async (intent: {
+        taskId: string;
+        arguments: Record<string, unknown>;
+    }) => {
+        const path =
+            typeof intent.arguments.path === 'string'
+                ? intent.arguments.path
+                : `artifacts/${intent.taskId}.txt`;
+        return {
+            status: 'ok' as const,
+            output: { path },
+            files: [{ path, change: 'added' as const }],
+            head_digest: digestFor(intent.taskId),
+        };
+    };
+}
+
+function createTestClient(store: AgentStore, taskStore: AgentTaskStore): void {
+    const liveModel = new GatedTestModelPort();
+    const runtime = new AgentRuntime({
+        store,
+        taskStore,
+        modelPort: liveModel,
+        ownsTaskStore: false,
+        toolExecutor: testToolExecutor(),
+        now: () => state.nowMs,
+        timers: {
+            setInterval: testSetInterval,
+            clearInterval: testClearInterval,
+            setTimeout: (handler, timeout) =>
+                globalThis.setTimeout(handler, timeout),
+            clearTimeout: (handle) =>
+                globalThis.clearTimeout(handle as never),
+        },
+        writerId: `runtime-probe-${randomHex(8)}`,
+    });
+    state.store = store;
+    state.taskStore = taskStore;
+    state.runtime = runtime;
+    state.liveModel = liveModel;
+    state.client = new AgentClient({ runtime });
+}
+
 function ensureClient(): AgentClient {
     if (state.client !== null) return state.client;
     const store = createAgentStore();
@@ -475,15 +543,8 @@ function ensureClient(): AgentClient {
             clearInterval: testClearInterval,
         },
     });
-    const client = new AgentClient({
-        transport: new FixtureTransport(),
-        store,
-        taskStore,
-    });
-    state.store = store;
-    state.taskStore = taskStore;
-    state.client = client;
-    return client;
+    createTestClient(store, taskStore);
+    return state.client!;
 }
 
 function requireClient(): AgentClient {
@@ -625,6 +686,7 @@ async function performOpen(): Promise<void> {
     state.error = null;
     state.incomplete = [];
     try {
+        if (state.runtime !== null) await state.runtime.open();
         const report = await requireTaskStore().open();
         state.incomplete = report.incomplete.map((entry) => ({
             taskId: entry.task_id,
@@ -709,7 +771,7 @@ async function appendFixtureEvent(
 }
 
 async function createTaskAndEvents(options: {
-    mode?: 'message' | 'cancelling' | 'finished' | 'approval' | 'failed';
+    mode?: 'message' | 'cancelling' | 'finished' | 'approval' | 'failed' | 'detail';
     title?: string;
     text?: string;
 } = {}): Promise<FixtureSummary> {
@@ -824,6 +886,61 @@ async function createTaskAndEvents(options: {
         });
         if (failed.ok !== true) {
             throw new Error(`failed fixture failed: ${failed.code ?? ''}`);
+        }
+    } else if (mode === 'detail') {
+        const messageId = `msg_${randomHex(8)}`;
+        const requestDigest = digestFor('detail-tool');
+        const steps: Array<[string, Record<string, unknown>]> = [
+            ['assistant.delta', { message_id: messageId, text_delta: 'Hello ' }],
+            ['assistant.delta', { message_id: messageId, text_delta: 'from replay' }],
+            ['assistant.message', { message_id: messageId, text: 'Hello from replay' }],
+            ['tool.requested', {
+                tool_call_id: 'tool_detail_1',
+                tool: 'write_file',
+                arguments_digest: requestDigest,
+                arguments_preview: '{"path":"notes.md"}',
+            }],
+            ['tool.started', { tool_call_id: 'tool_detail_1' }],
+            ['tool.completed', {
+                tool_call_id: 'tool_detail_1',
+                status: 'ok',
+                output_digest: requestDigest,
+                output_preview: 'wrote notes',
+                truncated: false,
+            }],
+            ['host.instruction', {
+                text: '<script>hostile</script>',
+                status: 'completed',
+                tool_call_id: 'tool_hostile',
+            }],
+            ['error', {
+                code: 'malformed_event',
+                message: 'The event stream contained an invalid event. The transcript was not changed.',
+                retryable: false,
+            }],
+            ['usage.updated', { input_tokens: 12, output_tokens: 34, model_calls: 2 }],
+            ['plan.updated', {
+                plan_id: 'plan_detail_1',
+                title: 'Replay plan',
+                steps: [
+                    { step_id: 'step_read', label: 'Read request', state: 'done' },
+                    { step_id: 'step_write', label: 'Write answer', state: 'active' },
+                ],
+            }],
+        ];
+        for (const [type, data] of steps) {
+            const appended = await appendFixtureEvent(fixture, type, data);
+            if (appended.ok !== true) {
+                throw new Error(`detail fixture ${type} failed: ${appended.code ?? ''}`);
+            }
+        }
+        const finished = await appendFixtureEvent(fixture, 'run.finished', {
+            status: 'finished',
+            finished_at_ms: state.nowMs + fixture.eventIds.length + 1,
+            duration_ms: fixture.eventIds.length + 1,
+        });
+        if (finished.ok !== true) {
+            throw new Error(`detail finish failed: ${finished.code ?? ''}`);
         }
     } else {
         const finished = eventFor(fixture, 2, 1, 'run.finished', {
@@ -1083,15 +1200,19 @@ async function createClientRun(): Promise<FixtureSummary> {
     const deadline = Date.now() + 10_000;
     let cursor = client.store.getRunCursor(task.taskId, run.runId);
     while (
-        (cursor === null || cursor.lastSequence < 1) &&
+        (cursor === null || cursor.lastSequence < 2) &&
         Date.now() < deadline
     ) {
         await new Promise((resolve) => setTimeout(resolve, 10));
         cursor = client.store.getRunCursor(task.taskId, run.runId);
     }
-    if (cursor === null || cursor.lastSequence < 1 || cursor.lastDigest === null) {
-        throw new Error('client fixture run did not reach run.started');
+    if (cursor === null || cursor.lastSequence < 2 || cursor.lastDigest === null) {
+        throw new Error('client fixture run did not reach turn.started');
     }
+    state.liveRuns.set(run.runId, {
+        taskId: task.taskId,
+        runId: run.runId,
+    });
     const fixture: FixtureSummary = {
         taskId: task.taskId,
         projectId: task.projectId,
@@ -1266,44 +1387,12 @@ function digestFor(text: string): string {
 }
 
 async function runtimeForTest(): Promise<AgentRuntime> {
-    if (state.runtime !== null) {
-        await state.runtime.open();
-        return state.runtime;
+    ensureClient();
+    if (state.runtime === null) {
+        throw new Error('the shared studio test runtime is not initialized');
     }
-    const client = ensureClient();
-    const liveModel = new GatedTestModelPort();
-    const runtime = new AgentRuntime({
-        store: client.store,
-        taskStore: requireTaskStore(),
-        modelPort: liveModel,
-        ownsTaskStore: false,
-        toolExecutor: async (intent) => {
-            const path =
-                typeof intent.arguments.path === 'string'
-                    ? intent.arguments.path
-                    : `artifacts/${intent.taskId}.txt`;
-            return {
-                status: 'ok',
-                output: { path },
-                files: [{ path, change: 'added' }],
-                head_digest: digestFor(intent.taskId),
-            };
-        },
-        now: () => state.nowMs,
-        timers: {
-            setInterval: testSetInterval,
-            clearInterval: testClearInterval,
-            setTimeout: (handler, timeout) =>
-                globalThis.setTimeout(handler, timeout),
-            clearTimeout: (handle) =>
-                globalThis.clearTimeout(handle as never),
-        },
-        writerId: `runtime-probe-${randomHex(8)}`,
-    });
-    state.runtime = runtime;
-    state.liveModel = liveModel;
-    await runtime.open();
-    return runtime;
+    await state.runtime.open();
+    return state.runtime;
 }
 
 async function disposeRuntimeForTest(): Promise<void> {
@@ -1340,6 +1429,7 @@ function liveTaskSnapshot(taskId: string): LiveRunSnapshot {
         hold: task.hold,
         latestRunId: task.latestRunId,
         runId: run?.runId ?? null,
+        retryOfRunId: run?.retryOfRunId ?? null,
         generation: run?.generation ?? null,
         lastSequence: run?.lastSequence ?? null,
         lastEventId: run?.lastEventId ?? null,
@@ -2039,9 +2129,58 @@ function importFixtureFromStore(): void {
     };
 }
 
-export function installStudioTestApi(): void {
+async function queueTaskMessageForTest(
+    taskId: string,
+    text: string,
+): Promise<Outcome> {
+    try {
+        const client = requireClient();
+        await client.open();
+        const receipt = await client.queueMessage({ taskId, text });
+        return { ok: true, record: receipt };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function failLiveRunForTest(runId: string): Promise<Outcome> {
+    try {
+        const stream = requireLiveModel().latest(runId);
+        if (stream === null) {
+            throw new Error(`live model stream for ${runId} is missing`);
+        }
+        stream.push({
+            type: 'failed',
+            code: 'model_unavailable',
+            message: 'synthetic retryable failure',
+            retryable: true,
+        });
+        stream.end();
+        const entry = liveRunFor(runId);
+        await waitFor(
+            () => liveTaskSnapshot(entry.taskId).runState === 'failed',
+            'live run failure',
+        );
+        return { ok: true, record: liveTaskSnapshot(entry.taskId) };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+function adoptStudioAgentOwner(owner: StudioAgentOwnerForTest): void {
+    state.client = owner.client;
+    state.store = owner.store;
+    state.taskStore = owner.taskStore;
+    state.runtime = owner.runtime;
+    state.liveModel =
+        owner.modelPort instanceof GatedTestModelPort ? owner.modelPort : null;
+}
+
+export function installStudioTestApi(owner?: StudioAgentOwnerForTest): void {
     if (window.__studioTest !== undefined) return;
+    if (owner !== undefined) adoptStudioAgentOwner(owner);
     window.__studioTest = {
+        clientForTest: () => state.client,
         async reset() {
             await disposeRuntimeForTest();
             await state.client?.dispose();
@@ -2058,11 +2197,19 @@ export function installStudioTestApi(): void {
         },
         open,
         async reopen() {
+            const store = state.client?.store ?? state.store ?? createAgentStore();
             await disposeRuntimeForTest();
-            if (state.taskStore === null) {
-                return open();
-            }
-            state.taskStore.close();
+            state.taskStore?.close();
+            const taskStore = new AgentTaskStore({
+                store,
+                now: () => state.nowMs,
+                faults: state.faults,
+                timers: {
+                    setInterval: testSetInterval,
+                    clearInterval: testClearInterval,
+                },
+            });
+            createTestClient(store, taskStore);
             state.phase = 'idle';
             return open();
         },
@@ -2254,7 +2401,9 @@ export function installStudioTestApi(): void {
         startRunOnHeldTaskForTest,
         resolveBackgroundHoldForTest,
         startTwoLiveTasksForTest,
+        queueTaskMessageForTest,
         liveTextForTest,
+        failLiveRunForTest,
         liveToolForTest,
         finishLiveRunForTest,
         resyncLiveRunForTest,

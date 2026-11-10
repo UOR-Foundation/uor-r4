@@ -737,7 +737,7 @@ test.describe('browser agent task store', () => {
 
     test('client_resume_commits_pre_resume_snapshot_and_reloads', async ({ page }) => {
         const created = await call<FixtureSummary>(page, 'createClientRun');
-        expect((await call<CursorView>(page, 'cursor')).sequence).toBe(1);
+        expect((await call<CursorView>(page, 'cursor')).sequence).toBe(2);
 
         const resumed = await call<Outcome>(page, 'resumeViaClient');
         expect(resumed.ok, JSON.stringify(resumed)).toBe(true);
@@ -745,15 +745,15 @@ test.describe('browser agent task store', () => {
             taskId: created.taskId,
             runId: created.runId,
             generation: 1,
-            lastSequence: 1,
+            lastSequence: 2,
         });
         expect(await call<CursorView>(page, 'cursor')).toMatchObject({
             generation: 2,
-            sequence: 2,
-            eventId: `evt_${created.runId}_2_000000000002`,
+            sequence: 3,
+            eventId: `evt_${created.runId}_2_000000000003`,
         });
         const db = await readDb(page);
-        expect(db.eventRecords).toHaveLength(3);
+        expect(db.eventRecords).toHaveLength(4);
         expect(db.snapshotRecords).toHaveLength(1);
 
         await page.reload();
@@ -764,7 +764,7 @@ test.describe('browser agent task store', () => {
             taskId: created.taskId,
             runId: created.runId,
             generation: 2,
-            sequence: 2,
+            sequence: 3,
         });
     });
 
@@ -806,7 +806,7 @@ test.describe('browser agent task store', () => {
         expect(await call<CursorView>(page, 'cursor')).toMatchObject({
             taskId: created.taskId,
             generation: 3,
-            sequence: 3,
+            sequence: 4,
         });
 
         await page.reload();
@@ -816,7 +816,7 @@ test.describe('browser agent task store', () => {
         expect(await call<CursorView>(page, 'cursor')).toMatchObject({
             taskId: created.taskId,
             generation: 3,
-            sequence: 3,
+            sequence: 4,
         });
 
         const db = await readDb(page);
@@ -827,9 +827,9 @@ test.describe('browser agent task store', () => {
         const positions = records.map(
             (record) => `${record.generation}:${record.last_sequence}`,
         );
-        expect(positions).toContain('1:1');
-        expect(positions).toContain('2:2');
-        expect(positions).toContain('3:3');
+        expect(positions).toContain('1:2');
+        expect(positions).toContain('2:3');
+        expect(positions).toContain('3:4');
     });
 
     test('export_import_round_trips_multiple_resume_anchors', async ({ page }) => {
@@ -847,9 +847,9 @@ test.describe('browser agent task store', () => {
         expect(await call<CursorView>(page, 'cursor')).toMatchObject({
             taskId: created.taskId,
             generation: 3,
-            sequence: 3,
+            sequence: 4,
         });
-        expect((await readDb(page)).eventRecords).toHaveLength(4);
+        expect((await readDb(page)).eventRecords).toHaveLength(5);
     });
 
     test('import_rejects_resume_without_its_anchor_before_writing', async ({ page }) => {
@@ -1662,7 +1662,14 @@ test.describe('browser agent task store', () => {
         expect(loading.phase).toBe('loading');
         expect(loading.sendEnabled).toBe(false);
         expect(loading.canStartRun).toBe(false);
-        expect(loading.activeRun).toBeNull();
+        // The production owner opens before the typed mount, so the active run
+        // is already replayed when this artificial loading window begins.
+        expect(loading.activeRun).toMatchObject({
+            generation: 1,
+            lastSequence: 2,
+            state: 'running',
+            statusProjection: 'cancelling',
+        });
 
         const ready = await call<RestoreView>(page, 'whenOpen');
         expect(ready.phase).toBe('ready');

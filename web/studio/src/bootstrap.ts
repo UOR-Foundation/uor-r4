@@ -7,6 +7,11 @@ import { ModelSources } from '../assets/js/model_sources.js';
 import { StudioApp } from './components/StudioApp.js';
 import { activateStudioMigration, studioMigrationStatus } from './persistence/migration.js';
 import { installLegacyShortcutGuard } from './agent/legacyShortcutGuard.js';
+import { AgentClient } from './agent/client.js';
+import { AgentRuntime, type RuntimeToolExecutor } from './agent/runtime.js';
+import { AgentTaskStore } from './agent/store.js';
+import { ReplayModelPort, type ModelPort } from './agent/modelPort.js';
+import { createAgentStore, type AgentStore } from './state/agent.js';
 
 interface LegacyAppWindow extends Window {
     __studioApp?: { worker: Worker | null };
@@ -23,6 +28,52 @@ function retargetSkipLink(href: string): string | null {
 export function typedPreviewRequested(search: string): boolean {
     const params = new URLSearchParams(search);
     return params.get('legacy') !== '1' && params.get('typed') !== '0';
+}
+
+export interface StudioAgentOwner {
+    store: AgentStore;
+    taskStore: AgentTaskStore | null;
+    runtime: AgentRuntime | null;
+    client: AgentClient;
+    modelPort: ModelPort;
+    error: { code: string; message: string } | null;
+}
+
+// One production browser owner: the runtime owns the reducer/task adapter and
+// the client is the only UI-facing path. A missing or unopenable IndexedDB
+// keeps the legacy shell usable through an explicit runtime_unavailable client
+// instead of constructing a second store or writer.
+export function createStudioAgentOwner(options: { indexedDB?: IDBFactory; modelPort?: ModelPort; now?: () => number; toolExecutor?: RuntimeToolExecutor } = {}): StudioAgentOwner {
+    const store = createAgentStore();
+    const modelPort = options.modelPort ?? new ReplayModelPort();
+    try {
+        const taskStore = new AgentTaskStore({
+            store,
+            ...(options.indexedDB === undefined ? {} : { indexedDB: options.indexedDB }),
+            ...(options.now === undefined ? {} : { now: options.now }),
+        });
+        const runtime = new AgentRuntime({
+            store,
+            taskStore,
+            modelPort,
+            ownsTaskStore: false,
+            ...(options.now === undefined ? {} : { now: options.now }),
+            ...(options.toolExecutor === undefined ? {} : { toolExecutor: options.toolExecutor }),
+        });
+        return { store, taskStore, runtime, client: new AgentClient({ runtime }), modelPort, error: null };
+    } catch (error) {
+        const code = error !== null && typeof error === 'object' && 'code' in error && typeof (error as { code?: unknown }).code === 'string'
+            ? (error as { code: string }).code
+            : 'runtime_unavailable';
+        return {
+            store,
+            taskStore: null,
+            runtime: null,
+            client: new AgentClient({ store }),
+            modelPort,
+            error: { code, message: error instanceof Error ? error.message : String(error) },
+        };
+    }
 }
 
 export function studioTestApiEnabled(
@@ -71,6 +122,21 @@ export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?:
     const requestedTheme = new URLSearchParams(window.location.search).get('theme')
         || (window.location.hash === '#theme=light' ? 'light' : (window.location.hash === '#theme=dark' ? 'dark' : null));
     if (requestedTheme === 'light' || requestedTheme === 'dark') apis.ui.updateSettings({ theme: requestedTheme });
+    const gatedTestApi = studioTestApiEnabled(import.meta.env.VITE_STUDIO_TEST, window.location.search);
+    const testApi = gatedTestApi ? await import('./agent/testApi.js') : null;
+    const owner = createStudioAgentOwner({
+        ...(testApi === null ? {} : {
+            modelPort: testApi.createGatedTestModelPort(),
+            now: testApi.studioTestNow,
+            toolExecutor: testApi.createGatedTestToolExecutor(),
+        }),
+    });
+    try {
+        await owner.client.open();
+    } catch {
+        // The client stays explicit runtime_unavailable; the legacy shell and
+        // composer must still mount.
+    }
     const store = new LifecycleStore();
     const legacyWorker = (window as LegacyAppWindow).__studioApp?.worker || null;
     const worker = legacyWorker || new Worker(new URL('../assets/js/uor_model_worker.js', import.meta.url), { type: 'module' });
@@ -84,11 +150,9 @@ export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?:
         files: apis.files,
         sessions: apis.sessions,
         ui: apis.ui,
+        agentClient: owner.client,
     }), root);
-    if (studioTestApiEnabled(import.meta.env.VITE_STUDIO_TEST, window.location.search)) {
-        const { installStudioTestApi } = await import('./agent/testApi.js');
-        installStudioTestApi();
-    }
+    if (testApi !== null) testApi.installStudioTestApi(owner);
     const previousSkipHref = retargetSkipLink('#harness-main');
     root.dataset.active = 'true';
     return {
@@ -98,8 +162,13 @@ export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?:
         files: apis.files,
         sessions: apis.sessions,
         ui: apis.ui,
+        agentClient: owner.client,
+        agentStore: owner.store,
+        agentTaskStore: owner.taskStore,
+        agentRuntime: owner.runtime,
         dispose() {
             shortcutGuard.dispose();
+            void owner.client.dispose().finally(() => owner.taskStore?.close());
             worker.removeEventListener('message', forwardMessage);
             if (!legacyWorker) worker.terminate();
             root.dataset.active = 'false';

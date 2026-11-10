@@ -9,6 +9,7 @@ import type { LifecycleStore } from '../state/lifecycle.js';
 import type { RunView, TaskView } from '../state/agent.js';
 import { useLifecycle } from '../state/useLifecycle.js';
 import { AgentTranscript } from './AgentTranscript.js';
+import { TaskDetail } from './TaskDetail.js';
 import { attachmentSize, draftFromStoredAttachment, planAttachmentBatch } from './ComposerAttachments.js';
 import type { AttachmentDraft } from './ComposerAttachments.js';
 import { MAX_DOCUMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES } from './ComposerAttachments.js';
@@ -34,6 +35,9 @@ interface AgentComposerProps {
     agentTask?: TaskView | null;
     activeRun?: RunView | null;
     unresolvedRun?: boolean;
+    showTaskDetail?: boolean;
+    onTaskBack?(): void;
+    onOpenSurface?(surface: 'changes' | 'terminal'): void;
 }
 
 let insertSequence = 0;
@@ -51,7 +55,7 @@ function revokePreview(draft: AttachmentDraft): void {
     }
 }
 
-export function AgentComposer({ store, sessions, files, ui, generation, copy, download, draft: controlledDraft, pasted: controlledPasted, onDraftChange, onPastedChange, agentClient = null, agentTask = null, activeRun = null, unresolvedRun = false }: AgentComposerProps) {
+export function AgentComposer({ store, sessions, files, ui, generation, copy, download, draft: controlledDraft, pasted: controlledPasted, onDraftChange, onPastedChange, agentClient = null, agentTask = null, activeRun = null, unresolvedRun = false, showTaskDetail = false, onTaskBack, onOpenSurface }: AgentComposerProps) {
     const state = useLifecycle(store);
     const [pastedState, setPastedState] = useState('');
     const pasted = controlledPasted ?? pastedState;
@@ -208,7 +212,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     }
 
     function send(prompt: string): boolean | Promise<boolean> {
-        if (agentClient) {
+        if (agentClient !== null && agentClient.store.snapshot().tasks.length > 0) {
             if (!agentTask) {
                 ui.toast('Select a task before sending.', 'error');
                 return false;
@@ -449,10 +453,14 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
 
     return (
         <section aria-label="Agent composer" class="agent-workspace">
-            <header class="agent-heading"><div><h1>Agent</h1><p>{selectionLabel}</p></div><span class="session-phase">Session: {state.session.phase}</span></header>
-            {state.session.error && <p role="alert" class="workbench-alert">{state.session.error}</p>}
-            {activeGeneration && <p class="generation-banner">Generating with {activeGeneration.source.id} ({activeGeneration.privacy})</p>}
-            <AgentTranscript messages={messages} canRun={store.canRun()} busy={generating} copy={copy} insert={(content) => files.insertText(content, nextInsertName())} download={(content) => download('studio-message.md', content)} retry={(content) => generation.send(content)} />
+            {showTaskDetail && agentTask && agentClient
+                ? <TaskDetail task={agentTask} client={agentClient} onBack={onTaskBack ?? (() => {})} onOpenSurface={onOpenSurface ?? (() => {})} />
+                : <>
+                    <header class="agent-heading"><div><h1>Agent</h1><p>{selectionLabel}</p></div><span class="session-phase">Session: {state.session.phase}</span></header>
+                    {state.session.error && <p role="alert" class="workbench-alert">{state.session.error}</p>}
+                    {activeGeneration && <p class="generation-banner">Generating with {activeGeneration.source.id} ({activeGeneration.privacy})</p>}
+                    <AgentTranscript messages={messages} canRun={store.canRun()} busy={generating} copy={copy} insert={(content) => files.insertText(content, nextInsertName())} download={(content) => download('studio-message.md', content)} retry={(content) => generation.send(content)} />
+                </>}
             <details class="context-drawer" aria-label="Context attachments"><summary><span><Icon name="attach" />Context</span><span class="attachment-count">{attachments.length}</span></summary><div class="context-content">
                 <div class="context-actions"><button type="button" disabled={!activeFile} onClick={() => { const file = files.activeFile(); if (file) void addBudgetedAttachment({ name: file.path, content: file.content, source: 'editor' }); }}>Attach current file</button><button type="button" disabled={!attachments.length} onClick={clearAllAttachments}>Clear attachments</button></div>
                 <label>Pasted context<textarea aria-label="Pasted context" value={pasted} onInput={(event) => setPasted(event.currentTarget.value)} /></label>

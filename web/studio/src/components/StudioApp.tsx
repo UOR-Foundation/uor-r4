@@ -55,6 +55,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     const [agentPasted, setAgentPasted] = useState('');
     const [taskQuery, setTaskQuery] = useState('');
     const [taskRevision, setTaskRevision] = useState(0);
+    const [detailOpen, setDetailOpen] = useState(false);
     const [taskList, setTaskList] = useState<TaskListState>(() => ({ phase: agentClient === null ? 'ready' : 'loading', message: null }));
     const [editorSettings, setEditorSettings] = useState(() => ui.getSettings());
     useScopedShortcuts({ onPalette: () => setPaletteOpen(true), onSettings: () => setSettingsOpen(true) });
@@ -68,23 +69,42 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         }
         let active = true;
         setTaskList((current) => ({ ...current, phase: 'loading', message: null }));
-        void agentClient.listTasks({ includeArchived: true }).then(() => {
-            if (!active) return;
-            setTaskList({ phase: 'ready', message: null });
-            setTaskRevision((value) => value + 1);
-        }).catch((failure: unknown) => {
-            if (!active) return;
-            if (failure instanceof AgentClientError && failure.code === 'runtime_unavailable') setTaskList({ phase: 'runtime_unavailable', message: null });
-            else setTaskList({ phase: 'error', message: failure instanceof Error ? failure.message : String(failure) });
-        });
+        void (async () => {
+            try {
+                await agentClient.open();
+            } catch (failure) {
+                if (active) setTaskList({ phase: 'runtime_unavailable', message: failure instanceof Error ? failure.message : String(failure) });
+                return;
+            }
+            try {
+                await agentClient.listTasks({ includeArchived: true });
+                if (!active) return;
+                setTaskList({ phase: 'ready', message: null });
+                setTaskRevision((value) => value + 1);
+            } catch (failure) {
+                if (!active) return;
+                if (failure instanceof AgentClientError && failure.code === 'runtime_unavailable') setTaskList({ phase: 'runtime_unavailable', message: null });
+                else setTaskList({ phase: 'error', message: failure instanceof Error ? failure.message : String(failure) });
+            }
+        })();
         return () => { active = false; };
     }, [agentClient]);
     useEffect(() => {
         if (agentClient === null) return;
-        let stream: ReturnType<AgentClient['subscribe']>;
-        try { stream = agentClient.subscribe(); } catch { return; }
         let active = true;
+        let stream: ReturnType<AgentClient['subscribe']> | null = null;
         void (async () => {
+            try {
+                await agentClient.open();
+            } catch {
+                return;
+            }
+            if (!active) return;
+            try {
+                stream = agentClient.subscribe();
+            } catch {
+                return;
+            }
             try {
                 for await (const _event of stream) {
                     if (!active) return;
@@ -92,7 +112,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
                 }
             } catch { /* a closed stream is not a task failure */ }
         })();
-        return () => { active = false; stream.close(); };
+        return () => { active = false; stream?.close(); };
     }, [agentClient]);
     const selectedRuntime = useMemo(() => {
         if (agentClient === null) return null;
@@ -169,8 +189,10 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     const selectTask = (taskId: string) => {
         if (agentClient === null) return;
         agentClient.store.selectTask(taskId);
+        setDetailOpen(true);
         setTaskRevision((value) => value + 1);
     };
+    const closeDetail = () => setDetailOpen(false);
     const commands: PaletteCommand[] = [
         { id: 'agent', group: 'Navigation', label: 'Go to Agent', description: 'Chat and context', run: () => setActiveSection('agent') },
         { id: 'workspace', group: 'Navigation', label: 'Go to Workspace', description: 'Files and editor', run: () => setActiveSection('workspace') },
@@ -189,7 +211,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     ];
     const renderSection = (section: StudioSection, secondary = false) => {
         const idPrefix = secondary ? 'secondary-' : '';
-        if (section === 'agent') return <AgentComposer key={`${state.session.activeId || 'new'}:${state.session.revision}:${sessionRevision}`} store={store} sessions={sessions} files={files} ui={ui} generation={agent} draft={agentDraft} pasted={agentPasted} onDraftChange={setAgentDraft} onPastedChange={setAgentPasted} agentClient={agentClient} agentTask={selectedRuntime?.task ?? null} activeRun={selectedRuntime?.activeRun ?? null} unresolvedRun={selectedRuntime?.unresolvedRun ?? false} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} download={download} />;
+        if (section === 'agent') return <AgentComposer key={`${state.session.activeId || 'new'}:${state.session.revision}:${sessionRevision}`} store={store} sessions={sessions} files={files} ui={ui} generation={agent} draft={agentDraft} pasted={agentPasted} onDraftChange={setAgentDraft} onPastedChange={setAgentPasted} agentClient={agentClient} agentTask={selectedRuntime?.task ?? null} activeRun={selectedRuntime?.activeRun ?? null} unresolvedRun={selectedRuntime?.unresolvedRun ?? false} showTaskDetail={detailOpen} onTaskBack={closeDetail} onOpenSurface={(surface) => setActiveSection(surface === 'changes' ? 'changes' : 'terminal')} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} download={download} />;
         if (section === 'workspace') return <WorkspaceEditor store={store} files={files} operations={operations} onError={reportFile} onSuccess={succeed} settings={editorSettings} />;
         if (section === 'changes') return <ChangesPanel actions={desktopActions} files={files} idPrefix={idPrefix} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} />;
         if (section === 'terminal') return <TerminalPanel actions={desktopActions} files={files} idPrefix={idPrefix} />;
@@ -214,8 +236,8 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             loading={taskList.phase === 'loading'}
             error={taskList.phase === 'error' ? taskList.message : null}
             showEmpty={!taskReadyZero}
-            legacySessions={agentClient === null ? <SessionList store={store} agent={agent} download={download} onError={report} onSuccess={succeed} onChange={(operation) => { succeed(operation); setSessionRevision((value) => value + 1); }} showHeader={false} showEmpty={false} labelId={LOCAL_SESSIONS_LABEL_ID} /> : undefined}
-            legacySessionsEmpty={agentClient === null && state.session.items.length === 0}
+            legacySessions={agentClient === null || tasks.length === 0 ? <SessionList store={store} agent={agent} download={download} onError={report} onSuccess={succeed} onChange={(operation) => { succeed(operation); setSessionRevision((value) => value + 1); }} showHeader={false} showEmpty={false} labelId={LOCAL_SESSIONS_LABEL_ID} /> : undefined}
+            legacySessionsEmpty={(agentClient === null || tasks.length === 0) && state.session.items.length === 0}
         />}
         alert={error && <p role="alert" class="workbench-alert">{error.message}</p>} primary={renderSection(activeSection)}>
         <Inspector store={store} ui={ui} open={inspectorOpen} onClose={() => setInspectorOpen(false)} />

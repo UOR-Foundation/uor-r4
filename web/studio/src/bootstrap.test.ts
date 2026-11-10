@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'preact';
 import { LifecycleStore } from './state/lifecycle.js';
 import {
+    createStudioAgentOwner,
     mountTypedStudio,
     studioTestApiEnabled,
     typedPreviewRequested,
 } from './bootstrap.js';
+import { AgentClient } from './agent/client.js';
 import { StudioApp } from './components/StudioApp.js';
 import { activateStudioMigration, studioMigrationStatus } from './persistence/migration.js';
 
@@ -69,6 +71,7 @@ describe('typed Studio bootstrap', () => {
             const root = document.createElement('div');
             const mounted = await mountTypedStudio(root);
             expect(window.__studioTest).toBeDefined();
+            expect(window.__studioTest!.clientForTest()).toBe(mounted.agentClient);
             mounted.dispose();
             delete window.__studioTest;
 
@@ -239,5 +242,41 @@ describe('typed Studio bootstrap', () => {
         } finally {
             window.history.replaceState({}, '', '/');
         }
+    });
+
+    it('mounts exactly one browser runtime owner and passes its client to StudioApp', async () => {
+        const root = document.createElement('div');
+        const mounted = await mountTypedStudio(root);
+        const vnode = vi.mocked(render).mock.calls[0]![0] as unknown as {
+            props: { agentClient?: AgentClient | null };
+        };
+        expect(mounted.agentClient).toBeInstanceOf(AgentClient);
+        expect(vnode.props.agentClient).toBe(mounted.agentClient);
+        expect(mounted.agentStore).toBe(mounted.agentClient.store);
+        expect(mounted.store).toBeInstanceOf(LifecycleStore);
+        mounted.dispose();
+    });
+
+    it('reports an unavailable runtime without removing the legacy shell', async () => {
+        const owner = createStudioAgentOwner();
+        expect(owner.client).toBeInstanceOf(AgentClient);
+        expect(owner.runtime).toBeNull();
+        expect(owner.taskStore).toBeNull();
+        await expect(owner.client.listTasks({})).rejects.toMatchObject({
+            code: 'runtime_unavailable',
+        });
+
+        const root = document.createElement('div');
+        const mounted = await mountTypedStudio(root);
+        const vnode = vi.mocked(render).mock.calls[0]![0] as unknown as {
+            props: { store: LifecycleStore; files: unknown; agentClient: AgentClient };
+        };
+        expect(vnode.props.store).toBeInstanceOf(LifecycleStore);
+        expect(vnode.props.files).toBe(legacyWindow.__studioFiles);
+        expect(vnode.props.agentClient).toBe(mounted.agentClient);
+        await expect(mounted.agentClient.listTasks({})).rejects.toMatchObject({
+            code: 'runtime_unavailable',
+        });
+        mounted.dispose();
     });
 });

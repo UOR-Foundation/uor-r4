@@ -108,6 +108,15 @@ export interface RunErrorView {
     retryable: boolean;
 }
 
+// Delivery failures are message-scoped records, not run-level failures. The
+// runtime emits them before a terminal event; keeping them out of RunErrorView
+// means a successful or cancelled run cannot present a retained failure.
+export interface MessageDeliveryErrorView {
+    code: 'message_not_delivered';
+    messageId: string | null;
+    message: string;
+}
+
 export interface RunView {
     taskId: string;
     runId: string;
@@ -123,6 +132,7 @@ export interface RunView {
     needsResync: boolean;
     resyncCode: AgentErrorCode | null;
     error: RunErrorView | null;
+    deliveryErrors: MessageDeliveryErrorView[];
     messages: AgentMessageView[];
     toolCalls: AgentToolCallView[];
     approvals: AgentApprovalView[];
@@ -239,6 +249,7 @@ interface InternalRun {
     needsResync: boolean;
     resyncCode: AgentErrorCode | null;
     error: RunErrorView | null;
+    deliveryErrors: MessageDeliveryErrorView[];
     messages: AgentMessageView[];
     messagesById: Map<string, AgentMessageView>;
     deltasById: Map<string, string>;
@@ -378,6 +389,7 @@ function captureRunState(
         needsResync: run.needsResync,
         resyncCode: run.resyncCode,
         error: run.error === null ? null : { ...run.error },
+        deliveryErrors: run.deliveryErrors.map((entry) => ({ ...entry })),
         verifiedSnapshot:
             run.verifiedSnapshot === null ? null : { ...run.verifiedSnapshot },
     };
@@ -394,6 +406,7 @@ function captureRunState(
         run.needsResync = state.needsResync;
         run.resyncCode = state.resyncCode;
         run.error = state.error === null ? null : { ...state.error };
+        run.deliveryErrors = state.deliveryErrors.map((entry) => ({ ...entry }));
         run.verifiedSnapshot =
             state.verifiedSnapshot === null ? null : { ...state.verifiedSnapshot };
     });
@@ -528,6 +541,7 @@ function cloneInternalRun(run: InternalRun): InternalRun {
         needsResync: run.needsResync,
         resyncCode: run.resyncCode,
         error: run.error === null ? null : { ...run.error },
+        deliveryErrors: run.deliveryErrors.map((entry) => ({ ...entry })),
         messages,
         messagesById: new Map(messages.map((message) => [message.messageId, message])),
         deltasById: new Map(run.deltasById),
@@ -919,6 +933,7 @@ function createRun(task: InternalTask, event: AgentIncomingEvent): InternalRun {
         needsResync: false,
         resyncCode: null,
         error: null,
+        deliveryErrors: [],
         messages: [],
         messagesById: new Map(),
         deltasById: new Map(),
@@ -1002,6 +1017,13 @@ function upsertToolCall(
     return toolCall;
 }
 
+const MESSAGE_ID_PATTERN = /msg_[0-9a-f]{16}/;
+
+function deliveryMessageId(message: string): string | null {
+    const match = MESSAGE_ID_PATTERN.exec(message);
+    return match === null ? null : match[0];
+}
+
 function reduceKnownEvent(
     run: InternalRun,
     event: AgentIncomingEvent,
@@ -1041,13 +1063,25 @@ function reduceKnownEvent(
             run.state = 'expired';
             run.endedAtMs = data.expired_at_ms as number;
             break;
-        case 'error':
+        case 'error': {
+            const code = data.code as string;
+            if (code === 'message_not_delivered') {
+                const message = data.message as string;
+                captureArrayLength(journal, run.deliveryErrors);
+                run.deliveryErrors.push({
+                    code: 'message_not_delivered',
+                    messageId: deliveryMessageId(message),
+                    message,
+                });
+                break;
+            }
             run.error = {
-                code: data.code as string,
+                code,
                 message: data.message as string,
                 retryable: data.retryable as boolean,
             };
             break;
+        }
         case 'assistant.message': {
             const messageId = data.message_id as string;
             const text = data.text as string;
@@ -1194,6 +1228,7 @@ function copyRun(run: InternalRun): RunView {
         needsResync: run.needsResync,
         resyncCode: run.resyncCode,
         error: run.error === null ? null : { ...run.error },
+        deliveryErrors: run.deliveryErrors.map((entry) => ({ ...entry })),
         messages: run.messages.map((message) => ({ ...message })),
         toolCalls: run.toolCalls.map((toolCall) => ({ ...toolCall })),
         approvals: run.approvals.map((approval) => ({ ...approval })),
