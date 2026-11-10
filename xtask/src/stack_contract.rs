@@ -301,6 +301,10 @@ mod tests {
             markdown,
             render_markdown(&root, &files).expect("markdown renders twice")
         );
+        assert_eq!(
+            fs::read_to_string(root.join(MARKDOWN_PATH)).expect("committed markdown"),
+            markdown
+        );
         assert!(markdown.contains("<!-- @generated"));
         assert!(markdown.contains("### Mechanisms"));
         assert!(markdown.contains("### Probes"));
@@ -309,6 +313,10 @@ mod tests {
         assert_eq!(
             json,
             render_json(&root, &files).expect("json renders twice")
+        );
+        assert_eq!(
+            fs::read_to_string(root.join(JSON_PATH)).expect("committed json"),
+            json
         );
         assert!(json.contains("\"schema\": \"uor-r4.stack-contract.generated/1\""));
         assert!(json.contains("\"source_blake3\""));

@@ -61,6 +61,8 @@ includes 7 new contract tests and 2 generator tests.
   two allowances name unrelated pre-existing findings.
 - `cargo run --offline -p xtask -- stack-contract --check`: pass.
 - `cargo run --offline -p xtask -- check-model`: pass, 33 conformance IDs.
+- `cargo test --offline -p uor-r4-harness`: 677 library tests passed with 1
+  network-gated test ignored; every integration and doc test passed.
 - `uor-harness check --repo .`: exit 0 with repository-wide pre-existing
   warnings.
 - `git diff --check`: pass.
