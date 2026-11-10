@@ -5654,12 +5654,21 @@ enum ReplyKey {
     /// The turn's first 8 tokens, the reply position, and the reply's last `j`. At position 0
     /// this is claude-161's opening key.
     TurnPosition(usize),
+    /// The turn's last `n` prompt tokens, the reply position, and the reply's last token
+    /// (claude-345). The first 8 tokens end before the second operand of a sum and before the
+    /// word of "What is the opposite of tall?"; the tail holds them.
+    TailPosition(usize),
+    /// The turn's first 8 prompt tokens and, of the tokens after them, the last `n`; then the
+    /// reply position and the reply's last token (claude-345). A sum's first operand is in the
+    /// first 8 and its second in the tail; a prompt of at most `8 + n` tokens is keyed whole.
+    HeadTail(usize),
 }
 
 impl ReplyKey {
     fn of(self, row: &ReplyRow) -> Vec<u32> {
         let last = |j: usize| &row.reply[row.reply.len() - j.min(row.reply.len())..];
         let turn = &row.prompt[..TURN_KEY.min(row.prompt.len())];
+        let tail = |n: usize| &row.prompt[row.prompt.len() - n.min(row.prompt.len())..];
         // The parts are joined by `u32::MAX`, which no token id takes.
         match self {
             ReplyKey::None => Vec::new(),
@@ -5667,6 +5676,14 @@ impl ReplyKey {
             ReplyKey::Turn(j) => [turn, &[u32::MAX], last(j)].concat(),
             ReplyKey::TurnPosition(j) => {
                 [turn, &[u32::MAX, row.reply.len() as u32, u32::MAX], last(j)].concat()
+            }
+            ReplyKey::HeadTail(n) => {
+                let rest = &row.prompt[turn.len()..];
+                let end = &rest[rest.len() - n.min(rest.len())..];
+                [turn, end, &[u32::MAX, row.reply.len() as u32, u32::MAX], last(1)].concat()
+            }
+            ReplyKey::TailPosition(n) => {
+                [tail(n), &[u32::MAX, row.reply.len() as u32, u32::MAX], last(1)].concat()
             }
         }
     }
@@ -5677,6 +5694,8 @@ impl ReplyKey {
             ReplyKey::Reply(j) => format!("reply-last-{j}"),
             ReplyKey::Turn(j) => format!("turn-{TURN_KEY}+reply-last-{j}"),
             ReplyKey::TurnPosition(j) => format!("turn-{TURN_KEY}+position+reply-last-{j}"),
+            ReplyKey::TailPosition(n) => format!("tail-{n}+position+reply-last-1"),
+            ReplyKey::HeadTail(n) => format!("turn-{TURN_KEY}+tail-{n}+position+reply-last-1"),
         }
     }
 }
@@ -5798,6 +5817,62 @@ fn reply_bound_rows(
         .collect()
 }
 
+/// [`ReplyBound`] for tables asked in order (claude-345): the first of `chain` whose table keeps
+/// the row's key names it. A specific key answers where TRAIN holds the question; the general key
+/// after it keeps the wording of a turn whose value TRAIN never held.
+fn reply_bound_backoff_rows(
+    chain: &[ReplyKey],
+    train: &[ReplyRow],
+    dev: &[ReplyRow],
+    shares: &[f64],
+) -> Vec<ReplyBound> {
+    let tables: Vec<ReplyTableCounts> = chain.iter().map(|key| reply_table(*key, train)).collect();
+    let names: Vec<String> = chain.iter().map(|key| key.name()).collect();
+    shares
+        .iter()
+        .map(|&min_share| {
+            let kept = |stored: &&(u32, usize, usize)| table_keeps(stored, min_share);
+            let mut out = ReplyBound {
+                key: names.join(", else "),
+                min_share,
+                train_rows: train.len(),
+                train_keys: tables.iter().map(|t| t.values().filter(kept).count()).sum(),
+                all: KindCount::default(),
+                openings: KindCount::default(),
+                copies: KindCount::default(),
+                rest: KindCount::default(),
+                opening_hits_with_fallback: 0,
+            };
+            for row in dev {
+                let named = chain
+                    .iter()
+                    .zip(&tables)
+                    .find_map(|(key, table)| table.get(&key.of(row)).filter(kept))
+                    .map(|s| s.0);
+                let kinds = [
+                    (true, &mut out.all),
+                    (row.opening, &mut out.openings),
+                    (row.copy, &mut out.copies),
+                    (!row.opening && !row.copy, &mut out.rest),
+                ];
+                for (_, kind) in kinds.into_iter().filter(|(of, _)| *of) {
+                    kind.rows += 1;
+                    kind.named += usize::from(named.is_some());
+                    kind.hits += usize::from(named == Some(row.target));
+                }
+            }
+            out
+        })
+        .collect()
+}
+
+/// The tail lengths `--reply-bound` tries for [`ReplyKey::TailPosition`]: the float memory's
+/// longest key is 16 ids.
+const REPLY_BOUND_TAILS: [usize; 3] = [8, 12, 16];
+/// The tail lengths `--reply-bound` tries after the first 8 tokens ([`ReplyKey::HeadTail`]): 8
+/// fills the float memory's 16-id key; 14 holds 8 tokens before the 6-token role line.
+const REPLY_BOUND_ENDS: [usize; 3] = [8, 12, 14];
+
 /// The stored-share thresholds `--reply-bound` reports.
 const REPLY_BOUND_SHARES: [f64; 4] = [0.0, 0.5, 0.8, 0.95];
 
@@ -5809,15 +5884,49 @@ pub fn reply_bound(data_root: &Path) -> Result<Vec<ReplyBound>> {
     let (train_windows, _) =
         hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
     let (dev_windows, dev_mask) = load_dev(data_root)?;
-    let train = reply_rows(&train_windows, &train_mask);
-    let dev = reply_rows(&dev_windows, &dev_mask);
+    Ok(reply_bound_of(
+        &reply_rows(&train_windows, &train_mask),
+        &reply_rows(&dev_windows, &dev_mask),
+    ))
+}
+
+/// [`reply_bound`] over two named folders instead of the pinned TRAIN and DEV (claude-345): each
+/// holds `tokens.u16` and `response_mask.u8`, `train` the table's rows and `dev` the rows it is
+/// asked about. The first two values are the folders' token hashes, so a reader can say which
+/// files were counted.
+pub fn reply_bound_dirs(train: &Path, dev: &Path) -> Result<(String, String, Vec<ReplyBound>)> {
+    let rows = |dir: &Path| -> Result<(Vec<ReplyRow>, String)> {
+        let (tokens, mask, sha) = load_unpinned_uort(dir)?;
+        let (windows, _) =
+            hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
+        Ok((reply_rows(&windows, &mask), sha))
+    };
+    let ((train, train_sha), (dev, dev_sha)) = (rows(train)?, rows(dev)?);
+    Ok((train_sha, dev_sha, reply_bound_of(&train, &dev)))
+}
+
+/// Every key [`reply_bound`] reports, over `train`'s table and `dev`'s rows.
+fn reply_bound_of(train: &[ReplyRow], dev: &[ReplyRow]) -> Vec<ReplyBound> {
     let keys = std::iter::once(ReplyKey::None)
         .chain((1..=4).map(ReplyKey::Reply))
         .chain((0..=4).map(ReplyKey::Turn))
-        .chain((0..=1).map(ReplyKey::TurnPosition));
-    Ok(keys
-        .flat_map(|key| reply_bound_rows(key, &train, &dev, &REPLY_BOUND_SHARES))
-        .collect())
+        .chain((0..=1).map(ReplyKey::TurnPosition))
+        .chain(REPLY_BOUND_TAILS.map(ReplyKey::TailPosition));
+    let mut out: Vec<ReplyBound> = keys
+        .flat_map(|key| reply_bound_rows(key, train, dev, &REPLY_BOUND_SHARES))
+        .collect();
+    let specific = REPLY_BOUND_TAILS
+        .map(ReplyKey::TailPosition)
+        .into_iter()
+        .chain(REPLY_BOUND_ENDS.map(ReplyKey::HeadTail));
+    let general = ReplyKey::TurnPosition(1);
+    for first in specific {
+        out.extend(reply_bound_backoff_rows(&[first, general], train, dev, &REPLY_BOUND_SHARES));
+    }
+    // Both ends of the question, then its end, then its start: a sum needs both operands.
+    let chain = [ReplyKey::HeadTail(8), ReplyKey::TailPosition(8), general];
+    out.extend(reply_bound_backoff_rows(&chain, train, dev, &REPLY_BOUND_SHARES));
+    out
 }
 
 /// Pinned SHA-256 of the sealed Fresh V2 panel's `tokens.u16`, opened once for M1 bar (e)
@@ -17618,6 +17727,42 @@ mod tests {
         }
         // The opening step has no reply yet, so no reply key.
         assert_eq!(greedy_reply_key(&tokens[..4], 3, &[]), None);
+    }
+
+    #[test]
+    fn a_tail_key_names_what_the_first_eight_tokens_end_before() {
+        // Questions with the same first 8 tokens and different last words, each answered by its
+        // own token: the first-8 key cannot tell them apart, the tail key can.
+        let row = |end: u32, target: u32| ReplyRow {
+            window: 0,
+            offset: 0,
+            prompt: [&[1u32, 2, 3, 4, 5, 6, 7, 8][..], &[end, 9]].concat(),
+            reply: vec![30],
+            target,
+            opening: false,
+            copy: false,
+        };
+        let train = [row(40, 50), row(41, 51), row(41, 51)];
+        // DEV: both held questions, and one whose last word TRAIN never held.
+        let dev = [row(40, 50), row(41, 51), row(42, 51)];
+        // The first-8 key keeps its commonest target, 51 (2 of 3 rows), for every question.
+        let head = &reply_bound_rows(ReplyKey::TurnPosition(1), &train, &dev, &[0.5])[0];
+        assert_eq!((head.rest.named, head.rest.hits), (3, 2));
+        // The tail key names each held question right and the unseen one not at all.
+        let tail = &reply_bound_rows(ReplyKey::TailPosition(8), &train, &dev, &[0.5])[0];
+        assert_eq!((tail.rest.named, tail.rest.hits), (2, 2));
+        // Asked in order, the tail names the held two and the first-8 key the unseen one.
+        let chain = [ReplyKey::TailPosition(8), ReplyKey::TurnPosition(1)];
+        let both = &reply_bound_backoff_rows(&chain, &train, &dev, &[0.5])[0];
+        assert_eq!((both.rest.named, both.rest.hits), (3, 3));
+        assert_eq!(
+            both.key,
+            "tail-8+position+reply-last-1, else turn-8+position+reply-last-1"
+        );
+        // The first 8 and the last 8 of a 10-token prompt are the whole prompt, each token once.
+        let whole = ReplyKey::HeadTail(8).of(&dev[0]);
+        assert_eq!(whole[..10], dev[0].prompt[..]);
+        assert_eq!(whole[10..], [u32::MAX, 1, u32::MAX, 30]);
     }
 
     #[test]

@@ -306,7 +306,8 @@ use uor_r4_float_train::flock_read_opening::OpeningAnchor;
 use uor_r4_float_train::flock_read_register::RegisterSelect;
 use uor_r4_float_train::in_space_long::{
     cell_grade, cells_ok, census, context_reach, controls, cut_grade, cycle_grade, decode_speed, key_grade, keyed_grade, served_grade, integer_grade, panel_prompts, fbs_arm_named, grade,
-    gradient_norms, inspect_run, opening_bound, overturn, read_grade, reply_bound, root_separation,
+    gradient_norms, inspect_run, opening_bound, overturn, read_grade, reply_bound,
+    reply_bound_dirs, root_separation,
     run_long, run_recall, score_rows, scopes_ok, set_decode_cache, take_decode_forwards,
     DecodeRule, LongConfig, PastWindowRule, PointObjective, ReadScope, RecallForm, TrainSplit, TrainTargets, DEFAULT_REGISTER_PICKS,
     MEMORY_DROPOUT_MAX,
@@ -353,6 +354,7 @@ fn main() -> Result<()> {
     let mut decode = None;
     let mut bound = false;
     let mut reply = false;
+    let mut reply_dirs: (Option<PathBuf>, Option<PathBuf>) = (None, None);
     let mut census_on = false;
     let mut fresh_v2 = None;
     let mut extra_panels: Vec<(String, PathBuf)> = Vec::new();
@@ -484,6 +486,8 @@ fn main() -> Result<()> {
             "--decode-speed" => decode = Some(PathBuf::from(&value)),
             "--opening-bound" => bound = switch(&value)?,
             "--reply-bound" => reply = switch(&value)?,
+            "--reply-bound-train" => reply_dirs.0 = Some(PathBuf::from(&value)),
+            "--reply-bound-dev" => reply_dirs.1 = Some(PathBuf::from(&value)),
             "--census" => census_on = switch(&value)?,
             "--score-rows" => score = Some(PathBuf::from(&value)),
             "--overturn" => overturn_on = switch(&value)?,
@@ -1254,7 +1258,23 @@ fn main() -> Result<()> {
         return Ok(());
     }
     if reply {
-        for row in reply_bound(&data_root)? {
+        let rows = match &reply_dirs {
+            (Some(train), Some(dev)) => {
+                let (train_sha, dev_sha, rows) = reply_bound_dirs(train, dev)?;
+                println!(
+                    "{}",
+                    serde_json::json!({"train_tokens_sha256": train_sha, "dev_tokens_sha256": dev_sha})
+                );
+                rows
+            }
+            (None, None) => reply_bound(&data_root)?,
+            _ => {
+                return Err(FloatTrainError::Invalid(
+                    "give both --reply-bound-train and --reply-bound-dev, or neither".to_owned(),
+                ))
+            }
+        };
+        for row in rows {
             println!("{}", serde_json::to_string(&row)?);
         }
         return Ok(());
