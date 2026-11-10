@@ -123,9 +123,9 @@ These items are ready and open to anyone.
 
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
-| [Repair Studio model identity and share exact geometric arithmetic](items/m7-lexlean-studio-tools.md) | ready | a lab | no | [m7-studio-live-model-sources](items/m7-studio-live-model-sources.md), [infra-desktop-client-tauri](items/infra-desktop-client-tauri.md) | not yet synced |
+| [Repair Studio model identity and share exact geometric arithmetic](items/m7-lexlean-studio-tools.md) | ready | a lab | no | [m7-studio-live-model-sources](items/m7-studio-live-model-sources.md), [infra-desktop-client-tauri](items/infra-desktop-client-tauri.md) | [#3704](https://github.com/UOR-Foundation/uor-r4/issues/3704) |
 | [Build the library, CLI and browser bit-identity parity harness](items/m7-parity-library-cli-browser.md) | ready | anyone | no | [m7-studio-connect-wasm-engine](items/m7-studio-connect-wasm-engine.md), [m4-export-uorlut01-cli](items/m4-export-uorlut01-cli.md) | [#2867](https://github.com/UOR-Foundation/uor-r4/issues/2867) |
-| [Deliver the Cursor-style browser-owned Studio task workspace](items/studio-cursor-hosted.md) | ready | a lab | no | none | not yet synced |
+| [Deliver the Cursor-style browser-owned Studio task workspace](items/studio-cursor-hosted.md) | ready | a lab | no | none | [#3917](https://github.com/UOR-Foundation/uor-r4/issues/3917) |
 | [Deliver the native-style Studio IDE harness and real connection workflows](items/studio-ide-harness.md) | ready | a lab | no | [studio-typed-shell-upgrade](items/studio-typed-shell-upgrade.md) | [#3569](https://github.com/UOR-Foundation/uor-r4/issues/3569) |
 | [Migrate the Studio to a typed lifecycle shell without changing its engine](items/studio-typed-shell-upgrade.md) | ready | a lab | no | [m7-studio-live-model-sources](items/m7-studio-live-model-sources.md) | [#3500](https://github.com/UOR-Foundation/uor-r4/issues/3500) |
 | [Decompose images into bounded integer R4 patches for native Studio input](items/geometric-image-input.md) | done | a lab | no | [studio-conversational-composer](items/studio-conversational-composer.md) | [#3619](https://github.com/UOR-Foundation/uor-r4/issues/3619) |
