@@ -2407,3 +2407,841 @@ describe('ReplayModelPort deterministic scripts', () => {
         }
     });
 });
+
+const INGEST_TASK_A = 'tsk_00000000000000a1';
+const INGEST_TASK_B = 'tsk_00000000000000b2';
+const INGEST_RUN_A = 'run_00000000000000a1';
+const INGEST_RUN_B = 'run_00000000000000b2';
+const INGEST_DIGEST = `sha256:${'c'.repeat(64)}`;
+
+function runtimeEvent(input: {
+    taskId: string;
+    runId: string;
+    sequence: number;
+    type: string;
+    data: Record<string, unknown>;
+    generation?: number;
+}): AgentIncomingEvent {
+    const generation = input.generation ?? 1;
+    return {
+        schema: AGENT_EVENT_SCHEMA,
+        event_id: `evt_${input.runId}_${generation}_${input.sequence
+            .toString()
+            .padStart(12, '0')}`,
+        project_id: PROJECT_ID,
+        task_id: input.taskId,
+        run_id: input.runId,
+        generation,
+        sequence: input.sequence,
+        recorded_at_ms: 1_800_000_000_000 + input.sequence,
+        type: input.type,
+        data: input.data,
+    } as unknown as AgentIncomingEvent;
+}
+
+function frame(event: AgentIncomingEvent): Uint8Array {
+    return new TextEncoder().encode(`${canonicalJson(event)}\n`);
+}
+
+function streamForTask(
+    model: ControlledModel,
+    taskId: string,
+): DeferredModelStream {
+    let index = -1;
+    for (let cursor = 0; cursor < model.requests.length; cursor += 1) {
+        if (model.requests[cursor]!.taskId === taskId) index = cursor;
+    }
+    if (index < 0) throw new Error(`model request for ${taskId} is missing`);
+    return model.streams[index]!;
+}
+
+describe('AgentRuntime Task 13 two live tasks and hostile ingestion', () => {
+    test('two_live_tasks_keep_independent_cursors', async () => {
+        const { runtime, store, model } = makeRuntime();
+        await runtime.open();
+        try {
+            const taskA = await runtime.createTask({ title: 'live A' });
+            const taskB = await runtime.createTask({ title: 'live B' });
+            const runA = await runtime.startRun({
+                taskId: taskA.taskId,
+                prompt: 'live A prompt',
+            });
+            const runB = await runtime.startRun({
+                taskId: taskB.taskId,
+                prompt: 'live B prompt',
+            });
+            await until(
+                () =>
+                    model.requests.some(
+                        (request) => request.taskId === taskA.taskId,
+                    ) &&
+                    model.requests.some(
+                        (request) => request.taskId === taskB.taskId,
+                    ),
+                'two live model turns',
+            );
+
+            const cursorB = store.getRunCursor(taskB.taskId, runB.runId)!;
+            streamForTask(model, taskA.taskId).push({
+                type: 'text-delta',
+                text: 'alpha only',
+            });
+            await until(
+                () =>
+                    runView(store, taskA.taskId, runA.runId).messages.length ===
+                    1,
+                'task A delta',
+            );
+            expect(store.getRunCursor(taskB.taskId, runB.runId)).toEqual(
+                cursorB,
+            );
+            expect(
+                runView(store, taskB.taskId, runB.runId).messages,
+            ).toEqual([]);
+
+            const streamA = streamForTask(model, taskA.taskId);
+            streamA.push({ type: 'finished', reason: 'stop' });
+            streamA.end();
+            await until(
+                () =>
+                    runView(store, taskA.taskId, runA.runId).state ===
+                    'finished',
+                'task A finished',
+            );
+            expect(
+                runView(store, taskB.taskId, runB.runId).state,
+            ).toBe('running');
+            expect(store.getRunCursor(taskB.taskId, runB.runId)).toEqual(
+                cursorB,
+            );
+
+            const streamB = streamForTask(model, taskB.taskId);
+            streamB.push({ type: 'text-delta', text: 'beta only' });
+            streamB.push({ type: 'finished', reason: 'stop' });
+            streamB.end();
+            await until(
+                () =>
+                    runView(store, taskB.taskId, runB.runId).state ===
+                    'finished',
+                'task B finished',
+            );
+            expect(
+                runView(store, taskA.taskId, runA.runId).messages.map(
+                    (message) => message.text,
+                ),
+            ).toEqual(['alpha only']);
+            expect(
+                runView(store, taskB.taskId, runB.runId).messages.map(
+                    (message) => message.text,
+                ),
+            ).toEqual(['beta only']);
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('two_live_tasks_do_not_share_artifacts_or_approvals', async () => {
+        const executor: RuntimeToolExecutor = async (intent) => ({
+            status: 'ok',
+            output: { path: `artifacts/${intent.taskId}.txt` },
+            files: [
+                {
+                    path: `artifacts/${intent.taskId}.txt`,
+                    change: 'added',
+                },
+            ],
+            head_digest: `sha256:${intent.taskId.endsWith('1') ? '1'.repeat(64) : '2'.repeat(64)}`,
+        });
+        const { runtime, store, model } = makeRuntime({}, executor);
+        await runtime.open();
+        try {
+            const taskA = await runtime.createTask({ title: 'artifact A' });
+            const taskB = await runtime.createTask({ title: 'artifact B' });
+            const runA = await runtime.startRun({
+                taskId: taskA.taskId,
+                prompt: 'artifact A prompt',
+            });
+            const runB = await runtime.startRun({
+                taskId: taskB.taskId,
+                prompt: 'artifact B prompt',
+            });
+            await until(
+                () =>
+                    model.requests.some(
+                        (request) => request.taskId === taskA.taskId,
+                    ) &&
+                    model.requests.some(
+                        (request) => request.taskId === taskB.taskId,
+                    ),
+                'two live model turns',
+            );
+            streamForTask(model, taskA.taskId).push({
+                type: 'tool-call',
+                toolCallId: 'tool_artifact_a',
+                tool: 'write_file',
+                arguments: {},
+            });
+            streamForTask(model, taskB.taskId).push({
+                type: 'tool-call',
+                toolCallId: 'tool_artifact_b',
+                tool: 'write_file',
+                arguments: {},
+            });
+            await until(
+                () =>
+                    model.requests.filter(
+                        (request) => request.taskId === taskA.taskId,
+                    ).length >= 2 &&
+                    model.requests.filter(
+                        (request) => request.taskId === taskB.taskId,
+                    ).length >= 2,
+                'post-tool turns',
+            );
+
+            const changesA = await runtime.changesSnapshot({
+                taskId: taskA.taskId,
+                runId: runA.runId,
+                scope: 'last_turn',
+            });
+            const changesB = await runtime.changesSnapshot({
+                taskId: taskB.taskId,
+                runId: runB.runId,
+                scope: 'last_turn',
+            });
+            expect(changesA?.files).toEqual([
+                { path: `artifacts/${taskA.taskId}.txt`, change: 'added' },
+            ]);
+            expect(changesB?.files).toEqual([
+                { path: `artifacts/${taskB.taskId}.txt`, change: 'added' },
+            ]);
+            expect(changesA?.headDigest).not.toBe(changesB?.headDigest);
+            expect(
+                store.latestChangesSnapshot(taskA.taskId, runA.runId)?.files,
+            ).toEqual([
+                { path: `artifacts/${taskA.taskId}.txt`, change: 'added' },
+            ]);
+
+            const streamA = streamForTask(model, taskA.taskId);
+            streamA.push({ type: 'finished', reason: 'stop' });
+            streamA.end();
+            const streamB = streamForTask(model, taskB.taskId);
+            streamB.push({ type: 'finished', reason: 'stop' });
+            streamB.end();
+            await until(
+                () =>
+                    runView(store, taskA.taskId, runA.runId).state ===
+                        'finished' &&
+                    runView(store, taskB.taskId, runB.runId).state ===
+                        'finished',
+                'both artifact tasks finished',
+            );
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('two_live_tasks_keep_independent_tool_approvals', async () => {
+        const executor: RuntimeToolExecutor = async () => ({
+            status: 'ok',
+            output: {},
+        });
+        const { runtime, store, model } = makeRuntime(
+            { requiresApproval: (tool) => tool === 'write_file' },
+            executor,
+        );
+        await runtime.open();
+        try {
+            const taskA = await runtime.createTask({ title: 'approval A' });
+            const taskB = await runtime.createTask({ title: 'approval B' });
+            const runA = await runtime.startRun({
+                taskId: taskA.taskId,
+                prompt: 'approval A prompt',
+            });
+            const runB = await runtime.startRun({
+                taskId: taskB.taskId,
+                prompt: 'approval B prompt',
+            });
+            await until(
+                () =>
+                    model.requests.some(
+                        (request) => request.taskId === taskA.taskId,
+                    ) &&
+                    model.requests.some(
+                        (request) => request.taskId === taskB.taskId,
+                    ),
+                'two approval model turns',
+            );
+            streamForTask(model, taskA.taskId).push({
+                type: 'tool-call',
+                toolCallId: 'tool_approval_a',
+                tool: 'write_file',
+                arguments: { path: 'a.txt' },
+            });
+            streamForTask(model, taskB.taskId).push({
+                type: 'tool-call',
+                toolCallId: 'tool_approval_b',
+                tool: 'write_file',
+                arguments: { path: 'b.txt' },
+            });
+            await until(
+                () =>
+                    runView(store, taskA.taskId, runA.runId).approvals
+                        .length === 1 &&
+                    runView(store, taskB.taskId, runB.runId).approvals
+                        .length === 1,
+                'both tool approvals',
+            );
+            const approvalA = runView(store, taskA.taskId, runA.runId)
+                .approvals[0]!;
+            const approvalB = runView(store, taskB.taskId, runB.runId)
+                .approvals[0]!;
+            expect(approvalA.approvalId).not.toBe(approvalB.approvalId);
+            expect(approvalA.requestDigest).not.toBe(approvalB.requestDigest);
+
+            await runtime.resolveApproval({
+                approvalId: approvalA.approvalId,
+                decision: 'approved',
+            });
+            await until(
+                () =>
+                    model.requests.filter(
+                        (request) => request.taskId === taskA.taskId,
+                    ).length >= 2,
+                'task A post-approval turn',
+            );
+            expect(
+                runView(store, taskB.taskId, runB.runId).approvals[0]
+                    ?.decision,
+            ).toBeNull();
+            expect(
+                runView(store, taskB.taskId, runB.runId).toolCalls[0]?.status,
+            ).toBe('requested');
+
+            await runtime.resolveApproval({
+                approvalId: approvalB.approvalId,
+                decision: 'approved',
+            });
+            await until(
+                () =>
+                    model.requests.filter(
+                        (request) => request.taskId === taskB.taskId,
+                    ).length >= 2,
+                'task B post-approval turn',
+            );
+            const streamA = streamForTask(model, taskA.taskId);
+            streamA.push({ type: 'finished', reason: 'stop' });
+            streamA.end();
+            const streamB = streamForTask(model, taskB.taskId);
+            streamB.push({ type: 'finished', reason: 'stop' });
+            streamB.end();
+            await until(
+                () =>
+                    runView(store, taskA.taskId, runA.runId).state ===
+                        'finished' &&
+                    runView(store, taskB.taskId, runB.runId).state ===
+                        'finished',
+                'both approval runs finished',
+            );
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('one_task_hostile_and_terminal_input_cannot_mutate_another_live_task', async () => {
+        const { runtime, store, model } = makeRuntime();
+        await runtime.open();
+        try {
+            const taskA = await runtime.createTask({ title: 'hostile A' });
+            const taskB = await runtime.createTask({ title: 'hostile B' });
+            const runA = await runtime.startRun({
+                taskId: taskA.taskId,
+                prompt: 'hostile A prompt',
+            });
+            const runB = await runtime.startRun({
+                taskId: taskB.taskId,
+                prompt: 'hostile B prompt',
+            });
+            await until(
+                () =>
+                    model.requests.some(
+                        (request) => request.taskId === taskA.taskId,
+                    ) &&
+                    model.requests.some(
+                        (request) => request.taskId === taskB.taskId,
+                    ),
+                'two live model turns',
+            );
+            const workerA = runtime.createIngest({
+                taskId: taskA.taskId,
+                runId: runA.runId,
+            });
+            const workerB = runtime.createIngest({
+                taskId: taskB.taskId,
+                runId: runB.runId,
+            });
+            const cursorB = store.getRunCursor(taskB.taskId, runB.runId)!;
+            const nextSequence =
+                runView(store, taskA.taskId, runA.runId).lastSequence + 1;
+
+            const unknown = await workerA.push(
+                frame(
+                    runtimeEvent({
+                        taskId: taskA.taskId,
+                        runId: runA.runId,
+                        sequence: nextSequence,
+                        type: 'assistant.message.forged',
+                        data: {
+                            message_id: 'msg_forged',
+                            text: 'forged assistant output',
+                            tool_call_id: 'tool_forged',
+                            status: 'ok',
+                        },
+                    }),
+                ),
+            );
+            expect(unknown[0]?.kind).toBe('unknown');
+            const cross = await workerA.push(
+                frame(
+                    runtimeEvent({
+                        taskId: taskB.taskId,
+                        runId: runB.runId,
+                        sequence: 2,
+                        type: 'assistant.message',
+                        data: {
+                            message_id: 'msg_cross',
+                            text: 'cross task output',
+                        },
+                    }),
+                ),
+            );
+            expect(cross[0]?.code()).toBe('cross_task_event');
+            const workerA2 = runtime.createIngest({
+                taskId: taskA.taskId,
+                runId: runA.runId,
+            });
+            const malformed = await workerA2.push(
+                new TextEncoder().encode('{hostile}\n'),
+            );
+            expect(malformed[0]?.code()).toBe('malformed_event');
+
+            expect(store.getRunCursor(taskB.taskId, runB.runId)).toEqual(
+                cursorB,
+            );
+            expect(
+                runView(store, taskB.taskId, runB.runId).messages,
+            ).toEqual([]);
+            expect(runView(store, taskA.taskId, runA.runId).messages).toEqual(
+                [],
+            );
+            expect(runView(store, taskA.taskId, runA.runId).state).toBe(
+                'running',
+            );
+
+            const streamA = streamForTask(model, taskA.taskId);
+            streamA.push({ type: 'finished', reason: 'stop' });
+            streamA.end();
+            await until(
+                () =>
+                    runView(store, taskA.taskId, runA.runId).state ===
+                    'finished',
+                'hostile task A finished',
+            );
+            expect(
+                runView(store, taskB.taskId, runB.runId).state,
+            ).toBe('running');
+            expect(store.getRunCursor(taskB.taskId, runB.runId)).toEqual(
+                cursorB,
+            );
+
+            const honestB = await workerB.push(
+                frame(
+                    runtimeEvent({
+                        taskId: taskB.taskId,
+                        runId: runB.runId,
+                        sequence:
+                            runView(store, taskB.taskId, runB.runId)
+                                .lastSequence + 1,
+                        type: 'assistant.message',
+                        data: {
+                            message_id: 'msg_b',
+                            text: 'task B still writes honestly',
+                        },
+                    }),
+                ),
+            );
+            expect(honestB[0]?.kind).toBe('applied');
+            expect(runView(store, taskA.taskId, runA.runId).messages).toEqual(
+                [],
+            );
+            const streamB = streamForTask(model, taskB.taskId);
+            streamB.push({ type: 'finished', reason: 'stop' });
+            streamB.end();
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('runtime_ingest_cursor_expiry_resyncs_without_fabricated_completion', async () => {
+        const { runtime, store, model } = makeRuntime({
+            taskStore: null as unknown as AgentTaskStore,
+        });
+        await runtime.open();
+        try {
+            const { task, run } = await startOne(runtime, model);
+            const worker = runtime.createIngest({
+                taskId: task.taskId,
+                runId: run.runId,
+            });
+            const outcome = await worker.cursorExpired();
+            expect(outcome.code()).toBe('cursor_expired');
+            const view = runView(store, task.taskId, run.runId);
+            expect(view.generation).toBe(2);
+            expect(view.events.at(-1)?.type).toBe('run.resumed');
+            expect(view.events.map((event) => event.type)).not.toContain(
+                'run.finished',
+            );
+            expect(view.events.map((event) => event.type)).not.toContain(
+                'assistant.message',
+            );
+            expect(view.messages).toEqual([]);
+
+            const fresh = runtime.createIngest({
+                taskId: task.taskId,
+                runId: run.runId,
+            });
+            const stale = await fresh.push(
+                frame(
+                    runtimeEvent({
+                        taskId: task.taskId,
+                        runId: run.runId,
+                        generation: 1,
+                        sequence: 3,
+                        type: 'assistant.message',
+                        data: {
+                            message_id: 'msg_stale',
+                            text: 'stale output',
+                        },
+                    }),
+                ),
+            );
+            expect(stale[0]?.code()).toBe('stale_generation');
+            expect(
+                runView(store, task.taskId, run.runId).messages,
+            ).toEqual([]);
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('runtime_ingest_preserves_durable_unknown_events_without_output', async () => {
+        const { runtime, store, model } = makeRuntime();
+        await runtime.open();
+        try {
+            const { task, run } = await startOne(runtime, model);
+            const worker = runtime.createIngest({
+                taskId: task.taskId,
+                runId: run.runId,
+            });
+            const unknown = await worker.push(
+                frame(
+                    runtimeEvent({
+                        taskId: task.taskId,
+                        runId: run.runId,
+                        sequence:
+                            runView(store, task.taskId, run.runId)
+                                .lastSequence + 1,
+                        type: 'assistant.attachment.forged',
+                        data: {
+                            message_id: 'msg_forged',
+                            text: 'forged output',
+                            output_digest: INGEST_DIGEST,
+                        },
+                    }),
+                ),
+            );
+            expect(unknown[0]?.kind).toBe('unknown');
+            const view = runView(store, task.taskId, run.runId);
+            expect(view.unknownEvents).toHaveLength(1);
+            expect(view.messages).toEqual([]);
+            expect(view.toolCalls).toEqual([]);
+            model.streams.forEach((stream) => stream.end());
+        } finally {
+            await runtime.dispose();
+        }
+    });
+
+    test('dispose_respects_a_borrowed_task_store_owner', async () => {
+        const { runtime, taskStore } = makeRuntime({ ownsTaskStore: false });
+        await runtime.open();
+        expect(taskStore.isOpen).toBe(true);
+        await runtime.dispose();
+        expect(taskStore.isOpen).toBe(true);
+        expect(taskStore.closed).toBe(false);
+    });
+});
+
+describe('AgentRuntime Task 13 replay corrections', () => {
+    test('replay_model_one_turn_tool_script_terminates_instead_of_repeating', async () => {
+        const store = createAgentStore();
+        const clock = new TestClock();
+        const port = new ReplayModelPort({
+            script: [
+                [
+                    {
+                        type: 'tool-call',
+                        toolCallId: 'tool_single_turn',
+                        tool: 'read_file',
+                        arguments: {},
+                    },
+                ],
+            ],
+        });
+        let executions = 0;
+        const runtime = new AgentRuntime({
+            store,
+            taskStore: null as unknown as AgentTaskStore,
+            modelPort: port,
+            toolExecutor: async () => {
+                executions += 1;
+                return { status: 'ok', output: { executions } };
+            },
+            now: clock.now,
+            timers: clock,
+            writerId: 'writer-single-turn',
+            ids: deterministicIds(),
+        });
+        await runtime.open();
+        try {
+            const task = await runtime.createTask({ title: 'one turn' });
+            const run = await runtime.startRun({
+                taskId: task.taskId,
+                prompt: 'one turn prompt',
+            });
+            await until(
+                () =>
+                    runView(store, task.taskId, run.runId).state ===
+                    'finished',
+                'one-turn script termination',
+                120,
+            );
+            const view = runView(store, task.taskId, run.runId);
+            expect(executions).toBe(1);
+            expect(
+                view.events.filter((event) => event.type === 'tool.requested'),
+            ).toHaveLength(1);
+            expect(view.events.at(-1)?.type).toBe('run.finished');
+        } finally {
+            await runtime.dispose();
+        }
+    });
+
+    test('steer_prompt_uses_latest_history_text_while_force_merges_the_base_turn', async () => {
+        let releaseTool: ((result: RuntimeToolResult) => void) | null = null;
+        const executor: RuntimeToolExecutor = () =>
+            new Promise<RuntimeToolResult>((resolve) => {
+                releaseTool = resolve;
+            });
+        const { runtime, store, model } = makeRuntime({}, executor);
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(
+                runtime,
+                model,
+                'base prompt',
+            );
+            stream.push({
+                type: 'tool-call',
+                toolCallId: 'tool_steer_force',
+                tool: 'read_file',
+                arguments: {},
+            });
+            await until(() => releaseTool !== null, 'tool execution');
+            await runtime.steer({
+                taskId: task.taskId,
+                text: 'steer text',
+            });
+            await runtime.forceSend({
+                taskId: task.taskId,
+                text: 'force text',
+            });
+            releaseTool!({ status: 'ok', output: {} });
+            await until(() => model.requests.length >= 2, 'steered turn');
+            const request = model.requests[1]!;
+            expect(request.prompt).toBe('steer text');
+            expect(request.history).toEqual([
+                { role: 'user', text: 'base prompt\nforce text' },
+                { role: 'user', text: 'steer text' },
+            ]);
+            const streamNext = model.streams[1]!;
+            streamNext.push({ type: 'finished', reason: 'stop' });
+            streamNext.end();
+            await until(
+                () => runView(store, task.taskId, run.runId).state === 'finished',
+                'finished after steer and force',
+            );
+        } finally {
+            model.streams.forEach((item) => item.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('pending_approval_is_reconstructed_from_verified_events_after_reopen', async () => {
+        const store = createAgentStore();
+        await seedRunInStore(store);
+        const expiresAtMs = 1_900_000_000_000;
+        await appendToStore(
+            store,
+            runtimeEvent({
+                taskId: INGEST_TASK_A,
+                runId: INGEST_RUN_A,
+                sequence: 2,
+                type: 'tool.requested',
+                data: {
+                    tool_call_id: 'tool_restored',
+                    tool: 'write_file',
+                    arguments_digest: INGEST_DIGEST,
+                    arguments_preview: '{"path":"restored.txt"}',
+                },
+            }),
+        );
+        await appendToStore(
+            store,
+            runtimeEvent({
+                taskId: INGEST_TASK_A,
+                runId: INGEST_RUN_A,
+                sequence: 3,
+                type: 'tool.approval_required',
+                data: {
+                    approval_id: 'appr_restored',
+                    tool_call_id: 'tool_restored',
+                    tool: 'write_file',
+                    scope: 'tool:write_file',
+                    request_digest: INGEST_DIGEST,
+                    expires_at_ms: expiresAtMs,
+                },
+            }),
+        );
+        const clock = new TestClock();
+        const runtime = new AgentRuntime({
+            store,
+            taskStore: null as unknown as AgentTaskStore,
+            now: clock.now,
+            timers: clock,
+            ids: deterministicIds(),
+        });
+        await runtime.open();
+        try {
+            const restored = await runtime.pendingApprovals(INGEST_TASK_A);
+            expect(restored).toEqual([
+                {
+                    approvalId: 'appr_restored',
+                    taskId: INGEST_TASK_A,
+                    runId: INGEST_RUN_A,
+                    generation: 1,
+                    toolCallId: 'tool_restored',
+                    tool: 'write_file',
+                    scope: 'tool:write_file',
+                    requestDigest: INGEST_DIGEST,
+                    expiresAtMs,
+                    expired: false,
+                },
+            ]);
+            await expect(
+                runtime.resolveApproval({
+                    approvalId: 'appr_restored',
+                    decision: 'approved',
+                }),
+            ).rejects.toMatchObject({ code: 'approval_forbidden' });
+            const view = runView(store, INGEST_TASK_A, INGEST_RUN_A);
+            expect(view.approvals[0]?.decision).toBeNull();
+            expect(
+                view.events.filter(
+                    (event) => event.type === 'tool.approval_resolved',
+                ),
+            ).toHaveLength(0);
+        } finally {
+            await runtime.dispose();
+        }
+    });
+});
+
+async function seedRunInStore(store: AgentStore): Promise<void> {
+    await appendToStore(
+        store,
+        runtimeEvent({
+            taskId: INGEST_TASK_A,
+            runId: INGEST_RUN_A,
+            sequence: 0,
+            type: 'run.queued',
+            data: { queued_at_ms: 1_800_000_000_000 },
+        }),
+    );
+    await appendToStore(
+        store,
+        runtimeEvent({
+            taskId: INGEST_TASK_A,
+            runId: INGEST_RUN_A,
+            sequence: 1,
+            type: 'run.started',
+            data: {
+                started_at_ms: 1_800_000_000_001,
+                model: { id: 'replay', kind: 'fixture' },
+                mode: 'agent',
+                environment: { kind: 'browser-fixture' },
+                retry_of_run_id: null,
+            },
+        }),
+    );
+}
+
+async function appendToStore(
+    store: AgentStore,
+    event: AgentIncomingEvent,
+): Promise<void> {
+    const result = await store.appendEvent(event);
+    expect(result.status, `${event.type}: ${result.message ?? ''}`).toBe(
+        'applied',
+    );
+}
+
+describe('ReplayModelPort per-run script positions', () => {
+    test('script_position_is_independent_per_live_run_and_exhausts', async () => {
+        const firstTurn: ModelStreamEvent[] = [
+            { type: 'text-delta', text: 'first scripted turn' },
+            { type: 'finished', reason: 'stop' },
+        ];
+        const secondTurn: ModelStreamEvent[] = [
+            { type: 'text-delta', text: 'second scripted turn' },
+            { type: 'finished', reason: 'stop' },
+        ];
+        const port = new ReplayModelPort({
+            script: [firstTurn, secondTurn],
+        });
+        const request = (runId: string): ModelRequest => ({
+            taskId: INGEST_TASK_A,
+            runId,
+            generation: 1,
+            mode: 'agent',
+            prompt: 'script',
+            history: [{ role: 'user', text: 'script' }],
+        });
+        const collect = async (runId: string): Promise<ModelStreamEvent[]> => {
+            const events: ModelStreamEvent[] = [];
+            for await (const event of port.open(request(runId))) {
+                events.push(event);
+            }
+            return events;
+        };
+
+        expect(await collect(INGEST_RUN_A)).toEqual(firstTurn);
+        expect(await collect(INGEST_RUN_B)).toEqual(firstTurn);
+        expect(await collect(INGEST_RUN_A)).toEqual(secondTurn);
+        expect(await collect(INGEST_RUN_A)).toEqual([]);
+        expect(await collect(INGEST_RUN_B)).toEqual(secondTurn);
+    });
+});

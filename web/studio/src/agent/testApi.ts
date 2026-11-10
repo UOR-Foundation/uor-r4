@@ -2,9 +2,14 @@ import { AgentClient, AgentClientError, type TaskSummary } from './client.js';
 import { FixtureTransport } from './fixtureTransport.js';
 import { AgentTaskStore } from './store.js';
 import { AgentRuntime } from './runtime.js';
-import { ReplayModelPort } from './modelPort.js';
+import {
+    type ModelPort,
+    type ModelRequest,
+    type ModelStreamEvent,
+} from './modelPort.js';
 import { AgentStoreError } from './storeTypes.js';
 import { AGENT_EVENT_SCHEMA } from './generated/agentContract.js';
+import { canonicalJson } from './generated/agentCanonical.js';
 import {
     createRunQueuedEvent,
     createRunStartedEvent,
@@ -99,6 +104,61 @@ interface Outcome {
     records?: unknown;
 }
 
+interface LiveTaskSeed {
+    taskId: string;
+    runId: string;
+    generation: number;
+    title: string;
+    prompt: string;
+}
+
+interface LiveRunSnapshot {
+    taskId: string;
+    title: string;
+    taskState: string;
+    hold: {
+        reason: 'waiting_for_background';
+        run_id: string;
+        tool_call_id: string;
+    } | null;
+    latestRunId: string | null;
+    runId: string | null;
+    generation: number | null;
+    lastSequence: number | null;
+    lastEventId: string | null;
+    lastDigest: string | null;
+    runState: string | null;
+    messages: string[];
+    changes: Array<{
+        files: Array<Record<string, unknown>>;
+        headDigest: string;
+    }>;
+    approvals: Array<{
+        approvalId: string;
+        toolCallId: string;
+        requestDigest: string;
+        expiresAtMs: number;
+        decision: string | null;
+    }>;
+    unknownEvents: number;
+}
+
+interface ReloadTaskSeed {
+    taskId: string;
+    runId: string;
+    generation: number;
+    title: string;
+    message: string;
+    files: Array<Record<string, unknown>>;
+    headDigest: string;
+    snapshot: {
+        generation: number;
+        lastSequence: number;
+        lastEventId: string;
+        headDigest: string;
+    };
+}
+
 export interface StudioTestApi {
     reset(): Promise<void>;
     open(): Promise<RestoreView>;
@@ -153,6 +213,32 @@ export interface StudioTestApi {
         runId: string,
         toolCallId: string,
     ): Promise<Outcome>;
+    startTwoLiveTasksForTest(): Promise<Outcome>;
+    liveTextForTest(runId: string, text: string): Promise<Outcome>;
+    liveToolForTest(runId: string, path: string): Promise<Outcome>;
+    finishLiveRunForTest(runId: string): Promise<Outcome>;
+    resyncLiveRunForTest(runId: string): Promise<Outcome>;
+    ingestHostileForTest(
+        runId: string,
+        mode:
+            | 'malformed'
+            | 'partial'
+            | 'utf8_split'
+            | 'unknown'
+            | 'gap'
+            | 'cross_task'
+            | 'duplicate'
+            | 'forged_duplicate',
+    ): Promise<Outcome>;
+    seedTwoFinishedTasksForTest(): Promise<Outcome>;
+    taskSnapshotForTest(taskId: string): Outcome;
+    verifyRunForTest(taskId: string, runId: string): Promise<Outcome>;
+    seedPendingApprovalForTest(): Promise<Outcome>;
+    pendingApprovalsForTest(taskId: string): Promise<Outcome>;
+    resolveRestoredApprovalForTest(approvalId: string): Promise<Outcome>;
+    seedFailedRunForRetryProbe(): Promise<Outcome>;
+    retryRestoredRunForTest(taskId: string, runId: string): Promise<Outcome>;
+    clearHoldNullForTest(taskId: string): Promise<Outcome>;
     acquireLease(writerId: string, nowMs?: number): Promise<Outcome>;
     heartbeatLease(writerId: string, nowMs?: number): Promise<Outcome>;
     releaseLease(writerId: string): Promise<Outcome>;
@@ -192,6 +278,9 @@ interface TestState {
     client: AgentClient | null;
     taskStore: AgentTaskStore | null;
     store: AgentStore | null;
+    runtime: AgentRuntime | null;
+    liveModel: GatedTestModelPort | null;
+    liveRuns: Map<string, { taskId: string; runId: string }>;
     nowMs: number;
     phase: RestoreView['phase'];
     error: { code: string; message: string } | null;
@@ -234,6 +323,9 @@ function freshState(): TestState {
         client: null,
         taskStore: null,
         store: null,
+        runtime: null,
+        liveModel: null,
+        liveRuns: new Map(),
         nowMs: 1_794_283_200_000,
         phase: 'idle',
         error: null,
@@ -299,6 +391,75 @@ class SummaryTransport extends FixtureTransport {
 
     override async listTasks(): Promise<TaskSummary[]> {
         return [this.taskSummary];
+    }
+}
+
+class DeferredTestModelStream implements AsyncIterable<ModelStreamEvent> {
+    private readonly queue: ModelStreamEvent[] = [];
+    private readonly waiters: Array<
+        (result: IteratorResult<ModelStreamEvent>) => void
+    > = [];
+    private closed = false;
+
+    push(event: ModelStreamEvent): void {
+        if (this.closed) return;
+        const waiter = this.waiters.shift();
+        if (waiter !== undefined) {
+            waiter({ value: event, done: false });
+            return;
+        }
+        this.queue.push(event);
+    }
+
+    end(): void {
+        if (this.closed) return;
+        this.closed = true;
+        for (const waiter of this.waiters.splice(0)) {
+            waiter({ value: undefined as never, done: true });
+        }
+    }
+
+    next(): Promise<IteratorResult<ModelStreamEvent>> {
+        const queued = this.queue.shift();
+        if (queued !== undefined) {
+            return Promise.resolve({ value: queued, done: false });
+        }
+        if (this.closed) {
+            return Promise.resolve({ value: undefined as never, done: true });
+        }
+        return new Promise((resolve) => this.waiters.push(resolve));
+    }
+
+    return(): Promise<IteratorResult<ModelStreamEvent>> {
+        this.end();
+        return Promise.resolve({ value: undefined as never, done: true });
+    }
+
+    [Symbol.asyncIterator](): AsyncIterator<ModelStreamEvent> {
+        return this;
+    }
+}
+
+// Test-only synthetic port. It exposes one live stream per model turn so a
+// gated probe can drive two independent runs from the same runtime.
+class GatedTestModelPort implements ModelPort {
+    readonly id = 'test-gated';
+    readonly kind = 'synthetic-test';
+    readonly synthetic = true;
+    readonly requests: ModelRequest[] = [];
+    private readonly streamsByRun = new Map<string, DeferredTestModelStream[]>();
+
+    open(request: ModelRequest): AsyncIterable<ModelStreamEvent> {
+        this.requests.push(request);
+        const stream = new DeferredTestModelStream();
+        const streams = this.streamsByRun.get(request.runId) ?? [];
+        streams.push(stream);
+        this.streamsByRun.set(request.runId, streams);
+        return stream;
+    }
+
+    latest(runId: string): DeferredTestModelStream | null {
+        return this.streamsByRun.get(runId)?.at(-1) ?? null;
     }
 }
 
@@ -548,7 +709,9 @@ async function appendFixtureEvent(
 }
 
 async function createTaskAndEvents(options: {
-    mode?: 'message' | 'cancelling' | 'finished';
+    mode?: 'message' | 'cancelling' | 'finished' | 'approval' | 'failed';
+    title?: string;
+    text?: string;
 } = {}): Promise<FixtureSummary> {
     if (state.phase !== 'ready') {
         const opened = await open();
@@ -557,7 +720,9 @@ async function createTaskAndEvents(options: {
         }
     }
     const taskStore = requireTaskStore();
-    const task = await taskStore.createTask({ title: 'Fixture task' });
+    const task = await taskStore.createTask({
+        title: options.title ?? 'Fixture task',
+    });
     const runId = `run_${randomHex(8)}`;
     const fixture: FixtureSummary = {
         taskId: task.task_id,
@@ -605,7 +770,7 @@ async function createTaskAndEvents(options: {
     if (mode === 'message') {
         const message = eventFor(fixture, 2, 1, 'assistant.message', {
             message_id: `msg_${randomHex(8)}`,
-            text: 'replayed fixture message',
+            text: options.text ?? 'replayed fixture message',
         });
         const messageResult = await taskStore.appendEvent({ event: message });
         if (messageResult.status !== 'applied') {
@@ -623,6 +788,43 @@ async function createTaskAndEvents(options: {
         }
         fixture.eventIds.push(status.event_id);
         fixture.digests.push(statusResult.digest!);
+    } else if (mode === 'approval') {
+        const toolCallId = 'tool_reload_approval';
+        const approvalId = 'appr_reload_approval';
+        const requestDigest = digestFor('reload-approval');
+        const requested = await appendFixtureEvent(fixture, 'tool.requested', {
+            tool_call_id: toolCallId,
+            tool: 'write_file',
+            arguments_digest: requestDigest,
+            arguments_preview: '{"path":"approval.txt"}',
+        });
+        if (requested.ok !== true) {
+            throw new Error(`approval request fixture failed: ${requested.code ?? ''}`);
+        }
+        const required = await appendFixtureEvent(
+            fixture,
+            'tool.approval_required',
+            {
+                approval_id: approvalId,
+                tool_call_id: toolCallId,
+                tool: 'write_file',
+                scope: 'tool:write_file',
+                request_digest: requestDigest,
+                expires_at_ms: state.nowMs + 600_000,
+            },
+        );
+        if (required.ok !== true) {
+            throw new Error(`approval fixture failed: ${required.code ?? ''}`);
+        }
+    } else if (mode === 'failed') {
+        const failed = await appendFixtureEvent(fixture, 'run.failed', {
+            code: 'model_unavailable',
+            message: 'synthetic retryable failure',
+            retryable: true,
+        });
+        if (failed.ok !== true) {
+            throw new Error(`failed fixture failed: ${failed.code ?? ''}`);
+        }
     } else {
         const finished = eventFor(fixture, 2, 1, 'run.finished', {
             status: 'finished',
@@ -1054,12 +1256,39 @@ function cursorView(): CursorView | null {
 
 const HOLD_TOOL_ID = 'tool_hold_probe';
 
-function runtimeForTest(): AgentRuntime {
-    const client = requireClient();
-    return new AgentRuntime({
+function digestFor(text: string): string {
+    let hex = '';
+    for (let index = 0; index < 64; index += 1) {
+        const code = text.charCodeAt(index % Math.max(1, text.length));
+        hex += ((code + index) % 16).toString(16);
+    }
+    return `sha256:${hex}`;
+}
+
+async function runtimeForTest(): Promise<AgentRuntime> {
+    if (state.runtime !== null) {
+        await state.runtime.open();
+        return state.runtime;
+    }
+    const client = ensureClient();
+    const liveModel = new GatedTestModelPort();
+    const runtime = new AgentRuntime({
         store: client.store,
         taskStore: requireTaskStore(),
-        modelPort: new ReplayModelPort(),
+        modelPort: liveModel,
+        ownsTaskStore: false,
+        toolExecutor: async (intent) => {
+            const path =
+                typeof intent.arguments.path === 'string'
+                    ? intent.arguments.path
+                    : `artifacts/${intent.taskId}.txt`;
+            return {
+                status: 'ok',
+                output: { path },
+                files: [{ path, change: 'added' }],
+                head_digest: digestFor(intent.taskId),
+            };
+        },
         now: () => state.nowMs,
         timers: {
             setInterval: testSetInterval,
@@ -1069,8 +1298,69 @@ function runtimeForTest(): AgentRuntime {
             clearTimeout: (handle) =>
                 globalThis.clearTimeout(handle as never),
         },
-        writerId: `runtime-test-${randomHex(8)}`,
+        writerId: `runtime-probe-${randomHex(8)}`,
     });
+    state.runtime = runtime;
+    state.liveModel = liveModel;
+    await runtime.open();
+    return runtime;
+}
+
+async function disposeRuntimeForTest(): Promise<void> {
+    const runtime = state.runtime;
+    state.runtime = null;
+    state.liveModel = null;
+    state.liveRuns.clear();
+    if (runtime !== null) await runtime.dispose();
+}
+
+function requireLiveModel(): GatedTestModelPort {
+    if (state.liveModel === null) {
+        throw new Error('the gated live model is not initialized');
+    }
+    return state.liveModel;
+}
+
+function liveTaskSnapshot(taskId: string): LiveRunSnapshot {
+    const store = requireClient().store;
+    const task = store
+        .snapshot()
+        .tasks.find((candidate) => candidate.taskId === taskId);
+    if (task === undefined) {
+        throw new Error(`task ${taskId} is missing`);
+    }
+    const run =
+        task.latestRunId === null
+            ? null
+            : store.getRun(task.taskId, task.latestRunId);
+    return {
+        taskId: task.taskId,
+        title: task.title,
+        taskState: task.state,
+        hold: task.hold,
+        latestRunId: task.latestRunId,
+        runId: run?.runId ?? null,
+        generation: run?.generation ?? null,
+        lastSequence: run?.lastSequence ?? null,
+        lastEventId: run?.lastEventId ?? null,
+        lastDigest: run?.lastDigest ?? null,
+        runState: run?.state ?? null,
+        messages: run?.messages.map((message) => message.text) ?? [],
+        changes:
+            run?.changesSnapshots.map((snapshot) => ({
+                files: snapshot.files,
+                headDigest: snapshot.headDigest,
+            })) ?? [],
+        approvals:
+            run?.approvals.map((approval) => ({
+                approvalId: approval.approvalId,
+                toolCallId: approval.toolCallId,
+                requestDigest: approval.requestDigest,
+                expiresAtMs: approval.expiresAtMs,
+                decision: approval.decision,
+            })) ?? [],
+        unknownEvents: run?.unknownEvents.length ?? 0,
+    };
 }
 
 async function seedBackgroundHoldForTest(): Promise<Outcome> {
@@ -1115,9 +1405,8 @@ async function seedBackgroundHoldForTest(): Promise<Outcome> {
 }
 
 async function startRunOnHeldTaskForTest(taskId: string): Promise<Outcome> {
-    const runtime = runtimeForTest();
     try {
-        await runtime.open();
+        const runtime = await runtimeForTest();
         const run = await runtime.startRun({
             taskId,
             prompt: 'must not start on a hold',
@@ -1125,8 +1414,6 @@ async function startRunOnHeldTaskForTest(taskId: string): Promise<Outcome> {
         return { ok: true, record: run };
     } catch (error) {
         return failure(error);
-    } finally {
-        await runtime.dispose();
     }
 }
 
@@ -1135,9 +1422,8 @@ async function resolveBackgroundHoldForTest(
     runId: string,
     toolCallId: string,
 ): Promise<Outcome> {
-    const runtime = runtimeForTest();
     try {
-        await runtime.open();
+        const runtime = await runtimeForTest();
         const receipt = await runtime.resolveBackground({
             taskId,
             runId,
@@ -1146,8 +1432,560 @@ async function resolveBackgroundHoldForTest(
         return { ok: true, record: receipt };
     } catch (error) {
         return failure(error);
-    } finally {
-        await runtime.dispose();
+    }
+}
+
+function waitFor(
+    predicate: () => boolean,
+    label: string,
+    attempts = 400,
+): Promise<void> {
+    return new Promise((resolve, reject) => {
+        let remaining = attempts;
+        const tick = (): void => {
+            if (predicate()) {
+                resolve();
+                return;
+            }
+            remaining -= 1;
+            if (remaining <= 0) {
+                reject(new Error(`timed out waiting for ${label}`));
+                return;
+            }
+            globalThis.setTimeout(tick, 5);
+        };
+        tick();
+    });
+}
+
+function liveRunFor(runId: string): {
+    taskId: string;
+    runId: string;
+    run: RunView;
+} {
+    const entry = state.liveRuns.get(runId);
+    if (entry === undefined) throw new Error(`live run ${runId} is unknown`);
+    const run = requireClient().store.getRun(entry.taskId, runId);
+    if (run === null) throw new Error(`live run ${runId} is missing`);
+    return { ...entry, run };
+}
+
+function encodeFrame(event: Record<string, unknown>): Uint8Array {
+    return new TextEncoder().encode(`${canonicalJson(event)}\n`);
+}
+
+function syntheticEvent(input: {
+    taskId: string;
+    projectId: string;
+    runId: string;
+    generation: number;
+    sequence: number;
+    type: string;
+    data: Record<string, unknown>;
+    eventId?: string;
+}): Record<string, unknown> {
+    return {
+        schema: AGENT_EVENT_SCHEMA,
+        event_id:
+            input.eventId ??
+            `evt_${input.runId}_${input.generation}_${input.sequence
+                .toString()
+                .padStart(12, '0')}`,
+        project_id: input.projectId,
+        task_id: input.taskId,
+        run_id: input.runId,
+        generation: input.generation,
+        sequence: input.sequence,
+        recorded_at_ms: state.nowMs + input.sequence,
+        type: input.type,
+        data: input.data,
+    };
+}
+
+function lastAppliedEventFrame(runId: string, forged: boolean): Uint8Array {
+    const entry = liveRunFor(runId);
+    const task = requireClient()
+        .store.snapshot()
+        .tasks.find((candidate) => candidate.taskId === entry.taskId);
+    if (task === undefined) throw new Error('live task is missing');
+    const event = entry.run.events.at(-1);
+    if (event === undefined) throw new Error('live run has no applied event');
+    const data = forged
+        ? { ...event.data, text: 'forged duplicate content' }
+        : event.data;
+    return encodeFrame(
+        syntheticEvent({
+            taskId: task.taskId,
+            projectId: task.projectId,
+            runId: entry.runId,
+            generation: event.generation,
+            sequence: event.sequence,
+            type: event.type,
+            data,
+            eventId: event.eventId,
+        }),
+    );
+}
+
+async function startTwoLiveTasksForTest(): Promise<Outcome> {
+    try {
+        const runtime = await runtimeForTest();
+        const model = requireLiveModel();
+        const specs = [
+            { title: 'Live task A', prompt: 'live task A prompt' },
+            { title: 'Live task B', prompt: 'live task B prompt' },
+        ];
+        const seeds: LiveTaskSeed[] = [];
+        for (const spec of specs) {
+            const task = await runtime.createTask({ title: spec.title });
+            const run = await runtime.startRun({
+                taskId: task.taskId,
+                prompt: spec.prompt,
+            });
+            state.liveRuns.set(run.runId, {
+                taskId: task.taskId,
+                runId: run.runId,
+            });
+            seeds.push({
+                taskId: task.taskId,
+                runId: run.runId,
+                generation: run.generation,
+                title: spec.title,
+                prompt: spec.prompt,
+            });
+        }
+        await waitFor(
+            () => seeds.every((seed) => model.latest(seed.runId) !== null),
+            'two live model streams',
+        );
+        return { ok: true, record: seeds };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function liveTextForTest(runId: string, text: string): Promise<Outcome> {
+    try {
+        const stream = requireLiveModel().latest(runId);
+        if (stream === null) {
+            throw new Error(`live model stream for ${runId} is missing`);
+        }
+        stream.push({ type: 'text-delta', text });
+        const entry = liveRunFor(runId);
+        await waitFor(
+            () => liveTaskSnapshot(entry.taskId).messages.includes(text),
+            'live text delivery',
+        );
+        return { ok: true, record: liveTaskSnapshot(entry.taskId) };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function liveToolForTest(runId: string, path: string): Promise<Outcome> {
+    try {
+        const model = requireLiveModel();
+        const before = model.latest(runId);
+        if (before === null) {
+            throw new Error(`live model stream for ${runId} is missing`);
+        }
+        before.push({
+            type: 'tool-call',
+            toolCallId: `tool_${randomHex(4)}`,
+            tool: 'write_file',
+            arguments: { path },
+        });
+        const entry = liveRunFor(runId);
+        await waitFor(
+            () =>
+                liveTaskSnapshot(entry.taskId).changes.some((change) =>
+                    change.files.some((file) => file.path === path),
+                ),
+            'live tool artifact',
+        );
+        await waitFor(
+            () => model.latest(runId) !== before,
+            'post-tool model turn',
+        );
+        return { ok: true, record: liveTaskSnapshot(entry.taskId) };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function finishLiveRunForTest(runId: string): Promise<Outcome> {
+    try {
+        const stream = requireLiveModel().latest(runId);
+        if (stream === null) {
+            throw new Error(`live model stream for ${runId} is missing`);
+        }
+        stream.push({ type: 'finished', reason: 'stop' });
+        stream.end();
+        const entry = liveRunFor(runId);
+        await waitFor(
+            () => {
+                const snapshot = liveTaskSnapshot(entry.taskId);
+                return (
+                    snapshot.runState === 'finished' ||
+                    snapshot.runState === 'failed'
+                );
+            },
+            'live run terminal',
+        );
+        return { ok: true, record: liveTaskSnapshot(entry.taskId) };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function resyncLiveRunForTest(runId: string): Promise<Outcome> {
+    try {
+        const runtime = await runtimeForTest();
+        const entry = liveRunFor(runId);
+        const result = await runtime.resumeTask({
+            taskId: entry.taskId,
+            runId,
+        });
+        return {
+            ok: true,
+            record: {
+                snapshot: result.snapshot,
+                generation: result.event.generation,
+            },
+        };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function ingestHostileForTest(
+    runId: string,
+    mode:
+        | 'malformed'
+        | 'partial'
+        | 'utf8_split'
+        | 'unknown'
+        | 'gap'
+        | 'cross_task'
+        | 'duplicate'
+        | 'forged_duplicate',
+): Promise<Outcome> {
+    try {
+        const runtime = await runtimeForTest();
+        const entry = liveRunFor(runId);
+        const task = requireClient()
+            .store.snapshot()
+            .tasks.find((candidate) => candidate.taskId === entry.taskId);
+        if (task === undefined) throw new Error('live task is missing');
+        const nextSequence = entry.run.lastSequence + 1;
+        const unknownFrame = syntheticEvent({
+            taskId: task.taskId,
+            projectId: task.projectId,
+            runId,
+            generation: entry.run.generation,
+            sequence: nextSequence,
+            type: 'assistant.message.forged',
+            data: {
+                message_id: 'msg_forged',
+                text: 'forged hostile output',
+                tool_call_id: 'tool_forged',
+                status: 'ok',
+                output_digest: digestFor('forged-output'),
+                completion: true,
+            },
+        });
+        const worker = runtime.createIngest({
+            taskId: task.taskId,
+            runId,
+        });
+        const outcomes = [];
+        if (mode === 'malformed') {
+            outcomes.push(
+                ...(await worker.push(
+                    new TextEncoder().encode('{"schema":oops}\n'),
+                )),
+            );
+        } else if (mode === 'partial') {
+            const encoded = encodeFrame(unknownFrame);
+            outcomes.push(
+                ...(await worker.push(encoded.subarray(0, encoded.length - 1))),
+            );
+        } else if (mode === 'utf8_split') {
+            const event = syntheticEvent({
+                taskId: task.taskId,
+                projectId: task.projectId,
+                runId,
+                generation: entry.run.generation,
+                sequence: nextSequence,
+                type: 'thinking.delta',
+                data: { text_delta: 'héllo 🌍 — split' },
+            });
+            const encoded = encodeFrame(event);
+            for (const byte of encoded) {
+                outcomes.push(...(await worker.push(new Uint8Array([byte]))));
+            }
+        } else if (mode === 'unknown') {
+            outcomes.push(...(await worker.push(encodeFrame(unknownFrame))));
+        } else if (mode === 'gap') {
+            const gap = syntheticEvent({
+                taskId: task.taskId,
+                projectId: task.projectId,
+                runId,
+                generation: entry.run.generation,
+                sequence: nextSequence + 1,
+                type: 'assistant.delta',
+                data: {
+                    message_id: 'msg_gap',
+                    text_delta: 'gap output',
+                },
+            });
+            outcomes.push(...(await worker.push(encodeFrame(gap))));
+        } else if (mode === 'cross_task') {
+            const cross = syntheticEvent({
+                taskId: 'tsk_ffffffffffffffff',
+                projectId: task.projectId,
+                runId,
+                generation: entry.run.generation,
+                sequence: nextSequence,
+                type: 'assistant.message',
+                data: {
+                    message_id: 'msg_cross',
+                    text: 'cross task output',
+                },
+            });
+            outcomes.push(...(await worker.push(encodeFrame(cross))));
+        } else {
+            outcomes.push(
+                ...(await worker.push(
+                    lastAppliedEventFrame(runId, mode === 'forged_duplicate'),
+                )),
+            );
+        }
+        const eof = await worker.eof();
+        if (eof !== null) outcomes.push(eof);
+        return {
+            ok: true,
+            record: {
+                mode,
+                outcomes: outcomes.map((outcome) => ({
+                    kind: outcome.kind,
+                    code: outcome.code(),
+                    requiresResync: outcome.requiresResync,
+                })),
+                snapshot: liveTaskSnapshot(entry.taskId),
+            },
+        };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function seedTwoFinishedTasksForTest(): Promise<Outcome> {
+    try {
+        const specs = [
+            {
+                title: 'Reload task A',
+                text: 'alpha reload message',
+                path: 'artifacts/reload-a.txt',
+                headDigest: digestFor('reload-a'),
+            },
+            {
+                title: 'Reload task B',
+                text: 'beta reload message',
+                path: 'artifacts/reload-b.txt',
+                headDigest: digestFor('reload-b'),
+            },
+        ];
+        const seeds: ReloadTaskSeed[] = [];
+        for (const spec of specs) {
+            const fixture = await createTaskAndEvents({
+                mode: 'message',
+                title: spec.title,
+                text: spec.text,
+            });
+            const changes = await appendFixtureEvent(
+                fixture,
+                'changes.snapshot',
+                {
+                    scope: 'last_turn',
+                    files: [{ path: spec.path, change: 'added' }],
+                    head_digest: spec.headDigest,
+                    captured_at_ms: state.nowMs + 50,
+                },
+            );
+            if (changes.ok !== true) {
+                throw new Error(`change fixture failed: ${changes.code ?? ''}`);
+            }
+            const finished = await appendFixtureEvent(
+                fixture,
+                'run.finished',
+                {
+                    status: 'finished',
+                    finished_at_ms: state.nowMs + 60,
+                    duration_ms: 60,
+                },
+            );
+            if (finished.ok !== true) {
+                throw new Error(`finish fixture failed: ${finished.code ?? ''}`);
+            }
+            const snapshot = await requireTaskStore().writeSnapshot(
+                fixture.taskId,
+                fixture.runId,
+            );
+            seeds.push({
+                taskId: fixture.taskId,
+                runId: fixture.runId,
+                generation: fixture.generation,
+                title: spec.title,
+                message: spec.text,
+                files: [{ path: spec.path, change: 'added' }],
+                headDigest: spec.headDigest,
+                snapshot: {
+                    generation: snapshot.generation,
+                    lastSequence: snapshot.last_sequence,
+                    lastEventId: snapshot.last_event_id,
+                    headDigest: snapshot.head_digest,
+                },
+            });
+        }
+        return { ok: true, record: seeds };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+function taskSnapshotForTest(taskId: string): Outcome {
+    try {
+        return { ok: true, record: liveTaskSnapshot(taskId) };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function verifyRunForTest(
+    taskId: string,
+    runId: string,
+): Promise<Outcome> {
+    try {
+        const read = await requireTaskStore().readRun(taskId, runId);
+        const snapshot = await requireTaskStore().readSnapshot(taskId, runId);
+        const cursor = requireClient().store.getRunCursor(taskId, runId);
+        return {
+            ok: read.ok && snapshot.ok,
+            record: {
+                runOk: read.ok,
+                runCode: read.ok ? null : read.code,
+                eventCount: read.ok ? read.events.length : 0,
+                snapshotOk: snapshot.ok,
+                snapshotCode: snapshot.ok ? null : snapshot.code,
+                snapshot: snapshot.ok
+                    ? {
+                          generation: snapshot.record.generation,
+                          lastSequence: snapshot.record.last_sequence,
+                          lastEventId: snapshot.record.last_event_id,
+                          headDigest: snapshot.record.head_digest,
+                      }
+                    : null,
+                cursor,
+            },
+        };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function seedPendingApprovalForTest(): Promise<Outcome> {
+    try {
+        const fixture = await createTaskAndEvents({
+            mode: 'approval',
+            title: 'Approval reload task',
+        });
+        return { ok: true, record: fixture };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function pendingApprovalsForTest(taskId: string): Promise<Outcome> {
+    try {
+        const runtime = await runtimeForTest();
+        const pending = await runtime.pendingApprovals(taskId);
+        return {
+            ok: true,
+            record: {
+                pending,
+                view: liveTaskSnapshot(taskId).approvals,
+            },
+        };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function resolveRestoredApprovalForTest(
+    approvalId: string,
+): Promise<Outcome> {
+    try {
+        const runtime = await runtimeForTest();
+        await runtime.resolveApproval({ approvalId, decision: 'approved' });
+        return { ok: true };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function retryRestoredRunForTest(
+    taskId: string,
+    runId: string,
+): Promise<Outcome> {
+    try {
+        const runtime = await runtimeForTest();
+        const run = await runtime.retry({ taskId, runId });
+        return { ok: true, record: run };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function seedFailedRunForRetryProbe(): Promise<Outcome> {
+    try {
+        const fixture = await createTaskAndEvents({
+            mode: 'failed',
+            title: 'Retry honesty task',
+        });
+        return { ok: true, record: fixture };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function clearHoldNullForTest(taskId: string): Promise<Outcome> {
+    try {
+        const store = requireTaskStore();
+        const records = await store.listTasks({ includeArchived: true });
+        const record = records.find(
+            (candidate) => candidate.task_id === taskId,
+        );
+        if (record === undefined) {
+            throw new Error(`task ${taskId} is missing`);
+        }
+        const written = await store.writeTaskRecord({ ...record, hold: null });
+        const memory = requireClient()
+            .store.snapshot()
+            .tasks.find((candidate) => candidate.taskId === taskId);
+        const durable = (
+            await store.listTasks({ includeArchived: true })
+        ).find((candidate) => candidate.task_id === taskId);
+        return {
+            ok: true,
+            record: {
+                memoryHold: memory?.hold ?? null,
+                durableHold: durable?.hold ?? null,
+                writtenHold: written.hold ?? null,
+            },
+        };
+    } catch (error) {
+        return failure(error);
     }
 }
 
@@ -1413,6 +2251,21 @@ export function installStudioTestApi(): void {
         seedBackgroundHoldForTest,
         startRunOnHeldTaskForTest,
         resolveBackgroundHoldForTest,
+        startTwoLiveTasksForTest,
+        liveTextForTest,
+        liveToolForTest,
+        finishLiveRunForTest,
+        resyncLiveRunForTest,
+        ingestHostileForTest,
+        seedTwoFinishedTasksForTest,
+        taskSnapshotForTest,
+        verifyRunForTest,
+        seedPendingApprovalForTest,
+        pendingApprovalsForTest,
+        resolveRestoredApprovalForTest,
+        seedFailedRunForRetryProbe,
+        retryRestoredRunForTest,
+        clearHoldNullForTest,
         async acquireLease(writerId: string, nowMs?: number) {
             try {
                 const fixture = currentFixture();

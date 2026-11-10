@@ -64,6 +64,7 @@ import {
     type ModelRequest,
     type ModelStreamEvent,
 } from './modelPort.js';
+import { IngestOutcome, NdjsonIngest } from './ingest.js';
 
 const PROJECT_ID_PATTERN = /^prj_[0-9a-f]{16}$/;
 const RUN_ID_PATTERN = /^run_[0-9a-f]{16}$/;
@@ -141,6 +142,9 @@ export interface AgentRuntimeOptions {
     approvalTtlMs?: number;
     leaseHeartbeatMs?: number;
     maxQueuedMessages?: number;
+    // A borrowed task store stays open when the runtime is disposed; the
+    // owner that constructed it remains responsible for closing it.
+    ownsTaskStore?: boolean;
     requiresApproval?: (tool: string, args: Record<string, unknown>) => boolean;
     requestStopAck?: (input: {
         taskId: string;
@@ -169,6 +173,25 @@ export interface HostApprovalResolution {
     runId: string;
     generation: number;
     requestDigest: string;
+}
+
+export interface RestoredApproval {
+    approvalId: string;
+    taskId: string;
+    runId: string;
+    generation: number;
+    toolCallId: string;
+    tool: string;
+    scope: string;
+    requestDigest: string;
+    expiresAtMs: number;
+    expired: boolean;
+}
+
+export interface RuntimeEventIngest {
+    push(bytes: Uint8Array): Promise<IngestOutcome[]>;
+    eof(): Promise<IngestOutcome | null>;
+    cursorExpired(): Promise<IngestOutcome>;
 }
 
 interface Deferred<T> {
@@ -386,6 +409,7 @@ export class AgentRuntime {
     private readonly approvalTtlMs: number;
     private readonly leaseHeartbeatMs: number;
     private readonly maxQueuedMessages: number;
+    private readonly ownsTaskStore: boolean;
     private readonly requiresApproval: (
         tool: string,
         args: Record<string, unknown>,
@@ -402,6 +426,7 @@ export class AgentRuntime {
     private readonly listeners = new Set<RuntimeListener>();
     private readonly eventStreams = new Set<RuntimeEventStream>();
     private readonly heldLeases = new Set<string>();
+    private restoredApprovals: RestoredApproval[] = [];
     private heartbeatHandle: unknown = null;
     private heartbeatTask: Promise<void> = Promise.resolve();
     private heartbeatInFlight = false;
@@ -453,6 +478,7 @@ export class AgentRuntime {
             Math.max(1, Math.floor(LEASE_STALE_MS / 3));
         this.maxQueuedMessages =
             options.maxQueuedMessages ?? DEFAULT_MAX_QUEUED_MESSAGES;
+        this.ownsTaskStore = options.ownsTaskStore ?? true;
         this.requiresApproval = options.requiresApproval ?? (() => false);
         this.requestStopAck = options.requestStopAck ?? null;
     }
@@ -473,6 +499,7 @@ export class AgentRuntime {
         if (this.opened) return;
         if (this.taskStore !== null) await this.taskStore.open();
         this.opened = true;
+        this.reconstructApprovals();
         if (this.taskStore !== null && this.heartbeatHandle === null) {
             this.heartbeatHandle = this.timers.setInterval(() => {
                 this.tickHeartbeat();
@@ -533,6 +560,7 @@ export class AgentRuntime {
             await Promise.allSettled([...this.chains.values()]);
             for (const stream of [...this.eventStreams]) stream.close();
             this.listeners.clear();
+            this.restoredApprovals = [];
         } finally {
             if (!hostClosed) {
                 try {
@@ -546,7 +574,7 @@ export class AgentRuntime {
                     }
                 }
             }
-            this.taskStore?.close();
+            if (this.ownsTaskStore) this.taskStore?.close();
             this.opened = false;
         }
     }
@@ -1056,38 +1084,160 @@ export class AgentRuntime {
     async ingestWireEvent(text: string): Promise<AgentAppendResult> {
         this.assertOpen();
         const event = parseAgentEventWire(text);
-        return this.withTask(event.task_id, async () => {
-            let result: AgentAppendResult;
-            if (this.taskStore === null) {
-                result = await this.store.appendEvent(event);
-            } else {
-                const stored = await this.taskStore.appendEvent({
-                    event,
-                    writer_id: this.writerId,
-                });
-                result = {
-                    status: stored.status,
-                    code: stored.code,
-                    message: stored.message,
-                    requiresResync: stored.status === 'rejected',
-                    eventId: stored.event_id,
-                    digest: stored.digest,
-                    storage: stored.storage,
-                };
-            }
-            if (result.status === 'applied') {
-                this.persistenceError = null;
-                this.publish(event, result.digest ?? undefined);
-            } else if (result.status === 'rejected') {
-                this.persistenceError = new AgentClientError(
-                    result.code ?? 'internal',
-                    result.message ?? 'durable append was rejected',
-                    true,
-                    result.storage ?? null,
-                );
-            }
-            return result;
+        return this.withTask(event.task_id, () => this.appendIncoming(event));
+    }
+
+    createIngest(input: { taskId: string; runId: string }): RuntimeEventIngest {
+        this.assertOpen();
+        const worker = new NdjsonIngest({
+            taskId: input.taskId,
+            runId: input.runId,
+            sink: (event) => this.appendIncomingBound(event, input),
         });
+        return {
+            push: (bytes) => worker.push(bytes),
+            eof: () => worker.eof(),
+            cursorExpired: async () => {
+                const outcome = worker.cursorExpired();
+                try {
+                    await this.resumeTask(input);
+                } catch (error) {
+                    return IngestOutcome.rejected(errorCode(error));
+                }
+                return outcome;
+            },
+        };
+    }
+
+    // Pending approvals replayed from the verified event log. The original
+    // runtime is not alive after a reload, so these objects are exact
+    // identity/digest/expiry records for display and refusal, not a second
+    // resolution authority. An already-resolved approval is never listed.
+    async pendingApprovals(taskId?: string): Promise<RestoredApproval[]> {
+        this.assertOpen();
+        return this.restoredApprovals
+            .filter(
+                (approval) =>
+                    taskId === undefined || approval.taskId === taskId,
+            )
+            .map((approval) => ({ ...approval }));
+    }
+
+    private async appendIncoming(
+        event: AgentIncomingEvent,
+    ): Promise<AgentAppendResult> {
+        let result: AgentAppendResult;
+        if (this.taskStore === null) {
+            result = await this.store.appendEvent(event);
+        } else {
+            const stored = await this.taskStore.appendEvent({
+                event,
+                writer_id: this.writerId,
+            });
+            result = {
+                status: stored.status,
+                code: stored.code,
+                message: stored.message,
+                requiresResync: stored.status === 'rejected',
+                eventId: stored.event_id,
+                digest: stored.digest,
+                storage: stored.storage,
+            };
+        }
+        if (result.status === 'applied') {
+            this.persistenceError = null;
+            this.publish(event, result.digest ?? undefined);
+            this.syncControlAfterIngest(event);
+        } else if (result.status === 'rejected') {
+            this.persistenceError = new AgentClientError(
+                result.code ?? 'internal',
+                result.message ?? 'durable append was rejected',
+                true,
+                result.storage ?? null,
+            );
+        }
+        return result;
+    }
+
+    private async appendIncomingBound(
+        event: AgentIncomingEvent,
+        expected: { taskId: string; runId: string },
+    ): Promise<AgentAppendResult> {
+        if (event.task_id !== expected.taskId) {
+            return {
+                status: 'rejected',
+                code: 'cross_task_event',
+                message: 'event does not belong to the bound task',
+                requiresResync: true,
+                eventId: event.event_id,
+                digest: null,
+                storage: null,
+            };
+        }
+        if (event.run_id !== expected.runId) {
+            return {
+                status: 'rejected',
+                code: 'out_of_order',
+                message: 'event does not belong to the bound run',
+                requiresResync: true,
+                eventId: event.event_id,
+                digest: null,
+                storage: null,
+            };
+        }
+        return this.withTask(expected.taskId, () =>
+            this.appendIncoming(event),
+        );
+    }
+
+    // An already-applied external event is authoritative for the reducer
+    // cursor. Move this runtime's own append counter past it so the next
+    // runtime-generated event does not collide with the ingested sequence.
+    private syncControlAfterIngest(event: AgentIncomingEvent): void {
+        const control = this.active.get(event.task_id);
+        if (control === undefined || control.runId !== event.run_id) return;
+        if (event.sequence >= control.sequence) {
+            control.sequence = event.sequence + 1;
+        }
+        if (event.generation > control.generation) {
+            control.generation = event.generation;
+        }
+    }
+
+    private reconstructApprovals(): void {
+        const now = this.now();
+        const restored: RestoredApproval[] = [];
+        const seen = new Set<string>();
+        for (const run of this.store.snapshot().runs) {
+            if (run.needsResync || isTerminalState(run.state)) continue;
+            for (const approval of run.approvals) {
+                if (
+                    approval.decision !== null ||
+                    seen.has(approval.approvalId)
+                ) {
+                    continue;
+                }
+                seen.add(approval.approvalId);
+                const required = run.events.find(
+                    (event) =>
+                        event.type === 'tool.approval_required' &&
+                        event.data.approval_id === approval.approvalId,
+                );
+                restored.push({
+                    approvalId: approval.approvalId,
+                    taskId: run.taskId,
+                    runId: run.runId,
+                    generation: required?.generation ?? run.generation,
+                    toolCallId: approval.toolCallId,
+                    tool: approval.tool,
+                    scope: approval.scope,
+                    requestDigest: approval.requestDigest,
+                    expiresAtMs: approval.expiresAtMs,
+                    expired: now > approval.expiresAtMs,
+                });
+            }
+        }
+        this.restoredApprovals = restored;
     }
 
     async tree(_input: TreeInput): Promise<TreeEntry[]> {
@@ -1428,19 +1578,27 @@ export class AgentRuntime {
                 const userTurn = [current.prompt, ...current.forceTexts].join(
                     '\n',
                 );
+                const steeredTurns = current.extraUserTexts.splice(0);
                 const history = [
                     { role: 'user' as const, text: userTurn },
-                    ...current.extraUserTexts.splice(0).map((text) => ({
+                    ...steeredTurns.map((text) => ({
                         role: 'user' as const,
                         text,
                     })),
                 ];
+                // A steer is the latest instruction for this turn; force text
+                // is folded into the base user turn instead of becoming a
+                // separate history message.
+                const prompt =
+                    steeredTurns.length === 0
+                        ? userTurn
+                        : steeredTurns[steeredTurns.length - 1]!;
                 const request: ModelRequest = {
                     taskId: current.taskId,
                     runId: current.runId,
                     generation: current.generation,
                     mode: current.mode,
-                    prompt: userTurn,
+                    prompt,
                     history,
                 };
                 const iterator =

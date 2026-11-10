@@ -596,7 +596,10 @@ function taskToAgentRecord(record: TaskRecord): AgentTaskRecord {
         archived: record.archived,
         pinnedLocal: record.pinned_local,
         latestRunId: record.latest_run_id ?? null,
-        ...(record.hold === undefined ? {} : { hold: record.hold }),
+        // An absent durable hold is an explicit clear, not "leave the in-memory
+        // projection untouched". The adapter's writeTaskRecord({hold:null})
+        // path therefore clears both copies consistently.
+        hold: record.hold ?? null,
     };
 }
 
@@ -916,8 +919,12 @@ export class AgentTaskStore {
         const normalized: TaskRecord = {
             ...jsonClean(record),
             latest_run_id: latest,
-            ...(hold === null || hold === undefined ? {} : { hold }),
         };
+        if (hold === null || hold === undefined) {
+            delete (normalized as { hold?: unknown }).hold;
+        } else {
+            normalized.hold = hold;
+        }
         await this.persistTaskWithRollback(normalized);
         if (
             marker !== null &&

@@ -1988,3 +1988,468 @@ test('no_query_browser_exposes_no_studio_test_api', async ({ page }) => {
     expect(await page.evaluate(() => '__studioTest' in window)).toBe(false);
     expect(await page.evaluate(() => Object.keys(window).filter((key) => key.toLowerCase().includes('studiotest')))).toEqual([]);
 });
+
+interface LiveTaskSeed {
+    taskId: string;
+    runId: string;
+    generation: number;
+    title: string;
+    prompt: string;
+}
+
+interface LiveRunSnapshot {
+    taskId: string;
+    title: string;
+    taskState: string;
+    hold: {
+        reason: 'waiting_for_background';
+        run_id: string;
+        tool_call_id: string;
+    } | null;
+    latestRunId: string | null;
+    runId: string | null;
+    generation: number | null;
+    lastSequence: number | null;
+    lastEventId: string | null;
+    lastDigest: string | null;
+    runState: string | null;
+    messages: string[];
+    changes: Array<{
+        files: Array<Record<string, unknown>>;
+        headDigest: string;
+    }>;
+    approvals: Array<{
+        approvalId: string;
+        toolCallId: string;
+        requestDigest: string;
+        expiresAtMs: number;
+        decision: string | null;
+    }>;
+    unknownEvents: number;
+}
+
+interface ReloadTaskSeed {
+    taskId: string;
+    runId: string;
+    generation: number;
+    title: string;
+    message: string;
+    files: Array<Record<string, unknown>>;
+    headDigest: string;
+    snapshot: {
+        generation: number;
+        lastSequence: number;
+        lastEventId: string;
+        headDigest: string;
+    };
+}
+
+interface HostileResult {
+    mode: string;
+    outcomes: Array<{
+        kind: string;
+        code: string | null;
+        requiresResync: boolean;
+    }>;
+    snapshot: LiveRunSnapshot;
+}
+
+test.describe('Task 13 parallel tasks, reload and hostile ingestion', () => {
+    test('two_live_tasks_keep_independent_artifacts_and_reload_from_indexeddb', async ({ page }) => {
+        await openStudio(page);
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        const started = await call<Outcome>(page, 'startTwoLiveTasksForTest');
+        expect(started.ok, JSON.stringify(started)).toBe(true);
+        const [taskA, taskB] = started.record as LiveTaskSeed[];
+
+        const liveA = (await call<Outcome>(page, 'taskSnapshotForTest', taskA.taskId))
+            .record as LiveRunSnapshot;
+        const liveB = (await call<Outcome>(page, 'taskSnapshotForTest', taskB.taskId))
+            .record as LiveRunSnapshot;
+        expect(liveA.runState).toBe('running');
+        expect(liveB.runState).toBe('running');
+        expect(liveA.runId).not.toBe(liveB.runId);
+
+        expect((await call<Outcome>(page, 'liveTextForTest', taskA.runId, 'alpha live output')).ok)
+            .toBe(true);
+        const bAfterA = (await call<Outcome>(page, 'taskSnapshotForTest', taskB.taskId))
+            .record as LiveRunSnapshot;
+        expect(bAfterA.lastSequence).toBe(liveB.lastSequence);
+        expect(bAfterA.messages).toEqual([]);
+
+        expect((await call<Outcome>(page, 'liveTextForTest', taskB.runId, 'beta live output')).ok)
+            .toBe(true);
+        expect(
+            (await call<Outcome>(page, 'liveToolForTest', taskA.runId, 'artifacts/live-a.txt')).ok,
+        ).toBe(true);
+        expect(
+            (await call<Outcome>(page, 'liveToolForTest', taskB.runId, 'artifacts/live-b.txt')).ok,
+        ).toBe(true);
+        expect((await call<Outcome>(page, 'finishLiveRunForTest', taskA.runId)).ok).toBe(true);
+        expect((await call<Outcome>(page, 'finishLiveRunForTest', taskB.runId)).ok).toBe(true);
+
+        const finalA = (await call<Outcome>(page, 'taskSnapshotForTest', taskA.taskId))
+            .record as LiveRunSnapshot;
+        const finalB = (await call<Outcome>(page, 'taskSnapshotForTest', taskB.taskId))
+            .record as LiveRunSnapshot;
+        expect(finalA.runState).toBe('finished');
+        expect(finalB.runState).toBe('finished');
+        expect(finalA.messages).toEqual(['alpha live output']);
+        expect(finalB.messages).toEqual(['beta live output']);
+        expect(finalA.changes[0]?.files).toEqual([
+            { path: 'artifacts/live-a.txt', change: 'added' },
+        ]);
+        expect(finalB.changes[0]?.files).toEqual([
+            { path: 'artifacts/live-b.txt', change: 'added' },
+        ]);
+        expect(finalA.changes[0]?.headDigest).not.toBe(finalB.changes[0]?.headDigest);
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+
+        const reloadA = (await call<Outcome>(page, 'taskSnapshotForTest', taskA.taskId))
+            .record as LiveRunSnapshot;
+        const reloadB = (await call<Outcome>(page, 'taskSnapshotForTest', taskB.taskId))
+            .record as LiveRunSnapshot;
+        expect(reloadA).toMatchObject({
+            taskId: taskA.taskId,
+            runId: taskA.runId,
+            generation: finalA.generation,
+            lastSequence: finalA.lastSequence,
+            lastEventId: finalA.lastEventId,
+            lastDigest: finalA.lastDigest,
+            runState: 'finished',
+            messages: ['alpha live output'],
+        });
+        expect(reloadB).toMatchObject({
+            taskId: taskB.taskId,
+            runId: taskB.runId,
+            generation: finalB.generation,
+            lastSequence: finalB.lastSequence,
+            lastEventId: finalB.lastEventId,
+            lastDigest: finalB.lastDigest,
+            runState: 'finished',
+            messages: ['beta live output'],
+        });
+        expect(reloadA.changes[0]?.files).toEqual([
+            { path: 'artifacts/live-a.txt', change: 'added' },
+        ]);
+        expect(reloadB.changes[0]?.files).toEqual([
+            { path: 'artifacts/live-b.txt', change: 'added' },
+        ]);
+        expect(reloadB.lastDigest).not.toBe(reloadA.lastDigest);
+
+        for (const task of [taskA, taskB]) {
+            const verified = await call<Outcome>(page, 'verifyRunForTest', task.taskId, task.runId);
+            expect(verified.record).toMatchObject({
+                runOk: true,
+                runCode: null,
+            });
+            expect((verified.record as { eventCount: number }).eventCount).toBeGreaterThan(2);
+        }
+        const state = await call<RestoreView>(page, 'restoreState');
+        expect(state.phase).toBe('ready');
+        expect(state.canStartRun).toBe(true);
+    });
+
+    test('hostile_ndjson_bytes_never_become_output_and_active_runs_keep_send_disabled', async ({ page }) => {
+        await openStudio(page);
+        await call<RestoreView>(page, 'open');
+        const started = await call<Outcome>(page, 'startTwoLiveTasksForTest');
+        expect(started.ok, JSON.stringify(started)).toBe(true);
+        const [taskA, taskB] = started.record as LiveTaskSeed[];
+
+        const modes = [
+            'malformed',
+            'partial',
+            'utf8_split',
+            'unknown',
+            'cross_task',
+            'duplicate',
+            'gap',
+        ] as const;
+        const outcomes = new Map<string, HostileResult>();
+        for (const mode of modes) {
+            const result = await call<Outcome>(page, 'ingestHostileForTest', taskA.runId, mode);
+            expect(result.ok, JSON.stringify(result)).toBe(true);
+            outcomes.set(mode, result.record as HostileResult);
+        }
+
+        expect(outcomes.get('malformed')!.outcomes[0]).toMatchObject({
+            kind: 'rejected',
+            code: 'malformed_event',
+        });
+        expect(outcomes.get('partial')!.outcomes.at(-1)).toMatchObject({
+            kind: 'rejected',
+            code: 'truncated_frame',
+        });
+        expect(outcomes.get('utf8_split')!.outcomes.at(-1)).toMatchObject({
+            kind: 'applied',
+        });
+        expect(outcomes.get('unknown')!.outcomes[0]).toMatchObject({
+            kind: 'unknown',
+            code: null,
+        });
+        expect(outcomes.get('gap')!.outcomes[0]).toMatchObject({
+            kind: 'rejected',
+            code: 'out_of_order',
+            requiresResync: true,
+        });
+        expect(outcomes.get('cross_task')!.outcomes[0]).toMatchObject({
+            kind: 'rejected',
+            code: 'cross_task_event',
+        });
+        expect(outcomes.get('duplicate')!.outcomes[0]).toMatchObject({
+            kind: 'duplicate',
+        });
+        expect((await call<Outcome>(page, 'resyncLiveRunForTest', taskA.runId)).ok)
+            .toBe(true);
+
+        expect((await call<Outcome>(page, 'liveTextForTest', taskA.runId, 'honest after hostile')).ok)
+            .toBe(true);
+        const finished = await call<Outcome>(page, 'finishLiveRunForTest', taskA.runId);
+        expect(finished.ok, JSON.stringify(finished)).toBe(true);
+        const cleanA = finished.record as LiveRunSnapshot;
+        expect(cleanA.messages).toEqual(['honest after hostile']);
+
+        const forged = await call<Outcome>(
+            page,
+            'ingestHostileForTest',
+            taskB.runId,
+            'forged_duplicate',
+        );
+        expect(forged.ok, JSON.stringify(forged)).toBe(true);
+        expect((forged.record as HostileResult).outcomes[0]).toMatchObject({
+            kind: 'rejected',
+            code: 'duplicate_event',
+            requiresResync: true,
+        });
+        const poisonedB = (await call<Outcome>(page, 'taskSnapshotForTest', taskB.taskId))
+            .record as LiveRunSnapshot;
+        expect(poisonedB.messages).toEqual([]);
+        expect(poisonedB.runState).toBe('running');
+        expect(poisonedB.unknownEvents).toBe(0);
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        const reloadA = (await call<Outcome>(page, 'taskSnapshotForTest', taskA.taskId))
+            .record as LiveRunSnapshot;
+        const reloadB = (await call<Outcome>(page, 'taskSnapshotForTest', taskB.taskId))
+            .record as LiveRunSnapshot;
+        expect(reloadA.messages).toEqual(['honest after hostile']);
+        expect(reloadA.runState).toBe('finished');
+        expect(reloadB.messages).toEqual([]);
+        expect(reloadB.runState).toBe('running');
+        expect(reloadB.unknownEvents).toBe(0);
+        expect(reloadB.changes).toEqual([]);
+
+        await call(page, 'targetFixture', taskB.taskId, taskB.runId, taskB.generation);
+        const blocked = await call<RestoreView>(page, 'restoreState');
+        expect(blocked.activeRun?.runId).toBe(taskB.runId);
+        expect(blocked.canStartRun).toBe(false);
+        expect(blocked.sendEnabled).toBe(false);
+    });
+
+    test('two_finished_tasks_restore_with_verified_chain_snapshot_cursor_and_artifacts', async ({ page }) => {
+        await openStudio(page);
+        await call<RestoreView>(page, 'open');
+        const seeded = await call<Outcome>(page, 'seedTwoFinishedTasksForTest');
+        expect(seeded.ok, JSON.stringify(seeded)).toBe(true);
+        const [taskA, taskB] = seeded.record as ReloadTaskSeed[];
+        const beforeA = (await call<Outcome>(page, 'taskSnapshotForTest', taskA.taskId))
+            .record as LiveRunSnapshot;
+        const beforeB = (await call<Outcome>(page, 'taskSnapshotForTest', taskB.taskId))
+            .record as LiveRunSnapshot;
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+
+        for (const [seed, before] of [
+            [taskA, beforeA],
+            [taskB, beforeB],
+        ] as const) {
+            const restored = (await call<Outcome>(page, 'taskSnapshotForTest', seed.taskId))
+                .record as LiveRunSnapshot;
+            expect(restored).toMatchObject({
+                runId: seed.runId,
+                generation: seed.generation,
+                lastSequence: before.lastSequence,
+                lastEventId: before.lastEventId,
+                lastDigest: before.lastDigest,
+                runState: 'finished',
+                messages: [seed.message],
+            });
+            expect(restored.changes[0]?.files).toEqual(seed.files);
+            expect(restored.changes[0]?.headDigest).toBe(seed.headDigest);
+
+            const verified = await call<Outcome>(
+                page,
+                'verifyRunForTest',
+                seed.taskId,
+                seed.runId,
+            );
+            expect(verified.ok, JSON.stringify(verified)).toBe(true);
+            expect(verified.record).toMatchObject({
+                runOk: true,
+                snapshotOk: true,
+                snapshot: {
+                    generation: seed.snapshot.generation,
+                    lastSequence: seed.snapshot.lastSequence,
+                    lastEventId: seed.snapshot.lastEventId,
+                    headDigest: seed.snapshot.headDigest,
+                },
+            });
+        }
+        expect(beforeA.lastDigest).not.toBe(beforeB.lastDigest);
+        expect((await readDb(page)).taskRecords).toHaveLength(2);
+        expect((await readDb(page)).runRecords).toHaveLength(2);
+        expect((await readDb(page)).snapshotKeys).toHaveLength(2);
+    });
+
+    test('pending_approval_and_retry_restore_honestly_without_fabricated_resolution', async ({ page }) => {
+        await openStudio(page);
+        await call<RestoreView>(page, 'open');
+        const approvalSeed = await call<Outcome>(page, 'seedPendingApprovalForTest');
+        expect(approvalSeed.ok, JSON.stringify(approvalSeed)).toBe(true);
+        const approvalFixture = approvalSeed.record as {
+            taskId: string;
+            runId: string;
+        };
+        const retrySeed = await call<Outcome>(page, 'seedFailedRunForRetryProbe');
+        expect(retrySeed.ok, JSON.stringify(retrySeed)).toBe(true);
+        const retryFixture = retrySeed.record as { taskId: string; runId: string };
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+
+        const pending = await call<Outcome>(
+            page,
+            'pendingApprovalsForTest',
+            approvalFixture.taskId,
+        );
+        expect(pending.ok, JSON.stringify(pending)).toBe(true);
+        const pendingRecord = pending.record as {
+            pending: Array<{
+                approvalId: string;
+                taskId: string;
+                runId: string;
+                generation: number;
+                toolCallId: string;
+                requestDigest: string;
+                expiresAtMs: number;
+                expired: boolean;
+            }>;
+            view: LiveRunSnapshot['approvals'];
+        };
+        expect(pendingRecord.pending).toHaveLength(1);
+        expect(pendingRecord.pending[0]).toMatchObject({
+            approvalId: 'appr_reload_approval',
+            taskId: approvalFixture.taskId,
+            runId: approvalFixture.runId,
+            generation: 1,
+            toolCallId: 'tool_reload_approval',
+            expired: false,
+        });
+        expect(pendingRecord.pending[0].requestDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
+        expect(pendingRecord.pending[0].expiresAtMs).toBeGreaterThan(0);
+        expect(pendingRecord.view[0]).toMatchObject({
+            approvalId: 'appr_reload_approval',
+            decision: null,
+        });
+
+        const beforeResolve = await call<Outcome>(
+            page,
+            'verifyRunForTest',
+            approvalFixture.taskId,
+            approvalFixture.runId,
+        );
+        const refused = await call<Outcome>(
+            page,
+            'resolveRestoredApprovalForTest',
+            'appr_reload_approval',
+        );
+        expect(refused.ok, JSON.stringify(refused)).toBe(false);
+        expect(refused.code).toBe('approval_forbidden');
+        const afterResolve = await call<Outcome>(
+            page,
+            'verifyRunForTest',
+            approvalFixture.taskId,
+            approvalFixture.runId,
+        );
+        expect((afterResolve.record as { eventCount: number }).eventCount).toBe(
+            (beforeResolve.record as { eventCount: number }).eventCount,
+        );
+        const stillPending = (await call<Outcome>(
+            page,
+            'taskSnapshotForTest',
+            approvalFixture.taskId,
+        )).record as LiveRunSnapshot;
+        expect(stillPending.approvals[0]?.decision).toBeNull();
+        expect(stillPending.runState).not.toBe('finished');
+
+        const retry = await call<Outcome>(
+            page,
+            'retryRestoredRunForTest',
+            retryFixture.taskId,
+            retryFixture.runId,
+        );
+        expect(retry.ok, JSON.stringify(retry)).toBe(false);
+        expect(retry.code).toBe('invalid_arguments');
+        expect(retry.message).toContain('prompt is unavailable');
+        const retryTask = (await call<Outcome>(page, 'taskSnapshotForTest', retryFixture.taskId))
+            .record as LiveRunSnapshot;
+        expect(retryTask.latestRunId).toBe(retryFixture.runId);
+
+        await call(
+            page,
+            'targetFixture',
+            approvalFixture.taskId,
+            approvalFixture.runId,
+            1,
+        );
+        const blocked = await call<RestoreView>(page, 'restoreState');
+        expect(blocked.activeRun?.runId).toBe(approvalFixture.runId);
+        expect(blocked.canStartRun).toBe(false);
+        expect(blocked.sendEnabled).toBe(false);
+    });
+
+    test('adapter_hold_null_clears_memory_and_durable_records', async ({ page }) => {
+        await openStudio(page);
+        await call<RestoreView>(page, 'open');
+        const seeded = await call<Outcome>(page, 'seedBackgroundHoldForTest');
+        expect(seeded.ok, JSON.stringify(seeded)).toBe(true);
+        const hold = seeded.record as {
+            taskId: string;
+            runId: string;
+            toolCallId: string;
+        };
+
+        const cleared = await call<Outcome>(page, 'clearHoldNullForTest', hold.taskId);
+        expect(cleared.ok, JSON.stringify(cleared)).toBe(true);
+        expect(cleared.record).toMatchObject({
+            memoryHold: null,
+            durableHold: null,
+            writtenHold: null,
+        });
+        const before = (await call<Outcome>(page, 'taskSnapshotForTest', hold.taskId))
+            .record as LiveRunSnapshot;
+        expect(before.hold).toBeNull();
+        expect(before.taskState).toBe('idle');
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        const restored = (await call<Outcome>(page, 'taskSnapshotForTest', hold.taskId))
+            .record as LiveRunSnapshot;
+        expect(restored.hold).toBeNull();
+        expect(restored.taskState).toBe('idle');
+        const durable = (await readDb(page)).taskRecords.find(
+            (record) => record.task_id === hold.taskId,
+        );
+        expect(durable?.hold).toBeUndefined();
+    });
+});

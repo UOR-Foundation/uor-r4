@@ -76,7 +76,7 @@ export class ReplayModelPort implements ModelPort {
         modelCalls: number;
     } | null;
     private readonly turns: readonly ReplayModelTurn[] | null;
-    private turnIndex = 0;
+    private readonly turnIndexByRun = new Map<string, number>();
 
     constructor(options: ReplayModelPortOptions = {}) {
         this.chunks = options.chunks ?? ['Synthetic replay acknowledges: '];
@@ -91,8 +91,9 @@ export class ReplayModelPort implements ModelPort {
 
     async *open(request: ModelRequest): AsyncIterable<ModelStreamEvent> {
         if (this.turns !== null) {
-            const index = Math.min(this.turnIndex, this.turns.length - 1);
-            this.turnIndex += 1;
+            const index = this.turnIndexByRun.get(request.runId) ?? 0;
+            if (index >= this.turns.length) return;
+            this.turnIndexByRun.set(request.runId, index + 1);
             for (const event of this.turns[index] ?? []) yield event;
             return;
         }
