@@ -102,9 +102,28 @@ No model result was measured and no GPU was used.
 
 ## Checks run at the head
 
-The final head's exact commands and results are appended to the PR review
-record after the commit. This section records the pre-head checks named above;
-it will not be treated as the review.
+- `cargo fmt --check -p repo-model -p xtask -p uor-r4-harness`: pass.
+- `rustfmt --check` on `uor-chat.rs` and `fbs-export.rs`: pass.
+- `cargo clippy -p repo-model -p xtask --all-targets` with the two documented
+  pre-existing xtask allowances: pass.
+- `cargo clippy -p uor-r4-integer --bin uor-chat --bin fbs-export -D warnings`:
+  **not clean**. It reports 61 pre-existing crate-library findings outside this
+  unit; none is in the two changed binaries.
+- `cargo test -p repo-model -p xtask`: 248 passed.
+- `cargo test -p uor-r4-harness --lib`: 677 passed, 1 ignored.
+- `cargo test -p uor-r4-integer --features serving-wasm --lib`: 517 passed,
+  1 ignored.
+- `uor-chat` binary tests: 9 passed.
+- `fbs-export` binary tests: 3 passed.
+- `stack-contract --check`: pass, four contracts current.
+- loop quick gates: `stack-contract`, `fmt-claim-wording`, `fmt-harness` and
+  `claim-wording` all `GREEN`.
+- loop planted fault: `stack-contract` `CAUGHT`, red with `dependency cycle`.
+- `check-model`: pass, 33 IDs.
+- `roadmap check`: pass, 143 items.
+- `uor-harness check`: exit 0 with 336 pre-existing warnings and no errors.
+- `loop report --check`: pass.
+- `git diff --check`: pass.
 
 ## Skills used
 
