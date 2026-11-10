@@ -515,15 +515,29 @@ export class AgentRuntime {
     async dispose(): Promise<void> {
         if (this.disposed) return;
         this.disposed = true;
+        const record = (error: unknown): void => {
+            if (this.persistenceError === null) {
+                this.persistenceError = new AgentClientError(
+                    errorCode(error),
+                    errorMessage(error),
+                    false,
+                    error instanceof AgentStoreError ? error.storage : null,
+                );
+            }
+        };
         if (this.heartbeatHandle !== null) {
-            this.timers.clearInterval(this.heartbeatHandle);
+            try {
+                this.timers.clearInterval(this.heartbeatHandle);
+            } catch (error) {
+                record(error);
+            }
             this.heartbeatHandle = null;
         }
         const controls = [...this.active.values()];
         for (const control of controls) {
             control.terminal = true;
             control.cancelRequested = true;
-            this.clearTimers(control);
+            this.clearTimersSafely(control, record);
             control.pendingApproval?.resolve('cancelled');
             control.pendingApproval = null;
             control.stopDeferred?.resolve(false);
@@ -532,54 +546,54 @@ export class AgentRuntime {
         // Controls are terminal; close the host before any chain/iterator wait
         // so a pending tool call can be rejected instead of holding cleanup.
         let hostClosed = this.hostClientInstance === null;
-        if (!hostClosed) {
+        const closeHost = (): void => {
+            if (hostClosed) return;
             try {
                 this.hostClientInstance?.close();
                 hostClosed = true;
             } catch (error) {
-                if (this.persistenceError === null) {
-                    this.persistenceError = new AgentClientError(
-                        errorCode(error),
-                        errorMessage(error),
-                    );
-                }
+                record(error);
             }
-        }
+        };
+        closeHost();
         try {
-            await this.heartbeatTask;
+            try {
+                await this.heartbeatTask;
+            } catch (error) {
+                record(error);
+            }
             for (const control of controls) {
                 try {
                     await control.modelIterator?.return?.();
                 } catch (error) {
-                    if (this.persistenceError === null) {
-                        this.persistenceError = new AgentClientError(
-                            errorCode(error),
-                            errorMessage(error),
-                        );
-                    }
+                    record(error);
                 }
                 this.active.delete(control.taskId);
-                await this.releaseLease(control.taskId);
+                try {
+                    await this.releaseLease(control.taskId);
+                } catch (error) {
+                    record(error);
+                }
             }
             this.taskQueues.clear();
             await Promise.allSettled([...this.chains.values()]);
-            for (const stream of [...this.eventStreams]) stream.close();
-            this.listeners.clear();
-            this.restoredApprovals = [];
         } finally {
-            if (!hostClosed) {
+            for (const stream of [...this.eventStreams]) {
                 try {
-                    this.hostClientInstance?.close();
+                    stream.close();
                 } catch (error) {
-                    if (this.persistenceError === null) {
-                        this.persistenceError = new AgentClientError(
-                            errorCode(error),
-                            errorMessage(error),
-                        );
-                    }
+                    record(error);
                 }
             }
-            if (this.ownsTaskStore) this.taskStore?.close();
+            this.eventStreams.clear();
+            this.listeners.clear();
+            this.restoredApprovals = [];
+            closeHost();
+            try {
+                if (this.ownsTaskStore) this.taskStore?.close();
+            } catch (error) {
+                record(error);
+            }
             this.opened = false;
         }
     }
@@ -1347,6 +1361,28 @@ export class AgentRuntime {
                 false,
                 error instanceof AgentStoreError ? error.storage : null,
             );
+            // The terminal could not be made durable after a preterminal
+            // fallback was already committed. Settle the live control so no
+            // stop receipt or queued turn waits forever, but append no
+            // fabricated terminal event.
+            try {
+                await this.settleControlWithoutEvent(control, false);
+            } catch (settleError) {
+                this.persistenceError = new AgentClientError(
+                    errorCode(settleError),
+                    errorMessage(settleError),
+                    false,
+                    settleError instanceof AgentStoreError
+                        ? settleError.storage
+                        : null,
+                );
+            } finally {
+                // Idempotent: a failed settle must still release any stop
+                // receipt or queued turn that would otherwise wait forever.
+                control.stopDeferred?.resolve(false);
+                control.stopDeferred = null;
+                this.taskQueues.delete(control.taskId);
+            }
             return {
                 status: 'rejected',
                 code: errorCode(error),
@@ -1354,7 +1390,7 @@ export class AgentRuntime {
                 requiresResync: false,
                 eventId: event.event_id,
                 digest: null,
-                storage: null,
+                storage: error instanceof AgentStoreError ? error.storage : null,
             };
         }
     }
@@ -2503,6 +2539,27 @@ export class AgentRuntime {
                 errorCode(error),
                 errorMessage(error),
             );
+        }
+    }
+
+    private clearTimersSafely(
+        current: RunControl,
+        record: (error: unknown) => void,
+    ): void {
+        if (current.stopTimer !== null) {
+            try {
+                this.timers.clearTimeout(current.stopTimer);
+            } catch (error) {
+                record(error);
+            }
+            current.stopTimer = null;
+        }
+        for (const pending of current.pendingBoundary.splice(0)) {
+            try {
+                this.timers.clearTimeout(pending.timer);
+            } catch (error) {
+                record(error);
+            }
         }
     }
 

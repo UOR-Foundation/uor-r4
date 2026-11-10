@@ -480,6 +480,69 @@ describe('HostClient transport matrix', () => {
         }
     });
 
+    test('loopback_read_stop_aborts_the_stream_and_delivers_no_late_lines', async () => {
+        const intent = await validIntent();
+        const result = await validResult(intent);
+        let controller:
+            | ReadableStreamDefaultController<Uint8Array>
+            | null = null;
+        let streamSignal: AbortSignal | null = null;
+        const fetchImpl = (async (
+            input: RequestInfo | URL,
+            init: RequestInit = {},
+        ): Promise<Response> => {
+            const url = String(input);
+            if (url.includes('/v1/studio/host/intents')) {
+                return new Response(JSON.stringify(result), {
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                });
+            }
+            streamSignal = init.signal ?? null;
+            const stream = new ReadableStream<Uint8Array>({
+                start(streamController) {
+                    controller = streamController;
+                    streamController.enqueue(
+                        new TextEncoder().encode(
+                            `${JSON.stringify(result)}\n`,
+                        ),
+                    );
+                    init.signal?.addEventListener('abort', () => {
+                        streamController.error(
+                            new DOMException('Aborted', 'AbortError'),
+                        );
+                    });
+                },
+            });
+            return new Response(stream, {
+                status: 200,
+                headers: { 'content-type': 'application/x-ndjson' },
+            });
+        }) as typeof fetch;
+        const transport = new LoopbackHostTransport({
+            token: 'launch-token',
+            fetch: fetchImpl,
+            cursor: '7',
+        });
+        const received: HostToolResult[] = [];
+        const errors: AgentClientError[] = [];
+        const subscription = transport.subscribe(
+            (value) => received.push(value),
+            { onError: (error) => errors.push(error) },
+        );
+        await until(() => received.length === 1, 'first loopback line');
+        subscription.close();
+        await until(() => streamSignal?.aborted === true, 'loopback abort');
+        // The aborted reader is already errored; a transport that ignored the
+        // stop would still be able to deliver. Give it a turn to try.
+        expect(controller).not.toBeNull();
+        await new Promise<void>((resolve) =>
+            globalThis.setTimeout(resolve, 20),
+        );
+        expect(received).toHaveLength(1);
+        expect(errors).toHaveLength(0);
+    });
+
     test('loopback_cursor_expired_requests_snapshot_resync', async () => {
         const fetchImpl = (async () =>
             new Response(JSON.stringify({ code: 'cursor_expired' }), {

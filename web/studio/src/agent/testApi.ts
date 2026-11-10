@@ -208,7 +208,7 @@ export interface StudioTestApi {
     } | null;
     cursor(): CursorView | null;
     taskView(): TaskViewSummary | null;
-    writeSnapshot(): Promise<Outcome>;
+    writeSnapshot(taskId?: string, runId?: string): Promise<Outcome>;
     readSnapshot(): Promise<Outcome>;
     appendChanges(): Promise<Outcome>;
     appendResume(): Promise<Outcome>;
@@ -242,6 +242,13 @@ export interface StudioTestApi {
             | 'duplicate'
             | 'forged_duplicate',
     ): Promise<Outcome>;
+    eventsForTest(taskId: string, runId: string): Outcome;
+    ingestTerminalForTest(
+        runId: string,
+        type: 'run.finished' | 'run.failed' | 'run.cancelled' | 'run.expired',
+    ): Promise<Outcome>;
+    ingestThinkingHeartbeatForTest(runId: string): Promise<Outcome>;
+    lateToolForTest(runId: string, path: string): Promise<Outcome>;
     seedTwoFinishedTasksForTest(): Promise<Outcome>;
     taskSnapshotForTest(taskId: string): Outcome;
     verifyRunForTest(taskId: string, runId: string): Promise<Outcome>;
@@ -1761,6 +1768,201 @@ async function resyncLiveRunForTest(runId: string): Promise<Outcome> {
     }
 }
 
+function eventsForTest(taskId: string, runId: string): Outcome {
+    try {
+        const run = requireClient().store.getRun(taskId, runId);
+        if (run === null) throw new Error('run is missing');
+        return {
+            ok: true,
+            record: {
+                state: run.state,
+                generation: run.generation,
+                lastSequence: run.lastSequence,
+                lastEventId: run.lastEventId,
+                lastDigest: run.lastDigest,
+                events: run.events.map((event) => ({
+                    sequence: event.sequence,
+                    type: event.type,
+                    eventId: event.eventId,
+                })),
+            },
+        };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+function terminalDataForTest(
+    type: 'run.finished' | 'run.failed' | 'run.cancelled' | 'run.expired',
+): Record<string, unknown> {
+    const now = state.nowMs;
+    if (type === 'run.finished') {
+        return {
+            status: 'finished',
+            finished_at_ms: now,
+            duration_ms: 10,
+        };
+    }
+    if (type === 'run.failed') {
+        return {
+            code: 'host_failed',
+            message: 'host terminal failure',
+            retryable: false,
+        };
+    }
+    if (type === 'run.cancelled') {
+        return { safe_boundary: true, finished_at_ms: now };
+    }
+    return { expired_at_ms: now, reason: 'host terminal expiry' };
+}
+
+async function ingestTerminalForTest(
+    runId: string,
+    type: 'run.finished' | 'run.failed' | 'run.cancelled' | 'run.expired',
+): Promise<Outcome> {
+    try {
+        const runtime = await runtimeForTest();
+        const entry = liveRunFor(runId);
+        const task = requireClient()
+            .store.snapshot()
+            .tasks.find((candidate) => candidate.taskId === entry.taskId);
+        if (task === undefined) throw new Error('live task is missing');
+        const run = requireClient().store.getRun(entry.taskId, runId);
+        if (run === null) throw new Error('live run is missing');
+        const frame = syntheticEvent({
+            taskId: task.taskId,
+            projectId: task.projectId,
+            runId,
+            generation: run.generation,
+            sequence: run.lastSequence + 1,
+            type,
+            data: terminalDataForTest(type),
+        });
+        const worker = runtime.createIngest({
+            taskId: task.taskId,
+            runId,
+        });
+        const outcomes = await worker.push(encodeFrame(frame));
+        const eof = await worker.eof();
+        if (eof !== null) outcomes.push(eof);
+        await waitFor(
+            () => {
+                const view = liveTaskSnapshot(entry.taskId);
+                return view.runState === 'finished'
+                    || view.runState === 'failed'
+                    || view.runState === 'cancelled'
+                    || view.runState === 'expired';
+            },
+            'terminal ingestion',
+        ).catch(() => undefined);
+        return {
+            ok: true,
+            record: {
+                type,
+                eventId: frame.event_id,
+                outcomes: outcomes.map((outcome) => ({
+                    kind: outcome.kind,
+                    code: outcome.code(),
+                    requiresResync: outcome.requiresResync,
+                })),
+                snapshot: liveTaskSnapshot(entry.taskId),
+            },
+        };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function ingestThinkingHeartbeatForTest(runId: string): Promise<Outcome> {
+    try {
+        const runtime = await runtimeForTest();
+        const entry = liveRunFor(runId);
+        const task = requireClient()
+            .store.snapshot()
+            .tasks.find((candidate) => candidate.taskId === entry.taskId);
+        if (task === undefined) throw new Error('live task is missing');
+        const run = requireClient().store.getRun(entry.taskId, runId);
+        if (run === null) throw new Error('live run is missing');
+        const worker = runtime.createIngest({
+            taskId: task.taskId,
+            runId,
+        });
+        const outcomes = [];
+        outcomes.push(
+            ...(await worker.push(
+                encodeFrame(
+                    syntheticEvent({
+                        taskId: task.taskId,
+                        projectId: task.projectId,
+                        runId,
+                        generation: run.generation,
+                        sequence: run.lastSequence + 1,
+                        type: 'thinking.delta',
+                        data: { text_delta: 'tolerated thought' },
+                    }),
+                ),
+            )),
+        );
+        outcomes.push(
+            ...(await worker.push(
+                encodeFrame(
+                    syntheticEvent({
+                        taskId: task.taskId,
+                        projectId: task.projectId,
+                        runId,
+                        generation: run.generation,
+                        sequence: run.lastSequence + 2,
+                        type: 'heartbeat',
+                        data: { nonce: 'tolerated-heartbeat' },
+                    }),
+                ),
+            )),
+        );
+        return {
+            ok: true,
+            record: {
+                outcomes: outcomes.map((outcome) => ({
+                    kind: outcome.kind,
+                    code: outcome.code(),
+                })),
+                snapshot: liveTaskSnapshot(entry.taskId),
+            },
+        };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
+async function lateToolForTest(runId: string, path: string): Promise<Outcome> {
+    try {
+        const model = requireLiveModel();
+        const entry = liveRunFor(runId);
+        const stream = model.latest(runId);
+        if (stream === null) {
+            throw new Error(`live model stream for ${runId} is missing`);
+        }
+        const before = liveTaskSnapshot(entry.taskId);
+        stream.push({
+            type: 'tool-call',
+            toolCallId: `tool_late_${randomHex(4)}`,
+            tool: 'write_file',
+            arguments: { path },
+        });
+        await new Promise<void>((resolve) =>
+            globalThis.setTimeout(resolve, 150),
+        );
+        return {
+            ok: true,
+            record: {
+                before,
+                after: liveTaskSnapshot(entry.taskId),
+            },
+        };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
 async function ingestHostileForTest(
     runId: string,
     mode:
@@ -2283,12 +2485,12 @@ export function installStudioTestApi(owner?: StudioAgentOwnerForTest): void {
         },
         cursor: cursorView,
         taskView,
-        async writeSnapshot() {
+        async writeSnapshot(taskId?: string, runId?: string) {
             try {
                 const fixture = currentFixture();
                 const record = await requireTaskStore().writeSnapshot(
-                    fixture.taskId,
-                    fixture.runId,
+                    taskId ?? fixture.taskId,
+                    runId ?? fixture.runId,
                 );
                 return { ok: true, record };
             } catch (error) {
@@ -2424,6 +2626,10 @@ export function installStudioTestApi(owner?: StudioAgentOwnerForTest): void {
         finishLiveRunForTest,
         resyncLiveRunForTest,
         ingestHostileForTest,
+        eventsForTest,
+        ingestTerminalForTest,
+        ingestThinkingHeartbeatForTest,
+        lateToolForTest,
         seedTwoFinishedTasksForTest,
         taskSnapshotForTest,
         verifyRunForTest,
