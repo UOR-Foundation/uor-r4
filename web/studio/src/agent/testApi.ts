@@ -2043,7 +2043,8 @@ export function installStudioTestApi(): void {
     if (window.__studioTest !== undefined) return;
     window.__studioTest = {
         async reset() {
-            state.client?.dispose();
+            await disposeRuntimeForTest();
+            await state.client?.dispose();
             if (state.taskStore !== null) {
                 await state.taskStore.deleteDatabase();
             } else {
@@ -2057,6 +2058,7 @@ export function installStudioTestApi(): void {
         },
         open,
         async reopen() {
+            await disposeRuntimeForTest();
             if (state.taskStore === null) {
                 return open();
             }

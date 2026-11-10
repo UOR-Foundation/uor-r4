@@ -45,6 +45,7 @@ export interface ModelPort {
 
 export const REPLAY_MODEL_ID = 'synthetic-replay';
 export const REPLAY_MODEL_KIND = 'synthetic-replay';
+export const MAX_REPLAY_SCRIPT_POSITIONS = 256;
 export const REPLAY_MODEL_LABEL =
     'Synthetic deterministic replay fixture; not an R4 model or a task brain.';
 
@@ -89,11 +90,16 @@ export class ReplayModelPort implements ModelPort {
                   : options.script;
     }
 
+    get scriptPositionCount(): number {
+        return this.turnIndexByRun.size;
+    }
+
     async *open(request: ModelRequest): AsyncIterable<ModelStreamEvent> {
         if (this.turns !== null) {
             const index = this.turnIndexByRun.get(request.runId) ?? 0;
             if (index >= this.turns.length) return;
             this.turnIndexByRun.set(request.runId, index + 1);
+            this.pruneTurnIndexes();
             for (const event of this.turns[index] ?? []) yield event;
             return;
         }
@@ -109,5 +115,20 @@ export class ReplayModelPort implements ModelPort {
                 : this.usage;
         yield { type: 'usage', ...usage };
         yield { type: 'finished', reason: 'stop' };
+    }
+
+    // Completed script positions are evicted oldest-first once the map exceeds
+    // the cap. Active (not-yet-exhausted) positions are never evicted, so two
+    // live runs cannot consume each other's turns.
+    private pruneTurnIndexes(): void {
+        if (this.turnIndexByRun.size <= MAX_REPLAY_SCRIPT_POSITIONS) return;
+        const length = this.turns?.length ?? 0;
+        for (const [runId, index] of this.turnIndexByRun) {
+            if (index < length) continue;
+            this.turnIndexByRun.delete(runId);
+            if (this.turnIndexByRun.size <= MAX_REPLAY_SCRIPT_POSITIONS) {
+                return;
+            }
+        }
     }
 }

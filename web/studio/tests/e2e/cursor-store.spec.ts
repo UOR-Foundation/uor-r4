@@ -2044,6 +2044,15 @@ interface ReloadTaskSeed {
     };
 }
 
+function seededDigest(text: string): string {
+    let hex = '';
+    for (let index = 0; index < 64; index += 1) {
+        const code = text.charCodeAt(index % Math.max(1, text.length));
+        hex += ((code + index) % 16).toString(16);
+    }
+    return `sha256:${hex}`;
+}
+
 interface HostileResult {
     mode: string;
     outcomes: Array<{
@@ -2239,6 +2248,8 @@ test.describe('Task 13 parallel tasks, reload and hostile ingestion', () => {
         const reloadB = (await call<Outcome>(page, 'taskSnapshotForTest', taskB.taskId))
             .record as LiveRunSnapshot;
         expect(reloadA.messages).toEqual(['honest after hostile']);
+        expect(reloadA.unknownEvents).toBe(1);
+        expect(reloadA.changes).toEqual([]);
         expect(reloadA.runState).toBe('finished');
         expect(reloadB.messages).toEqual([]);
         expect(reloadB.runState).toBe('running');
@@ -2354,8 +2365,12 @@ test.describe('Task 13 parallel tasks, reload and hostile ingestion', () => {
             toolCallId: 'tool_reload_approval',
             expired: false,
         });
-        expect(pendingRecord.pending[0].requestDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
-        expect(pendingRecord.pending[0].expiresAtMs).toBeGreaterThan(0);
+        expect(pendingRecord.pending[0].requestDigest).toBe(
+            seededDigest('reload-approval'),
+        );
+        expect(pendingRecord.pending[0].expiresAtMs).toBe(
+            1_794_283_200_000 + 600_000,
+        );
         expect(pendingRecord.view[0]).toMatchObject({
             approvalId: 'appr_reload_approval',
             decision: null,
@@ -2451,5 +2466,28 @@ test.describe('Task 13 parallel tasks, reload and hostile ingestion', () => {
             (record) => record.task_id === hold.taskId,
         );
         expect(durable?.hold).toBeUndefined();
+    });
+
+    test('reset_and_reopen_dispose_the_cached_runtime_before_the_shared_store', async ({ page }) => {
+        await openStudio(page);
+        await call<RestoreView>(page, 'open');
+        expect((await call<Outcome>(page, 'startTwoLiveTasksForTest')).ok).toBe(true);
+
+        const reopened = await call<RestoreView>(page, 'reopen');
+        expect(reopened.phase).toBe('ready');
+        const afterReopen = await call<Outcome>(page, 'startTwoLiveTasksForTest');
+        expect(afterReopen.ok, JSON.stringify(afterReopen)).toBe(true);
+        const [reopenedTask] = afterReopen.record as LiveTaskSeed[];
+        expect((await call<Outcome>(page, 'finishLiveRunForTest', reopenedTask.runId)).ok)
+            .toBe(true);
+
+        await call(page, 'reset');
+        const resetOpen = await call<RestoreView>(page, 'open');
+        expect(resetOpen.phase).toBe('ready');
+        const afterReset = await call<Outcome>(page, 'startTwoLiveTasksForTest');
+        expect(afterReset.ok, JSON.stringify(afterReset)).toBe(true);
+        const [resetTask] = afterReset.record as LiveTaskSeed[];
+        expect((await call<Outcome>(page, 'finishLiveRunForTest', resetTask.runId)).ok)
+            .toBe(true);
     });
 });

@@ -2938,7 +2938,7 @@ describe('AgentRuntime Task 13 two live tasks and hostile ingestion', () => {
         }
     });
 
-    test('runtime_ingest_preserves_durable_unknown_events_without_output', async () => {
+    test('runtime_ingest_preserves_unknown_events_without_output', async () => {
         const { runtime, store, model } = makeRuntime();
         await runtime.open();
         try {
@@ -3243,5 +3243,387 @@ describe('ReplayModelPort per-run script positions', () => {
         expect(await collect(INGEST_RUN_A)).toEqual(secondTurn);
         expect(await collect(INGEST_RUN_A)).toEqual([]);
         expect(await collect(INGEST_RUN_B)).toEqual(secondTurn);
+    });
+});
+
+describe('AgentRuntime Task 13 fix round 1 lifecycle and resync', () => {
+    function nextFrame(
+        taskId: string,
+        runId: string,
+        generation: number,
+        sequence: number,
+        type: string,
+        data: Record<string, unknown>,
+    ): Uint8Array {
+        return frame(
+            runtimeEvent({
+                taskId,
+                runId,
+                generation,
+                sequence,
+                type,
+                data,
+            }),
+        );
+    }
+
+    test('ingest_worker_rejects_after_dispose_with_an_owned_store', async () => {
+        const { runtime, store, model } = makeRuntime();
+        await runtime.open();
+        const { task, run } = await startOne(runtime, model);
+        const cursor = store.getRunCursor(task.taskId, run.runId)!;
+        const worker = runtime.createIngest({
+            taskId: task.taskId,
+            runId: run.runId,
+        });
+        await runtime.dispose();
+        const outcomes = await worker.push(
+            nextFrame(
+                task.taskId,
+                run.runId,
+                cursor.generation,
+                cursor.lastSequence + 1,
+                'assistant.message',
+                { message_id: 'msg_after_dispose', text: 'must not apply' },
+            ),
+        );
+        expect(outcomes[0]?.code()).toBe('runtime_unavailable');
+        expect(store.getRunCursor(task.taskId, run.runId)).toEqual(cursor);
+        model.streams.forEach((stream) => stream.end());
+    });
+
+    test('ingest_worker_rejects_after_dispose_with_a_borrowed_store', async () => {
+        const { runtime, store, taskStore, model } = makeRuntime({
+            ownsTaskStore: false,
+        });
+        await runtime.open();
+        const { task, run } = await startOne(runtime, model);
+        const cursor = store.getRunCursor(task.taskId, run.runId)!;
+        const worker = runtime.createIngest({
+            taskId: task.taskId,
+            runId: run.runId,
+        });
+        await runtime.dispose();
+        expect(taskStore.isOpen).toBe(true);
+        const outcomes = await worker.push(
+            nextFrame(
+                task.taskId,
+                run.runId,
+                cursor.generation,
+                cursor.lastSequence + 1,
+                'assistant.message',
+                { message_id: 'msg_after_dispose', text: 'must not apply' },
+            ),
+        );
+        expect(outcomes[0]?.code()).toBe('runtime_unavailable');
+        expect(store.getRunCursor(task.taskId, run.runId)).toEqual(cursor);
+        taskStore.close();
+        model.streams.forEach((stream) => stream.end());
+    });
+
+    test('ingest_worker_rejects_after_dispose_with_a_null_store', async () => {
+        const { runtime, store, model } = makeRuntime({
+            taskStore: null as unknown as AgentTaskStore,
+        });
+        await runtime.open();
+        const { task, run } = await startOne(runtime, model);
+        const cursor = store.getRunCursor(task.taskId, run.runId)!;
+        const worker = runtime.createIngest({
+            taskId: task.taskId,
+            runId: run.runId,
+        });
+        await runtime.dispose();
+        const outcomes = await worker.push(
+            nextFrame(
+                task.taskId,
+                run.runId,
+                cursor.generation,
+                cursor.lastSequence + 1,
+                'assistant.message',
+                { message_id: 'msg_after_dispose', text: 'must not apply' },
+            ),
+        );
+        expect(outcomes[0]?.code()).toBe('runtime_unavailable');
+        expect(store.getRunCursor(task.taskId, run.runId)).toEqual(cursor);
+        model.streams.forEach((stream) => stream.end());
+    });
+
+    test('ingested_terminal_event_settles_control_without_a_later_append', async () => {
+        const { runtime, store, taskStore, model } = makeRuntime();
+        await runtime.open();
+        const { task, run, stream } = await startOne(runtime, model);
+        const cursor = store.getRunCursor(task.taskId, run.runId)!;
+        const worker = runtime.createIngest({
+            taskId: task.taskId,
+            runId: run.runId,
+        });
+        const outcomes = await worker.push(
+            nextFrame(
+                task.taskId,
+                run.runId,
+                cursor.generation,
+                cursor.lastSequence + 1,
+                'run.finished',
+                {
+                    status: 'finished',
+                    finished_at_ms: 1_800_000_000_010,
+                    duration_ms: 10,
+                },
+            ),
+        );
+        expect(outcomes[0]?.kind).toBe('applied');
+        const settled = runView(store, task.taskId, run.runId);
+        expect(settled.state).toBe('finished');
+        const eventCount = settled.events.length;
+        await until(
+            () => taskStore.releases.length === 1,
+            'terminal ingest lease release',
+        );
+
+        stream.push({ type: 'text-delta', text: 'late generated output' });
+        stream.push({
+            type: 'tool-call',
+            toolCallId: 'tool_after_terminal',
+            tool: 'read_file',
+            arguments: {},
+        });
+        stream.end();
+        await flush(30);
+        const after = runView(store, task.taskId, run.runId);
+        expect(after.events).toHaveLength(eventCount);
+        expect(after.messages).toEqual([]);
+        expect(eventTypes(after)).not.toContain('tool.requested');
+
+        const next = await runtime.startRun({
+            taskId: task.taskId,
+            prompt: 'next after terminal ingest',
+        });
+        expect(next.generation).toBe(cursor.generation + 1);
+        model.streams.forEach((item) => item.end());
+    });
+
+    test('replacement_worker_after_gap_and_verified_resume_applies_next_frame', async () => {
+        const { runtime, store, model } = makeRuntime({
+            taskStore: null as unknown as AgentTaskStore,
+        });
+        await runtime.open();
+        const { task, run } = await startOne(runtime, model);
+        const cursor = store.getRunCursor(task.taskId, run.runId)!;
+        const oldWorker = runtime.createIngest({
+            taskId: task.taskId,
+            runId: run.runId,
+        });
+        const gap = await oldWorker.push(
+            nextFrame(
+                task.taskId,
+                run.runId,
+                cursor.generation,
+                cursor.lastSequence + 2,
+                'assistant.delta',
+                { message_id: 'msg_gap', text_delta: 'gap output' },
+            ),
+        );
+        expect(gap[0]?.code()).toBe('out_of_order');
+        expect(gap[0]?.requiresResync).toBe(true);
+        const halted = await oldWorker.push(
+            nextFrame(
+                task.taskId,
+                run.runId,
+                cursor.generation,
+                cursor.lastSequence + 1,
+                'assistant.delta',
+                { message_id: 'msg_gap', text_delta: 'old worker output' },
+            ),
+        );
+        expect(halted[0]?.code()).toBe('out_of_order');
+
+        await runtime.resumeTask({ taskId: task.taskId, runId: run.runId });
+        const resumed = store.getRunCursor(task.taskId, run.runId)!;
+        expect(resumed.generation).toBe(cursor.generation + 1);
+        const replacement = runtime.createIngest({
+            taskId: task.taskId,
+            runId: run.runId,
+        });
+        const applied = await replacement.push(
+            nextFrame(
+                task.taskId,
+                run.runId,
+                resumed.generation,
+                resumed.lastSequence + 1,
+                'assistant.message',
+                {
+                    message_id: 'msg_after_resume',
+                    text: 'after verified resume',
+                },
+            ),
+        );
+        expect(applied[0]?.kind).toBe('applied');
+        expect(
+            runView(store, task.taskId, run.runId).messages.map(
+                (message) => message.text,
+            ),
+        ).toEqual(['after verified resume']);
+        model.streams.forEach((item) => item.end());
+    });
+
+    test('two_live_tasks_queue_and_steer_with_differing_generations', async () => {
+        const { runtime, store, model } = makeRuntime();
+        await runtime.open();
+        try {
+            const taskA = await runtime.createTask({ title: 'queue A' });
+            const taskB = await runtime.createTask({ title: 'steer B' });
+            const runA = await runtime.startRun({
+                taskId: taskA.taskId,
+                prompt: 'A first generation',
+            });
+            const runB = await runtime.startRun({
+                taskId: taskB.taskId,
+                prompt: 'B first generation',
+            });
+            await until(
+                () =>
+                    model.requests.some(
+                        (request) => request.taskId === taskA.taskId,
+                    ) &&
+                    model.requests.some(
+                        (request) => request.taskId === taskB.taskId,
+                    ),
+                'two generation-one turns',
+            );
+            const queued = await runtime.queueMessage({
+                taskId: taskA.taskId,
+                text: 'A queued second generation',
+            });
+            const steered = await runtime.steer({
+                taskId: taskB.taskId,
+                text: 'B steered same generation',
+            });
+            expect(eventTypes(runView(store, taskA.taskId, runA.runId))).toContain(
+                'message.queued',
+            );
+            expect(
+                eventTypes(runView(store, taskB.taskId, runB.runId)),
+            ).not.toContain('message.queued');
+            expect(
+                eventTypes(runView(store, taskB.taskId, runB.runId)),
+            ).not.toContain('message.steered');
+
+            const streamA = streamForTask(model, taskA.taskId);
+            streamA.push({ type: 'finished', reason: 'stop' });
+            streamA.end();
+            await until(
+                () =>
+                    model.requests.filter(
+                        (request) => request.taskId === taskA.taskId,
+                    ).length >= 2,
+                'A queued second generation',
+            );
+            const taskViewA = store
+                .snapshot()
+                .tasks.find((candidate) => candidate.taskId === taskA.taskId)!;
+            expect(taskViewA.latestRunId).not.toBe(runA.runId);
+            const runA2 = runView(
+                store,
+                taskA.taskId,
+                taskViewA.latestRunId!,
+            );
+            expect(runA2.generation).toBe(2);
+            expect(runA2.events[0]?.type).toBe('run.queued');
+            expect(runA2.events[1]?.type).toBe('run.started');
+            expect(
+                model.requests.filter(
+                    (request) => request.taskId === taskA.taskId,
+                )[1]!.prompt,
+            ).toBe('A queued second generation');
+            expect(
+                eventTypes(runView(store, taskB.taskId, runB.runId)),
+            ).not.toContain('message.queued');
+            expect(runView(store, taskB.taskId, runB.runId).generation).toBe(1);
+
+            const streamB = streamForTask(model, taskB.taskId);
+            streamB.push({
+                type: 'tool-call',
+                toolCallId: 'tool_steer_generation',
+                tool: 'read_file',
+                arguments: {},
+            });
+            await until(
+                () =>
+                    model.requests.filter(
+                        (request) => request.taskId === taskB.taskId,
+                    ).length >= 2,
+                'B steered same generation',
+            );
+            const requestB = model.requests.filter(
+                (request) => request.taskId === taskB.taskId,
+            )[1]!;
+            expect(requestB.prompt).toBe('B steered same generation');
+            expect(requestB.generation).toBe(1);
+            expect(
+                eventTypes(runView(store, taskB.taskId, runB.runId)),
+            ).toContain('message.steered');
+            expect(runView(store, taskA.taskId, runA2.runId).generation).toBe(2);
+            expect(
+                runView(store, taskA.taskId, runA2.runId).events.map(
+                    (event) => event.data.message_id,
+                ),
+            ).not.toContain(steered.messageId);
+            expect(
+                runView(store, taskB.taskId, runB.runId).events.map(
+                    (event) => event.data.message_id,
+                ),
+            ).not.toContain(queued.messageId);
+
+            const streamA2 = streamForTask(model, taskA.taskId);
+            streamA2.push({ type: 'finished', reason: 'stop' });
+            streamA2.end();
+            const streamB2 = streamForTask(model, taskB.taskId);
+            streamB2.push({ type: 'finished', reason: 'stop' });
+            streamB2.end();
+            await until(
+                () =>
+                    runView(store, taskA.taskId, runA2.runId).state ===
+                        'finished' &&
+                    runView(store, taskB.taskId, runB.runId).state ===
+                        'finished',
+                'queue and steer runs finished',
+            );
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+});
+
+describe('ReplayModelPort script position bound', () => {
+    test('per_run_script_positions_are_bounded_without_cross_consuming', async () => {
+        const turn: ModelStreamEvent[] = [
+            { type: 'text-delta', text: 'bounded script turn' },
+            { type: 'finished', reason: 'stop' },
+        ];
+        const port = new ReplayModelPort({ script: [turn] });
+        const request = (runId: string): ModelRequest => ({
+            taskId: INGEST_TASK_A,
+            runId,
+            generation: 1,
+            mode: 'agent',
+            prompt: 'bounded',
+            history: [{ role: 'user', text: 'bounded' }],
+        });
+        const collect = async (runId: string): Promise<ModelStreamEvent[]> => {
+            const events: ModelStreamEvent[] = [];
+            for await (const event of port.open(request(runId))) {
+                events.push(event);
+            }
+            return events;
+        };
+        for (let index = 0; index < 400; index += 1) {
+            await collect(`run_${index.toString(16).padStart(16, '0')}`);
+        }
+        const bounded = port as unknown as { scriptPositionCount: number };
+        expect(bounded.scriptPositionCount).toBeLessThanOrEqual(256);
+        expect(
+            await collect(`run_${'f'.repeat(16)}`),
+        ).toEqual(turn);
     });
 });

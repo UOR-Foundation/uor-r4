@@ -1,6 +1,7 @@
 import {
     AGENT_EVENT_SCHEMA,
     APPROVAL_TTL_MS,
+    TERMINAL_AGENT_EVENT_TYPES,
     type AgentErrorCode,
     type AgentEvent,
     type RunState,
@@ -74,6 +75,9 @@ const TERMINAL_RUN_STATES: ReadonlySet<RunState> = new Set([
     'cancelled',
     'expired',
 ]);
+const TERMINAL_EVENT_TYPES: ReadonlySet<string> = new Set(
+    TERMINAL_AGENT_EVENT_TYPES,
+);
 const DEFAULT_PROJECT_ID = 'prj_0000000000000001';
 const DEFAULT_STOP_ACK_TIMEOUT_MS = 30_000;
 const DEFAULT_BOUNDARY_WAIT_MS = 30_000;
@@ -1087,6 +1091,9 @@ export class AgentRuntime {
         return this.withTask(event.task_id, () => this.appendIncoming(event));
     }
 
+    // One worker per run stream. A halted worker is not reset; after a gap or
+    // cursor expiry the caller verifies a snapshot (resumeTask) and creates a
+    // replacement worker for the new generation.
     createIngest(input: { taskId: string; runId: string }): RuntimeEventIngest {
         this.assertOpen();
         const worker = new NdjsonIngest({
@@ -1098,7 +1105,7 @@ export class AgentRuntime {
             push: (bytes) => worker.push(bytes),
             eof: () => worker.eof(),
             cursorExpired: async () => {
-                const outcome = worker.cursorExpired();
+                const outcome = await worker.cursorExpired();
                 try {
                     await this.resumeTask(input);
                 } catch (error) {
@@ -1123,9 +1130,26 @@ export class AgentRuntime {
             .map((approval) => ({ ...approval }));
     }
 
+    private runtimeUnavailable(
+        event: AgentIncomingEvent,
+    ): AgentAppendResult | null {
+        if (!this.disposed && this.opened) return null;
+        return {
+            status: 'rejected',
+            code: 'runtime_unavailable',
+            message: 'the browser runtime is disposed or not open',
+            requiresResync: false,
+            eventId: event.event_id,
+            digest: null,
+            storage: null,
+        };
+    }
+
     private async appendIncoming(
         event: AgentIncomingEvent,
     ): Promise<AgentAppendResult> {
+        const unavailable = this.runtimeUnavailable(event);
+        if (unavailable !== null) return unavailable;
         let result: AgentAppendResult;
         if (this.taskStore === null) {
             result = await this.store.appendEvent(event);
@@ -1138,7 +1162,13 @@ export class AgentRuntime {
                 status: stored.status,
                 code: stored.code,
                 message: stored.message,
-                requiresResync: stored.status === 'rejected',
+                // The reducer's own needsResync decision distinguishes a gap
+                // or duplicate (resyncable) from a terminal-run rejection
+                // (not resyncable) and a cross-task event.
+                requiresResync:
+                    stored.status === 'rejected' &&
+                    this.store.getRun(event.task_id, event.run_id)
+                        ?.needsResync === true,
                 eventId: stored.event_id,
                 digest: stored.digest,
                 storage: stored.storage,
@@ -1147,7 +1177,7 @@ export class AgentRuntime {
         if (result.status === 'applied') {
             this.persistenceError = null;
             this.publish(event, result.digest ?? undefined);
-            this.syncControlAfterIngest(event);
+            await this.syncControlAfterIngest(event);
         } else if (result.status === 'rejected') {
             this.persistenceError = new AgentClientError(
                 result.code ?? 'internal',
@@ -1163,12 +1193,14 @@ export class AgentRuntime {
         event: AgentIncomingEvent,
         expected: { taskId: string; runId: string },
     ): Promise<AgentAppendResult> {
+        const unavailable = this.runtimeUnavailable(event);
+        if (unavailable !== null) return unavailable;
         if (event.task_id !== expected.taskId) {
             return {
                 status: 'rejected',
                 code: 'cross_task_event',
                 message: 'event does not belong to the bound task',
-                requiresResync: true,
+                requiresResync: false,
                 eventId: event.event_id,
                 digest: null,
                 storage: null,
@@ -1179,7 +1211,7 @@ export class AgentRuntime {
                 status: 'rejected',
                 code: 'out_of_order',
                 message: 'event does not belong to the bound run',
-                requiresResync: true,
+                requiresResync: false,
                 eventId: event.event_id,
                 digest: null,
                 storage: null,
@@ -1193,15 +1225,58 @@ export class AgentRuntime {
     // An already-applied external event is authoritative for the reducer
     // cursor. Move this runtime's own append counter past it so the next
     // runtime-generated event does not collide with the ingested sequence.
-    private syncControlAfterIngest(event: AgentIncomingEvent): void {
+    // A terminal event also settles the control without appending anything
+    // after the terminal event; finalize* would attempt exactly such an append.
+    private async syncControlAfterIngest(
+        event: AgentIncomingEvent,
+    ): Promise<void> {
         const control = this.active.get(event.task_id);
         if (control === undefined || control.runId !== event.run_id) return;
+        if (TERMINAL_EVENT_TYPES.has(event.type)) {
+            await this.settleIngestedTerminal(control, event.type);
+            return;
+        }
         if (event.sequence >= control.sequence) {
             control.sequence = event.sequence + 1;
         }
         if (event.generation > control.generation) {
             control.generation = event.generation;
         }
+    }
+
+    private async settleIngestedTerminal(
+        control: RunControl,
+        eventType: string,
+    ): Promise<void> {
+        if (control.terminal) return;
+        control.terminal = true;
+        control.cancelRequested = true;
+        this.clearTimers(control);
+        control.pendingApproval?.resolve('cancelled');
+        control.pendingApproval = null;
+        const iterator = control.modelIterator;
+        control.modelIterator = null;
+        try {
+            await iterator?.return?.();
+        } catch (error) {
+            if (this.persistenceError === null) {
+                this.persistenceError = new AgentClientError(
+                    errorCode(error),
+                    errorMessage(error),
+                );
+            }
+        }
+        if (this.active.get(control.taskId) === control) {
+            this.active.delete(control.taskId);
+        }
+        // A terminal event already arrived, so queued/pending messages cannot
+        // be failed with a later event. Clear them without appending.
+        this.taskQueues.delete(control.taskId);
+        control.stopDeferred?.resolve(
+            eventType === 'run.finished' || eventType === 'run.cancelled',
+        );
+        control.stopDeferred = null;
+        await this.releaseLease(control.taskId);
     }
 
     private reconstructApprovals(): void {

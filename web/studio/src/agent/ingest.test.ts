@@ -15,6 +15,7 @@ import {
 } from './fixtures.js';
 import {
     IngestOutcome,
+    NdjsonBuffer,
     NdjsonIngest,
     decodeEof,
     decodeFrame,
@@ -165,7 +166,7 @@ describe('NDJSON frame decoding', () => {
             expect(second.frames, `split ${split} lost the frame`).toEqual([
                 frame,
             ]);
-            expect(second.buffer).toHaveLength(0);
+            expect(second.buffer.length).toBe(0);
         }
     });
 
@@ -177,7 +178,7 @@ describe('NDJSON frame decoding', () => {
             bytes(`${first}\n${second}\n${third.slice(0, 6)}`),
         );
         expect(decoded.frames).toEqual([first, second]);
-        expect(text(decoded.buffer)).toBe(third.slice(0, 6));
+        expect(text(decoded.buffer.toUint8Array())).toBe(third.slice(0, 6));
         expect(decoded.error).toBeNull();
     });
 
@@ -210,7 +211,9 @@ describe('IngestOutcome', () => {
         expect(IngestOutcome.rejected('out_of_order').code()).toBe(
             'out_of_order',
         );
-        expect(IngestOutcome.rejected('out_of_order').requiresResync).toBe(true);
+        expect(
+            IngestOutcome.rejected('out_of_order', true).requiresResync,
+        ).toBe(true);
         expect(IngestOutcome.rejected('malformed_event').requiresResync).toBe(
             false,
         );
@@ -591,5 +594,194 @@ describe('NdjsonIngest hostile frames', () => {
         const applied = await workerB.push(bytes(ndjson(honestB)));
         expect(applied[0]?.kind).toBe('applied');
         expect(runOf(store, TASK_A, RUN_A).messages).toEqual([]);
+    });
+});
+
+describe('NdjsonIngest fix round 1 buffering and halt bounds', () => {
+    async function countSetCopies(
+        operation: () => Promise<void>,
+    ): Promise<number> {
+        const proto = Uint8Array.prototype as unknown as {
+            set(source: ArrayLike<number>, offset?: number): void;
+        };
+        const original = proto.set;
+        let copied = 0;
+        proto.set = function (
+            this: Uint8Array,
+            source: ArrayLike<number>,
+            offset = 0,
+        ): void {
+            copied += source.length;
+            original.call(this, source, offset);
+        };
+        try {
+            await operation();
+        } finally {
+            proto.set = original;
+        }
+        return copied;
+    }
+
+    test('large_frame_fed_one_byte_at_a_time_keeps_byte_copies_linear', async () => {
+        const store = createAgentStore();
+        await seedRun(store);
+        const worker = workerFor(store);
+        const message = eventFor({
+            taskId: TASK_A,
+            runId: RUN_A,
+            sequence: 2,
+            type: 'assistant.message',
+            data: {
+                message_id: 'msg_large',
+                text: 'x'.repeat(64 * 1024),
+            },
+        });
+        const encoded = bytes(ndjson(message));
+
+        const copied = await countSetCopies(async () => {
+            for (let index = 0; index < encoded.length; index += 1) {
+                await worker.push(encoded.subarray(index, index + 1));
+            }
+        });
+        expect(runOf(store).messages.map((entry) => entry.text)).toEqual([
+            'x'.repeat(64 * 1024),
+        ]);
+        expect(
+            copied,
+            `copied ${copied} bytes for a ${encoded.length}-byte frame`,
+        ).toBeLessThan(encoded.length * 8);
+    });
+
+    test('one_mib_buffer_appends_one_byte_at_a_time_stay_amortized', () => {
+        const buffer = new NdjsonBuffer();
+        const total = 1024 * 1024;
+        const byte = new Uint8Array([0x61]);
+        for (let index = 0; index < total; index += 1) {
+            buffer.append(byte);
+        }
+        expect(buffer.length).toBe(total);
+        expect(buffer.capacity).toBeLessThanOrEqual(total * 2);
+        expect(
+            buffer.copyBytes,
+            `copied ${buffer.copyBytes} bytes for ${total} one-byte appends`,
+        ).toBeLessThan(total * 4);
+    });
+
+    test('newline_flood_is_rejected_before_a_frame_per_newline_is_materialized', async () => {
+        const store = createAgentStore();
+        await seedRun(store);
+        const worker = workerFor(store);
+        const outcomes = await worker.push(bytes('\n'.repeat(1_000_000)));
+        expect(outcomes).toHaveLength(1);
+        expect(outcomes[0]?.code()).toBe('limit_exceeded');
+        expect(runOf(store).lastSequence).toBe(1);
+        expect(worker.bufferedBytes).toHaveLength(0);
+    });
+
+    test('oversized_partial_is_rejected_without_waiting_for_eof', async () => {
+        const store = createAgentStore();
+        await seedRun(store);
+        const worker = workerFor(store);
+        const outcomes = await worker.push(
+            bytes('x'.repeat(1024 * 1024 + 1)),
+        );
+        expect(outcomes).toHaveLength(1);
+        expect(outcomes[0]?.code()).toBe('limit_exceeded');
+        expect(worker.bufferedLength).toBe(0);
+        expect(runOf(store).lastSequence).toBe(1);
+    });
+
+    test('more_than_64_complete_frames_in_one_push_apply_none', async () => {
+        const store = createAgentStore();
+        await seedRun(store);
+        const worker = workerFor(store);
+        let payload = '';
+        for (let sequence = 2; sequence < 67; sequence += 1) {
+            payload += ndjson(
+                eventFor({
+                    taskId: TASK_A,
+                    runId: RUN_A,
+                    sequence,
+                    type: 'assistant.delta',
+                    data: {
+                        message_id: 'msg_flood',
+                        text_delta: `frame ${sequence}`,
+                    },
+                }),
+            );
+        }
+        const outcomes = await worker.push(bytes(payload));
+        expect(outcomes).toHaveLength(1);
+        expect(outcomes[0]?.code()).toBe('limit_exceeded');
+        expect(runOf(store).lastSequence).toBe(1);
+        expect(runOf(store).messages).toEqual([]);
+    });
+
+    test('stops_after_the_first_halt_without_decoding_later_frames', async () => {
+        const store = createAgentStore();
+        await seedRun(store);
+        const worker = workerFor(store);
+        let payload = '{"schema":oops}\n';
+        for (let sequence = 2; sequence < 12; sequence += 1) {
+            payload += ndjson(
+                eventFor({
+                    taskId: TASK_A,
+                    runId: RUN_A,
+                    sequence,
+                    type: 'assistant.delta',
+                    data: {
+                        message_id: 'msg_after_halt',
+                        text_delta: 'must not decode',
+                    },
+                }),
+            );
+        }
+        const outcomes = await worker.push(bytes(payload));
+        expect(outcomes).toHaveLength(1);
+        expect(outcomes[0]?.code()).toBe('malformed_event');
+        expect(runOf(store).lastSequence).toBe(1);
+        expect(runOf(store).messages).toEqual([]);
+    });
+
+    test('cross_task_and_terminal_out_of_order_do_not_claim_resync', async () => {
+        expect(IngestOutcome.rejected('cross_task_event').requiresResync).toBe(
+            false,
+        );
+
+        const store = createAgentStore();
+        await seedRun(store);
+        await appendStored(
+            store,
+            eventFor({
+                taskId: TASK_A,
+                runId: RUN_A,
+                sequence: 2,
+                type: 'run.finished',
+                data: {
+                    status: 'finished',
+                    finished_at_ms: 1_800_000_000_002,
+                    duration_ms: 2,
+                },
+            }),
+        );
+        const worker = workerFor(store);
+        const afterTerminal = await worker.push(
+            bytes(
+                ndjson(
+                    eventFor({
+                        taskId: TASK_A,
+                        runId: RUN_A,
+                        sequence: 3,
+                        type: 'assistant.message',
+                        data: {
+                            message_id: 'msg_after_terminal',
+                            text: 'no append after terminal',
+                        },
+                    }),
+                ),
+            ),
+        );
+        expect(afterTerminal[0]?.code()).toBe('out_of_order');
+        expect(afterTerminal[0]?.requiresResync).toBe(false);
     });
 });
