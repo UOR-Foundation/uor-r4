@@ -6,12 +6,14 @@
 //!
 //! ```text
 //! recall-pairs tokenizer=TOKENIZER.json line=SAMPLES.json noline=SAMPLES.json \
-//!   [control=SAMPLES.json] [eos=1]
+//!   [control=SAMPLES.json] [eos=1] [none=" none."]
 //! ```
 //!
 //! A recall reply is a line-panel sample whose prompt ends in the assistant
 //! marker with a memory line directly before it, where the line names a value
-//! and not `none`. Its partner is the no-line sample with the same reference
+//! and not `none` (`none=` gives the text of a line that names nothing, as it
+//! follows `Memory:`; a panel whose lines are replies passes its abstaining
+//! reply). Its partner is the no-line sample with the same reference
 //! and the same prompt once every memory line is taken out. A recall reply
 //! whose partner sits in another window is counted and left out.
 //!
@@ -21,7 +23,8 @@
 //! A reply is exact when its ids up to and including the end marker equal the
 //! reference's, and the reference has the end marker. Prints one JSON object:
 //! the counts, `E_line`, `E_noline`, `D = E_line - E_noline`, `E_control` and
-//! `G = E_line - E_control`, and the marker ids read from the tokenizer.
+//! `G = E_line - E_control`, `E_line_recall` (exact over every recall reply of
+//! the line panel, paired or not), and the marker ids read from the tokenizer.
 
 use std::collections::HashMap;
 use std::fs;
@@ -79,6 +82,7 @@ struct Counts {
     closing_lines: usize,
     none_lines: usize,
     recall_replies: usize,
+    recall_line_exact: usize,
     matched_pairs: usize,
     unmatched: usize,
     unmatched_with_other_window: usize,
@@ -213,6 +217,7 @@ fn count(
             continue;
         }
         counts.recall_replies += 1;
+        counts.recall_line_exact += usize::from(exact(sample, eos));
         let stripped = strip_lines(&sample.prompt, markers);
         let wanted = key(&stripped, &sample.reference, eos);
         let Some(&partner) = by_key.get(&wanted) else {
@@ -260,9 +265,13 @@ fn read_samples(path: &str) -> Result<Vec<Sample>, String> {
     serde_json::from_slice(&bytes).map_err(|error| format!("{path}: {error}"))
 }
 
-fn markers_from(tokenizer: &ByteBpeTokenizer, eos: u32) -> Result<Markers, String> {
+fn markers_from(
+    tokenizer: &ByteBpeTokenizer,
+    eos: u32,
+    none_text: &str,
+) -> Result<Markers, String> {
     let head = tokenizer.encode(" Memory:");
-    let with_none = tokenizer.encode(" Memory: none.");
+    let with_none = tokenizer.encode(&format!(" Memory:{none_text}"));
     let none = with_none
         .strip_prefix(head.as_slice())
         .ok_or("the none line does not start with the memory marker's ids")?
@@ -283,7 +292,7 @@ fn run(arguments: &[String]) -> Result<String, String> {
         let (name, value) = argument
             .split_once('=')
             .ok_or_else(|| format!("argument is not name=value: {argument}"))?;
-        if !["tokenizer", "line", "noline", "control", "eos"].contains(&name) {
+        if !["tokenizer", "line", "noline", "control", "eos", "none"].contains(&name) {
             return Err(format!("unknown argument: {name}"));
         }
         if named.insert(name, value).is_some() {
@@ -306,7 +315,8 @@ fn run(arguments: &[String]) -> Result<String, String> {
     let bytes = fs::read(tokenizer_path).map_err(|error| format!("{tokenizer_path}: {error}"))?;
     let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&bytes)
         .ok_or_else(|| format!("{tokenizer_path}: not a readable tokenizer.json"))?;
-    let markers = markers_from(&tokenizer, eos)?;
+    let none_text = named.get("none").copied().unwrap_or(" none.");
+    let markers = markers_from(&tokenizer, eos, none_text)?;
 
     let line = read_samples(need("line")?)?;
     let noline = read_samples(need("noline")?)?;
@@ -328,6 +338,7 @@ fn run(arguments: &[String]) -> Result<String, String> {
         "E_line": e_line,
         "E_noline": e_noline,
         "D": minus(e_line, e_noline),
+        "E_line_recall": share(counts.recall_line_exact, counts.recall_replies),
         "E_control": e_control,
         "G": minus(e_line, e_control),
         "V_reference": share(counts.pair_reference_names_value, counts.matched_pairs),
@@ -462,6 +473,7 @@ mod tests {
                 closing_lines: 4,
                 none_lines: 1,
                 recall_replies: 3,
+                recall_line_exact: 2,
                 matched_pairs: 2,
                 unmatched: 1,
                 unmatched_with_other_window: 1,

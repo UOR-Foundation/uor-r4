@@ -4184,24 +4184,31 @@ fn the_copy_rule_is_recorded_only_when_latest() {
     use super::synthetic::synthetic_hamming;
     use super::CopyRule;
     let mut snap = synthetic_fbs_trunk(20261110);
-    let read = synthetic_hamming(snap.width, snap.layers.len(), 4, 345);
-    let json = serde_json::to_value(&read).expect("json");
-    assert!(json.get("copy_latest").is_none(), "a snapshot under the mean holds no rule");
-    for (copy_latest, rule) in [(false, CopyRule::Mean), (true, CopyRule::LatestExact)] {
-        snap.hamming = Some(crate::fbs_snapshot::FbsHammingSnapshot { copy_latest, ..read.clone() });
-        let bytes = super::export_fbs_trunk_uorlut01(&snap).expect("export");
-        let image = super::read_hamming_uorlut01(&bytes).expect("parse").expect("the reads");
+    snap.hamming = Some(synthetic_hamming(snap.width, snap.layers.len(), 4, 345));
+    let mean = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+    // The exporter sets the rule from the run's config (`fbs-export --run-config`); the snapshot
+    // does not carry it.
+    let latest = super::set_hamming_copy_latest_uorlut01(&mean).expect("the rule is set");
+    for (bytes, copy_latest, rule) in [(&mean, false, CopyRule::Mean), (&latest, true, CopyRule::LatestExact)] {
+        let image = super::read_hamming_uorlut01(bytes).expect("parse").expect("the reads");
         assert_eq!(image.record.copy_latest, copy_latest);
-        let _ = with_header(&bytes, |h| {
+        let _ = with_header(bytes, |h| {
             let field = h["hamming"].get("copy_latest").cloned();
             assert_eq!(field, copy_latest.then(|| serde_json::json!(true)));
         });
-        let mut model = IntegerStackModel::parse(&bytes).expect("the session serves it");
+        let mut model = IntegerStackModel::parse(bytes).expect("the session serves it");
         assert_eq!(model.copy_rule(), Some(rule));
         // The serving switch still overrides the artifact's own rule.
         assert!(model.set_copy_rule(CopyRule::LatestNearest));
         assert_eq!(model.copy_rule(), Some(CopyRule::LatestNearest));
     }
+    // Only the header changed: the artifact equals the mean one with that one header field set.
+    let by_hand = with_header(&mean, |h| h["hamming"]["copy_latest"] = serde_json::json!(true));
+    assert_eq!(latest, by_hand);
+    // A stack without Hamming reads has no copy rule to set.
+    snap.hamming = None;
+    let plain = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+    assert!(super::set_hamming_copy_latest_uorlut01(&plain).is_err());
 }
 
 #[test]

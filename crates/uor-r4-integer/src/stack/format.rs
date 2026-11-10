@@ -1843,7 +1843,6 @@ fn export_fbs_trunk(
             let mut record = StackHamming::new(h.heads, h.depths.clone());
             record.copy_key = h.copy_key;
             record.copy_keys = h.copy_keys.clone();
-            record.copy_latest = h.copy_latest;
             record.check(&shape)?;
             if h.reads.len() != h.depths.len() {
                 return Err(StackError::TableLength {
@@ -2085,6 +2084,36 @@ pub fn add_hamming_ask_uorlut01(artifact: &[u8], asks: &[Option<super::AskImage>
     out.extend_from_slice(&header_bytes);
     out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
     out.extend_from_slice(&b.data);
+    super::hamming::hamming_image(&Container::parse(&out)?)?;
+    Ok(out)
+}
+
+/// The same artifact with its Hamming record's copy rule set to the latest exact match
+/// (`copy_latest`, claude-345): the rule a run trained with `--hamming-copy-latest` serves. The
+/// rule is in the run's `config.json`, not in the snapshot, so `fbs-export --run-config` sets it
+/// here. Only the header changes: every matrix and table keeps its bytes and its offset from the
+/// data start. An artifact without Hamming reads is refused, and the result is read back before
+/// it is returned.
+pub fn set_hamming_copy_latest_uorlut01(artifact: &[u8]) -> Result<Vec<u8>, StackError> {
+    let container = Container::parse(artifact)?;
+    let Some(mut record) = container.hamming.clone() else {
+        return Err(StackError::Shape("the copy rule is set on a stack with Hamming reads"));
+    };
+    record.copy_latest = true;
+    record.check(&container.shape)?;
+    let declared = u64::from_le_bytes(artifact[8..16].try_into().map_err(|_| StackError::MissingData)?);
+    let header_end = 16 + usize::try_from(declared).map_err(|_| StackError::MissingData)?;
+    let data = artifact.get(header_end.div_ceil(ALIGN) * ALIGN..).ok_or(StackError::MissingData)?;
+    let mut header: serde_json::Value =
+        serde_json::from_slice(&artifact[16..header_end]).map_err(StackError::Header)?;
+    header["hamming"] = json!(record);
+    let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
+    let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + data.len());
+    out.extend_from_slice(MAGIC);
+    out.extend_from_slice(&(header_bytes.len() as u64).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
+    out.extend_from_slice(data);
     super::hamming::hamming_image(&Container::parse(&out)?)?;
     Ok(out)
 }

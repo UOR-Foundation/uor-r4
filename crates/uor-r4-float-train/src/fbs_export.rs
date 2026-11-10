@@ -510,8 +510,6 @@ fn hamming_snapshot(
         // head's own when they differ (claude-268), absent otherwise.
         copy_key: reads.copy_key(),
         copy_keys: reads.mixed_copy_keys(),
-        // The copy heads' rule (claude-345), absent from the JSON under the mean.
-        copy_latest: reads.copy_latest(),
     })
 }
 

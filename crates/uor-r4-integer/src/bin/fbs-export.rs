@@ -30,7 +30,9 @@
 //! nearest token (`head = "native_vector_nearest"`), for a snapshot taken before `fbs-snapshot`
 //! recorded it. A run with `train_as_served: true` requires both raw flags. It also refuses a
 //! config whose `retain_rates` disagrees with the snapshot's, or whose objective reads the writer
-//! for a snapshot that reads nearest.
+//! for a snapshot that reads nearest. A config with `hamming_copy_latest: true` (claude-345) sets
+//! the Hamming record's `copy_latest`, so the copy heads serve their latest exact match; the
+//! snapshot does not carry that rule, so such a run is exported with its config.
 //!
 //! It parses the artifact back before writing it, never replaces or leaves a
 //! partial `OUT_PATH` (`fbs_snapshot::write_new_file`), and prints its sha256.
@@ -56,7 +58,8 @@ use uor_r4_integer::fbs_snapshot::{
     FBS_HAMMING_ASK_KEY,
 };
 use uor_r4_integer::stack::{
-    add_hamming_ask_uorlut01, add_point_key_uorlut01, AskImage, build_point_key, check_point_key_read_back,
+    add_hamming_ask_uorlut01, add_point_key_uorlut01, set_hamming_copy_latest_uorlut01, AskImage, build_point_key,
+    check_point_key_read_back,
     export_fbs_trunk_uorlut01_carry, export_fbs_trunk_uorlut01_with, point_key_windows,
     FbsExportSnaps, FbsTrunkSnapshot, IntegerStackModel, POINT_KEY_BOS, POINT_KEY_WINDOW,
 };
@@ -153,6 +156,8 @@ fn run() -> Result<(), String> {
     }
     let mut snaps = FbsExportSnaps::SNAPPED;
     let (mut paths, mut run_config) = (Vec::new(), None::<String>);
+    // The copy rule the run trained (claude-345), read from its config below.
+    let mut copy_latest = false;
     let mut carry = None::<usize>;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
@@ -248,6 +253,11 @@ fn run() -> Result<(), String> {
             ));
         }
         snap.readout_nearest = nearest;
+        copy_latest = serde_json::from_str::<serde_json::Value>(&text)
+            .map_err(|e| format!("{config}: {e}"))?
+            .get("hamming_copy_latest")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
     }
     let artifact = match carry {
         Some(context) => export_fbs_trunk_uorlut01_carry(&snap, snaps, context),
@@ -257,6 +267,13 @@ fn run() -> Result<(), String> {
     let artifact = match asks {
         None => artifact,
         Some(asks) => add_hamming_ask_uorlut01(&artifact, &asks).map_err(|e| format!("the ask heads: {e}"))?,
+    };
+    // A run trained with `--hamming-copy-latest` serves the latest exact match: the rule is in
+    // its config, not in the snapshot, and goes into the Hamming record here.
+    let artifact = if copy_latest {
+        set_hamming_copy_latest_uorlut01(&artifact).map_err(|e| format!("the copy rule: {e}"))?
+    } else {
+        artifact
     };
     IntegerStackModel::parse(&artifact)
         .map_err(|e| format!("the exported artifact does not parse: {e}"))?;

@@ -88,6 +88,7 @@ pub use flock::{
 };
 pub use format::{
     add_hamming_ask_uorlut01, add_point_key_uorlut01, drop_hamming_carry_uorlut01,
+    set_hamming_copy_latest_uorlut01,
     StackPointKey, POINT_KEY_EXP, STACK_FBS_POINT_SCHEMA,
 };
 pub use format::{
