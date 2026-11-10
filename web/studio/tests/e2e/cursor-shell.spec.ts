@@ -129,6 +129,39 @@ test('each_typed_view_keeps_exactly_one_h1', async ({ page }) => {
     }
 });
 
+test('composer_focus_ring_stays_on_wrapper_and_not_the_textarea', async ({ page }) => {
+    await openTypedAt(page, 1440);
+    const root = page.locator('#studio-typed-root');
+    const prompt = root.locator('.agent-composer textarea[aria-label="Prompt"]');
+    const composer = root.locator('.agent-composer');
+
+    await prompt.focus();
+    await expect(composer).toBeVisible();
+    const composerStyle = await composer.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { width: style.outlineWidth, line: style.outlineStyle, color: style.outlineColor, offset: style.outlineOffset };
+    });
+    const promptStyle = await prompt.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { width: style.outlineWidth, line: style.outlineStyle };
+    });
+    expect(composerStyle).toEqual({ width: '2px', line: 'solid', color: 'rgb(217, 119, 87)', offset: '1px' });
+
+    await root.locator('[data-pane-target="editor"]').click();
+    await root.getByRole('button', { name: 'Open demo', exact: true }).click();
+    const fileContents = root.locator('.code-input textarea[aria-label="File contents"]');
+    await expect(fileContents).toBeEnabled();
+    await fileContents.focus();
+    const codeStyle = await fileContents.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { width: style.outlineWidth, line: style.outlineStyle };
+    });
+    expect({
+        promptHasExtraOutline: promptStyle.line !== 'none' && promptStyle.width !== '0px',
+        codeHasExtraOutline: codeStyle.line !== 'none' && codeStyle.width !== '0px',
+    }).toEqual({ promptHasExtraOutline: false, codeHasExtraOutline: false });
+});
+
 test('390_has_no_horizontal_overflow', async ({ page }) => {
     await openTypedAt(page, 390, 852);
     const root = page.locator('#studio-typed-root');
