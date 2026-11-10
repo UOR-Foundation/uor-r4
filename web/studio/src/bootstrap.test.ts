@@ -128,6 +128,42 @@ describe('typed Studio bootstrap', () => {
         }
     });
 
+    it('suppresses legacy Cmd/Ctrl+comma only for editable targets in typed mode', async () => {
+        const root = document.createElement('div');
+        const mounted = await mountTypedStudio(root);
+        const editable = document.createElement('div');
+        editable.setAttribute('contenteditable', 'true');
+        const child = document.createElement('span');
+        editable.appendChild(child);
+        document.body.appendChild(editable);
+        const input = document.createElement('input');
+        document.body.appendChild(input);
+        const outside = document.createElement('button');
+        document.body.appendChild(outside);
+        const press = (target: EventTarget, init: KeyboardEventInit & { isComposing?: boolean; keyCode?: number }) => {
+            const event = new KeyboardEvent('keydown', { key: ',', bubbles: true, cancelable: true, ...init });
+            Object.defineProperties(event, {
+                isComposing: { value: Boolean(init.isComposing) },
+                keyCode: { value: init.keyCode ?? 0 },
+            });
+            target.dispatchEvent(event);
+            return event;
+        };
+        try {
+            expect(press(child, { metaKey: true }).defaultPrevented, 'contenteditable descendant').toBe(true);
+            expect(press(input, { ctrlKey: true }).defaultPrevented, 'input').toBe(true);
+            expect(press(outside, { metaKey: true }).defaultPrevented, 'outside editable').toBe(false);
+            expect(press(child, { metaKey: true, isComposing: true }).defaultPrevented, 'IME composition').toBe(false);
+            expect(press(child, { metaKey: true, keyCode: 229 }).defaultPrevented, 'IME keyCode 229').toBe(false);
+            expect(press(child, { metaKey: true, shiftKey: true, key: 'P' } as KeyboardEventInit).defaultPrevented, 'scoped palette chord').toBe(false);
+        } finally {
+            editable.remove();
+            input.remove();
+            outside.remove();
+            mounted.dispose();
+        }
+    });
+
     it('refuses Preact rendering when migration fails', async () => {
         window.localStorage.setItem('uor.studio.settings.v1', '{bad-json');
         expect(activateStudioMigration(true).state).toBe('error');

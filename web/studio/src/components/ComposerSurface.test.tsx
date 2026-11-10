@@ -822,6 +822,22 @@ describe('asynchronous send receipts and draft preservation', () => {
         expect(promptElement().value).toBe('second draft');
     });
 
+    it('records an accepted async send while restoring a newer draft for history recall', async () => {
+        let accept!: (value: boolean) => void;
+        const onSend = vi.fn(() => new Promise<boolean>((resolve) => { accept = resolve; }));
+        await mountSurface({ value: 'first draft', onSend });
+        typePrompt('first draft');
+        act(() => { button('Send').click(); });
+        typePrompt('second draft');
+        accept(true);
+        await flushAsync();
+        expect(promptElement().value).toBe('second draft');
+        pressKey(promptElement(), 'ArrowUp');
+        expect(promptElement().value).toBe('first draft');
+        pressKey(promptElement(), 'ArrowDown');
+        expect(promptElement().value).toBe('second draft');
+    });
+
     it('preserves the draft when an async send is refused or rejects', async () => {
         const refused = await mountSurface({ value: 'keep refused', onSend: vi.fn(() => Promise.resolve(false)) });
         typePrompt('keep refused');
@@ -892,29 +908,27 @@ describe('task runtime send identity', () => {
         expect(button('Send').disabled).toBe(true);
         typePrompt('queued note');
         act(() => { button('Queue').click(); });
-        await settleAsync();
+        await vi.waitFor(() => { expect(promptElement().value).toBe(''); });
         expect(transport.calls.filter((call) => call.method === 'queueMessage').at(-1)?.payload).toEqual({ taskId: task.taskId, text: 'queued note' });
-        expect(promptElement().value).toBe('');
 
         typePrompt('steer note');
         act(() => { button('Steer').click(); });
-        await settleAsync();
+        await vi.waitFor(() => { expect(promptElement().value).toBe(''); });
         expect(transport.calls.filter((call) => call.method === 'steer').at(-1)?.payload).toEqual({ taskId: task.taskId, text: 'steer note' });
-        expect(promptElement().value).toBe('');
 
         typePrompt('force note');
         act(() => { button('Force send').click(); });
-        await settleAsync();
+        await vi.waitFor(() => { expect(promptElement().value).toBe(''); });
         expect(transport.calls.filter((call) => call.method === 'forceSend').at(-1)?.payload).toEqual({ taskId: task.taskId, text: 'force note' });
-        expect(promptElement().value).toBe('');
 
         act(() => { button('Stop run').click(); });
-        await settleAsync();
-        expect(transport.calls.filter((call) => call.method === 'stop').at(-1)?.payload).toEqual({ taskId: task.taskId, runId: run.runId });
+        await vi.waitFor(() => {
+            expect(transport.calls.filter((call) => call.method === 'stop').at(-1)?.payload).toEqual({ taskId: task.taskId, runId: run.runId });
+            expect(button('Queue').disabled).toBe(true);
+            expect(button('Stop run').disabled).toBe(true);
+        });
         expect(sessionsApi.stopGeneration).not.toHaveBeenCalled();
         expect(transport.calls.filter((call) => call.method === 'startRun')).toHaveLength(startsBefore);
-        expect(button('Queue').disabled).toBe(true);
-        expect(button('Stop run').disabled).toBe(true);
     });
 
     it('preserves the draft and reports a failed queue receipt', async () => {

@@ -25,6 +25,14 @@ function clearPaletteHash(view: Window): boolean {
     return true;
 }
 
+function isEditableTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) return false;
+    const tag = target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    const editable = target.closest('[contenteditable]');
+    return editable !== null && editable.getAttribute('contenteditable') !== 'false';
+}
+
 export interface LegacyShortcutGuard {
     dispose(): void;
 }
@@ -43,24 +51,31 @@ export function installLegacyShortcutGuard(root: HTMLElement): LegacyShortcutGua
         : null;
     if (palette && observer) observer.observe(palette, { attributes: true, attributeFilter: ['hidden'] });
 
-    const blockPaletteShortcut = (event: KeyboardEvent) => {
+    const blockLegacyShortcut = (event: KeyboardEvent) => {
         if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
-        if (event.key !== 'k' && event.key !== 'K') return;
+        if (event.key === 'k' || event.key === 'K') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            closeLegacyPalette(view);
+            return;
+        }
+        if (event.key !== ',') return;
+        if (event.isComposing || event.keyCode === 229) return;
+        if (!isEditableTarget(event.target) && !isEditableTarget(doc.activeElement)) return;
         event.preventDefault();
         event.stopImmediatePropagation();
-        closeLegacyPalette(view);
     };
     const closeOnPaletteHash = () => { if (clearPaletteHash(view)) closeLegacyPalette(view); };
     const closeOnLegacyPublished = () => closeLegacyPalette(view);
 
-    view.addEventListener('keydown', blockPaletteShortcut, true);
+    view.addEventListener('keydown', blockLegacyShortcut, true);
     view.addEventListener('hashchange', closeOnPaletteHash);
     view.addEventListener('uor-studio-v2-ready', closeOnLegacyPublished);
 
     return {
         dispose() {
             observer?.disconnect();
-            view.removeEventListener('keydown', blockPaletteShortcut, true);
+            view.removeEventListener('keydown', blockLegacyShortcut, true);
             view.removeEventListener('hashchange', closeOnPaletteHash);
             view.removeEventListener('uor-studio-v2-ready', closeOnLegacyPublished);
         },

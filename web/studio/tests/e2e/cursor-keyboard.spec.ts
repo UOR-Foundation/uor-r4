@@ -39,6 +39,7 @@ test('scoped_settings_shortcut_opens_the_typed_settings', async ({ page }) => {
     await blurActive(page);
     await page.keyboard.press('Control+,');
     await expect(page.getByRole('dialog', { name: 'Studio settings', exact: true })).toBeVisible();
+    await expect(page.locator('#settingsDialog')).toBeHidden();
 });
 
 test('scoped_shortcuts_are_ignored_inside_the_prompt', async ({ page }) => {
@@ -48,8 +49,16 @@ test('scoped_shortcuts_are_ignored_inside_the_prompt', async ({ page }) => {
     await page.keyboard.press('Control+Shift+P');
     await expect(page.locator('dialog')).toHaveCount(0);
     await expect(prompt).toBeFocused();
+});
+
+test('editable_comma_does_not_open_legacy_or_typed_settings', async ({ page }) => {
+    await openTyped(page);
+    const prompt = page.locator('#studio-typed-root textarea[aria-label="Prompt"]');
+    await prompt.focus();
     await page.keyboard.press('Control+,');
+    await expect(page.locator('#settingsDialog')).toBeHidden();
     await expect(page.locator('dialog')).toHaveCount(0);
+    await expect(prompt).toBeFocused();
 });
 
 test('tab_moves_focus_normally_between_toolbar_actions', async ({ page }) => {

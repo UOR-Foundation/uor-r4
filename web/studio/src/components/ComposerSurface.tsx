@@ -93,7 +93,22 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
     function acceptSubmission(prompt: string) {
         if (!mountedRef.current) return;
         const textarea = textareaRef.current;
-        if (textarea && textarea.value !== prompt) return;
+        const current = textarea?.value ?? props.value;
+        if (textarea && current !== prompt) {
+            const controller = controllerRef.current;
+            if (controller) {
+                controller.recordSubmitted(prompt);
+                setDraft(current);
+            } else {
+                notifyDraftChange(current);
+                flushSync(() => {
+                    inputChangeRef.current(current);
+                    setMenu(null);
+                });
+            }
+            textarea.focus();
+            return;
+        }
         if (controllerRef.current) controllerRef.current.recordSubmitted(prompt);
         else notifyDraftChange('');
         if (textarea) textarea.value = '';
