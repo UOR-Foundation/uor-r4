@@ -466,13 +466,100 @@ impl AgentCursor {
                 "event generation does not match the cursor generation",
             ));
         }
-        if event.sequence <= self.sequence {
+        let expected_sequence = self.sequence.checked_add(1).ok_or_else(|| {
+            AgentError::new(AgentErrorCode::OutOfOrder, "cursor sequence overflow")
+        })?;
+        if event.sequence != expected_sequence {
             return Err(AgentError::new(
                 AgentErrorCode::OutOfOrder,
-                "event sequence is not after the cursor position",
+                format!("event sequence must be {expected_sequence} after the cursor position"),
             ));
         }
         Ok(())
+    }
+
+    pub fn check_resume(&self, event: &AgentEvent) -> Result<Self, AgentError> {
+        if self.project_id != event.project_id
+            || self.task_id != event.task_id
+            || self.run_id != event.run_id
+        {
+            return Err(AgentError::new(
+                AgentErrorCode::CrossTaskEvent,
+                "resume event belongs to a different project, task or run",
+            ));
+        }
+        if event.event_type != "run.resumed" {
+            return Err(AgentError::invalid_event(
+                "check_resume requires a run.resumed event",
+            ));
+        }
+        if self.sequence == 0 {
+            return Err(AgentError::invalid_event(
+                "resume requires a verified run.started cursor",
+            ));
+        }
+        let expected_generation = self
+            .generation
+            .checked_add(1)
+            .ok_or_else(|| AgentError::invalid_event("cursor generation overflow"))?;
+        if event.generation != expected_generation {
+            return Err(AgentError::new(
+                AgentErrorCode::StaleGeneration,
+                format!("run.resumed generation must be {expected_generation}"),
+            ));
+        }
+        let expected_sequence = self.sequence.checked_add(1).ok_or_else(|| {
+            AgentError::new(AgentErrorCode::OutOfOrder, "cursor sequence overflow")
+        })?;
+        if event.sequence != expected_sequence {
+            return Err(AgentError::new(
+                AgentErrorCode::OutOfOrder,
+                format!("run.resumed sequence must be {expected_sequence}"),
+            ));
+        }
+        let data = event
+            .data
+            .as_object()
+            .ok_or_else(|| AgentError::invalid_event("run.resumed data must be an object"))?;
+        let previous_generation = data
+            .get("previous_generation")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| {
+                AgentError::invalid_event("run.resumed requires data.previous_generation")
+            })?;
+        if previous_generation != self.generation {
+            return Err(AgentError::invalid_event(format!(
+                "run.resumed previous_generation must be {}",
+                self.generation
+            )));
+        }
+        let snapshot_digest = data
+            .get("snapshot_digest")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                AgentError::invalid_event("run.resumed requires data.snapshot_digest")
+            })?;
+        if !is_digest_string(snapshot_digest) {
+            return Err(AgentError::invalid_event(
+                "run.resumed snapshot_digest must be sha256:<64 lowercase hex>",
+            ));
+        }
+        let resumed_at_ms = data
+            .get("resumed_at_ms")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| AgentError::invalid_event("run.resumed requires data.resumed_at_ms"))?;
+        if resumed_at_ms > MAX_SAFE_INTEGER {
+            return Err(AgentError::invalid_event(
+                "run.resumed resumed_at_ms exceeds the safe integer range",
+            ));
+        }
+        Ok(Self {
+            project_id: event.project_id.clone(),
+            task_id: event.task_id.clone(),
+            run_id: event.run_id.clone(),
+            generation: event.generation,
+            sequence: event.sequence,
+        })
     }
 }
 

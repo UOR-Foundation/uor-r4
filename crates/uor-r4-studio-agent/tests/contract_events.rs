@@ -65,6 +65,21 @@ fn cursor_token_round_trips() {
 }
 
 #[test]
+fn cursor_rejects_sequence_gaps() {
+    let cursor = AgentCursor::from_event(&common::event(2)).unwrap();
+    assert!(cursor.check_event(&common::event(3)).is_ok());
+
+    let gap = common::event(5);
+    assert_eq!(cursor.check_event(&gap).unwrap_err().code(), "out_of_order");
+
+    let same_position = common::event(2);
+    assert_eq!(
+        cursor.check_event(&same_position).unwrap_err().code(),
+        "out_of_order"
+    );
+}
+
+#[test]
 fn approval_object_requires_digest_and_expiry() {
     let requested_at_ms = 1_794_283_200_123u64;
     let approval = json!({
@@ -177,6 +192,7 @@ fn resume_uses_next_generation_without_repeating_start_markers() {
     assert_eq!(resumed.sequence, started.sequence + 1);
     assert_ne!(resumed.event_id, started.event_id);
     assert_eq!(resumed_cursor, AgentCursor::from_event(&resumed).unwrap());
+    assert_eq!(resumed_cursor, cursor.check_resume(&resumed).unwrap());
     assert_eq!(resumed_cursor.last_event_id(), resumed.event_id);
 
     let mut wrong_previous = resumed_value.clone();
@@ -188,21 +204,55 @@ fn resume_uses_next_generation_without_repeating_start_markers() {
     early_sequence["event_id"] = json!(event_id(common::RUN_ID, 2, 1));
     assert!(validate_event(&early_sequence).is_err());
 
-    let mut repeated_started = resumed_value.clone();
-    repeated_started["type"] = json!("run.started");
-    repeated_started["data"] = json!({
-        "started_at_ms": resumed_at_ms,
-        "model": {"id": "replay", "kind": "fixture"},
-        "mode": "agent",
-        "environment": {"kind": "local-browser"},
-        "retry_of_run_id": null
+    let repeated_started_value = json!({
+        "schema": AGENT_EVENT_SCHEMA,
+        "event_id": event_id(common::RUN_ID, 2, 1),
+        "project_id": common::PROJECT_ID,
+        "task_id": common::TASK_ID,
+        "run_id": common::RUN_ID,
+        "generation": 2,
+        "sequence": 1,
+        "recorded_at_ms": resumed_at_ms,
+        "type": "run.started",
+        "data": {
+            "started_at_ms": resumed_at_ms,
+            "model": {"id": "replay", "kind": "fixture"},
+            "mode": "agent",
+            "environment": {"kind": "local-browser"},
+            "retry_of_run_id": null
+        }
     });
-    assert!(validate_event(&repeated_started).is_err());
+    let repeated_started = validate_event(&repeated_started_value).unwrap();
+    assert_eq!(repeated_started.sequence, 1);
+    assert_eq!(
+        resumed_cursor
+            .check_event(&repeated_started)
+            .unwrap_err()
+            .code(),
+        "out_of_order"
+    );
 
-    let mut repeated_queued = resumed_value.clone();
-    repeated_queued["type"] = json!("run.queued");
-    repeated_queued["data"] = json!({"queued_at_ms": resumed_at_ms});
-    assert!(validate_event(&repeated_queued).is_err());
+    let repeated_queued_value = json!({
+        "schema": AGENT_EVENT_SCHEMA,
+        "event_id": event_id(common::RUN_ID, 2, 0),
+        "project_id": common::PROJECT_ID,
+        "task_id": common::TASK_ID,
+        "run_id": common::RUN_ID,
+        "generation": 2,
+        "sequence": 0,
+        "recorded_at_ms": resumed_at_ms,
+        "type": "run.queued",
+        "data": {"queued_at_ms": resumed_at_ms}
+    });
+    let repeated_queued = validate_event(&repeated_queued_value).unwrap();
+    assert_eq!(repeated_queued.sequence, 0);
+    assert_eq!(
+        resumed_cursor
+            .check_event(&repeated_queued)
+            .unwrap_err()
+            .code(),
+        "out_of_order"
+    );
 
     let stale = common::event(3);
     assert_eq!(
@@ -214,6 +264,71 @@ fn resume_uses_next_generation_without_repeating_start_markers() {
         resumed_cursor.check_event(&cross_task).unwrap_err().code(),
         "cross_task_event"
     );
+}
+
+#[test]
+fn check_resume_rejects_a_sequence_jump() {
+    let queued_value: Value =
+        serde_json::from_str(include_str!("fixtures/event-run-queued.json")).unwrap();
+    let started_value: Value =
+        serde_json::from_str(include_str!("fixtures/event-run-started.json")).unwrap();
+    let (_, started) = validate_run_start_pair(&queued_value, &started_value).unwrap();
+    let cursor = AgentCursor::from_event(&started).unwrap();
+
+    let resumed_at_ms = common::RECORDED_AT_MS + 8_000;
+    let snapshot_digest = format!("sha256:{}", "cd".repeat(32));
+
+    let jumped_value = json!({
+        "schema": AGENT_EVENT_SCHEMA,
+        "event_id": event_id(common::RUN_ID, 2, 5),
+        "project_id": common::PROJECT_ID,
+        "task_id": common::TASK_ID,
+        "run_id": common::RUN_ID,
+        "generation": 2,
+        "sequence": 5,
+        "recorded_at_ms": resumed_at_ms,
+        "type": "run.resumed",
+        "data": {
+            "resumed_at_ms": resumed_at_ms,
+            "previous_generation": 1,
+            "snapshot_digest": snapshot_digest.clone()
+        }
+    });
+    let jumped = validate_event(&jumped_value).unwrap();
+    assert_eq!(jumped.sequence, 5);
+    assert_eq!(
+        cursor.check_resume(&jumped).unwrap_err().code(),
+        "out_of_order"
+    );
+
+    let valid_value = json!({
+        "schema": AGENT_EVENT_SCHEMA,
+        "event_id": event_id(common::RUN_ID, 2, 2),
+        "project_id": common::PROJECT_ID,
+        "task_id": common::TASK_ID,
+        "run_id": common::RUN_ID,
+        "generation": 2,
+        "sequence": 2,
+        "recorded_at_ms": resumed_at_ms,
+        "type": "run.resumed",
+        "data": {
+            "resumed_at_ms": resumed_at_ms,
+            "previous_generation": 1,
+            "snapshot_digest": snapshot_digest
+        }
+    });
+    let valid = validate_event(&valid_value).unwrap();
+    let resumed = cursor.check_resume(&valid).unwrap();
+    assert_eq!(resumed, cursor.resumed().unwrap());
+    assert_eq!((resumed.generation, resumed.sequence), (2, 2));
+
+    let mut wrong_previous = valid.clone();
+    wrong_previous.data["previous_generation"] = json!(0);
+    assert!(cursor.check_resume(&wrong_previous).is_err());
+
+    let mut wrong_type = valid.clone();
+    wrong_type.event_type = "run.status".to_string();
+    assert!(cursor.check_resume(&wrong_type).is_err());
 }
 
 #[test]
