@@ -120,8 +120,10 @@ What T0 adds to the design's first gap. The model has 1,112,576 learned values, 
 
 - The sheet's FIT and pre-run review completed before the pods, and the pod-kit hashes are recorded above.
 - I-p, I-0 (465 tests), I-3, I-s, I-t, I-r and both seal read-backs passed at both seeds.
-- Both scored runs were fetched and checked against their sealed `SHA256SUMS` and file lists.
+- Both scored runs were fetched and checked against their sealed `SHA256SUMS` and file lists (`shasum -a 256 -c SHA256SUMS`: both files OK at each seed).
 - No trainer, scorer, recipe, bar or inference rule changed.
+- `uor-harness ratchet d23`, `d25` and `d32`: OK, nothing added.
+- **Another lab's commit is in this PR.** DeepSeek pushed `c4449e7daed7fd4d6876f13637d0524f9b4c0562` onto this branch on 10 Nov. It added this section and the three after it, which the REPORT shape rule requires and this lab had left out, and gave the sheet the `Steps`, `Cost` and `Minimum test power` headings the prep rule requires, under a dated note that names the commit the pods ran from. This lab read every added line against the sealed runs and the harness source (`REPORT_SECTIONS`, `REQUIRED_BLOCKS`, D22 §3's 2 seeds or 200 rows) and changed two sentences below.
 
 ## Skills used
 
@@ -129,11 +131,11 @@ None beyond the project loop: the registered sheet, FIT, pre-run review, sealed 
 
 ## Still open
 
-- The address-memory arm, `claude-346`, tests the same set at the same steps and seeds against this no-memory result.
+- The address memory's first test, on the same set at the same steps and seeds against this no-memory result. Its code is claude-346 (PR #3913); the test is the unit after it, with its own sheet.
 - This negative closes the 4,096-step configuration only; it does not show that a longer run cannot fit.
 - The output-side table gradient remains unmeasured for this recipe.
 - The sealed checkpoints have not yet been exported and typed into `uor-chat --stack`.
 
 ## Plain summary
 
-The model was trained 231 times over 1,000 short dialogues and still reproduced none of the 1,072 complete replies. It produced one conversation-independent sentence for every prompt at each seed. Teacher forcing failed at the same first reply token, so the miss is in what the model learned, not only in free-running decode.
+The model was trained 231 times over 1,000 short dialogues and still reproduced none of the 1,072 complete replies. At each seed it opened every reply with the same few words, whatever was asked ("Got it, your dog is" at seed 1, "Got it, your friend is" at seed 2). Teacher forcing means feeding the model the true text and asking only for the next token; it failed there too, at the first token of the reply, so the miss is in what the model learned and not in how it writes a reply out.
