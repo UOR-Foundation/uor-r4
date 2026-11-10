@@ -466,6 +466,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                 onForce={agentMode ? force : undefined}
                 onStop={() => { generation.stop(); refresh(); }}
                 onStopRun={stopTaskRun}
+                onActionError={(error) => ui.toast(failureMessage('Composer action failed', error), 'error')}
                 activeRun={activeTaskRun}
                 mode={permissionMode}
                 onMode={setPermissionMode}

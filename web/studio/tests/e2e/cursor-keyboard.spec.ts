@@ -8,6 +8,21 @@ async function blurActive(page: Page) {
     });
 }
 
+async function dispatchComma(page: Page, target: 'prompt' | 'body', init: Record<string, unknown>) {
+    return page.evaluate(({ target, init }) => {
+        const element = target === 'prompt'
+            ? document.querySelector<HTMLElement>('#studio-typed-root textarea[aria-label="Prompt"]')
+            : document.body;
+        const event = new KeyboardEvent('keydown', { key: ',', bubbles: true, cancelable: true, ...init });
+        Object.defineProperties(event, {
+            isComposing: { value: Boolean(init.isComposing) },
+            keyCode: { value: Number(init.keyCode ?? 0) },
+        });
+        element!.dispatchEvent(event);
+        return event.defaultPrevented;
+    }, { target, init });
+}
+
 test('send_modes_stay_disabled_without_a_task_runtime', async ({ page }) => {
     await openTyped(page);
     const root = page.locator('#studio-typed-root');
@@ -59,6 +74,26 @@ test('editable_comma_does_not_open_legacy_or_typed_settings', async ({ page }) =
     await expect(page.locator('#settingsDialog')).toBeHidden();
     await expect(page.locator('dialog')).toHaveCount(0);
     await expect(prompt).toBeFocused();
+});
+
+test('ime_and_modified_comma_do_not_open_legacy_or_typed_settings', async ({ page }) => {
+    await openTyped(page);
+    const prompt = page.locator('#studio-typed-root textarea[aria-label="Prompt"]');
+    await prompt.focus();
+    expect(await dispatchComma(page, 'prompt', { metaKey: true, isComposing: true })).toBe(false);
+    await expect(page.locator('#settingsDialog')).toBeHidden();
+    await expect(page.locator('dialog')).toHaveCount(0);
+    expect(await dispatchComma(page, 'prompt', { metaKey: true, keyCode: 229 })).toBe(false);
+    await expect(page.locator('#settingsDialog')).toBeHidden();
+    await expect(page.locator('dialog')).toHaveCount(0);
+
+    await blurActive(page);
+    expect(await dispatchComma(page, 'body', { metaKey: true, altKey: true })).toBe(false);
+    await expect(page.locator('#settingsDialog')).toBeHidden();
+    await expect(page.locator('dialog')).toHaveCount(0);
+    expect(await dispatchComma(page, 'body', { metaKey: true, shiftKey: true })).toBe(false);
+    await expect(page.locator('#settingsDialog')).toBeHidden();
+    await expect(page.locator('dialog')).toHaveCount(0);
 });
 
 test('tab_moves_focus_normally_between_toolbar_actions', async ({ page }) => {

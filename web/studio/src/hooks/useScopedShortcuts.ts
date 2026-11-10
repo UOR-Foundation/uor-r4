@@ -1,16 +1,9 @@
 import { useEffect, useRef } from 'preact/hooks';
+import { isEditableTarget } from '../agent/legacyShortcutGuard.js';
 
 export interface ScopedShortcutHandlers {
     onPalette(): void;
     onSettings(): void;
-}
-
-function isEditableTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof Element)) return false;
-    const tag = target.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-    const editable = target.closest('[contenteditable]');
-    return editable !== null && editable.getAttribute('contenteditable') !== 'false';
 }
 
 export function useScopedShortcuts(handlers: ScopedShortcutHandlers): void {

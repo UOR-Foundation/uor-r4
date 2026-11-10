@@ -29,6 +29,7 @@ export interface ComposerSurfaceProps {
     onForce?(prompt: string): SendResult;
     onStop?(): void;
     onStopRun?(): void;
+    onActionError?(error: unknown): void;
     activeRun?: RunSummary | null;
     mode: PermissionMode;
     onMode?(mode: PermissionMode): void;
@@ -75,6 +76,7 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
     const queueRef = useRef<SendAction | undefined>(undefined);
     const steerRef = useRef<SendAction | undefined>(undefined);
     const forceRef = useRef<SendAction | undefined>(undefined);
+    const actionErrorRef = useRef<((error: unknown) => void) | undefined>(undefined);
     const submittedHistoryRef = useRef<string[]>([]);
     const initialDraftRef = useRef(props.initialDraft ?? '');
 
@@ -119,17 +121,23 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
         textarea?.focus();
     }
 
-    function runAction(action: SendAction | undefined) {
-        if (!action || sendingRef.current || !mountedRef.current) return;
+    function executeAction(action: SendAction) {
+        if (!mountedRef.current) {
+            sendingRef.current = false;
+            return;
+        }
         const textarea = textareaRef.current;
         const prompt = textarea?.value ?? props.value;
-        if (!prompt.trim()) return;
-        sendingRef.current = true;
+        if (!prompt.trim()) {
+            sendingRef.current = false;
+            return;
+        }
         let result: SendResult;
         try {
             result = action(prompt);
-        } catch {
+        } catch (error) {
             sendingRef.current = false;
+            actionErrorRef.current?.(error);
             return;
         }
         if (result === true) {
@@ -148,31 +156,39 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
         });
     }
 
+    function runPromptAction(action: SendAction | undefined) {
+        if (!action || sendingRef.current || !mountedRef.current) return;
+        sendingRef.current = true;
+        const pendingMentions = Array.from(pendingMentionsRef.current);
+        const barrier = attachmentBarrierRef.current?.() ?? null;
+        if (!barrier && !pendingMentions.length) {
+            executeAction(action);
+            return;
+        }
+        void Promise.all([barrier ?? Promise.resolve(), ...pendingMentions]).then(() => {
+            if (!mountedRef.current) {
+                sendingRef.current = false;
+                return;
+            }
+            executeAction(action);
+        }, () => {
+            sendingRef.current = false;
+        });
+    }
+
     function submit() {
         if (sendingRef.current || !mountedRef.current) return;
         const textarea = textareaRef.current;
         const initial = textarea?.value ?? props.value;
         if (!initial.trim()) return;
-        const pendingMentions = Array.from(pendingMentionsRef.current);
-        const barrier = attachmentBarrierRef.current?.() ?? null;
-        if (!barrier && !pendingMentions.length) {
-            runAction(sendRef.current);
-            return;
-        }
-        sendingRef.current = true;
-        void Promise.all([barrier ?? Promise.resolve(), ...pendingMentions]).then(() => {
-            sendingRef.current = false;
-            if (!mountedRef.current) return;
-            runAction(sendRef.current);
-        }, () => {
-            sendingRef.current = false;
-        });
+        runPromptAction(sendRef.current);
     }
 
     sendRef.current = props.onSend;
     queueRef.current = props.onQueue;
     steerRef.current = props.onSteer;
     forceRef.current = props.onForce;
+    actionErrorRef.current = props.onActionError;
 
     function updateMenu(textarea: HTMLTextAreaElement) {
         const trigger = menuTrigger(textarea);
@@ -329,9 +345,9 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
         </div>
         <div class="composer-footer"><span>Enter to send · Shift+Enter for a line · / tasks · @ context</span><SendModeControls
             activeRun={props.activeRun ?? null}
-            onQueue={() => runAction(queueRef.current)}
-            onSteer={() => runAction(steerRef.current)}
-            onForce={() => runAction(forceRef.current)}
+            onQueue={() => runPromptAction(queueRef.current)}
+            onSteer={() => runPromptAction(steerRef.current)}
+            onForce={() => runPromptAction(forceRef.current)}
             onStop={() => props.onStopRun?.()}
         /><button type="button" disabled={!props.generating || props.canStop === false} onClick={() => props.onStop?.()}>Stop</button></div>
     </div>;

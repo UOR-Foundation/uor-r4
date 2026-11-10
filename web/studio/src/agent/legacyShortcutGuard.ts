@@ -25,7 +25,7 @@ function clearPaletteHash(view: Window): boolean {
     return true;
 }
 
-function isEditableTarget(target: EventTarget | null): boolean {
+export function isEditableTarget(target: EventTarget | null): boolean {
     if (!(target instanceof Element)) return false;
     const tag = target.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
@@ -52,15 +52,23 @@ export function installLegacyShortcutGuard(root: HTMLElement): LegacyShortcutGua
     if (palette && observer) observer.observe(palette, { attributes: true, attributeFilter: ['hidden'] });
 
     const blockLegacyShortcut = (event: KeyboardEvent) => {
-        if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+        if (!(event.metaKey || event.ctrlKey)) return;
         if (event.key === 'k' || event.key === 'K') {
+            if (event.altKey) return;
             event.preventDefault();
             event.stopImmediatePropagation();
             closeLegacyPalette(view);
             return;
         }
         if (event.key !== ',') return;
-        if (event.isComposing || event.keyCode === 229) return;
+        if (event.isComposing || event.keyCode === 229) {
+            event.stopImmediatePropagation();
+            return;
+        }
+        if (event.altKey || event.shiftKey) {
+            event.stopImmediatePropagation();
+            return;
+        }
         if (!isEditableTarget(event.target) && !isEditableTarget(doc.activeElement)) return;
         event.preventDefault();
         event.stopImmediatePropagation();

@@ -6,6 +6,7 @@ import type { GenerationAdapter } from '../adapters/generation.js';
 import type { Attachment, SessionApi, StudioSettings, StudioUiApi, WorkspaceApi } from '../adapters/workflow.js';
 import { AgentClient } from '../agent/client.js';
 import { FixtureTransport } from '../agent/fixtureTransport.js';
+import type { RunView, TaskView } from '../state/agent.js';
 import { AgentComposer } from './AgentComposer.js';
 import { StudioApp } from './StudioApp.js';
 import { makeFiles, makeModelAdapter, makeSessions, makeSources, makeUi } from './studioTestFixtures.js';
@@ -94,6 +95,10 @@ function ui() {
 interface MountOptions {
     selected?: boolean;
     activeFile?: boolean;
+    sendThrows?: boolean;
+    agentClient?: AgentClient | null;
+    agentTask?: TaskView | null;
+    activeRun?: RunView | null;
 }
 
 function mount(options: MountOptions = {}) {
@@ -102,12 +107,20 @@ function mount(options: MountOptions = {}) {
     const fileApi = workspace(options.activeFile !== false);
     const uiApi = ui();
     const generation: GenerationAdapter = {
-        send: vi.fn(() => true), stop: vi.fn(), dispose: vi.fn(),
+        send: vi.fn(() => {
+            if (options.sendThrows) throw new Error('generation exploded');
+            return true;
+        }), stop: vi.fn(), dispose: vi.fn(),
     };
     if (options.selected !== false) store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
     const copy = vi.fn(async () => undefined);
     const download = vi.fn();
-    const props = { store, sessions: sessionApi, files: fileApi, ui: uiApi.api, generation, copy, download };
+    const props = {
+        store, sessions: sessionApi, files: fileApi, ui: uiApi.api, generation, copy, download,
+        agentClient: options.agentClient ?? null,
+        agentTask: options.agentTask ?? null,
+        activeRun: options.activeRun ?? null,
+    };
     act(() => { render(<AgentComposer {...props} />, host); });
     return { store, sessionApi, fileApi, uiApi, generation, copy, download };
 }
@@ -257,6 +270,14 @@ describe('composer surface regression and editor behaviour', () => {
         act(() => { button('Send').click(); });
         expect(generation.send).toHaveBeenCalledTimes(1);
         expect(generation.send).toHaveBeenCalledWith('single path');
+    });
+
+    it('reports a synchronous generation send exception and preserves the draft', () => {
+        const { uiApi } = mount({ sendThrows: true });
+        typePrompt('keep this draft');
+        act(() => { button('Send').click(); });
+        expect(uiApi.api.toast).toHaveBeenCalledWith(expect.stringContaining('generation exploded'), 'error');
+        expect(promptElement().value).toBe('keep this draft');
     });
 });
 
@@ -764,6 +785,15 @@ describe('composer menus and host state', () => {
         expect(onStopRun).not.toHaveBeenCalled();
     });
 
+    it('treats cancelling as active and disables only repeated stop', async () => {
+        const activeRun = { taskId: 'tsk_0000000000000001', runId: 'run_0000000000000001', generation: 1, state: 'cancelling' as const, retryOfRunId: null };
+        await mountSurface({ value: 'wait', activeRun, onQueue: vi.fn(() => true), onSteer: vi.fn(() => true), onForce: vi.fn(() => true), onStopRun: vi.fn() });
+        expect(button('Queue').disabled).toBe(false);
+        expect(button('Steer').disabled).toBe(false);
+        expect(button('Force send').disabled).toBe(false);
+        expect(button('Stop run').disabled).toBe(true);
+    });
+
     it('passes the visible prompt only to enabled run send modes', async () => {
         const activeRun = { taskId: 'tsk_0000000000000001', runId: 'run_0000000000000001', generation: 1, state: 'running' as const, retryOfRunId: null };
         const onQueue = vi.fn(() => true);
@@ -866,14 +896,20 @@ describe('task runtime send identity', () => {
         await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     }
 
-    async function mountStudio(client: AgentClient) {
+    async function mountStudio(client: AgentClient, filesApi = makeFiles()) {
         const sessionsApi = makeSessions();
         const uiApi = makeUi();
         act(() => {
-            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessionsApi} ui={uiApi} agentClient={client} download={vi.fn()} />, host);
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={filesApi} sessions={sessionsApi} ui={uiApi} agentClient={client} download={vi.fn()} />, host);
         });
         await settleAsync();
         return { sessionsApi, uiApi };
+    }
+
+    function editorFiles() {
+        const files = makeFiles();
+        files.activeFile = vi.fn(() => ({ path: 'notes.md', name: 'notes.md', content: 'context text', mode: 'local' }));
+        return files;
     }
 
     it('starts a run through only AgentClient for a selected task and blocks a second active run', async () => {
@@ -931,6 +967,52 @@ describe('task runtime send identity', () => {
         expect(transport.calls.filter((call) => call.method === 'startRun')).toHaveLength(startsBefore);
     });
 
+    it('blocks Enter during a cancelling run without starting another run', async () => {
+        const { transport, client } = fixtureRuntime();
+        const task = await client.createTask({ title: 'Cancelling task' });
+        client.store.selectTask(task.taskId);
+        await client.startRun({ taskId: task.taskId, prompt: 'initial' });
+        const selected = client.store.snapshot().selectedTask!;
+        const latest = selected.runs.find((candidate) => candidate.runId === selected.latestRunId)!;
+        const cancelling = { ...latest, state: 'cancelling' as const };
+        const startsBefore = transport.calls.filter((call) => call.method === 'startRun').length;
+        const { uiApi } = mount({ agentClient: client, agentTask: selected, activeRun: cancelling });
+
+        expect(button('Send').disabled).toBe(true);
+        typePrompt('hold this draft');
+        pressKey(promptElement(), 'Enter');
+        await settleAsync();
+        expect(transport.calls.filter((call) => call.method === 'startRun')).toHaveLength(startsBefore);
+        expect(uiApi.api.toast).toHaveBeenCalledWith('This task already has an active run. Queue, steer or force the message instead.', 'error');
+        expect(promptElement().value).toBe('hold this draft');
+    });
+
+    for (const [label, method] of [['Queue', 'queueMessage'], ['Steer', 'steer'], ['Force send', 'forceSend']] as const) {
+        it(`waits for a deferred accepted mention before ${label}`, async () => {
+            const { transport, client } = fixtureRuntime();
+            const task = await client.createTask({ title: `Mention ${label}` });
+            client.store.selectTask(task.taskId);
+            await client.startRun({ taskId: task.taskId, prompt: 'initial' });
+            const { uiApi } = await mountStudio(client, editorFiles());
+            const pending = deferredDocument('pending.md', 1);
+            pasteFiles(promptElement(), [pending.file]);
+            typePrompt('@');
+            const option = host.querySelector<HTMLElement>('[role="option"][data-attachment="notes.md"]');
+            expect(option).not.toBeNull();
+            act(() => { option!.click(); });
+            act(() => { button(label).click(); });
+            expect(transport.calls.filter((call) => call.method === method)).toHaveLength(0);
+            pending.resolve();
+            await vi.waitFor(() => {
+                expect(transport.calls.filter((call) => call.method === method)).toHaveLength(1);
+            }, { timeout: 3000 });
+            expect(transport.calls.filter((call) => call.method === method)[0]!.payload).toEqual({ taskId: task.taskId, text: '@notes.md' });
+            const added = vi.mocked(uiApi.addAttachment).mock.calls.map((call) => (call[0] as { name: string }).name);
+            expect(added).toEqual(expect.arrayContaining(['pending.md', 'notes.md']));
+            await vi.waitFor(() => { expect(promptElement().value).toBe(''); });
+        });
+    }
+
     it('preserves the draft and reports a failed queue receipt', async () => {
         const { transport, client } = fixtureRuntime();
         const task = await client.createTask({ title: 'Refusing task' });
@@ -943,6 +1025,7 @@ describe('task runtime send identity', () => {
         act(() => { button('Queue').click(); });
         await settleAsync();
         expect(uiApi.toast).toHaveBeenCalledWith('Queue failed: queue refused', 'error');
+        expect(uiApi.toast).toHaveBeenCalledTimes(1);
         expect(promptElement().value).toBe('keep queued');
         expect(button('Queue').disabled).toBe(false);
     });

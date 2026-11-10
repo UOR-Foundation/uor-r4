@@ -128,7 +128,7 @@ describe('typed Studio bootstrap', () => {
         }
     });
 
-    it('suppresses legacy Cmd/Ctrl+comma only for editable targets in typed mode', async () => {
+    it('suppresses legacy Cmd/Ctrl+comma for editable, IME and modified chords', async () => {
         const root = document.createElement('div');
         const mounted = await mountTypedStudio(root);
         const editable = document.createElement('div');
@@ -149,14 +149,33 @@ describe('typed Studio bootstrap', () => {
             target.dispatchEvent(event);
             return event;
         };
+        const legacy = vi.fn();
+        document.addEventListener('keydown', legacy);
         try {
             expect(press(child, { metaKey: true }).defaultPrevented, 'contenteditable descendant').toBe(true);
             expect(press(input, { ctrlKey: true }).defaultPrevented, 'input').toBe(true);
+            expect(legacy).not.toHaveBeenCalled();
+
             expect(press(outside, { metaKey: true }).defaultPrevented, 'outside editable').toBe(false);
-            expect(press(child, { metaKey: true, isComposing: true }).defaultPrevented, 'IME composition').toBe(false);
-            expect(press(child, { metaKey: true, keyCode: 229 }).defaultPrevented, 'IME keyCode 229').toBe(false);
+            expect(legacy).toHaveBeenCalledTimes(1);
+            const baseline = legacy.mock.calls.length;
+
+            for (const [context, target, init] of [
+                ['IME composition in editable', child, { metaKey: true, isComposing: true }],
+                ['IME keyCode 229 in editable', child, { metaKey: true, keyCode: 229 }],
+                ['Alt+Meta comma in editable', child, { metaKey: true, altKey: true }],
+                ['Alt+Ctrl comma outside', outside, { ctrlKey: true, altKey: true }],
+                ['Shift+Meta comma in editable', child, { metaKey: true, shiftKey: true }],
+                ['Shift+Meta comma outside', outside, { metaKey: true, shiftKey: true }],
+            ] as const) {
+                const event = press(target, init);
+                expect(event.defaultPrevented, context).toBe(false);
+                expect(legacy.mock.calls.length, context).toBe(baseline);
+            }
+
             expect(press(child, { metaKey: true, shiftKey: true, key: 'P' } as KeyboardEventInit).defaultPrevented, 'scoped palette chord').toBe(false);
         } finally {
+            document.removeEventListener('keydown', legacy);
             editable.remove();
             input.remove();
             outside.remove();
