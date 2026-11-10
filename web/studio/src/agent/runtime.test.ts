@@ -3627,3 +3627,420 @@ describe('ReplayModelPort script position bound', () => {
         ).toEqual(turn);
     });
 });
+
+describe('AgentRuntime Task 13 fix round 2 ingested terminal delivery', () => {
+    function terminalFrame(
+        taskId: string,
+        runId: string,
+        generation: number,
+        sequence: number,
+        type: string,
+        data: Record<string, unknown>,
+    ): Uint8Array {
+        return frame(
+            runtimeEvent({
+                taskId,
+                runId,
+                generation,
+                sequence,
+                type,
+                data,
+            }),
+        );
+    }
+
+    function messageIndex(
+        view: RunView,
+        type: string,
+        messageId: string,
+        after = -1,
+    ): number {
+        return view.events.findIndex(
+            (event, index) =>
+                index > after &&
+                event.type === type &&
+                event.data.message_id === messageId,
+        );
+    }
+
+    test('ingested_finished_flushes_pending_steer_and_force_before_terminal_and_starts_queued_run', async () => {
+        const { runtime, store, model } = makeRuntime();
+        await runtime.open();
+        try {
+            const { task, run } = await startOne(
+                runtime,
+                model,
+                'terminal delivery base',
+            );
+            const queued = await runtime.queueMessage({
+                taskId: task.taskId,
+                text: 'queued first generation two',
+            });
+            const steered = await runtime.steer({
+                taskId: task.taskId,
+                text: 'late steer',
+            });
+            const forced = await runtime.forceSend({
+                taskId: task.taskId,
+                text: 'late force',
+            });
+            const cursor = store.getRunCursor(task.taskId, run.runId)!;
+            const worker = runtime.createIngest({
+                taskId: task.taskId,
+                runId: run.runId,
+            });
+            const outcomes = await worker.push(
+                terminalFrame(
+                    task.taskId,
+                    run.runId,
+                    cursor.generation,
+                    cursor.lastSequence + 1,
+                    'run.finished',
+                    {
+                        status: 'finished',
+                        finished_at_ms: 1_800_000_000_020,
+                        duration_ms: 20,
+                    },
+                ),
+            );
+            expect(outcomes[0]?.kind).toBe('applied');
+
+            const view = runView(store, task.taskId, run.runId);
+            const types = eventTypes(view);
+            const finishedIndex = types.lastIndexOf('run.finished');
+            expect(types.at(-1)).toBe('run.finished');
+            const steeredIndex = messageIndex(
+                view,
+                'message.steered',
+                steered.messageId,
+            );
+            const forcedIndex = messageIndex(
+                view,
+                'message.forced',
+                forced.messageId,
+            );
+            const steeredQueued = messageIndex(
+                view,
+                'message.queued',
+                steered.messageId,
+                steeredIndex,
+            );
+            const forcedQueued = messageIndex(
+                view,
+                'message.queued',
+                forced.messageId,
+                forcedIndex,
+            );
+            for (const index of [
+                steeredIndex,
+                forcedIndex,
+                steeredQueued,
+                forcedQueued,
+            ]) {
+                expect(index).toBeGreaterThan(-1);
+                expect(index).toBeLessThan(finishedIndex);
+            }
+            expect(steeredQueued).toBeGreaterThan(steeredIndex);
+            expect(forcedQueued).toBeGreaterThan(forcedIndex);
+            expect(
+                view.events.filter((event) => event.type === 'error'),
+            ).toHaveLength(0);
+
+            const taskView = store
+                .snapshot()
+                .tasks.find((candidate) => candidate.taskId === task.taskId)!;
+            expect(taskView.latestRunId).not.toBe(run.runId);
+            const nextRun = runView(
+                store,
+                task.taskId,
+                taskView.latestRunId!,
+            );
+            expect(nextRun.generation).toBe(2);
+            expect(nextRun.events[0]?.type).toBe('run.queued');
+            expect(nextRun.events[1]?.type).toBe('run.started');
+            await until(
+                () =>
+                    model.requests.filter(
+                        (request) => request.taskId === task.taskId,
+                    ).length >= 2,
+                'queued generation-two run',
+            );
+            expect(
+                model.requests.filter(
+                    (request) => request.taskId === task.taskId,
+                ).at(-1)!.prompt,
+            ).toBe('queued first generation two');
+            expect(queued.messageId).toBeTruthy();
+
+            const nextStream = streamForTask(model, task.taskId);
+            nextStream.push({ type: 'finished', reason: 'stop' });
+            nextStream.end();
+            await until(
+                () =>
+                    runView(store, task.taskId, nextRun.runId).state ===
+                    'finished',
+                'queued generation-two finished',
+            );
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('ingested_failed_fails_pending_and_queued_before_terminal_without_new_run', async () => {
+        const { runtime, store, model } = makeRuntime();
+        await runtime.open();
+        try {
+            const { task, run } = await startOne(
+                runtime,
+                model,
+                'failed terminal base',
+            );
+            await runtime.queueMessage({
+                taskId: task.taskId,
+                text: 'queued before failure',
+            });
+            await runtime.steer({
+                taskId: task.taskId,
+                text: 'pending steer before failure',
+            });
+            await runtime.forceSend({
+                taskId: task.taskId,
+                text: 'pending force before failure',
+            });
+            const cursor = store.getRunCursor(task.taskId, run.runId)!;
+            const worker = runtime.createIngest({
+                taskId: task.taskId,
+                runId: run.runId,
+            });
+            const outcomes = await worker.push(
+                terminalFrame(
+                    task.taskId,
+                    run.runId,
+                    cursor.generation,
+                    cursor.lastSequence + 1,
+                    'run.failed',
+                    {
+                        code: 'model_unavailable',
+                        message: 'host terminal failure',
+                        retryable: false,
+                    },
+                ),
+            );
+            expect(outcomes[0]?.kind).toBe('applied');
+
+            const view = runView(store, task.taskId, run.runId);
+            const types = eventTypes(view);
+            const terminalIndex = types.lastIndexOf('run.failed');
+            expect(types.at(-1)).toBe('run.failed');
+            const errors = view.events
+                .map((event, index) => ({ event, index }))
+                .filter((entry) => entry.event.type === 'error');
+            expect(errors).toHaveLength(3);
+            for (const entry of errors) {
+                expect(entry.index).toBeLessThan(terminalIndex);
+                expect(entry.event.data.code).toBe('message_not_delivered');
+            }
+            expect(view.error?.code).toBe('model_unavailable');
+            const taskView = store
+                .snapshot()
+                .tasks.find((candidate) => candidate.taskId === task.taskId)!;
+            expect(taskView.latestRunId).toBe(run.runId);
+            expect(taskView.state).toBe('idle');
+            expect(types).not.toContain('message.steered');
+            expect(types).not.toContain('message.forced');
+            model.streams.forEach((stream) => stream.end());
+        } finally {
+            await runtime.dispose();
+        }
+    });
+
+    test('ingested_cancelled_fails_pending_before_terminal_without_new_run', async () => {
+        const { runtime, store, model } = makeRuntime();
+        await runtime.open();
+        try {
+            const { task, run } = await startOne(
+                runtime,
+                model,
+                'cancelled terminal base',
+            );
+            await runtime.queueMessage({
+                taskId: task.taskId,
+                text: 'queued before cancellation',
+            });
+            await runtime.steer({
+                taskId: task.taskId,
+                text: 'pending steer before cancellation',
+            });
+            const cursor = store.getRunCursor(task.taskId, run.runId)!;
+            const worker = runtime.createIngest({
+                taskId: task.taskId,
+                runId: run.runId,
+            });
+            const outcomes = await worker.push(
+                terminalFrame(
+                    task.taskId,
+                    run.runId,
+                    cursor.generation,
+                    cursor.lastSequence + 1,
+                    'run.cancelled',
+                    {
+                        safe_boundary: true,
+                        finished_at_ms: 1_800_000_000_030,
+                    },
+                ),
+            );
+            expect(outcomes[0]?.kind).toBe('applied');
+            const view = runView(store, task.taskId, run.runId);
+            const types = eventTypes(view);
+            const terminalIndex = types.lastIndexOf('run.cancelled');
+            expect(types.at(-1)).toBe('run.cancelled');
+            const errors = view.events
+                .map((event, index) => ({ event, index }))
+                .filter((entry) => entry.event.type === 'error');
+            expect(errors).toHaveLength(2);
+            for (const entry of errors) {
+                expect(entry.index).toBeLessThan(terminalIndex);
+                expect(entry.event.data.code).toBe('message_not_delivered');
+            }
+            const taskView = store
+                .snapshot()
+                .tasks.find((candidate) => candidate.taskId === task.taskId)!;
+            expect(taskView.latestRunId).toBe(run.runId);
+            expect(taskView.state).toBe('idle');
+            model.streams.forEach((stream) => stream.end());
+        } finally {
+            await runtime.dispose();
+        }
+    });
+
+    test('invalid_ingested_terminal_emits_no_fallback_and_keeps_pending_messages', async () => {
+        const { runtime, store, model } = makeRuntime();
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(
+                runtime,
+                model,
+                'invalid terminal base',
+            );
+            await runtime.queueMessage({
+                taskId: task.taskId,
+                text: 'queued survives invalid terminal',
+            });
+            const steered = await runtime.steer({
+                taskId: task.taskId,
+                text: 'steer survives invalid terminal',
+            });
+            const forced = await runtime.forceSend({
+                taskId: task.taskId,
+                text: 'force survives invalid terminal',
+            });
+            const cursor = store.getRunCursor(task.taskId, run.runId)!;
+            const worker = runtime.createIngest({
+                taskId: task.taskId,
+                runId: run.runId,
+            });
+            const outcomes = await worker.push(
+                terminalFrame(
+                    task.taskId,
+                    run.runId,
+                    cursor.generation,
+                    cursor.lastSequence + 1,
+                    'run.finished',
+                    {
+                        status: 'failed',
+                        finished_at_ms: 1_800_000_000_040,
+                        duration_ms: 1,
+                    },
+                ),
+            );
+            expect(outcomes[0]?.code()).toBe('invalid_event');
+            const untouched = runView(store, task.taskId, run.runId);
+            expect(store.getRunCursor(task.taskId, run.runId)).toEqual(cursor);
+            expect(eventTypes(untouched)).not.toContain('message.steered');
+            expect(eventTypes(untouched)).not.toContain('message.forced');
+            expect(
+                untouched.events.filter((event) => event.type === 'error'),
+            ).toHaveLength(0);
+
+            stream.push({ type: 'finished', reason: 'stop' });
+            stream.end();
+            await until(
+                () =>
+                    messageIndex(
+                        runView(store, task.taskId, run.runId),
+                        'message.steered',
+                        steered.messageId,
+                    ) >= 0 &&
+                    messageIndex(
+                        runView(store, task.taskId, run.runId),
+                        'message.forced',
+                        forced.messageId,
+                    ) >= 0,
+                'pending messages survive invalid terminal',
+            );
+            await until(
+                () => store.getTaskLatestRunId(task.taskId) !== run.runId,
+                'queued run after invalid terminal',
+            );
+            const taskView = store
+                .snapshot()
+                .tasks.find((candidate) => candidate.taskId === task.taskId)!;
+            expect(taskView.latestRunId).not.toBe(run.runId);
+            const nextStream = streamForTask(model, task.taskId);
+            nextStream.push({ type: 'finished', reason: 'stop' });
+            nextStream.end();
+        } finally {
+            model.streams.forEach((item) => item.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('cursor_expiry_requires_a_replacement_worker_that_applies_the_next_frame', async () => {
+        const { runtime, store, model } = makeRuntime({
+            taskStore: null as unknown as AgentTaskStore,
+        });
+        await runtime.open();
+        try {
+            const { task, run } = await startOne(
+                runtime,
+                model,
+                'cursor expiry replacement',
+            );
+            const worker = runtime.createIngest({
+                taskId: task.taskId,
+                runId: run.runId,
+            });
+            const expired = await worker.cursorExpired();
+            expect(expired.code()).toBe('cursor_expired');
+            const resumed = store.getRunCursor(task.taskId, run.runId)!;
+            expect(resumed.generation).toBe(2);
+            const replacement = runtime.createIngest({
+                taskId: task.taskId,
+                runId: run.runId,
+            });
+            const applied = await replacement.push(
+                terminalFrame(
+                    task.taskId,
+                    run.runId,
+                    resumed.generation,
+                    resumed.lastSequence + 1,
+                    'assistant.message',
+                    {
+                        message_id: 'msg_after_cursor_expiry',
+                        text: 'after cursor expiry resync',
+                    },
+                ),
+            );
+            expect(applied[0]?.kind).toBe('applied');
+            expect(
+                runView(store, task.taskId, run.runId).messages.map(
+                    (message) => message.text,
+                ),
+            ).toEqual(['after cursor expiry resync']);
+            model.streams.forEach((stream) => stream.end());
+        } finally {
+            await runtime.dispose();
+        }
+    });
+});

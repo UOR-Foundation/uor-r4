@@ -172,7 +172,9 @@ function decodeLine(line: Uint8Array): string | null {
 // frame buffered. A chunk may end inside a multi-byte UTF-8 code point; only
 // complete lines are decoded, so the split is invisible to the frame text.
 // More than 64 complete frames in one push are rejected before any frame text
-// is allocated or returned.
+// is allocated or returned. On a late malformed/oversized frame the complete
+// prefix is returned with the error; the caller decides whether to apply it.
+// The worker path applies prefix frames before reporting the error.
 export function decodeFrame(
     bytes: Uint8Array,
     buffer: NdjsonBuffer = new NdjsonBuffer(),
@@ -193,12 +195,12 @@ export function decodeFrame(
         }
         if (index - start > MAX_EVENT_BYTES) {
             buffer.reset();
-            return { frames: [], buffer, error: 'limit_exceeded' };
+            return { frames, buffer, error: 'limit_exceeded' };
         }
         const decoded = decodeLine(view.subarray(start, index));
         if (decoded === null) {
             buffer.reset();
-            return { frames: [], buffer, error: 'malformed_event' };
+            return { frames, buffer, error: 'malformed_event' };
         }
         frames.push(decoded);
         start = index + 1;
@@ -206,7 +208,7 @@ export function decodeFrame(
     }
     if (buffer.length - start > MAX_EVENT_BYTES) {
         buffer.reset();
-        return { frames: [], buffer, error: 'limit_exceeded' };
+        return { frames, buffer, error: 'limit_exceeded' };
     }
     if (start > 0) buffer.compact(start);
     buffer.setScanned(buffer.length);

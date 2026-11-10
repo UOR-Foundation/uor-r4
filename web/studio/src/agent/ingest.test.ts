@@ -191,6 +191,38 @@ describe('NDJSON frame decoding', () => {
         expect(decodeEof(new Uint8Array())).toBeNull();
     });
 
+    test('decode_frame_preserves_the_complete_prefix_before_a_late_error', () => {
+        const first = canonicalJson(
+            eventFor({
+                taskId: TASK_A,
+                runId: RUN_A,
+                sequence: 2,
+                type: 'assistant.delta',
+                data: {
+                    message_id: 'msg_prefix',
+                    text_delta: 'prefix survives',
+                },
+            }),
+        );
+        const invalidTail = new Uint8Array([
+            ...bytes(`${first}\n`),
+            0xff,
+            0x0a,
+        ]);
+        const decoded = decodeFrame(invalidTail);
+        expect(decoded.frames).toEqual([first]);
+        expect(decoded.error).toBe('malformed_event');
+
+        const oversizedTail = new Uint8Array([
+            ...bytes(`${first}\n`),
+            ...bytes('x'.repeat(1024 * 1024 + 1)),
+            0x0a,
+        ]);
+        const limited = decodeFrame(oversizedTail);
+        expect(limited.frames).toEqual([first]);
+        expect(limited.error).toBe('limit_exceeded');
+    });
+
     test('decode_frame_rejects_invalid_utf8_without_decoding_replacement_text', () => {
         const invalid = new Uint8Array([0x7b, 0xff, 0xfe, 0x0a]);
         const decoded = decodeFrame(invalid);
@@ -598,30 +630,6 @@ describe('NdjsonIngest hostile frames', () => {
 });
 
 describe('NdjsonIngest fix round 1 buffering and halt bounds', () => {
-    async function countSetCopies(
-        operation: () => Promise<void>,
-    ): Promise<number> {
-        const proto = Uint8Array.prototype as unknown as {
-            set(source: ArrayLike<number>, offset?: number): void;
-        };
-        const original = proto.set;
-        let copied = 0;
-        proto.set = function (
-            this: Uint8Array,
-            source: ArrayLike<number>,
-            offset = 0,
-        ): void {
-            copied += source.length;
-            original.call(this, source, offset);
-        };
-        try {
-            await operation();
-        } finally {
-            proto.set = original;
-        }
-        return copied;
-    }
-
     test('large_frame_fed_one_byte_at_a_time_keeps_byte_copies_linear', async () => {
         const store = createAgentStore();
         await seedRun(store);
@@ -638,18 +646,25 @@ describe('NdjsonIngest fix round 1 buffering and halt bounds', () => {
         });
         const encoded = bytes(ndjson(message));
 
-        const copied = await countSetCopies(async () => {
-            for (let index = 0; index < encoded.length; index += 1) {
-                await worker.push(encoded.subarray(index, index + 1));
-            }
-        });
+        for (let index = 0; index < encoded.length; index += 1) {
+            await worker.push(encoded.subarray(index, index + 1));
+        }
         expect(runOf(store).messages.map((entry) => entry.text)).toEqual([
             'x'.repeat(64 * 1024),
         ]);
         expect(
-            copied,
-            `copied ${copied} bytes for a ${encoded.length}-byte frame`,
+            worker.copyBytes,
+            `copied ${worker.copyBytes} bytes for a ${encoded.length}-byte frame`,
         ).toBeLessThan(encoded.length * 8);
+    });
+
+    test('compact_copies_are_counted_in_the_structural_bound', () => {
+        const buffer = new NdjsonBuffer();
+        buffer.append(new TextEncoder().encode('abcdef'));
+        const before = buffer.copyBytes;
+        buffer.compact(2);
+        expect(buffer.length).toBe(4);
+        expect(buffer.copyBytes - before).toBe(4);
     });
 
     test('one_mib_buffer_appends_one_byte_at_a_time_stay_amortized', () => {
