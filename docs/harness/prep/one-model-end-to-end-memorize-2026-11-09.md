@@ -6,6 +6,8 @@ TEST FITNESS: FIT WITH CHANGES, all seven applied (10 Nov, a fresh-context revie
 
 PRE-RUN REVIEW: PASS WITH CHANGES (10 Nov, a second fresh-context reviewer; it read the sheet, the pod kit and the trainer's argument parser, and ran the store and syntax gates). Four minor findings. Applied: each row now reads each bar at its lower seed, so a split between the seeds is row 3 and cannot fall to row 0; the launcher says so loudly when a pod may be up with no watcher; a sealed failure is held one hour, not six. Accepted as it is: a watcher whose pod has gone keeps logging "no answer" on the laptop until the session ends it (no pod, no cost). The reviewer took the project chain from this sheet's "Why" and did not re-read `PLAN.md`.
 
+**POST-LAUNCH SHAPE CORRECTION (10 Nov).** The T0 pods started from sheet commit `3d5dee5a487d7d638e75d7b1eef7a3eb0f3f5336`. This later documentation commit exposes the registered `Steps`, `Cost` and `Minimum test power` content under the headings required by the harness shape rule. It changes no bar, sample, seed, corpus, recipe, pod, read or inference rule; the running cells remain governed by the commit above.
+
 **Why.**
 - No recorded run has asked whether the assembled model can fit a small set of dialogues and say it back in free-running decode. Every reply reading so far comes from models trained on millions of tokens and scored on prompts they had not seen, where a failure to fit and a failure to generalise look the same.
 - The design names two gaps: no learned transformation between a state and the next (1,112,576 learned values, 1,048,576 of them the token table), and no read keyed by state. If the first is real, the model should fail to fit even 1,000 dialogues. That is a prediction this test can refute.
@@ -18,8 +20,11 @@ Trained from a fresh start on 1,000 controlled dialogues only, with today's reci
 ## Base artifact
 
 - **Recipe:** claude-301's (b64L), unchanged, as claude-322 ran it: `--objective nearest --retain-rates 1 --decay-mult 1 --lr 0.001 --lr-end 0 --train-as-served 1 --context 192 --width 256 --hamming-read 4 --batch 64 --micro-batch 16`. No ask heads, no pull, no carry, no turn memory, as in claude-322.
-- **Steps:** 4,096 at `--eval-every 512`, from a fresh start (no `--init-from`). At batch 64 that is about 231 passes over the 1,133 trained windows.
 - **The pin:** `6fcf57f7822286e5b6bd7bcfe42d668116b23afa`, `origin/main` on 9 Nov. The trainer is built at the pin on each pod. No code changes.
+
+## Steps
+
+4,096 training steps at `--eval-every 512`, from a fresh start (no `--init-from`). At batch 64 that is about 231 passes over the 1,133 trained windows. Each seed then scores `models/step-004096` with the readings below.
 
 ## Data split
 
@@ -83,6 +88,14 @@ A row-1 pass does not show the model can converse. A row-3 reading closes this c
 - **I-r:** `rows-t0-memory.json` holds 40,419 rows, and every reference position of every complete sample is found in it.
 - **Seal:** each pod's `run/` is sealed with a file list and SHA-256 sums, put in the store under `results/claude/one-model-end-to-end-memorize-2026-11-09/<root>/T0/s<seed>/`, and read back; the pod goes down only after the laptop reads the same sums from the store and the required files are in the list. A run is never written into an existing root (L-002).
 - **The sheet in force:** this sheet's commit is written beside the pod kit and in the REPORT before any pod ships.
+
+## Minimum test power
+
+Two independent seeds are run and every bar is read at the lower seed. The deciding free-running reading contains 1,072 complete reference replies, well above the project's 200-row power floor, plus 40,419 teacher-forced target rows. The sheet stops if fewer than 800 complete samples can be decoded, because the intended comparison would then be underpowered or the scorer broken. No bar is inferred from one reply or one seed.
+
+## Cost
+
+Two Vast RTX 5090 pods, one seed each, at most $0.70/h each. The expected total is under $2.50, with a notice at $2.10 per pod and at two hours. The standing project cap of four pods and $8/h applies.
 
 ## Compute and stop rule
 

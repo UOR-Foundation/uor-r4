@@ -115,3 +115,25 @@ What T0 adds to the design's first gap. The model has 1,112,576 learned values, 
 2. Both seeds trained, scored, sealed and read back: done.
 3. Negatives first, the row read, the counts at both seeds, at least twenty decoded replies: this REPORT (24).
 4. One notebook row: added to `docs/research/notebook/float-training.md`.
+
+## Checks run at the head
+
+- The sheet's FIT and pre-run review completed before the pods, and the pod-kit hashes are recorded above.
+- I-p, I-0 (465 tests), I-3, I-s, I-t, I-r and both seal read-backs passed at both seeds.
+- Both scored runs were fetched and checked against their sealed `SHA256SUMS` and file lists.
+- No trainer, scorer, recipe, bar or inference rule changed.
+
+## Skills used
+
+None beyond the project loop: the registered sheet, FIT, pre-run review, sealed pod run, store read-back and report checks.
+
+## Still open
+
+- The address-memory arm, `claude-346`, tests the same set at the same steps and seeds against this no-memory result.
+- This negative closes the 4,096-step configuration only; it does not show that a longer run cannot fit.
+- The output-side table gradient remains unmeasured for this recipe.
+- The sealed checkpoints have not yet been exported and typed into `uor-chat --stack`.
+
+## Plain summary
+
+The model was trained 231 times over 1,000 short dialogues and still reproduced none of the 1,072 complete replies. It produced one conversation-independent sentence for every prompt at each seed. Teacher forcing failed at the same first reply token, so the miss is in what the model learned, not only in free-running decode.
