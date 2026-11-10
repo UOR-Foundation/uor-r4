@@ -310,6 +310,11 @@ pub fn recall_value(history: &[&str], query: &str) -> Option<String> {
         .collect();
     let mut best: Option<((usize, usize, usize), String)> = None;
     for (turn_index, turn) in history.iter().enumerate() {
+        // A request to the model states no fact: "Give me the opposite of fast." says nothing
+        // about what the opposite of anything is.
+        if is_request(turn) {
+            continue;
+        }
         for (clause_index, clause) in clauses(turn).into_iter().enumerate() {
             let shared: Vec<usize> = clause
                 .iter()
@@ -338,15 +343,41 @@ pub fn recall_value(history: &[&str], query: &str) -> Option<String> {
     best.map(|(_, value)| value)
 }
 
-/// The serving recall decision. A question with no matching prior clause is an
-/// explicit absence; ordinary non-question text requests no memory line.
+/// Whether a turn asks the model to do something, by its first word. Such a turn is a request,
+/// not a fact the user stated, so it answers no later question.
+fn is_request(turn: &str) -> bool {
+    words(turn).first().is_some_and(|word| {
+        matches!(
+            word.to_lowercase().as_str(),
+            "give" | "tell" | "make" | "repeat" | "say" | "add" | "sum" | "count" | "list" | "show" | "write" | "spell"
+        )
+    })
+}
+
+/// Whether a question speaks of the user: only then is "you have not told me" an answer to it.
+/// "me" and "us" alone do not count: "Can you tell me what day it is?" is not about the user.
+fn speaks_of_user(query: &str) -> bool {
+    words(query).iter().any(|word| {
+        matches!(
+            word.to_lowercase().as_str(),
+            "i" | "i'm" | "i've" | "i'd" | "i'll" | "my" | "mine" | "myself" | "we" | "our" | "ours"
+        )
+    })
+}
+
+/// The serving recall decision. A question about the user with no matching prior clause is an
+/// explicit absence. Ordinary non-question text requests no memory line, and neither does a
+/// question that is not about the user and that nothing stored answers ("Do cats bark?"): the
+/// model answers it by itself, as on the turns it was trained on without a line.
 pub fn recall(history: &[&str], query: &str) -> SieveRecall {
     if !is_query(query) {
         SieveRecall::NotRequested
     } else if let Some(value) = recall_value(history, query) {
         SieveRecall::Value(value)
-    } else {
+    } else if speaks_of_user(query) {
         SieveRecall::Absent
+    } else {
+        SieveRecall::NotRequested
     }
 }
 
@@ -386,9 +417,46 @@ mod tests {
             recall(&history, "What is my name?"),
             SieveRecall::Value("Sam".to_owned())
         );
+        // A question that is not about the user, with nothing stored, asks for no line.
         assert_eq!(
             recall(&["My dog is old."], "How old is Tom?"),
-            SieveRecall::Absent
+            SieveRecall::NotRequested
+        );
+    }
+
+    /// claude-345: general questions get no line. Before this, "Do cats bark?" was given the
+    /// absent line and "What is the opposite of hard?" the words after an earlier "opposite".
+    #[test]
+    fn a_general_question_gets_no_line_and_a_request_is_no_fact() {
+        let history = [
+            "My lucky number is 47.",
+            "My best friend is Maya.",
+            "Give me the opposite of fast.",
+        ];
+        for general in [
+            "Do cats bark?",
+            "What is 2 plus 3?",
+            "What color is a lemon?",
+            "What is the opposite of hard?",
+            "How many legs does a spider have?",
+        ] {
+            assert_eq!(recall(&history, general), SieveRecall::NotRequested, "{general}");
+        }
+        // About the user: a stored fact answers, and nothing stored is an explicit absence.
+        assert_eq!(
+            recall(&history, "What is my lucky number?"),
+            SieveRecall::Value("47".to_owned())
+        );
+        assert_eq!(
+            recall(&history, "Who is my friend?"),
+            SieveRecall::Value("Maya".to_owned())
+        );
+        assert_eq!(recall(&history, "What is my cat called?"), SieveRecall::Absent);
+        assert_eq!(recall(&history, "Where am I from?"), SieveRecall::Absent);
+        // Not about the user, but stored: the fact still answers.
+        assert_eq!(
+            recall(&["The red key is under the mat."], "Where is the red key?"),
+            SieveRecall::Value("mat".to_owned())
         );
     }
 
