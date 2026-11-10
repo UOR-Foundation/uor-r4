@@ -1316,6 +1316,9 @@ fn start_memory(
         ));
     }
     let (windows, _) = hs::build_document_windows(&tokens, &mask, config.context, hs::SHEET_BOS_ID)?;
+    // Each copy head's key, as the run's Hamming read is built: the leave rule asks every head.
+    let leave_keys: Vec<usize> =
+        config.hamming_copy_keys.clone().unwrap_or_else(|| vec![config.hamming_copy_key]);
     let train = openings(&windows, &mask);
     let mut table = if config.turn_memory_empty {
         std::collections::HashMap::new()
@@ -1328,7 +1331,7 @@ fn start_memory(
             .into_iter()
             .filter(|row| !row.prompt.is_empty())
             .map(|row| {
-                let copied = copy_names(&windows[row.window].input_ids, row.offset, row.target);
+                let copied = copy_names_by(&leave_keys, &windows[row.window].input_ids, row.offset, row.target);
                 let key = row.prompt[..config.turn_memory.min(row.prompt.len())].to_vec();
                 (key, copied)
             })
@@ -1374,7 +1377,7 @@ fn start_memory(
                 .iter()
                 .map(|row| {
                     let ids = &windows[row.window].input_ids;
-                    (reply_key(row), copy_names(ids, row.offset, row.target))
+                    (reply_key(row), copy_names_by(&leave_keys, ids, row.offset, row.target))
                 })
                 .collect();
             let owned = crate::flock_read_memory::copy_owned_keys(&copied);
@@ -5528,6 +5531,25 @@ fn copy_names(ids: &[u32], offset: usize, target: u32) -> bool {
         .rev()
         .find(|&s| ids[s - 1] == ids[offset])
         .is_some_and(|s| ids[s] == target)
+}
+
+/// Whether every copy head's latest exact match names `target` (claude-345), `keys` holding each
+/// copy head's key. A one-token head is [`copy_names`]. A two-token head (claude-261) takes the
+/// latest `s` in `2..offset` whose two previous tokens are the row's previous and own tokens, in
+/// order. The turn memory leaves a key to the copy read only where the whole copy read names the
+/// target: under `--hamming-copy-keys 1,2` a row only the one-token head gets right stays in the
+/// table. With one-token keys alone this is [`copy_names`].
+fn copy_names_by(keys: &[usize], ids: &[u32], offset: usize, target: u32) -> bool {
+    keys.iter().all(|&key| match key {
+        2 => {
+            offset >= 1
+                && (2..offset)
+                    .rev()
+                    .find(|&s| ids[s - 2] == ids[offset - 1] && ids[s - 1] == ids[offset])
+                    .is_some_and(|s| ids[s] == target)
+        }
+        _ => copy_names(ids, offset, target),
+    })
 }
 
 /// The reply table's key for `row` (claude-193): the probe's `turn-8 + position + reply-last-1`,
@@ -23142,7 +23164,7 @@ mod tests {
 
 #[cfg(test)]
 mod copy_names_tests {
-    use super::copy_names;
+    use super::{copy_names, copy_names_by};
 
     /// claude-345: the latest earlier position after the row's own token decides, as the copy
     /// read's latest exact match does; the row's own position and position 0 are no candidates.
@@ -23159,5 +23181,29 @@ mod copy_names_tests {
         // A token repeated in place is not its own earlier copy: 5 5 at offsets 1 and 2.
         assert!(!copy_names(&[3, 5, 5], 2, 5));
         assert!(!copy_names(&[5], 0, 5));
+    }
+
+    /// claude-345: under per-head keys every copy head must name the target. ids: 3 5 9 4 5 7 3 5;
+    /// the row at offset 7 holds 5 after 3. The one-token head's latest 5 is at 4, followed by 7;
+    /// the two-token head's latest `3 5` is at 0-1, followed by 9. So no target is named by both,
+    /// each is named by its own head, and one-token keys alone are `copy_names`.
+    #[test]
+    fn copy_names_by_asks_every_head_by_its_own_key() {
+        let ids = [3u32, 5, 9, 4, 5, 7, 3, 5];
+        assert!(copy_names_by(&[1], &ids, 7, 7) && copy_names(&ids, 7, 7));
+        assert!(copy_names_by(&[2], &ids, 7, 9) && !copy_names_by(&[2], &ids, 7, 7));
+        assert!(!copy_names_by(&[1, 2], &ids, 7, 7) && !copy_names_by(&[1, 2], &ids, 7, 9));
+        // Both heads agree where the pair's latest match is also the token's latest: 3 5 9 3 5.
+        let agree = [3u32, 5, 9, 3, 5];
+        assert!(copy_names_by(&[1, 2], &agree, 4, 9) && copy_names_by(&[2, 2], &agree, 4, 9));
+        // A pair the window never held names nothing, and neither does a row with no previous token.
+        assert!(!copy_names_by(&[2], &[4, 5, 9, 3, 5], 4, 9));
+        assert!(!copy_names_by(&[2], &[5, 9, 5], 0, 9) && !copy_names_by(&[1, 2], &[5], 0, 5));
+        for offset in 0..ids.len() {
+            for target in [3u32, 4, 5, 7, 9] {
+                assert_eq!(copy_names_by(&[1], &ids, offset, target), copy_names(&ids, offset, target));
+                assert_eq!(copy_names_by(&[1, 1], &ids, offset, target), copy_names(&ids, offset, target));
+            }
+        }
     }
 }
