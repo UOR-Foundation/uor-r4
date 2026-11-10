@@ -4,15 +4,15 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 
 ## Owner approval and goal
 
-The owner said verbatim: **"I approve of this plan, please implement it end to end autonomously"** (2026-11-09, Kimi chat). Register the browser-owned item and resolve reviewed defects first. The top session decides; no subagent decides acceptance or scope.
+The owner said verbatim: **"I approve of this plan, please implement it end to end autonomously"** (2026-11-09, Kimi chat). Register the item; the top session decides acceptance and scope, never a subagent.
 
 ## Cancel probe (ran first)
 
-Instrument/docs only: at base, #3569 is OPEN and unchanged, with no competing item/PR. Baseline: 11/11 harness gates GREEN (not roadmap validation); `npm ci` passed. A new item cannot anchor its own registration ORDER at the merge base, so use this parent route.
+Instrument/docs only: #3569 is OPEN and unchanged, with no competing item/PR. A new item cannot anchor its own registration ORDER at the merge base, so use this parent route.
 
 ## Scope decision and files
 
-Top-session D76 review accepts only the new-item advisory outside the parent's historical scope, not an implementation waiver or parent acceptance change. Touch only the new item, this parent task folder, and official generated roadmap output/metadata when base inputs validate. Later code uses the merged new item's ORDER. No service, model/API/engine/worker/tokenizer, `.github`, rendered STATE/HANDOFF, publication, credentials, real R4 generation, or owner-checkout changes.
+Top-session D76 review accepts only the new-item advisory outside the parent's scope, not an implementation waiver or parent acceptance change. Touch only the new item, this task folder and valid official roadmap output. Later code uses the merged item's ORDER. No service, model/API changes, `.github`, rendered STATE/HANDOFF, publication, credentials, real R4 generation, or owner-checkout changes.
 
 ## Binding implementation rulings
 

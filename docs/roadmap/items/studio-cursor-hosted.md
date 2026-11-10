@@ -27,11 +27,11 @@ The accepted M1 model is prediction-only. Executable work uses labelled `ReplayM
 - One typed task list and one runtime-owned composer send path provide the responsive UOR task shell, local search/pins/archive, accessible media/document attachments and queue/steer/force/stop controls. Existing selectors, IME behavior, `?legacy=1`, `?typed=0`, skip-link behavior and the exact 1023/1024 rail boundary pass regression checks.
 - The page/Web Worker exclusively owns task/run/event/cursor state. IndexedDB `uor-r4.studio.agent/1` persists bounded per-run records, canonical digest chains, verified snapshots, changes and comments. Parallel tasks, reload/resume, corruption/quota recovery and lease behavior pass their declared checks; an empty task list is not a runtime failure.
 - The optional Tauri companion only executes approved tools. Grant-bounded directory, branch-only diff and digest-verified artifact APIs, nonblocking loopback transport, and native approval authority pass default/GUI host tests. A page cannot approve its own intent; receipts are opaque host capabilities or asymmetrically verifiable, with no page HMAC secret. Static web explicitly reports unsupported host functions.
-- Review/editor workflows use real browser changes, companion/uploaded branch diffs, local comments, read-only PR information and inert digest-verified artifacts. No merge, LSP, debugger, extension or hosted-checkpoint capability is implied.
+- Review/editor workflows use real browser changes, companion/uploaded branch diffs, local comments, and inert digest-verified artifacts. Read-only PR metadata is local/imported or companion-supplied without credentials or a page-initiated network request; static web labels live GitHub PR information unsupported. No merge, LSP, debugger, extension or hosted-checkpoint capability is implied.
 - The test-only API requires both opt-ins and is absent from the default build; page load makes zero external requests and new agent secrets never enter `localStorage`. The existing provider-key store remains unchanged and is not copied into IndexedDB.
 - Independent task and exact-head reviews, required GitHub checks, protected merges and fresh-main verification complete. Local acceptance evidence and a handoff identify actual executed checks and every `NOT_RUN`/`UNVERIFIED` row.
 
-This item does **not** satisfy or close #3569 (`studio-ide-harness`), whose same-Rust-runtime, hosted-service and broader acceptance remains open and unchanged. Hosted services/integrations, real R4 generation, useful-model evaluation, production publication and full Cursor parity are `NOT_RUN`, not implied by fixture or exact-arithmetic checks.
+The older `studio-ide-harness` acceptance (#3569) remains open and unchanged, including its same-Rust-runtime, hosted-service and broader requirements; this item does not satisfy them. Hosted services/integrations, real R4 generation, useful-model evaluation, production publication and full Cursor parity are `NOT_RUN`, not implied by fixture or exact-arithmetic checks.
 
 ## Cancel if
 
@@ -40,6 +40,8 @@ The approved browser-owned runtime can be supplied by an existing current implem
 ## How to start
 
 Read the approved [design](../../superpowers/specs/2026-11-09-cursor-hosted-studio-upgrade-design.md), [23-task plan](../../superpowers/plans/2026-11-09-cursor-hosted-studio-upgrade.md), and active `docs/loop/tasks/studio-cursor-hosted/` ORDER. Execute serially from the contract and protected baseline through shell/composer, browser runtime/persistence, optional companion transport, review/editor and final local acceptance. Run the real loopback streaming experiment before choosing NDJSON or polling. Do not start either gated appendix.
+
+Registration found no other open PR touching Studio source, Tauri or product-document paths. Later #3569 work and this item's active ORDERs must be disjoint on overlapping paths; the loop's scope/claim checks enforce that coordination without changing #3569's status or acceptance.
 
 ## Rules that apply
 
