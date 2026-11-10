@@ -18,6 +18,34 @@ pub enum SieveRecall {
     Value(String),
 }
 
+/// How a sieve result is worded on the memory line.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SieveLine {
+    /// The bare value, or `none`: the line artifacts under the mean copy rule
+    /// were trained on.
+    Value,
+    /// A reply sentence around the value: the line a latest-exact copy read
+    /// follows word for word (claude-345, `recall=reply`).
+    Reply,
+}
+
+/// The reply sentence the sieve writes for an absence, without its full stop.
+const ABSENT_REPLY: &str = "You haven't told me that yet";
+
+impl SieveRecall {
+    /// The text after `Memory: `, without the closing full stop the chat layer
+    /// adds; `None` when the turn asked for nothing.
+    pub fn line(&self, form: SieveLine) -> Option<String> {
+        match (self, form) {
+            (Self::NotRequested, _) => None,
+            (Self::Absent, SieveLine::Value) => Some("none".to_owned()),
+            (Self::Absent, SieveLine::Reply) => Some(ABSENT_REPLY.to_owned()),
+            (Self::Value(value), SieveLine::Value) => Some(value.clone()),
+            (Self::Value(value), SieveLine::Reply) => Some(format!("It's {value}")),
+        }
+    }
+}
+
 const QUERY_STOP_WORDS: &[&str] = &[
     "a", "about", "am", "an", "and", "are", "be", "been", "being", "but", "by", "can", "could",
     "did", "do", "does", "for", "from", "had", "has", "have", "he", "her", "hers", "him", "his",
@@ -301,6 +329,24 @@ pub fn recall(history: &[&str], query: &str) -> SieveRecall {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_line_is_worded_by_its_form() {
+        let value = SieveRecall::Value("Maya".to_owned());
+        assert_eq!(value.line(SieveLine::Value).as_deref(), Some("Maya"));
+        assert_eq!(value.line(SieveLine::Reply).as_deref(), Some("It's Maya"));
+        assert_eq!(
+            SieveRecall::Absent.line(SieveLine::Value).as_deref(),
+            Some("none")
+        );
+        assert_eq!(
+            SieveRecall::Absent.line(SieveLine::Reply).as_deref(),
+            Some("You haven't told me that yet")
+        );
+        for form in [SieveLine::Value, SieveLine::Reply] {
+            assert_eq!(SieveRecall::NotRequested.line(form), None);
+        }
+    }
 
     #[test]
     fn extracts_name_and_action_values() {

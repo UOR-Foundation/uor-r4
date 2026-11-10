@@ -78,7 +78,7 @@ pub use content_readout::{
 };
 pub use dialogue_memory::{
     is_query as is_dialogue_query, recall as recall_from_dialogue,
-    recall_value as recall_value_from_dialogue, SieveRecall,
+    recall_value as recall_value_from_dialogue, SieveLine, SieveRecall,
 };
 
 pub use flock::{
