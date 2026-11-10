@@ -1073,7 +1073,21 @@ fn run_fixture(
             "--script".to_owned(),
             script_path.display().to_string(),
         ];
-        if let Some(extra) = case.get("args").and_then(Value::as_array) {
+        if let Some(extra) = case.get("args") {
+            let Some(extra) = extra
+                .as_array()
+                .filter(|extra| extra.iter().all(Value::is_string))
+            else {
+                report.record(
+                    id,
+                    AuditStatus::Mismatch,
+                    Value::String("array of strings".to_owned()),
+                    extra.clone(),
+                    fixture_path.display().to_string(),
+                    "case args must contain only strings",
+                );
+                continue;
+            };
             args.extend(extra.iter().filter_map(Value::as_str).map(str::to_owned));
         }
         let output = Command::new(chat).args(&args).output();
@@ -1121,18 +1135,23 @@ fn run_fixture(
                     }
                 };
                 let mut failures = check_expectation(&record, expectation);
-                if let Some(prior) = expectation.get("same_as").and_then(Value::as_str) {
-                    match seen.get(prior) {
-                        Some(earlier) => {
-                            let projection = transcript_projection(&record);
-                            if &projection != earlier {
-                                failures
-                                    .push(format!("transcript differs from prior case {prior}"));
+                if let Some(same_as) = expectation.get("same_as") {
+                    if let Some(prior) = same_as.as_str() {
+                        match seen.get(prior) {
+                            Some(earlier) => {
+                                let projection = transcript_projection(&record);
+                                if &projection != earlier {
+                                    failures.push(format!(
+                                        "transcript differs from prior case {prior}"
+                                    ));
+                                }
                             }
+                            None => failures.push(format!(
+                                "same_as names {prior}, which has no earlier result"
+                            )),
                         }
-                        None => failures.push(format!(
-                            "same_as names {prior}, which has no earlier result"
-                        )),
+                    } else {
+                        failures.push("same_as is not a string".to_owned());
                     }
                 }
                 seen.insert(case_id.to_owned(), transcript_projection(&record));
@@ -1183,6 +1202,30 @@ fn check_expectation(record: &Value, expectation: &Value) -> Vec<String> {
         .and_then(Value::as_array)
         .map(Vec::as_slice)
         .unwrap_or_default();
+    for key in ["turns", "turn_count", "distinct_replies_min"] {
+        if let Some(value) = expectation.get(key) {
+            if value.as_u64().is_none() {
+                failures.push(format!("{key} is not an unsigned integer"));
+            }
+        }
+    }
+    if expectation
+        .get("all_reply_ids_nonempty")
+        .is_some_and(|value| value.as_bool() != Some(true))
+    {
+        failures.push("all_reply_ids_nonempty is not true".to_owned());
+    }
+    let status = expectation.get("status");
+    if status.is_some_and(|value| !matches!(value.as_str(), Some("record" | "error"))) {
+        failures.push("status is not record or error".to_owned());
+    }
+    if let Some(stderr) = expectation.get("stderr_contains") {
+        if status.and_then(Value::as_str) != Some("error")
+            || stderr.as_str().is_none_or(|text| text.trim().is_empty())
+        {
+            failures.push("stderr_contains is not non-empty error text".to_owned());
+        }
+    }
     if let Some(required) = expectation.get("turns").and_then(Value::as_u64) {
         if turns.len() as u64 != required {
             failures.push(format!("turns: got {}, expected {required}", turns.len()));
@@ -1239,6 +1282,19 @@ fn check_expectation(record: &Value, expectation: &Value) -> Vec<String> {
             }
         }
     }
+    if expectation.get("memory").is_some()
+        && expectation
+            .get("memory")
+            .and_then(Value::as_array)
+            .is_none()
+    {
+        failures.push("memory is not an array of strings".to_owned());
+    }
+    if expectation.get("stops").is_some()
+        && expectation.get("stops").and_then(Value::as_array).is_none()
+    {
+        failures.push("stops is not an array of strings".to_owned());
+    }
     if let Some(patterns) = expectation
         .get("reply_text_contains")
         .and_then(Value::as_array)
@@ -1262,6 +1318,14 @@ fn check_expectation(record: &Value, expectation: &Value) -> Vec<String> {
                 }
             }
         }
+    }
+    if expectation.get("reply_text_contains").is_some()
+        && expectation
+            .get("reply_text_contains")
+            .and_then(Value::as_array)
+            .is_none()
+    {
+        failures.push("reply_text_contains is not an array of strings".to_owned());
     }
     if let Some(minimum) = expectation
         .get("distinct_replies_min")

@@ -30,6 +30,13 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md). Base: `ce3c3e57b`.
   present invalid artifact or present product-path failure as `MISMATCH`, and
   validates/executes recognized assertions, declared-case coverage, copy
   determinism/value carry and exact short-cycle stops.
+- **A second exact-head review found type-level vacuity in that repair.** A
+  recognized expectation name could still carry the wrong JSON type, and a
+  non-string `stderr_contains` could pass a process failure. Contract loading
+  now requires exact integer, boolean, string, and string-array types,
+  `stderr_contains` only with `status = error`, true-only
+  `all_reply_ids_nonempty`, and string-only fixture arguments. Planted tests
+  exercise each wrong-type refusal.
 
 ## What changed
 

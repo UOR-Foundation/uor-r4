@@ -1357,36 +1357,14 @@ fn check_fixture(path: &Path, probe: &Probe) -> Result<(), ModelError> {
                 path.display()
             )));
         }
-        if expect
-            .get("status")
-            .and_then(Value::as_str)
-            .is_some_and(|status| !matches!(status, "record" | "error"))
-        {
-            return Err(ModelError::Inconsistent(format!(
-                "{}: fixture case {id} status is not record or error",
-                path.display()
-            )));
-        }
-        if let Some(same_as) = expect.get("same_as").and_then(Value::as_str) {
-            check_slug("fixture same_as", same_as)?;
-            if same_as == id
-                || !cases
-                    .iter()
-                    .any(|other| other["id"].as_str() == Some(same_as))
+        check_fixture_expectation(path, id, expect, cases)?;
+        if let Some(args) = case.get("args") {
+            if !args
+                .as_array()
+                .is_some_and(|args| args.iter().all(Value::is_string))
             {
                 return Err(ModelError::Inconsistent(format!(
-                    "{}: fixture case {id} same_as must name another fixture case",
-                    path.display()
-                )));
-            }
-        }
-        if let Some(patterns) = expect.get("reply_text_contains").and_then(Value::as_array) {
-            if !patterns
-                .iter()
-                .any(|pattern| pattern.as_str().is_some_and(|p| !p.is_empty()))
-            {
-                return Err(ModelError::Inconsistent(format!(
-                    "{}: fixture case {id} reply_text_contains has no text",
+                    "{}: fixture case {id} args must be an array of strings",
                     path.display()
                 )));
             }
@@ -1430,6 +1408,95 @@ fn normalize_case_name(value: &str) -> String {
         .collect()
 }
 
+fn check_fixture_expectation(
+    path: &Path,
+    id: &str,
+    expect: &serde_json::Map<String, Value>,
+    cases: &[Value],
+) -> Result<(), ModelError> {
+    let bad = |message: &str| {
+        ModelError::Inconsistent(format!("{}: fixture case {id} {message}", path.display()))
+    };
+    for key in ["turns", "turn_count", "distinct_replies_min"] {
+        if let Some(value) = expect.get(key) {
+            if value.as_u64().is_none_or(|value| value == 0) {
+                return Err(bad(&format!("{key} must be a positive integer")));
+            }
+        }
+    }
+    if let Some(value) = expect.get("all_reply_ids_nonempty") {
+        if value.as_bool() != Some(true) {
+            return Err(bad("all_reply_ids_nonempty must be true"));
+        }
+    }
+    for key in ["stops", "memory", "reply_text_contains"] {
+        if let Some(value) = expect.get(key) {
+            if !value
+                .as_array()
+                .is_some_and(|items| items.iter().all(Value::is_string))
+            {
+                return Err(bad(&format!("{key} must be an array of strings")));
+            }
+        }
+    }
+    if let Some(stops) = expect.get("stops").and_then(Value::as_array) {
+        if stops.is_empty()
+            || stops.iter().any(|stop| {
+                !matches!(
+                    stop.as_str(),
+                    Some("eos" | "max_new_tokens" | "short_cycle")
+                )
+            })
+        {
+            return Err(bad("stops must name eos, max_new_tokens or short_cycle"));
+        }
+    }
+    if let Some(memory) = expect.get("memory").and_then(Value::as_array) {
+        if memory
+            .iter()
+            .any(|source| !matches!(source.as_str(), Some("none" | "explicit" | "sieve")))
+        {
+            return Err(bad("memory must name none, explicit or sieve"));
+        }
+    }
+    let status = match expect.get("status") {
+        None => None,
+        Some(value) => match value.as_str() {
+            Some(status @ ("record" | "error")) => Some(status),
+            _ => return Err(bad("status must be record or error")),
+        },
+    };
+    if let Some(stderr) = expect.get("stderr_contains") {
+        if status != Some("error") || stderr.as_str().is_none_or(|text| text.trim().is_empty()) {
+            return Err(bad(
+                "stderr_contains must be non-empty text and needs status = error",
+            ));
+        }
+    }
+    if let Some(same_as) = expect.get("same_as") {
+        let Some(same_as) = same_as.as_str() else {
+            return Err(bad("same_as must be a slug string"));
+        };
+        check_slug("fixture same_as", same_as)?;
+        if same_as == id
+            || !cases
+                .iter()
+                .any(|other| other["id"].as_str() == Some(same_as))
+        {
+            return Err(bad("same_as must name another fixture case"));
+        }
+    }
+    if let Some(patterns) = expect.get("reply_text_contains").and_then(Value::as_array) {
+        if !patterns
+            .iter()
+            .any(|pattern| pattern.as_str().is_some_and(|p| !p.is_empty()))
+        {
+            return Err(bad("reply_text_contains has no text"));
+        }
+    }
+    Ok(())
+}
+
 fn file_sha256(path: &Path) -> Result<String, ModelError> {
     let bytes = fs::read(path).map_err(|error| ModelError::Io(path.to_path_buf(), error))?;
     Ok(Sha256::digest(&bytes)
@@ -1441,6 +1508,7 @@ fn file_sha256(path: &Path) -> Result<String, ModelError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     const VALID: &str = r#"
 spec = "uor-r4.stack-contract/1"
@@ -1695,6 +1763,35 @@ statement = "This contract is not a proof of language capability."
         )
         .expect("fixture write");
         check_fixture(&path, &probe).expect("fixture checks");
+        let valid: Value =
+            serde_json::from_slice(&fs::read(&path).expect("fixture read")).expect("fixture json");
+        for (expectation, expected_error) in [
+            (json!({"turn_count": "1"}), "positive integer"),
+            (json!({"all_reply_ids_nonempty": "true"}), "must be true"),
+            (json!({"same_as": 7}), "slug string"),
+            (
+                json!({"status": "error", "stderr_contains": 42}),
+                "non-empty text",
+            ),
+            (json!({"stops": ["eos", 7]}), "array of strings"),
+        ] {
+            let mut fixture = valid.clone();
+            fixture["cases"][0]["expect"] = expectation;
+            fs::write(&path, serde_json::to_vec(&fixture).expect("fixture json"))
+                .expect("fixture write");
+            let error = check_fixture(&path, &probe)
+                .expect_err("wrong expectation type is refused")
+                .to_string();
+            assert!(error.contains(expected_error), "{error}");
+        }
+        let mut fixture = valid.clone();
+        fixture["cases"][0]["args"] = json!(["--max-tokens", 7]);
+        fs::write(&path, serde_json::to_vec(&fixture).expect("fixture json"))
+            .expect("fixture write");
+        let error = check_fixture(&path, &probe)
+            .expect_err("wrong arg type is refused")
+            .to_string();
+        assert!(error.contains("array of strings"), "{error}");
 
         fs::write(
             &path,
