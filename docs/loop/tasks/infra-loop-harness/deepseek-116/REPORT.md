@@ -95,7 +95,7 @@ No model result was measured and no GPU was used.
 - Contract: `conformance/stack/fbs-arm-r.toml`, schema
   `uor-r4.stack-contract/2`, revision 2.
 - Semantic hash at the checked-in source:
-  `94cee8a031a7e9cdecb4bc7d50fab8471a22c582e69a20231bdfd537e7094c48`.
+  `9a9cf79398532e7776077097b8ce6bf065b4bff8111183ee8c1e33c6f64e9027`.
 - Candidate: `conformance/stack/fbs-arm-rt.toml`.
 - Measured-negative history: `conformance/stack/fbs-arm-rk.toml`.
 - T0 history: `conformance/stack/fbs-b64l-baseline.toml`.
@@ -118,6 +118,10 @@ metadata auditing or the project's loop workflow.
 - The probe fixtures are executable, but no fixture has been passed against a
   local sealed artifact in this worktree.
 - Arm rk remains without an exported integer artifact.
+- Existing `UORLUT01` artifacts predate tokenizer provenance. New exports can
+  bind the tokenizer SHA-256 under `--tokenizer`; an existing artifact reports
+  that one diagnostic as `NOT_RUN` while its shape and serving path are still
+  audited.
 - The deterministic properties are held by executable Rust tests and fixtures,
   not by a Lean proof. Copy tie order, Hamming boundaries, memory precedence,
   EOS/cycle stops and artifact round trips retain their existing focused tests;

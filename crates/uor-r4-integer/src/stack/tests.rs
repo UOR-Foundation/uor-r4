@@ -4173,9 +4173,12 @@ fn optional_contract_provenance_changes_only_the_source_object() {
     .expect("no-provenance export");
     assert_eq!(without, base);
 
-    let provenance = super::StackContractProvenance {
-        source: "conformance/stack/fbs-arm-r.toml".to_owned(),
-        sha256: "a".repeat(64),
+    let provenance = super::FbsExportProvenance {
+        stack_contract: Some(super::StackContractProvenance {
+            source: "conformance/stack/fbs-arm-r.toml".to_owned(),
+            sha256: "a".repeat(64),
+        }),
+        tokenizer_sha256: Some("b".repeat(64)),
     };
     let with = super::export_fbs_trunk_uorlut01_with_provenance(
         &snap,
@@ -4189,12 +4192,13 @@ fn optional_contract_provenance_changes_only_the_source_object() {
     let metadata = super::inspect_uorlut01(&with).expect("provenance metadata");
     assert_eq!(
         metadata.source["stack_contract"]["source"],
-        provenance.source
+        "conformance/stack/fbs-arm-r.toml"
     );
     assert_eq!(
         metadata.source["stack_contract"]["sha256"],
-        provenance.sha256
+        "a".repeat(64)
     );
+    assert_eq!(metadata.source["tokenizer_sha256"], "b".repeat(64));
     assert_eq!(
         metadata.shape,
         super::inspect_uorlut01(&base).expect("base metadata").shape

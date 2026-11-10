@@ -27,8 +27,8 @@
         "all_reply_ids_nonempty": true,
         "stops": [
           "eos",
-          "cap",
-          "short-cycle"
+          "max_new_tokens",
+          "short_cycle"
         ],
         "memory": [
           "none",
@@ -60,8 +60,8 @@
         "all_reply_ids_nonempty": true,
         "stops": [
           "eos",
-          "cap",
-          "short-cycle"
+          "max_new_tokens",
+          "short_cycle"
         ],
         "memory": [
           "none",

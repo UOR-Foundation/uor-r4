@@ -1787,6 +1787,18 @@ pub struct StackContractProvenance {
     pub sha256: String,
 }
 
+/// Optional diagnostic provenance written beside the serving source object.
+/// Neither field is read by serving arithmetic.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct FbsExportProvenance {
+    /// The exact stack contract that produced the export.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stack_contract: Option<StackContractProvenance>,
+    /// SHA-256 of the tokenizer paired with the artifact.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tokenizer_sha256: Option<String>,
+}
+
 impl FbsExportSnaps {
     /// Everything snapped, the `uor-r4.lut-stack/4` contract.
     pub const SNAPPED: Self = Self {
@@ -1861,7 +1873,7 @@ pub fn export_fbs_trunk_uorlut01_with_provenance(
     snaps: FbsExportSnaps,
     context: Option<usize>,
     tail: usize,
-    provenance: Option<&StackContractProvenance>,
+    provenance: Option<&FbsExportProvenance>,
 ) -> Result<Vec<u8>, StackError> {
     if tail > 0 && snap.memory.as_ref().and_then(|memory| memory.reply.as_ref()).is_none() {
         return Err(StackError::Shape(
@@ -1898,7 +1910,7 @@ fn export_fbs_trunk(
     snaps: FbsExportSnaps,
     carry: Option<usize>,
     chain: Option<usize>,
-    provenance: Option<&StackContractProvenance>,
+    provenance: Option<&FbsExportProvenance>,
 ) -> Result<Vec<u8>, StackError> {
     let shape = StackShape {
         vocab: snap.vocab,
@@ -2152,7 +2164,12 @@ fn export_fbs_trunk(
         header["source"]["trained_context"] = json!(snap.context);
     }
     if let Some(provenance) = provenance {
-        header["source"]["stack_contract"] = json!(provenance);
+        if let Some(contract) = &provenance.stack_contract {
+            header["source"]["stack_contract"] = json!(contract);
+        }
+        if let Some(tokenizer_sha256) = &provenance.tokenizer_sha256 {
+            header["source"]["tokenizer_sha256"] = json!(tokenizer_sha256);
+        }
     }
     let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
     let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + b.data.len());

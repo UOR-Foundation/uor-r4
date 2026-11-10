@@ -97,7 +97,7 @@ pub use format::{
     FbsQuatMode, FbsReferenceSnaps, FbsRoutes, FbsTieMargins, FbsTrunkLayer, FbsTrunkSnapshot,
     FbsWriterOutput, Fixed, FloatTrunkLayer, FloatTrunkMixer, FloatTrunkRead, FloatTrunkRecurrence,
     FloatTrunkSnapshot, StackMemory, StackNumerics, StackPointer, StackReadSelect, StackShape,
-    StackArtifactMetadata, StackContractProvenance, StackTransportSnap, GROUP, MAGIC, MAX_POINTER_DIM, MAX_READ_SELECT, STACK_FBS_RAW_SCHEMA,
+    FbsExportProvenance, StackArtifactMetadata, StackContractProvenance, StackTransportSnap, GROUP, MAGIC, MAX_POINTER_DIM, MAX_READ_SELECT, STACK_FBS_RAW_SCHEMA,
     STACK_FBS_SCHEMA, STACK_POINTER_SCHEMA, STACK_READ_SCHEMA, STACK_SCHEMA,
 };
 pub use format::{

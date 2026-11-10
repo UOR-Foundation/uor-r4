@@ -287,7 +287,7 @@ timeout_seconds = 7200
 id = "export"
 role = "export"
 program = "fbs-export"
-args = ["--raw-gates", "--raw-transition", "--run-config", "config.json", "--stack-contract", "conformance/stack/fbs-arm-r.toml", "--context", "8256", "SNAPSHOT_JSON", "r.uorlut"]
+args = ["--raw-gates", "--raw-transition", "--run-config", "config.json", "--stack-contract", "conformance/stack/fbs-arm-r.toml", "--tokenizer", "tokenizer.json", "--context", "8256", "SNAPSHOT_JSON", "r.uorlut"]
 env = []
 inputs = ["model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors", "config.json"]
 outputs = ["r.uorlut"]
@@ -376,7 +376,7 @@ axis = "candidate count and tie order"
 expectation = "A source is available to a later question and a fresh rerun is deterministic."
 cases = ["source present", "kept-set order"]
 fixture = "conformance/stack/fixtures/copy-boundary.v2.json"
-fixture_sha256 = "f66d4c0d031c28e11329305ca5572f1e3b870b9d4efc943275d8dc435d75dc60"
+fixture_sha256 = "37c09c3cf0d9d88b3c2df69c761ef4507d19c8859bf24a04afe69b91ae6dd511"
 layers = ["chat"]
 
 [[probes]]
@@ -398,7 +398,7 @@ axis = "cycle period"
 expectation = "Every served reply reports a terminal EOS, cap or short-cycle stop."
 cases = ["recorded stop", "no unreported exhaustion"]
 fixture = "conformance/stack/fixtures/cycle-boundary.v2.json"
-fixture_sha256 = "c9fe9c75c79acf1a6261d26c08b98155f486559005be682e7e67427c45067e17"
+fixture_sha256 = "6954ced6f1bf494076290c63599a4d084bfee13b4c4ccad1bafe80d103c5797a"
 layers = ["chat"]
 
 [[probes]]

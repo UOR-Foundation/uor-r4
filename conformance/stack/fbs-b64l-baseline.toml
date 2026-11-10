@@ -199,7 +199,7 @@ timeout_seconds = 1800
 id = "export"
 role = "export"
 program = "fbs-export"
-args = ["--raw-gates", "--raw-transition", "--run-config", "config.json", "--stack-contract", "conformance/stack/fbs-b64l-baseline.toml", "--context", "192", "SNAPSHOT_JSON", "t0.uorlut"]
+args = ["--raw-gates", "--raw-transition", "--run-config", "config.json", "--stack-contract", "conformance/stack/fbs-b64l-baseline.toml", "--tokenizer", "tokenizer.json", "--context", "192", "SNAPSHOT_JSON", "t0.uorlut"]
 env = []
 inputs = ["model.safetensors", "hamming_read.safetensors", "config.json"]
 outputs = ["t0.uorlut"]
@@ -260,7 +260,7 @@ axis = "candidate count and tie order"
 expectation = "The kept set and tie order are stable."
 cases = ["source present", "kept-set order"]
 fixture = "conformance/stack/fixtures/copy-boundary.v2.json"
-fixture_sha256 = "f66d4c0d031c28e11329305ca5572f1e3b870b9d4efc943275d8dc435d75dc60"
+fixture_sha256 = "37c09c3cf0d9d88b3c2df69c761ef4507d19c8859bf24a04afe69b91ae6dd511"
 layers = ["chat"]
 
 [[probes]]

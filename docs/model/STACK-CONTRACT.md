@@ -18,8 +18,8 @@ A stack contract makes one model composition explicit across source, configurati
 
 The replicated three-seed configuration: float training of the SpiralCore/FBS trunk, latest-exact Hamming copy reads, a reply-worded turn memory, and the uor-r4.lut-stack/7 integer artifact served by the product chat path.
 
-- Source: `conformance/stack/fbs-arm-r.toml` (BLAKE3 `ed5fffc1a0b02e407ad6d682a87e55518c4e83432b930cff994cf3324fa8545b`)
-- Semantic hash: `94cee8a031a7e9cdecb4bc7d50fab8471a22c582e69a20231bdfd537e7094c48`
+- Source: `conformance/stack/fbs-arm-r.toml` (BLAKE3 `2637710c2a8f807f00105a50e6afdf0c9d926bd2fddd742010e7d93151e5d43f`)
+- Semantic hash: `9a9cf79398532e7776077097b8ce6bf065b4bff8111183ee8c1e33c6f64e9027`
 - Lane: `fbs`
 - State: `current`
 - Revision: 2
@@ -109,7 +109,7 @@ Schema: `uor-r4.lut-stack/7`
   - env --; inputs `train-tokens`<br>`train-mask`<br>`tokenizer`; outputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`; timeout 21600s
 - **score (`score`)**: `train-in-space --score-rows CHECKPOINT --panel line --sample-opening last --samples 1200 --context 192 --reply-tokens 48 --retain-rates 1`
   - env --; inputs `line-panel`<br>`no-line-panel`; outputs `score.json`; timeout 7200s
-- **export (`export`)**: `fbs-export --raw-gates --raw-transition --run-config config.json --stack-contract conformance/stack/fbs-arm-r.toml --context 8256 SNAPSHOT_JSON r.uorlut`
+- **export (`export`)**: `fbs-export --raw-gates --raw-transition --run-config config.json --stack-contract conformance/stack/fbs-arm-r.toml --tokenizer tokenizer.json --context 8256 SNAPSHOT_JSON r.uorlut`
   - env --; inputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`; outputs `r.uorlut`; timeout 1800s
 - **serve (`serve`)**: `uor-chat --stack r.uorlut --tokenizer tokenizer.json --protocol 2 --max-tokens 48`
   - env --; inputs `r.uorlut`<br>`tokenizer`; outputs `chat.json`; timeout 300s
@@ -126,8 +126,8 @@ Schema: `uor-r4.lut-stack/7`
 
 Arm r at seed 2 with copy head 0 on one-token keys and copy head 1 on two-token keys. It closed this configuration as a measured negative while leaving two-token keys themselves unretired.
 
-- Source: `conformance/stack/fbs-arm-rk.toml` (BLAKE3 `356a67445660c889d82f17a155641f10c94c3e3a298d1660c5ec7757351c3632`)
-- Semantic hash: `c7a3e945da5b454d6a7d70cd55d5e9875a169ccc58c51b432c81adfbf9063daf`
+- Source: `conformance/stack/fbs-arm-rk.toml` (BLAKE3 `7bac224adab52019031edd34a6a7b4c6a9817ba2b7b932d9f77cf04bd03aca23`)
+- Semantic hash: `3d83487a1cab94c111dc6fa9566e4835df95a734aee072bb6c6ddfba969f3582`
 - Lane: `fbs`
 - State: `historical`
 - Revision: 1
@@ -209,7 +209,7 @@ Schema: `uor-r4.lut-stack/7`
   - env --; inputs `train-tokens`<br>`train-mask`<br>`tokenizer`; outputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`; timeout 21600s
 - **score (`score`)**: `train-in-space --score-rows CHECKPOINT --panel line --sample-opening last --samples 1200 --context 192 --reply-tokens 48 --retain-rates 1`
   - env --; inputs `train-tokens`; outputs `score.json`; timeout 7200s
-- **export (`export`)**: `fbs-export --raw-gates --raw-transition --run-config config.json --stack-contract conformance/stack/fbs-arm-rk.toml --context 8256 SNAPSHOT_JSON rk.uorlut`
+- **export (`export`)**: `fbs-export --raw-gates --raw-transition --run-config config.json --stack-contract conformance/stack/fbs-arm-rk.toml --tokenizer tokenizer.json --context 8256 SNAPSHOT_JSON rk.uorlut`
   - env --; inputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`; outputs `rk.uorlut`; timeout 1800s
 - **audit (`verify`)**: `cargo xtask stack-audit --contract conformance/stack/fbs-arm-rk.toml`
   - env --; inputs `fbs-arm-rk.toml`; outputs `stack-audit.json`; timeout 300s
@@ -224,8 +224,8 @@ Schema: `uor-r4.lut-stack/7`
 
 Arm r's replicated configuration plus a turn-memory tail of nine: the uor-r4.lut-stack/9 reply table asks ends, tail and head. It reads row 1 at three seeds but makes copied values wrong more often than arm r.
 
-- Source: `conformance/stack/fbs-arm-rt.toml` (BLAKE3 `b4c586abaa3b240e87ee30d2a3257f052d63b7b05961111fde9c01132f448241`)
-- Semantic hash: `de32eb6480731bfdbbebab3cee9148c436e65f9475ce12583c3536eda961a850`
+- Source: `conformance/stack/fbs-arm-rt.toml` (BLAKE3 `705fe60097a3b9296eae79e628091c8664c51181119e42004b1e1dbe792281e9`)
+- Semantic hash: `237b0cee3f5406b8e7d8c5809babde29542361ac06bd53522decb895bd777757`
 - Lane: `fbs`
 - State: `candidate`
 - Revision: 1
@@ -311,7 +311,7 @@ Schema: `uor-r4.lut-stack/9`
   - env --; inputs `train-tokens`<br>`train-mask`<br>`tokenizer`; outputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`; timeout 21600s
 - **score (`score`)**: `train-in-space --score-rows CHECKPOINT --panel line --sample-opening last --samples 1200 --context 192 --reply-tokens 48 --retain-rates 1`
   - env --; inputs `train-tokens`; outputs `score.json`; timeout 7200s
-- **export (`export`)**: `fbs-export --raw-gates --raw-transition --run-config config.json --stack-contract conformance/stack/fbs-arm-rt.toml --context 8256 SNAPSHOT_JSON rt.uorlut`
+- **export (`export`)**: `fbs-export --raw-gates --raw-transition --run-config config.json --stack-contract conformance/stack/fbs-arm-rt.toml --tokenizer tokenizer.json --context 8256 SNAPSHOT_JSON rt.uorlut`
   - env --; inputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`; outputs `rt.uorlut`; timeout 1800s
 - **serve (`serve`)**: `uor-chat --stack rt.uorlut --tokenizer tokenizer.json --protocol 2 --max-tokens 48`
   - env --; inputs `rt.uorlut`<br>`tokenizer`; outputs `chat.json`; timeout 300s
@@ -328,8 +328,8 @@ Schema: `uor-r4.lut-stack/9`
 
 The T0 memorize configuration: the float-trained FBS trunk with four Hamming read heads, trained as served on the pinned tokenizer and scored by whole-table nearest. The sealed checkpoints were not exported.
 
-- Source: `conformance/stack/fbs-b64l-baseline.toml` (BLAKE3 `a5dfda2d730f0b1fde12016b8b4e5f85fa534f692f334ae5e204a489de0691f9`)
-- Semantic hash: `07bbfc76261a218b5e1aae33c9dd794ea11d271ce9c48857b2254aac3cb81b6e`
+- Source: `conformance/stack/fbs-b64l-baseline.toml` (BLAKE3 `853e90e5915c5ecd4d34b86333490fc49a112b0367ae1f6edaf743979c88119c`)
+- Semantic hash: `7ed8f25c76ebd9201f232c8db09433e81fd912ab0e0094667ba4f409e5657cb7`
 - Lane: `fbs`
 - State: `historical`
 - Revision: 2
@@ -409,7 +409,7 @@ Schema: `uor-r4.lut-stack/6`
   - env --; inputs `train-tokens`<br>`train-mask`; outputs `model.safetensors`<br>`hamming_read.safetensors`<br>`config.json`; timeout 7200s
 - **score (`score`)**: `train-in-space --score-rows CHECKPOINT --context 192 --reply-tokens 48 --samples 1200 --retain-rates 1`
   - env --; inputs `dev-tokens`<br>`dev-mask`; outputs `score.json`; timeout 1800s
-- **export (`export`)**: `fbs-export --raw-gates --raw-transition --run-config config.json --stack-contract conformance/stack/fbs-b64l-baseline.toml --context 192 SNAPSHOT_JSON t0.uorlut`
+- **export (`export`)**: `fbs-export --raw-gates --raw-transition --run-config config.json --stack-contract conformance/stack/fbs-b64l-baseline.toml --tokenizer tokenizer.json --context 192 SNAPSHOT_JSON t0.uorlut`
   - env --; inputs `model.safetensors`<br>`hamming_read.safetensors`<br>`config.json`; outputs `t0.uorlut`; timeout 1800s
 - **audit (`verify`)**: `cargo xtask stack-audit --contract conformance/stack/fbs-b64l-baseline.toml`
   - env --; inputs `fbs-b64l-baseline.toml`; outputs `stack-audit.json`; timeout 300s

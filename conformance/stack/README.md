@@ -51,6 +51,11 @@ never promoted to `MATCH`. With a chat binary, the audit runs the actual
 `uor-chat --script` product path; with the artifact path it also checks every
 registered probe fixture through that path.
 
+New artifacts can bind the exact contract and tokenizer with
+`fbs-export --stack-contract <TOML> --tokenizer <tokenizer.json>`. Both values
+are diagnostic source metadata; serving arithmetic does not read them. Older
+artifacts report that optional binding as `NOT_RUN`.
+
 Adding a contract:
 
 1. Copy an existing `.toml` file and give it a new lower-kebab-case `id`.

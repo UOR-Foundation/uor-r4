@@ -675,6 +675,23 @@ fn audit_artifact(
             "the artifact was exported without --stack-contract; serving does not require it",
         ),
     }
+    match artifact.source.get("tokenizer_sha256") {
+        Some(tokenizer) => report.compare(
+            "artifact-tokenizer-sha256",
+            Value::String(contract.model.tokenizer_sha256.clone()),
+            tokenizer.clone(),
+            path,
+            "optional diagnostic provenance binds the artifact to the contract tokenizer",
+        ),
+        None => report.record(
+            "artifact-tokenizer-sha256",
+            AuditStatus::NotRun,
+            Value::String("optional diagnostic provenance".to_owned()),
+            Value::Null,
+            path.display().to_string(),
+            "the artifact predates tokenizer provenance; its shape is still audited",
+        ),
+    }
 }
 
 fn audit_tokenizer(
@@ -1209,7 +1226,7 @@ mod tests {
                 },
                 {
                     "reply_ids": [8, 9],
-                    "stop": "cap",
+                    "stop": "max_new_tokens",
                     "memory": "explicit",
                     "reply_text": "It's 47."
                 }
@@ -1218,7 +1235,7 @@ mod tests {
         let expectation = serde_json::json!({
             "turns": 2,
             "all_reply_ids_nonempty": true,
-            "stops": ["eos", "cap", "short-cycle"],
+            "stops": ["eos", "max_new_tokens", "short_cycle"],
             "memory": ["none", "explicit"],
             "distinct_replies_min": 2
         });
@@ -1232,7 +1249,9 @@ mod tests {
         });
         let failures = check_expectation(&record, &wrong);
         assert!(failures.iter().any(|failure| failure.contains("turns")));
-        assert!(failures.iter().any(|failure| failure.contains("cap")));
+        assert!(failures
+            .iter()
+            .any(|failure| failure.contains("max_new_tokens")));
         assert!(failures.iter().any(|failure| failure.contains("memory")));
         assert!(failures
             .iter()

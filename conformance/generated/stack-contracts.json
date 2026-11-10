@@ -148,6 +148,8 @@
               "config.json",
               "--stack-contract",
               "conformance/stack/fbs-arm-r.toml",
+              "--tokenizer",
+              "tokenizer.json",
               "--context",
               "8256",
               "SNAPSHOT_JSON",
@@ -640,7 +642,7 @@
             "class": "boundary",
             "expectation": "A source is available to a later question and a fresh rerun is deterministic.",
             "fixture": "conformance/stack/fixtures/copy-boundary.v2.json",
-            "fixture_sha256": "f66d4c0d031c28e11329305ca5572f1e3b870b9d4efc943275d8dc435d75dc60",
+            "fixture_sha256": "37c09c3cf0d9d88b3c2df69c761ef4507d19c8859bf24a04afe69b91ae6dd511",
             "id": "copy-boundary",
             "layers": [
               "chat"
@@ -673,7 +675,7 @@
             "class": "boundary",
             "expectation": "Every served reply reports a terminal EOS, cap or short-cycle stop.",
             "fixture": "conformance/stack/fixtures/cycle-boundary.v2.json",
-            "fixture_sha256": "c9fe9c75c79acf1a6261d26c08b98155f486559005be682e7e67427c45067e17",
+            "fixture_sha256": "6954ced6f1bf494076290c63599a4d084bfee13b4c4ccad1bafe80d103c5797a",
             "id": "cycle-period-boundary",
             "layers": [
               "chat"
@@ -750,9 +752,9 @@
         "summary": "The replicated three-seed configuration: float training of the SpiralCore/FBS trunk, latest-exact Hamming copy reads, a reply-worded turn memory, and the uor-r4.lut-stack/7 integer artifact served by the product chat path.",
         "title": "FBS arm r: latest-exact copy with reply-worded memory"
       },
-      "semantic_blake3": "94cee8a031a7e9cdecb4bc7d50fab8471a22c582e69a20231bdfd537e7094c48",
+      "semantic_blake3": "9a9cf79398532e7776077097b8ce6bf065b4bff8111183ee8c1e33c6f64e9027",
       "source": "conformance/stack/fbs-arm-r.toml",
-      "source_blake3": "ed5fffc1a0b02e407ad6d682a87e55518c4e83432b930cff994cf3324fa8545b"
+      "source_blake3": "2637710c2a8f807f00105a50e6afdf0c9d926bd2fddd742010e7d93151e5d43f"
     },
     {
       "contract": {
@@ -903,6 +905,8 @@
               "config.json",
               "--stack-contract",
               "conformance/stack/fbs-arm-rk.toml",
+              "--tokenizer",
+              "tokenizer.json",
               "--context",
               "8256",
               "SNAPSHOT_JSON",
@@ -1298,7 +1302,7 @@
             "class": "boundary",
             "expectation": "A source is available and rerun is deterministic.",
             "fixture": "conformance/stack/fixtures/copy-boundary.v2.json",
-            "fixture_sha256": "f66d4c0d031c28e11329305ca5572f1e3b870b9d4efc943275d8dc435d75dc60",
+            "fixture_sha256": "37c09c3cf0d9d88b3c2df69c761ef4507d19c8859bf24a04afe69b91ae6dd511",
             "id": "copy-boundary",
             "layers": [
               "chat"
@@ -1359,9 +1363,9 @@
         "summary": "Arm r at seed 2 with copy head 0 on one-token keys and copy head 1 on two-token keys. It closed this configuration as a measured negative while leaving two-token keys themselves unretired.",
         "title": "FBS arm rk: mixed one- and two-token copy keys"
       },
-      "semantic_blake3": "c7a3e945da5b454d6a7d70cd55d5e9875a169ccc58c51b432c81adfbf9063daf",
+      "semantic_blake3": "3d83487a1cab94c111dc6fa9566e4835df95a734aee072bb6c6ddfba969f3582",
       "source": "conformance/stack/fbs-arm-rk.toml",
-      "source_blake3": "356a67445660c889d82f17a155641f10c94c3e3a298d1660c5ec7757351c3632"
+      "source_blake3": "7bac224adab52019031edd34a6a7b4c6a9817ba2b7b932d9f77cf04bd03aca23"
     },
     {
       "contract": {
@@ -1521,6 +1525,8 @@
               "config.json",
               "--stack-contract",
               "conformance/stack/fbs-arm-rt.toml",
+              "--tokenizer",
+              "tokenizer.json",
               "--context",
               "8256",
               "SNAPSHOT_JSON",
@@ -1987,7 +1993,7 @@
             "class": "boundary",
             "expectation": "A source is available and rerun is deterministic.",
             "fixture": "conformance/stack/fixtures/copy-boundary.v2.json",
-            "fixture_sha256": "f66d4c0d031c28e11329305ca5572f1e3b870b9d4efc943275d8dc435d75dc60",
+            "fixture_sha256": "37c09c3cf0d9d88b3c2df69c761ef4507d19c8859bf24a04afe69b91ae6dd511",
             "id": "copy-boundary",
             "layers": [
               "chat"
@@ -2072,9 +2078,9 @@
         "summary": "Arm r's replicated configuration plus a turn-memory tail of nine: the uor-r4.lut-stack/9 reply table asks ends, tail and head. It reads row 1 at three seeds but makes copied values wrong more often than arm r.",
         "title": "FBS arm rt: three-key turn memory"
       },
-      "semantic_blake3": "de32eb6480731bfdbbebab3cee9148c436e65f9475ce12583c3536eda961a850",
+      "semantic_blake3": "237b0cee3f5406b8e7d8c5809babde29542361ac06bd53522decb895bd777757",
       "source": "conformance/stack/fbs-arm-rt.toml",
-      "source_blake3": "b4c586abaa3b240e87ee30d2a3257f052d63b7b05961111fde9c01132f448241"
+      "source_blake3": "705fe60097a3b9296eae79e628091c8664c51181119e42004b1e1dbe792281e9"
     },
     {
       "contract": {
@@ -2198,6 +2204,8 @@
               "config.json",
               "--stack-contract",
               "conformance/stack/fbs-b64l-baseline.toml",
+              "--tokenizer",
+              "tokenizer.json",
               "--context",
               "192",
               "SNAPSHOT_JSON",
@@ -2511,7 +2519,7 @@
             "class": "boundary",
             "expectation": "The kept set and tie order are stable.",
             "fixture": "conformance/stack/fixtures/copy-boundary.v2.json",
-            "fixture_sha256": "f66d4c0d031c28e11329305ca5572f1e3b870b9d4efc943275d8dc435d75dc60",
+            "fixture_sha256": "37c09c3cf0d9d88b3c2df69c761ef4507d19c8859bf24a04afe69b91ae6dd511",
             "id": "copy-boundary",
             "layers": [
               "chat"
@@ -2570,9 +2578,9 @@
         "summary": "The T0 memorize configuration: the float-trained FBS trunk with four Hamming read heads, trained as served on the pinned tokenizer and scored by whole-table nearest. The sealed checkpoints were not exported.",
         "title": "FBS b64L complete-reply baseline"
       },
-      "semantic_blake3": "07bbfc76261a218b5e1aae33c9dd794ea11d271ce9c48857b2254aac3cb81b6e",
+      "semantic_blake3": "7ed8f25c76ebd9201f232c8db09433e81fd912ab0e0094667ba4f409e5657cb7",
       "source": "conformance/stack/fbs-b64l-baseline.toml",
-      "source_blake3": "a5dfda2d730f0b1fde12016b8b4e5f85fa534f692f334ae5e204a489de0691f9"
+      "source_blake3": "853e90e5915c5ecd4d34b86333490fc49a112b0367ae1f6edaf743979c88119c"
     }
   ],
   "schema": "uor-r4.stack-contract.generated/2",

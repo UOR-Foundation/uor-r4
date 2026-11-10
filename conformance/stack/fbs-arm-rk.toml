@@ -256,7 +256,7 @@ timeout_seconds = 7200
 id = "export"
 role = "export"
 program = "fbs-export"
-args = ["--raw-gates", "--raw-transition", "--run-config", "config.json", "--stack-contract", "conformance/stack/fbs-arm-rk.toml", "--context", "8256", "SNAPSHOT_JSON", "rk.uorlut"]
+args = ["--raw-gates", "--raw-transition", "--run-config", "config.json", "--stack-contract", "conformance/stack/fbs-arm-rk.toml", "--tokenizer", "tokenizer.json", "--context", "8256", "SNAPSHOT_JSON", "rk.uorlut"]
 env = []
 inputs = ["model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors", "config.json"]
 outputs = ["rk.uorlut"]
@@ -318,7 +318,7 @@ axis = "candidate count and tie order"
 expectation = "A source is available and rerun is deterministic."
 cases = ["source present", "kept-set order"]
 fixture = "conformance/stack/fixtures/copy-boundary.v2.json"
-fixture_sha256 = "f66d4c0d031c28e11329305ca5572f1e3b870b9d4efc943275d8dc435d75dc60"
+fixture_sha256 = "37c09c3cf0d9d88b3c2df69c761ef4507d19c8859bf24a04afe69b91ae6dd511"
 layers = ["chat"]
 
 [[probes]]

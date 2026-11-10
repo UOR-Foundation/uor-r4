@@ -66,11 +66,11 @@ use uor_r4_integer::fbs_snapshot::{
 use uor_r4_integer::stack::{
     add_hamming_ask_uorlut01, add_point_key_uorlut01, build_point_key, check_point_key_read_back,
     export_fbs_trunk_uorlut01_with_provenance, point_key_windows, set_hamming_copy_latest_uorlut01,
-    AskImage, FbsExportSnaps, FbsTrunkSnapshot, IntegerStackModel, StackContractProvenance,
-    POINT_KEY_BOS, POINT_KEY_WINDOW,
+    AskImage, FbsExportProvenance, FbsExportSnaps, FbsTrunkSnapshot, IntegerStackModel,
+    StackContractProvenance, POINT_KEY_BOS, POINT_KEY_WINDOW,
 };
 
-const USAGE: &str = "usage: fbs-export [--raw-gates] [--raw-transition] [--run-config CONFIG_JSON] [--stack-contract TOML] [--context C] SNAPSHOT_JSON OUT_PATH\n       fbs-export --point-key [--point-vote-k N] ARTIFACT TOKENS_U16 RESPONSE_MASK_U8 OUT_PATH";
+const USAGE: &str = "usage: fbs-export [--raw-gates] [--raw-transition] [--run-config CONFIG_JSON] [--stack-contract TOML] [--tokenizer TOKENIZER_JSON] [--context C] SNAPSHOT_JSON OUT_PATH\n       fbs-export --point-key [--point-vote-k N] ARTIFACT TOKENS_U16 RESPONSE_MASK_U8 OUT_PATH";
 
 fn check_run_export_contract(config: &str, snaps: FbsExportSnaps) -> Result<(), String> {
     let value: serde_json::Value =
@@ -168,6 +168,7 @@ fn run() -> Result<(), String> {
     let mut chain_tail = 0usize;
     let mut carry = None::<usize>;
     let mut stack_contract = None::<String>;
+    let mut provenance_tokenizer = None::<String>;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -206,6 +207,15 @@ fn run() -> Result<(), String> {
                 stack_contract = Some(
                     args.next()
                         .ok_or_else(|| format!("--stack-contract needs a path: {USAGE}"))?,
+                )
+            }
+            "--tokenizer" if provenance_tokenizer.is_some() => {
+                return Err("--tokenizer given twice".to_owned())
+            }
+            "--tokenizer" => {
+                provenance_tokenizer = Some(
+                    args.next()
+                        .ok_or_else(|| format!("--tokenizer needs a path: {USAGE}"))?,
                 )
             }
             flag if flag.starts_with("--") => return Err(format!("{flag}: {USAGE}")),
@@ -308,7 +318,7 @@ fn run() -> Result<(), String> {
     }
     // A run trained with a memory chain (claude-345) writes its record with the export, so the
     // export reads its reply keys back at that exact tail.
-    let provenance = match stack_contract {
+    let stack_contract = match stack_contract {
         None => None,
         Some(path) => {
             let bytes = std::fs::read(&path).map_err(|e| format!("{path}: {e}"))?;
@@ -321,6 +331,18 @@ fn run() -> Result<(), String> {
             })
         }
     };
+    let tokenizer_sha256 = match provenance_tokenizer {
+        None => None,
+        Some(path) => {
+            let bytes = std::fs::read(&path).map_err(|e| format!("{path}: {e}"))?;
+            Some(hex::encode(Sha256::digest(&bytes)))
+        }
+    };
+    let provenance =
+        (stack_contract.is_some() || tokenizer_sha256.is_some()).then_some(FbsExportProvenance {
+            stack_contract,
+            tokenizer_sha256,
+        });
     let artifact = export_fbs_trunk_uorlut01_with_provenance(
         &snap,
         snaps,
