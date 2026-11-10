@@ -4,7 +4,9 @@ import type { ComposerInputController } from '../adapters/composerInput.js';
 import { GENERATION_FINISHED_EVENT } from '../adapters/generation.js';
 import type { GenerationAdapter } from '../adapters/generation.js';
 import type { Attachment, SessionApi, StudioUiApi, WorkspaceApi } from '../adapters/workflow.js';
+import type { AgentClient } from '../agent/client.js';
 import type { LifecycleStore } from '../state/lifecycle.js';
+import type { RunView, TaskView } from '../state/agent.js';
 import { useLifecycle } from '../state/useLifecycle.js';
 import { AgentTranscript } from './AgentTranscript.js';
 import { attachmentSize, draftFromStoredAttachment, planAttachmentBatch } from './ComposerAttachments.js';
@@ -13,6 +15,7 @@ import { MAX_DOCUMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES } from './ComposerAttach
 import { LOCAL_TEMPLATES } from './ComposerMenu.js';
 import { ComposerSurface } from './ComposerSurface.js';
 import type { PermissionMode } from './PermissionPicker.js';
+import { isActiveRun } from './SendModeControls.js';
 import { Icon } from './ui/Icon.js';
 
 interface AgentComposerProps {
@@ -27,6 +30,9 @@ interface AgentComposerProps {
     pasted?: string;
     onDraftChange?(value: string): void;
     onPastedChange?(value: string): void;
+    agentClient?: AgentClient | null;
+    agentTask?: TaskView | null;
+    activeRun?: RunView | null;
 }
 
 let insertSequence = 0;
@@ -44,7 +50,7 @@ function revokePreview(draft: AttachmentDraft): void {
     }
 }
 
-export function AgentComposer({ store, sessions, files, ui, generation, copy, download, draft: controlledDraft, pasted: controlledPasted, onDraftChange, onPastedChange }: AgentComposerProps) {
+export function AgentComposer({ store, sessions, files, ui, generation, copy, download, draft: controlledDraft, pasted: controlledPasted, onDraftChange, onPastedChange, agentClient = null, agentTask = null, activeRun = null }: AgentComposerProps) {
     const state = useLifecycle(store);
     const [pastedState, setPastedState] = useState('');
     const pasted = controlledPasted ?? pastedState;
@@ -190,10 +196,89 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
         : predictionMode ? 'Local next-token prediction'
         : selected.kind === 'artifact' ? 'Local generation' : 'API chat';
 
-    function send(prompt: string): boolean {
+    const activeTaskRun = isActiveRun(activeRun) ? activeRun : null;
+    const agentMode = agentClient !== null;
+    const sendDisabled = agentMode ? Boolean(activeTaskRun) : !store.canRun();
+
+    function failureMessage(prefix: string, failure: unknown): string {
+        return `${prefix}: ${failure instanceof Error ? failure.message : String(failure)}`;
+    }
+
+    function send(prompt: string): boolean | Promise<boolean> {
+        if (agentClient) {
+            if (!agentTask) {
+                ui.toast('Select a task before sending.', 'error');
+                return false;
+            }
+            if (activeTaskRun) {
+                ui.toast('This task already has an active run. Queue, steer or force the message instead.', 'error');
+                return false;
+            }
+            return agentClient.startRun({ taskId: agentTask.taskId, prompt }).then(() => {
+                refresh();
+                return true;
+            }, (failure: unknown) => {
+                ui.toast(failureMessage('Run could not start', failure), 'error');
+                return false;
+            });
+        }
         if (!generation.send(prompt)) return false;
         refresh();
         return true;
+    }
+
+    function queue(prompt: string): boolean | Promise<boolean> {
+        if (!agentClient || !agentTask || !activeTaskRun) {
+            ui.toast('Queue requires a selected task with an active run.', 'error');
+            return false;
+        }
+        return agentClient.queueMessage({ taskId: agentTask.taskId, text: prompt }).then(() => {
+            refresh();
+            return true;
+        }, (failure: unknown) => {
+            ui.toast(failureMessage('Queue failed', failure), 'error');
+            return false;
+        });
+    }
+
+    function steer(prompt: string): boolean | Promise<boolean> {
+        if (!agentClient || !agentTask || !activeTaskRun) {
+            ui.toast('Steer requires a selected task with an active run.', 'error');
+            return false;
+        }
+        return agentClient.steer({ taskId: agentTask.taskId, text: prompt }).then(() => {
+            refresh();
+            return true;
+        }, (failure: unknown) => {
+            ui.toast(failureMessage('Steer failed', failure), 'error');
+            return false;
+        });
+    }
+
+    function force(prompt: string): boolean | Promise<boolean> {
+        if (!agentClient || !agentTask || !activeTaskRun) {
+            ui.toast('Force send requires a selected task with an active run.', 'error');
+            return false;
+        }
+        return agentClient.forceSend({ taskId: agentTask.taskId, text: prompt }).then(() => {
+            refresh();
+            return true;
+        }, (failure: unknown) => {
+            ui.toast(failureMessage('Force send failed', failure), 'error');
+            return false;
+        });
+    }
+
+    function stopTaskRun() {
+        if (!agentClient || !agentTask || !activeTaskRun) {
+            ui.toast('Stop run requires a selected task with an active run.', 'error');
+            return;
+        }
+        void agentClient.stop({ taskId: agentTask.taskId, runId: activeTaskRun.runId }).then(() => {
+            refresh();
+        }, (failure: unknown) => {
+            ui.toast(failureMessage('Stop run failed', failure), 'error');
+        });
     }
 
     function budgetItems() {
@@ -376,17 +461,22 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                 onAttach={handleAttachFiles}
                 onRemove={removeStoredOrImage}
                 onSend={send}
+                onQueue={agentMode ? queue : undefined}
+                onSteer={agentMode ? steer : undefined}
+                onForce={agentMode ? force : undefined}
                 onStop={() => { generation.stop(); refresh(); }}
+                onStopRun={stopTaskRun}
+                activeRun={activeTaskRun}
                 mode={permissionMode}
                 onMode={setPermissionMode}
                 model={modelLabel}
                 onModel={() => ui.setView('model')}
                 environment="Local browser"
                 onEnvironment={() => {}}
-                disabled={!store.canRun()}
+                disabled={sendDisabled}
                 runtimeAvailable={false}
                 initialDraft={initialDraftRef.current}
-                sendLabel={predictionMode ? 'Predict next tokens' : 'Send'}
+                sendLabel={agentMode ? 'Send' : predictionMode ? 'Predict next tokens' : 'Send'}
                 generating={generating}
                 canStop={activeGeneration?.canStop !== false}
                 editorFile={activeFile}

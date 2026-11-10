@@ -4,7 +4,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LifecycleStore } from '../state/lifecycle.js';
 import type { GenerationAdapter } from '../adapters/generation.js';
 import type { Attachment, SessionApi, StudioSettings, StudioUiApi, WorkspaceApi } from '../adapters/workflow.js';
+import { AgentClient } from '../agent/client.js';
+import { FixtureTransport } from '../agent/fixtureTransport.js';
 import { AgentComposer } from './AgentComposer.js';
+import { StudioApp } from './StudioApp.js';
+import { makeFiles, makeModelAdapter, makeSessions, makeSources, makeUi } from './studioTestFixtures.js';
+
+vi.mock('@xterm/xterm', () => ({
+    Terminal: class {
+        options = {};
+        open = vi.fn();
+        write = vi.fn();
+        onData = vi.fn();
+        onResize = vi.fn();
+        loadAddon = vi.fn();
+        focus = vi.fn();
+        dispose = vi.fn();
+        resize = vi.fn();
+    },
+}));
+vi.mock('@xterm/addon-fit', () => ({ FitAddon: class { fit = vi.fn(); } }));
 
 let host: HTMLDivElement;
 let createObjectURL: ReturnType<typeof vi.fn>;
@@ -725,20 +744,236 @@ describe('composer menus and host state', () => {
         expect(host.querySelectorAll('select[aria-label="Model"]')).toHaveLength(0);
     });
 
-    it('exposes no queue, steer, or force controls before Task 8', async () => {
-        const props = await mountSurface({ value: 'send me', onQueue: vi.fn(), onSteer: vi.fn(), onForce: vi.fn(), onStop: vi.fn() });
-        const labels = Array.from(host.querySelectorAll('button')).map((node) => node.textContent);
-        expect(labels).not.toContain('Queue');
-        expect(labels).not.toContain('Steer');
-        expect(labels).not.toContain('Force');
+    it('keeps one Send and exposes disabled run send modes without a selected runtime', async () => {
+        const onQueue = vi.fn(() => true);
+        const onSteer = vi.fn(() => true);
+        const onForce = vi.fn(() => true);
+        const onStopRun = vi.fn();
+        const props = await mountSurface({ value: 'send me', onQueue, onSteer, onForce, onStopRun });
+        const sendButtons = Array.from(host.querySelectorAll('button')).filter((node) => node.textContent === 'Send');
+        expect(sendButtons).toHaveLength(1);
+        for (const label of ['Queue', 'Steer', 'Force send', 'Stop run']) {
+            const mode = button(label);
+            expect(mode.disabled, label).toBe(true);
+            expect(mode.getAttribute('title'), label).toContain('Select a task');
+        }
         typePrompt('send me');
         act(() => { button('Send').click(); });
         expect(props.onSend).toHaveBeenCalledWith('send me');
+        expect(onQueue).not.toHaveBeenCalled();
+        expect(onStopRun).not.toHaveBeenCalled();
+    });
+
+    it('passes the visible prompt only to enabled run send modes', async () => {
+        const activeRun = { taskId: 'tsk_0000000000000001', runId: 'run_0000000000000001', generation: 1, state: 'running' as const, retryOfRunId: null };
+        const onQueue = vi.fn(() => true);
+        const onSteer = vi.fn(() => true);
+        const onForce = vi.fn(() => true);
+        const onStopRun = vi.fn();
+        await mountSurface({
+            value: 'follow up', activeRun, onQueue, onSteer, onForce, onStopRun,
+        });
+        typePrompt('follow up');
+        act(() => { button('Queue').click(); });
+        typePrompt('follow up');
+        act(() => { button('Steer').click(); });
+        typePrompt('follow up');
+        act(() => { button('Force send').click(); });
+        act(() => { button('Stop run').click(); });
+        expect(onQueue).toHaveBeenCalledWith('follow up');
+        expect(onSteer).toHaveBeenCalledWith('follow up');
+        expect(onForce).toHaveBeenCalledWith('follow up');
+        expect(onStopRun).toHaveBeenCalledOnce();
     });
 
     it('uses the existing model view action from AgentComposer', () => {
         const { uiApi } = mount();
         act(() => { button('Model: api-a').click(); });
         expect(uiApi.api.setView).toHaveBeenCalledWith('model');
+    });
+});
+
+describe('asynchronous send receipts and draft preservation', () => {
+    it('waits for an async receipt before clearing and blocks duplicate submissions while pending', async () => {
+        let accept!: (value: boolean) => void;
+        const onSend = vi.fn(() => new Promise<boolean>((resolve) => { accept = resolve; }));
+        await mountSurface({ value: 'first draft', onSend });
+        typePrompt('first draft');
+        act(() => { button('Send').click(); });
+        expect(onSend).toHaveBeenCalledWith('first draft');
+        expect(promptElement().value).toBe('first draft');
+        act(() => { button('Send').click(); });
+        pressKey(promptElement(), 'Enter');
+        expect(onSend).toHaveBeenCalledTimes(1);
+        accept(true);
+        await flushAsync();
+        expect(promptElement().value).toBe('');
+    });
+
+    it('preserves a newer draft when the user edits during an accepted pending send', async () => {
+        let accept!: (value: boolean) => void;
+        const onSend = vi.fn(() => new Promise<boolean>((resolve) => { accept = resolve; }));
+        await mountSurface({ value: 'first draft', onSend });
+        typePrompt('first draft');
+        act(() => { button('Send').click(); });
+        typePrompt('second draft');
+        accept(true);
+        await flushAsync();
+        expect(promptElement().value).toBe('second draft');
+    });
+
+    it('preserves the draft when an async send is refused or rejects', async () => {
+        const refused = await mountSurface({ value: 'keep refused', onSend: vi.fn(() => Promise.resolve(false)) });
+        typePrompt('keep refused');
+        act(() => { button('Send').click(); });
+        await flushAsync();
+        expect(refused.onSend).toHaveBeenCalledWith('keep refused');
+        expect(promptElement().value).toBe('keep refused');
+
+        const rejected = await mountSurface({ value: 'keep rejected', onSend: vi.fn(() => Promise.reject(new Error('offline'))) });
+        typePrompt('keep rejected');
+        act(() => { button('Send').click(); });
+        await flushAsync();
+        expect(rejected.onSend).toHaveBeenCalledWith('keep rejected');
+        expect(promptElement().value).toBe('keep rejected');
+    });
+});
+
+describe('task runtime send identity', () => {
+    function fixtureRuntime() {
+        const transport = new FixtureTransport();
+        return { transport, client: new AgentClient({ transport }) };
+    }
+
+    async function settleAsync() {
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+        await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    }
+
+    async function mountStudio(client: AgentClient) {
+        const sessionsApi = makeSessions();
+        const uiApi = makeUi();
+        act(() => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessionsApi} ui={uiApi} agentClient={client} download={vi.fn()} />, host);
+        });
+        await settleAsync();
+        return { sessionsApi, uiApi };
+    }
+
+    it('starts a run through only AgentClient for a selected task and blocks a second active run', async () => {
+        const { transport, client } = fixtureRuntime();
+        const task = await client.createTask({ title: 'Selected task' });
+        client.store.selectTask(task.taskId);
+        const { sessionsApi } = await mountStudio(client);
+
+        const permission = host.querySelector<HTMLSelectElement>('select[aria-label="Permission mode"]')!;
+        expect(permission.value).toBe('ask');
+        const autonomous = Array.from(permission.options).find((option) => option.textContent?.startsWith('Autonomous'));
+        expect(autonomous?.disabled).toBe(true);
+
+        typePrompt('start this task');
+        act(() => { button('Send').click(); });
+        await vi.waitFor(() => { expect(promptElement().value).toBe(''); });
+        const runs = transport.calls.filter((call) => call.method === 'startRun');
+        expect(runs).toHaveLength(1);
+        expect(runs[0]!.payload).toEqual({ taskId: task.taskId, prompt: 'start this task' });
+        expect(sessionsApi.sendPrompt).not.toHaveBeenCalled();
+        await vi.waitFor(() => { expect(button('Send').disabled).toBe(true); });
+    });
+
+    it('queues, steers, force-sends and stops with the selected task and actual run identity', async () => {
+        const { transport, client } = fixtureRuntime();
+        const task = await client.createTask({ title: 'Running task' });
+        client.store.selectTask(task.taskId);
+        const run = await client.startRun({ taskId: task.taskId, prompt: 'initial' });
+        const { sessionsApi } = await mountStudio(client);
+        const startsBefore = transport.calls.filter((call) => call.method === 'startRun').length;
+
+        expect(button('Send').disabled).toBe(true);
+        typePrompt('queued note');
+        act(() => { button('Queue').click(); });
+        await settleAsync();
+        expect(transport.calls.filter((call) => call.method === 'queueMessage').at(-1)?.payload).toEqual({ taskId: task.taskId, text: 'queued note' });
+        expect(promptElement().value).toBe('');
+
+        typePrompt('steer note');
+        act(() => { button('Steer').click(); });
+        await settleAsync();
+        expect(transport.calls.filter((call) => call.method === 'steer').at(-1)?.payload).toEqual({ taskId: task.taskId, text: 'steer note' });
+        expect(promptElement().value).toBe('');
+
+        typePrompt('force note');
+        act(() => { button('Force send').click(); });
+        await settleAsync();
+        expect(transport.calls.filter((call) => call.method === 'forceSend').at(-1)?.payload).toEqual({ taskId: task.taskId, text: 'force note' });
+        expect(promptElement().value).toBe('');
+
+        act(() => { button('Stop run').click(); });
+        await settleAsync();
+        expect(transport.calls.filter((call) => call.method === 'stop').at(-1)?.payload).toEqual({ taskId: task.taskId, runId: run.runId });
+        expect(sessionsApi.stopGeneration).not.toHaveBeenCalled();
+        expect(transport.calls.filter((call) => call.method === 'startRun')).toHaveLength(startsBefore);
+        expect(button('Queue').disabled).toBe(true);
+        expect(button('Stop run').disabled).toBe(true);
+    });
+
+    it('preserves the draft and reports a failed queue receipt', async () => {
+        const { transport, client } = fixtureRuntime();
+        const task = await client.createTask({ title: 'Refusing task' });
+        client.store.selectTask(task.taskId);
+        await client.startRun({ taskId: task.taskId, prompt: 'initial' });
+        vi.spyOn(transport, 'queueMessage').mockRejectedValue(new Error('queue refused'));
+        const { uiApi } = await mountStudio(client);
+
+        typePrompt('keep queued');
+        act(() => { button('Queue').click(); });
+        await settleAsync();
+        expect(uiApi.toast).toHaveBeenCalledWith('Queue failed: queue refused', 'error');
+        expect(promptElement().value).toBe('keep queued');
+        expect(button('Queue').disabled).toBe(false);
+    });
+
+    it('requires a selected task and preserves the draft without starting anything', async () => {
+        const { transport, client } = fixtureRuntime();
+        await client.createTask({ title: 'Unselected task' });
+        const { uiApi } = await mountStudio(client);
+        const before = transport.calls.length;
+
+        typePrompt('keep this draft');
+        act(() => { button('Send').click(); });
+        await settleAsync();
+        expect(uiApi.toast).toHaveBeenCalledWith('Select a task before sending.', 'error');
+        expect(transport.calls.slice(before).some((call) => call.method === 'startRun')).toBe(false);
+        expect(promptElement().value).toBe('keep this draft');
+    });
+
+    it('surfaces a start refusal and preserves the draft', async () => {
+        const { client } = fixtureRuntime();
+        const task = await client.createTask({ title: 'Archived task' });
+        client.store.selectTask(task.taskId);
+        await client.archiveTask({ taskId: task.taskId, archived: true });
+        const { uiApi } = await mountStudio(client);
+
+        typePrompt('keep me');
+        act(() => { button('Send').click(); });
+        await settleAsync();
+        expect(uiApi.toast).toHaveBeenCalledWith(expect.stringContaining('task_archived'), 'error');
+        expect(promptElement().value).toBe('keep me');
+    });
+
+    it('starts a fresh run when the selected task latest run is already terminal', async () => {
+        const { transport, client } = fixtureRuntime();
+        const task = await client.createTask({ title: 'Finished task' });
+        client.store.selectTask(task.taskId);
+        const first = await client.startRun({ taskId: task.taskId, prompt: 'first' });
+        await client.stop({ taskId: task.taskId, runId: first.runId });
+        const { sessionsApi } = await mountStudio(client);
+
+        typePrompt('second run');
+        act(() => { button('Send').click(); });
+        await settleAsync();
+        const runs = transport.calls.filter((call) => call.method === 'startRun');
+        expect(runs.at(-1)?.payload).toEqual({ taskId: task.taskId, prompt: 'second run' });
+        expect(sessionsApi.sendPrompt).not.toHaveBeenCalled();
     });
 });

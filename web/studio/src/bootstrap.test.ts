@@ -96,6 +96,38 @@ describe('typed Studio bootstrap', () => {
         expect(root.hidden).toBe(false);
     });
 
+    it('disposes the installed legacy shortcut guard when workflow initialization rejects', async () => {
+        const palette = document.createElement('div');
+        palette.id = 'commandPalette';
+        palette.hidden = true;
+        document.body.appendChild(palette);
+        const remove = vi.spyOn(window, 'removeEventListener');
+        const root = document.createElement('div');
+        legacyWindow.__studioUi = { getSettings: () => ({}), getAttachments: () => [] };
+        try {
+            await expect(mountTypedStudio(root, { timeoutMs: 10 })).rejects.toThrow('did not initialize');
+            expect(remove).toHaveBeenCalledWith('keydown', expect.any(Function), true);
+
+            const blocked = new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true, cancelable: true });
+            document.body.dispatchEvent(blocked);
+            expect(blocked.defaultPrevented, 'the legacy Cmd/Ctrl+K blocker must be removed').toBe(false);
+
+            palette.hidden = false;
+            window.dispatchEvent(new CustomEvent('uor-studio-v2-ready'));
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(palette.hidden, 'the readiness listener must be removed').toBe(false);
+
+            palette.hidden = true;
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            palette.hidden = false;
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(palette.hidden, 'the palette observer must be disconnected').toBe(false);
+        } finally {
+            palette.remove();
+            remove.mockRestore();
+        }
+    });
+
     it('refuses Preact rendering when migration fails', async () => {
         window.localStorage.setItem('uor.studio.settings.v1', '{bad-json');
         expect(activateStudioMigration(true).state).toBe('error');

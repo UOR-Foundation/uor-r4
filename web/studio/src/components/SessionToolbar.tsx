@@ -15,7 +15,7 @@ export function SessionToolbar({ status, projectName, environment, railOpen, onT
         </div>
         <div class="session-toolbar-actions">
             <div role="status" aria-live="polite" class="session-status"><span>{status.source}</span><span>{status.artifact}</span><span>{status.privacy}</span><span>{status.file}</span><span>{status.session}</span></div>
-            {onPalette && <button type="button" class="toolbar-command" data-shortcut="⌘K" onClick={onPalette}><Icon name="command" /><span>Command palette</span></button>}
+            {onPalette && <button type="button" class="toolbar-command" data-shortcut="⌘⇧P" aria-keyshortcuts="Meta+Shift+P Control+Shift+P" onClick={onPalette}><Icon name="command" /><span>Command palette</span></button>}
             {onSettings && <button type="button" class="toolbar-icon" aria-label="Settings" onClick={onSettings}><Icon name="settings" /><span class="visually-hidden">Settings</span></button>}
             {onInspector && <button type="button" class="toolbar-icon" aria-label="Inspector" aria-controls="studio-inspector" aria-expanded={inspectorOpen} onClick={onInspector}><Icon name="inspector" /><span class="visually-hidden">Inspector</span></button>}
         </div>

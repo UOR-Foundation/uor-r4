@@ -51,7 +51,13 @@ export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?:
     if (migration.state === 'error') throw new Error(`Browser-state migration failed: ${migration.error || 'unknown error'}`);
     root.hidden = false;
     const shortcutGuard = installLegacyShortcutGuard(root);
-    const apis = await waitForWorkflowApis(options.timeoutMs ?? 5000);
+    let apis: LegacyWorkflowApis;
+    try {
+        apis = await waitForWorkflowApis(options.timeoutMs ?? 5000);
+    } catch (error) {
+        shortcutGuard.dispose();
+        throw error;
+    }
     const requestedTheme = new URLSearchParams(window.location.search).get('theme')
         || (window.location.hash === '#theme=light' ? 'light' : (window.location.hash === '#theme=dark' ? 'dark' : null));
     if (requestedTheme === 'light' || requestedTheme === 'dark') apis.ui.updateSettings({ theme: requestedTheme });

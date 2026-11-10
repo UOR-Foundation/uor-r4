@@ -2,6 +2,7 @@ import { flushSync } from 'preact/compat';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { createComposerInput } from '../adapters/composerInput.js';
 import type { ComposerInputController } from '../adapters/composerInput.js';
+import type { RunSummary } from '../agent/client.js';
 import { ComposerAttachments } from './ComposerAttachments.js';
 import type { AttachmentDraft } from './ComposerAttachments.js';
 import { ComposerMenu, commandOptions, mentionOptions, menuTrigger } from './ComposerMenu.js';
@@ -9,7 +10,11 @@ import type { ComposerArtifact, ComposerEditorFile, ComposerMenuState, ComposerO
 import { EnvironmentPicker } from './EnvironmentPicker.js';
 import { PermissionPicker } from './PermissionPicker.js';
 import type { PermissionMode } from './PermissionPicker.js';
+import { SendModeControls } from './SendModeControls.js';
 import { Icon } from './ui/Icon.js';
+
+type SendResult = boolean | Promise<boolean>;
+type SendAction = (prompt: string) => SendResult;
 
 export interface ComposerSurfaceProps {
     value: string;
@@ -18,11 +23,13 @@ export interface ComposerSurfaceProps {
     attachments: readonly AttachmentDraft[];
     onAttach(files: File[]): void | Promise<void>;
     onRemove(id: string): void;
-    onSend(prompt: string): boolean;
-    onQueue?(): void;
-    onSteer?(): void;
-    onForce?(): void;
+    onSend(prompt: string): SendResult;
+    onQueue?(prompt: string): SendResult;
+    onSteer?(prompt: string): SendResult;
+    onForce?(prompt: string): SendResult;
     onStop?(): void;
+    onStopRun?(): void;
+    activeRun?: RunSummary | null;
     mode: PermissionMode;
     onMode?(mode: PermissionMode): void;
     model: string;
@@ -64,7 +71,10 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
     const pendingMentionsRef = useRef<Set<Promise<void>>>(new Set());
     const sendingRef = useRef(false);
     const mountedRef = useRef(true);
-    const sendRef = useRef<(prompt: string) => boolean>(() => false);
+    const sendRef = useRef<SendAction>(() => false);
+    const queueRef = useRef<SendAction | undefined>(undefined);
+    const steerRef = useRef<SendAction | undefined>(undefined);
+    const forceRef = useRef<SendAction | undefined>(undefined);
     const submittedHistoryRef = useRef<string[]>([]);
     const initialDraftRef = useRef(props.initialDraft ?? '');
 
@@ -80,12 +90,10 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
         notifyDraftChange(value);
     }
 
-    function sendCurrent() {
+    function acceptSubmission(prompt: string) {
         if (!mountedRef.current) return;
         const textarea = textareaRef.current;
-        const prompt = textarea?.value ?? props.value;
-        if (!prompt.trim()) return;
-        if (!sendRef.current(prompt)) return;
+        if (textarea && textarea.value !== prompt) return;
         if (controllerRef.current) controllerRef.current.recordSubmitted(prompt);
         else notifyDraftChange('');
         if (textarea) textarea.value = '';
@@ -96,6 +104,35 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
         textarea?.focus();
     }
 
+    function runAction(action: SendAction | undefined) {
+        if (!action || sendingRef.current || !mountedRef.current) return;
+        const textarea = textareaRef.current;
+        const prompt = textarea?.value ?? props.value;
+        if (!prompt.trim()) return;
+        sendingRef.current = true;
+        let result: SendResult;
+        try {
+            result = action(prompt);
+        } catch {
+            sendingRef.current = false;
+            return;
+        }
+        if (result === true) {
+            sendingRef.current = false;
+            acceptSubmission(prompt);
+            return;
+        }
+        if (result === false) {
+            sendingRef.current = false;
+            return;
+        }
+        void Promise.resolve(result).then((accepted) => {
+            if (accepted) acceptSubmission(prompt);
+        }, () => undefined).finally(() => {
+            sendingRef.current = false;
+        });
+    }
+
     function submit() {
         if (sendingRef.current || !mountedRef.current) return;
         const textarea = textareaRef.current;
@@ -104,19 +141,23 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
         const pendingMentions = Array.from(pendingMentionsRef.current);
         const barrier = attachmentBarrierRef.current?.() ?? null;
         if (!barrier && !pendingMentions.length) {
-            sendCurrent();
+            runAction(sendRef.current);
             return;
         }
         sendingRef.current = true;
         void Promise.all([barrier ?? Promise.resolve(), ...pendingMentions]).then(() => {
             sendingRef.current = false;
-            sendCurrent();
+            if (!mountedRef.current) return;
+            runAction(sendRef.current);
         }, () => {
             sendingRef.current = false;
         });
     }
 
     sendRef.current = props.onSend;
+    queueRef.current = props.onQueue;
+    steerRef.current = props.onSteer;
+    forceRef.current = props.onForce;
 
     function updateMenu(textarea: HTMLTextAreaElement) {
         const trigger = menuTrigger(textarea);
@@ -271,6 +312,12 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
             /></label>
             <button type="button" class="send-button" disabled={props.disabled || !props.value.trim()} onClick={() => submitRef.current()}><Icon name="send" /><span>{props.sendLabel ?? 'Send'}</span></button>
         </div>
-        <div class="composer-footer"><span>Enter to send · Shift+Enter for a line · / tasks · @ context</span><button type="button" disabled={!props.generating || props.canStop === false} onClick={() => props.onStop?.()}>Stop</button></div>
+        <div class="composer-footer"><span>Enter to send · Shift+Enter for a line · / tasks · @ context</span><SendModeControls
+            activeRun={props.activeRun ?? null}
+            onQueue={() => runAction(queueRef.current)}
+            onSteer={() => runAction(steerRef.current)}
+            onForce={() => runAction(forceRef.current)}
+            onStop={() => props.onStopRun?.()}
+        /><button type="button" disabled={!props.generating || props.canStop === false} onClick={() => props.onStop?.()}>Stop</button></div>
     </div>;
 }
