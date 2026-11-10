@@ -2,7 +2,7 @@
 
 Lab: claude. Item: one-model-end-to-end (#3407). Order: claude-345. First test of the aligned design ([DESIGN.md](../../loop/tasks/one-model-end-to-end/claude-345/DESIGN.md), section 8).
 
-TEST FITNESS: FIT WITH CHANGES, all seven applied (10 Nov, a fresh-context reviewer that had not seen the plan; it checked the sampling and reference rules against `in_space_long.rs`). The changes: a reply-level fit reading R2r, so row 2 cannot be reached by token-level misses; the rows checked in a fixed order with row 1 narrowed; the rows-file count in row 0; the trained windows named and counted; row 3 reworded to this recipe at this budget; R1 worded as the last complete reply of each window; the step-0 control claim dropped. The sheet's commit is recorded before any pod ships.
+TEST FITNESS: FIT WITH CHANGES, all seven applied (10 Nov, a fresh-context reviewer that had not seen the plan; it checked the sampling and reference rules against `in_space_long.rs`). The changes: a reply-level fit reading R2r, so row 2 cannot be reached by token-level misses; the rows checked in a fixed order with row 1 narrowed; the rows-file count in row 0; the trained windows named and counted; row 3 reworded to this recipe at this budget; R1 worded as the last complete reply of each window; the step-0 control claim dropped. The sheet's commit is recorded before any pod ships. After the FIT one instrument check was added, I-s, a smoke that can only end in row 0; no reading, bar or row changed.
 
 **Why.**
 - No recorded run has asked whether the assembled model can fit a small set of dialogues and say it back in free-running decode. Every reply reading so far comes from models trained on millions of tokens and scored on prompts they had not seen, where a failure to fit and a failure to generalise look the same.
@@ -76,6 +76,7 @@ A row-1 pass does not show the model can converse. A row-3 reading closes this c
 - **I-p:** a clean checkout at exactly the pin on the pod.
 - **I-0:** `cargo test --release --locked -p uor-r4-float-train --features cuda --lib` passes with at least one test run.
 - **I-3:** the set's three files, `tokenizer.json` (`d36d3e87…0f89`) and DEV's two files match their hashes before training; the run's `config.json` names the set's token and mask hashes, width 256, the Hamming read 4, batch 64, micro-batch 16, 4,096 steps, the seed, and no ask heads, pull, hold or carry; the trainer prints 1,133 usable TRAIN windows.
+- **I-s:** before the run, a 32-step smoke on the same set is trained, checked by I-3 and scored with the deciding pass's own arguments at 8 samples. It proves the window count and both command lines in about two minutes. Its numbers are never read; a failed smoke is row 0.
 - **I-t:** the run ends exit 0 with a numeric last loss and `models/step-004096` present.
 - **I-r:** `rows-t0-memory.json` holds 40,419 rows, and every reference position of every complete sample is found in it.
 - **Seal:** each pod's `run/` is sealed with a file list and SHA-256 sums, put in the store under `results/claude/one-model-end-to-end-memorize-2026-11-09/<root>/T0/s<seed>/`, and read back; the pod goes down only after the laptop reads the same sums from the store and the required files are in the list. A run is never written into an existing root (L-002).
@@ -83,6 +84,6 @@ A row-1 pass does not show the model can converse. A row-3 reading closes this c
 
 ## Compute and stop rule
 
-- Two Vast RTX 5090 pods, one seed each, at most $0.70/h each (a dearer offer is released at once), leased 3 hours and renewed by a watcher while the run moves. Expected about 90 minutes a pod: build and tests, about 35 minutes of training at claude-322's measured 0.48 s a step, then scoring, which is about as long again because the scorer also decodes DEV and a second decode rule in the same pass (sealed, not read). Expected spend under $2.50 in all; a notice at $2.10 a pod and at two hours. Inside the standing caps of 4 pods and $8/h.
+- Two Vast RTX 5090 pods, one seed each, at most $0.70/h each (a dearer offer is released at once), leased 3 hours and renewed by a watcher while the run moves. Expected about 100 minutes a pod: build and tests, the smoke, about 35 minutes of training at claude-322's measured 0.48 s a step, then scoring, which is about as long again because the scorer also decodes DEV and a second decode rule in the same pass (sealed, not read). Expected spend under $2.50 in all; a notice at $2.10 a pod and at two hours. Inside the standing caps of 4 pods and $8/h.
 - A watcher is armed before the job ships (L-004). A healthy run is never cancelled for passing a notice.
 - A failed step makes the cell NOT_RUN with the step named. One rerun is allowed, under `runs-2`.
