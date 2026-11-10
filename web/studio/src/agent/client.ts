@@ -16,6 +16,11 @@ import {
 import { AgentStoreError } from './storeTypes.js';
 import type { AgentTaskStore } from './store.js';
 import type { AgentRuntime } from './runtime.js';
+import { HostClient, type HostToolResult } from './hostClient.js';
+import {
+    AgentTransportHostTransport,
+    NullHostTransport,
+} from './transports.js';
 
 export type { AgentIncomingEvent } from '../state/agent.js';
 
@@ -184,6 +189,9 @@ export type TreeSource = 'local' | 'host';
 export interface TreeInput {
     source?: TreeSource;
     path?: string;
+    taskId?: string;
+    runId?: string;
+    generation?: number;
 }
 
 export interface TreeEntry {
@@ -338,6 +346,7 @@ class BufferedAgentEventStream implements AgentEventStream {
 export interface AgentClientOptions {
     transport?: AgentTransport | null;
     runtime?: AgentRuntime | null;
+    hostClient?: HostClient | null;
     store?: AgentStore;
     taskStore?: AgentTaskStore | null;
 }
@@ -348,6 +357,7 @@ export class AgentClient {
     private readonly transport: AgentTransport | null;
     private readonly taskStore: AgentTaskStore | null;
     private readonly runtime: AgentRuntime | null;
+    private readonly hostClient: HostClient;
     private readonly streams = new Set<BufferedAgentEventStream>();
     private readonly localFiles = new Map<string, LocalAgentFile>();
     private readonly localArtifactIds = new Map<string, string>();
@@ -373,9 +383,22 @@ export class AgentClient {
         }
         this.runtime = options.runtime ?? null;
         if (this.runtime !== null) {
+            if (
+                options.hostClient !== undefined &&
+                options.hostClient !== this.runtime.hostClient
+            ) {
+                throw new AgentClientError(
+                    'invalid_arguments',
+                    'the runtime owns its host client; do not inject a second host path',
+                );
+            }
             this.store = this.runtime.store;
             this.transport = this.runtime as unknown as AgentTransport;
             this.taskStore = null;
+            this.hostClient =
+                options.hostClient ??
+                this.runtime.hostClient ??
+                new HostClient({ transport: new NullHostTransport() });
             this.unsubscribeTransport = this.runtime.subscribe((event) => {
                 // The runtime publishes only events it has already applied
                 // through the shared AgentStore. Re-applying here returns
@@ -387,6 +410,15 @@ export class AgentClient {
         this.transport = options.transport ?? null;
         this.store = options.store ?? createAgentStore();
         this.taskStore = options.taskStore ?? null;
+        this.hostClient =
+            options.hostClient ??
+            (this.transport === null
+                ? new HostClient({ transport: new NullHostTransport() })
+                : new HostClient({
+                      transport: new AgentTransportHostTransport(
+                          this.transport,
+                      ),
+                  }));
         this.unsubscribeTransport =
             this.transport === null
                 ? null
@@ -645,21 +677,17 @@ export class AgentClient {
         if (source === 'local') {
             return this.localTree(input.path);
         }
-        const transport = this.transport;
-        if (transport === null) {
-            throw new AgentClientError(
-                'host_unavailable',
-                'the local host companion is not connected',
-            );
-        }
-        const capabilities = await transport.hostCapabilities();
-        if (!capabilities.tree) {
-            throw new AgentClientError(
-                'host_unavailable',
-                'the local host companion does not provide a file tree',
-            );
-        }
-        return transport.tree(input);
+        const result = await this.hostClient.execute({
+            tool: 'file.tree',
+            arguments:
+                input.path === undefined ? {} : { path: input.path },
+            ...(input.taskId === undefined ? {} : { taskId: input.taskId }),
+            ...(input.runId === undefined ? {} : { runId: input.runId }),
+            ...(input.generation === undefined
+                ? {}
+                : { generation: input.generation }),
+        });
+        return hostTreeEntries(result);
     }
 
     async changesSnapshot(
@@ -682,21 +710,13 @@ export class AgentClient {
         if (input.scope === 'last_turn') {
             return null;
         }
-        const transport = this.transport;
-        if (transport === null) {
-            throw new AgentClientError(
-                'host_unavailable',
-                'the local host companion is not connected',
-            );
-        }
-        const capabilities = await transport.hostCapabilities();
-        if (!capabilities.changes) {
-            throw new AgentClientError(
-                'host_unavailable',
-                'the local host companion does not provide branch diffs',
-            );
-        }
-        return transport.changesSnapshot(input);
+        const result = await this.hostClient.execute({
+            tool: 'git.changes',
+            arguments: { scope: 'branch' },
+            taskId: input.taskId,
+            ...(input.runId === undefined ? {} : { runId: input.runId }),
+        });
+        return hostChangesSnapshot(result);
     }
 
     async readArtifact(input: ReadArtifactInput): Promise<ArtifactContent> {
@@ -704,21 +724,22 @@ export class AgentClient {
         if (local !== null) {
             return local;
         }
-        const transport = this.transport;
-        if (transport !== null) {
-            const capabilities = await transport.hostCapabilities();
-            if (capabilities.readArtifact) {
-                return transport.readArtifact(input);
-            }
-        }
-        throw new AgentClientError(
-            'host_unavailable',
-            'the requested artifact is not local and the local host companion is not connected',
-        );
+        const result = await this.hostClient.execute({
+            tool: 'artifact.read',
+            arguments: {
+                ...(input.path === undefined ? {} : { path: input.path }),
+                ...(input.artifactId === undefined
+                    ? {}
+                    : { artifact_id: input.artifactId }),
+            },
+            ...(input.taskId === undefined ? {} : { taskId: input.taskId }),
+        });
+        return hostArtifactContent(result);
     }
 
     async hostCapabilities(): Promise<HostCapabilities> {
-        return this.requireTransport().hostCapabilities();
+        this.requireTransport();
+        return this.hostClient.capabilities();
     }
 
     async dispose(): Promise<void> {
@@ -973,4 +994,111 @@ export class AgentClient {
             bytes: new Uint8Array(file.bytes),
         };
     }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return false;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+}
+
+function invalidHostData(message: string): never {
+    throw new AgentClientError('invalid_event', message);
+}
+
+function hostTreeEntries(result: HostToolResult): TreeEntry[] {
+    if (!isRecord(result.output) || !Array.isArray(result.output.entries)) {
+        return invalidHostData('host file tree result has no entries array');
+    }
+    return result.output.entries.map((value) => {
+        if (
+            !isRecord(value) ||
+            typeof value.path !== 'string' ||
+            (value.kind !== 'file' && value.kind !== 'directory')
+        ) {
+            return invalidHostData('host file tree entry is malformed');
+        }
+        if (value.size_bytes === undefined) {
+            return { path: value.path, kind: value.kind };
+        }
+        if (
+            typeof value.size_bytes !== 'number' ||
+            !Number.isSafeInteger(value.size_bytes) ||
+            value.size_bytes < 0
+        ) {
+            return invalidHostData('host file tree entry size is malformed');
+        }
+        return {
+            path: value.path,
+            kind: value.kind,
+            sizeBytes: value.size_bytes,
+        };
+    });
+}
+
+function hostChangesSnapshot(
+    result: HostToolResult,
+): ChangesSnapshot | null {
+    if (!isRecord(result.output) || !('snapshot' in result.output)) {
+        return invalidHostData('host branch result has no snapshot');
+    }
+    const snapshot = result.output.snapshot;
+    if (snapshot === null) return null;
+    if (
+        !isRecord(snapshot) ||
+        snapshot.scope !== 'branch' ||
+        !Array.isArray(snapshot.files) ||
+        typeof snapshot.head_digest !== 'string' ||
+        typeof snapshot.captured_at_ms !== 'number'
+    ) {
+        return invalidHostData('host branch snapshot is malformed');
+    }
+    return {
+        scope: 'branch',
+        files: snapshot.files as Array<Record<string, unknown>>,
+        headDigest: snapshot.head_digest,
+        capturedAtMs: snapshot.captured_at_ms,
+    };
+}
+
+function hostArtifactContent(result: HostToolResult): ArtifactContent {
+    if (!isRecord(result.output)) {
+        return invalidHostData('host artifact result has no output');
+    }
+    const output = result.output;
+    if (
+        typeof output.path !== 'string' ||
+        output.path.length === 0 ||
+        typeof output.media_type !== 'string' ||
+        output.media_type.length === 0 ||
+        typeof output.digest !== 'string' ||
+        !DIGEST_PATTERN.test(output.digest) ||
+        !Number.isSafeInteger(output.size_bytes) ||
+        (output.size_bytes as number) < 0 ||
+        typeof output.bytes_base64 !== 'string'
+    ) {
+        return invalidHostData('host artifact result is malformed');
+    }
+    let bytes: Uint8Array;
+    try {
+        const binary = globalThis.atob(output.bytes_base64);
+        bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+            bytes[index] = binary.charCodeAt(index);
+        }
+    } catch {
+        return invalidHostData('host artifact bytes are not base64');
+    }
+    if (bytes.byteLength !== output.size_bytes) {
+        return invalidHostData('host artifact size does not match its bytes');
+    }
+    return {
+        path: output.path,
+        mediaType: output.media_type,
+        sizeBytes: bytes.byteLength,
+        digest: output.digest,
+        bytes,
+    };
 }

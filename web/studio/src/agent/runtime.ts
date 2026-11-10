@@ -7,6 +7,11 @@ import {
 } from './generated/agentContract.js';
 import { canonicalJson } from './generated/agentCanonical.js';
 import {
+    HostClient,
+    canonicalToolArguments,
+    sha256Canonical,
+} from './hostClient.js';
+import {
     AgentClientError,
     type AgentEventStream,
     type ApprovalReceipt,
@@ -122,6 +127,7 @@ export interface AgentRuntimeOptions {
     taskStore?: AgentTaskStore | null;
     modelPort?: ModelPort;
     toolExecutor?: RuntimeToolExecutor;
+    hostClient?: HostClient | null;
     now?: () => number;
     timers?: RuntimeTimers;
     ids?: RuntimeIdFactory;
@@ -304,41 +310,6 @@ function cloneJson<T>(value: T): T {
     return JSON.parse(canonicalJson(value)) as T;
 }
 
-async function sha256Canonical(value: unknown): Promise<string> {
-    const canonical = canonicalJson(value);
-    const subtle = globalThis.crypto?.subtle;
-    if (subtle === undefined) {
-        throw new AgentClientError(
-            'runtime_unavailable',
-            'Web Crypto SHA-256 is not available in this environment',
-        );
-    }
-    const digest = new Uint8Array(
-        await subtle.digest('SHA-256', new TextEncoder().encode(canonical)),
-    );
-    let hex = '';
-    for (const byte of digest) hex += byte.toString(16).padStart(2, '0');
-    return `sha256:${hex}`;
-}
-
-function canonicalArguments(value: unknown): Record<string, unknown> {
-    if (!isPlainObject(value)) {
-        throw new AgentClientError(
-            'invalid_arguments',
-            'tool arguments must be a canonical JSON object',
-        );
-    }
-    try {
-        canonicalJson(value);
-    } catch (error) {
-        throw new AgentClientError(
-            'invalid_arguments',
-            `tool arguments are not canonical: ${errorMessage(error)}`,
-        );
-    }
-    return cloneJson(value);
-}
-
 class RuntimeEventStream implements AgentEventStream {
     private readonly buffer: AgentIncomingEvent[] = [];
     private readonly waiters: Array<
@@ -409,6 +380,7 @@ export class AgentRuntime {
     private readonly taskStore: AgentTaskStore | null;
     private readonly modelPort: ModelPort;
     private readonly toolExecutor: RuntimeToolExecutor;
+    private readonly hostClientInstance: HostClient | null;
     private readonly now: () => number;
     private readonly timers: RuntimeTimers;
     private readonly ids: RuntimeIdFactory;
@@ -454,14 +426,23 @@ export class AgentRuntime {
             );
         }
         this.modelPort = options.modelPort ?? new ReplayModelPort();
+        if (options.hostClient != null && options.toolExecutor != null) {
+            throw new AgentClientError(
+                'invalid_arguments',
+                'inject a host client or a tool executor, not two host paths',
+            );
+        }
+        this.hostClientInstance = options.hostClient ?? null;
         this.toolExecutor =
             options.toolExecutor ??
-            (async () => {
-                throw new AgentClientError(
-                    'host_unavailable',
-                    'no host tool executor is connected',
-                );
-            });
+            (this.hostClientInstance !== null
+                ? (intent) => this.executeHostTool(intent)
+                : async () => {
+                      throw new AgentClientError(
+                          'host_unavailable',
+                          'no host tool executor is connected',
+                      );
+                  });
         this.now = options.now ?? (() => Date.now());
         this.timers = options.timers ?? defaultTimers();
         this.ids = options.ids ?? defaultIds();
@@ -482,6 +463,10 @@ export class AgentRuntime {
 
     get isOpen(): boolean {
         return this.opened;
+    }
+
+    get hostClient(): HostClient | null {
+        return this.hostClientInstance;
     }
 
     get lastPersistenceError(): AgentClientError | null {
@@ -1113,6 +1098,9 @@ export class AgentRuntime {
     }
 
     async hostCapabilities(): Promise<HostCapabilities> {
+        if (this.hostClientInstance !== null) {
+            return this.hostClientInstance.capabilities();
+        }
         return {
             tree: false,
             changes: false,
@@ -1568,6 +1556,54 @@ export class AgentRuntime {
         }
     }
 
+    private async executeHostTool(
+        intent: RuntimeToolIntent,
+    ): Promise<RuntimeToolResult> {
+        const hostClient = this.hostClientInstance;
+        if (hostClient === null) {
+            throw new AgentClientError(
+                'host_unavailable',
+                'the local host companion is not connected',
+            );
+        }
+        const hostIntent = await hostClient.createIntent({
+            taskId: intent.taskId,
+            runId: intent.runId,
+            generation: intent.generation,
+            toolCallId: intent.toolCallId,
+            tool: intent.tool,
+            arguments: intent.arguments,
+            ...(intent.approvalId === undefined
+                ? {}
+                : { approvalId: intent.approvalId }),
+        });
+        const result = await hostClient.execute(hostIntent);
+        const output = result.output ?? {};
+        let hostFiles: Array<Record<string, unknown>> | undefined;
+        let hostHeadDigest: string | undefined;
+        if (
+            result.status === 'ok' &&
+            isPlainObject(output) &&
+            Array.isArray(output.files) &&
+            typeof output.head_digest === 'string'
+        ) {
+            hostFiles = output.files as Array<Record<string, unknown>>;
+            hostHeadDigest = output.head_digest;
+        }
+        return {
+            status: result.status,
+            output,
+            ...(hostFiles === undefined || hostHeadDigest === undefined
+                ? {}
+                : { files: hostFiles, head_digest: hostHeadDigest }),
+            ...(result.code === undefined ? {} : { code: result.code }),
+            ...(result.message === undefined
+                ? {}
+                : { message: result.message }),
+            ...(result.truncated === true ? { truncated: true } : {}),
+        };
+    }
+
     private async handleToolCall(
         current: RunControl,
         toolCall: {
@@ -1579,7 +1615,7 @@ export class AgentRuntime {
         if (current.terminal || current.cancelRequested) return;
         let args: Record<string, unknown>;
         try {
-            args = canonicalArguments(toolCall.arguments);
+            args = canonicalToolArguments(toolCall.arguments);
         } catch (error) {
             await this.withTask(current.taskId, () =>
                 this.finalizeFailed(current, {
