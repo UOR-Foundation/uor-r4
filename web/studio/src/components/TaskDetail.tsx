@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { AgentClient } from '../agent/client.js';
 import type { TaskView, RunView, AgentToolCallView } from '../state/agent.js';
 import type { ApprovalHost } from './ApprovalCard.js';
@@ -171,6 +171,7 @@ function planData(run: RunView | null): { title: string; steps: Array<{ step_id:
 
 export function TaskDetail({ task, client, onBack, onOpenSurface }: TaskDetailProps) {
     const run = latestRun(task);
+    const headingRef = useRef<HTMLHeadingElement>(null);
     const [hostIdentity, setHostIdentity] = useState<ApprovalHost | null>(null);
     const [stopPending, setStopPending] = useState(false);
     const [retrying, setRetrying] = useState(false);
@@ -187,6 +188,10 @@ export function TaskDetail({ task, client, onBack, onOpenSurface }: TaskDetailPr
     }, [client]);
 
     useEffect(() => {
+        headingRef.current?.focus();
+    }, [task.taskId]);
+
+    useEffect(() => {
         if (run === null || isTerminalRunState(run.state)) setStopPending(false);
     }, [run?.state]);
 
@@ -194,18 +199,25 @@ export function TaskDetail({ task, client, onBack, onOpenSurface }: TaskDetailPr
     const approvals = useMemo(() => run === null ? [] : approvalEntries(run, hostIdentity), [run, hostIdentity]);
     const plan = useMemo(() => planData(run), [run]);
     const retryable = run !== null && (run.state === 'cancelled' || (run.state === 'failed' && run.error?.retryable === true));
-    const active = run !== null && isActiveRunState(run.state);
-    const busy = active && (run!.state === 'running' || run!.state === 'queued');
+    // A terminal event is authoritative; otherwise the persisted status
+    // projection (for example cancelling after a host acknowledgement or a
+    // reload) is what the user must see.
+    const status = run === null
+        ? task.state
+        : isTerminalRunState(run.state)
+            ? run.state
+            : run.statusProjection ?? run.state;
+    const active = run !== null && isActiveRunState(status);
+    const busy = active && (status === 'running' || status === 'queued');
     const statusDetail = run === null
         ? null
-        : run.state === 'waiting_for_approval'
+        : status === 'waiting_for_approval'
             ? `for ${run.approvals.find((approval) => approval.decision === null)?.tool ?? 'host approval'}`
-            : run.state === 'waiting_for_background'
+            : status === 'waiting_for_background'
                 ? 'for background work'
-                : run.state === 'cancelling'
+                : status === 'cancelling'
                     ? 'waiting for host acknowledgement'
-                    : run.state === 'queued' ? 'waiting to start' : null;
-    const status = run?.state ?? task.state;
+                    : status === 'queued' ? 'waiting to start' : null;
 
     const stop = () => {
         if (run === null || stopPending) return;
@@ -240,9 +252,10 @@ export function TaskDetail({ task, client, onBack, onOpenSurface }: TaskDetailPr
         <header class="task-detail-header" data-task-detail-header>
             <button type="button" class="task-detail-back" onClick={onBack}>Back to tasks</button>
             <p class="task-detail-status">Status: {runStateLabel(status)}</p>
-            <h1 class="task-detail-title">{task.title}</h1>
+            <h1 ref={headingRef} tabIndex={-1} class="task-detail-title">{task.title}</h1>
             <dl class="task-detail-facts">
-                <div><dt>Prompt</dt><dd>{task.title}</dd></div>
+                <div><dt>Title</dt><dd>{task.title}</dd></div>
+                <div><dt>Starting prompt</dt><dd>Starting prompt not recorded</dd></div>
                 <div><dt>Project</dt><dd>{task.projectId}</dd></div>
                 <div><dt>Repo</dt><dd>{task.repo ?? 'Not set'}</dd></div>
                 <div><dt>Branch</dt><dd>{task.branch ?? 'Not set'}</dd></div>

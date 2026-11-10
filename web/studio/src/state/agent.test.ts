@@ -1105,3 +1105,20 @@ describe('AgentStore delivery-error projection', () => {
         expect(JSON.parse(JSON.stringify(store.snapshot().runs[0]))).toEqual(before);
     });
 });
+
+describe('AgentStore task selection', () => {
+    test('clear_selection_removes_only_the_selected_task_view', () => {
+        const store = createAgentStore();
+        for (const entry of [queued(0), started(1)]) {
+            expect(store.apply(entry).status).toBe('applied');
+        }
+        expect(store.selectTask(TASK_ID)?.taskId).toBe(TASK_ID);
+        expect(store.snapshot().selectedTaskId).toBe(TASK_ID);
+        expect(store.snapshot().selectedTask?.taskId).toBe(TASK_ID);
+
+        store.clearSelection();
+        expect(store.snapshot().selectedTaskId).toBeNull();
+        expect(store.snapshot().selectedTask).toBeNull();
+        expect(store.snapshot().tasks.map((task) => task.taskId)).toEqual([TASK_ID]);
+    });
+});

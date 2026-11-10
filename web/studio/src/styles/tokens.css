@@ -7,6 +7,7 @@
     --uor-muted: #a8a49a;
     --uor-accent: #d97757;
     --uor-focus: #f5f3ee;
+    --uor-danger: #e78c7c;
     --uor-radius-sm: 4px;
     --uor-radius-md: 8px;
 }
@@ -19,4 +20,5 @@
     --uor-muted: #6b675e;
     --uor-accent: #b85a3c;
     --uor-focus: #1f1e1a;
+    --uor-danger: #a33c2c;
 }

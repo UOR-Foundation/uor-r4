@@ -11,6 +11,12 @@ export interface ApprovalCardProps {
     onResolve(approvalId: string, decision: 'approved' | 'denied'): void;
 }
 
+function expiryISO(expiresAtMs: number): string | null {
+    if (!Number.isFinite(expiresAtMs)) return null;
+    const date = new Date(expiresAtMs);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 function decisionLabel(decision: AgentApprovalView['decision']): string | null {
     if (decision === 'approved') return 'Approved by the host.';
     if (decision === 'denied') return 'Denied by the host.';
@@ -24,12 +30,13 @@ function decisionLabel(decision: AgentApprovalView['decision']): string | null {
 export function ApprovalCard({ approval, hostIdentity, onResolve }: ApprovalCardProps) {
     const resolved = decisionLabel(approval.decision);
     const canResolve = resolved === null && hostIdentity?.canApprove === true;
+    const expiry = expiryISO(approval.expiresAtMs);
     return <article class="approval-card" data-approval-id={approval.approvalId} aria-label="Approval required">
-        <header class="approval-heading"><h3>Approval required</h3><span class="approval-state">{resolved === null ? 'Pending host decision' : resolved}</span></header>
+        <header class="approval-heading"><h2>Approval required</h2><span class="approval-state">{resolved === null ? 'Pending host decision' : resolved}</span></header>
         <dl class="approval-facts">
             <div><dt>Tool</dt><dd>{approval.tool}</dd></div>
             <div><dt>Scope</dt><dd>{approval.scope}</dd></div>
-            <div><dt>Expiry</dt><dd><time dateTime={new Date(approval.expiresAtMs).toISOString()}>{new Date(approval.expiresAtMs).toISOString()}</time></dd></div>
+            <div><dt>Expiry</dt><dd>{expiry === null ? <span data-approval-expiry="unrecorded">Not recorded</span> : <time dateTime={expiry}>{expiry}</time>}</dd></div>
         </dl>
         <p class="approval-host">Host: {hostIdentity === null ? 'not connected' : hostIdentity.id}</p>
         {!canResolve && resolved === null && <p class="approval-guidance">This action needs host approval. Approve it in the local companion.</p>}

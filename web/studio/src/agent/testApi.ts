@@ -774,6 +774,7 @@ async function createTaskAndEvents(options: {
     mode?: 'message' | 'cancelling' | 'finished' | 'approval' | 'failed' | 'detail';
     title?: string;
     text?: string;
+    expiresAtMs?: number;
 } = {}): Promise<FixtureSummary> {
     if (state.phase !== 'ready') {
         const opened = await open();
@@ -872,7 +873,7 @@ async function createTaskAndEvents(options: {
                 tool: 'write_file',
                 scope: 'tool:write_file',
                 request_digest: requestDigest,
-                expires_at_ms: state.nowMs + 600_000,
+                expires_at_ms: options.expiresAtMs ?? state.nowMs + 600_000,
             },
         );
         if (required.ok !== true) {
@@ -2196,6 +2197,9 @@ export function installStudioTestApi(owner?: StudioAgentOwnerForTest): void {
             state = freshState();
         },
         open,
+        // API-only control: the mounted StudioApp keeps the client it was
+        // given. This rebuilds the test owner and must not be read as a UI
+        // hot-swap claim.
         async reopen() {
             const store = state.client?.store ?? state.store ?? createAgentStore();
             await disposeRuntimeForTest();

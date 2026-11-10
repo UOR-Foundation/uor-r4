@@ -1807,6 +1807,10 @@ export class AgentStore {
         );
     }
 
+    clearSelection(): void {
+        this.selectedTaskId = null;
+    }
+
     upsertTask(record: AgentTaskRecord): TaskView {
         if (
             !TASK_ID_PATTERN.test(record.taskId) ||

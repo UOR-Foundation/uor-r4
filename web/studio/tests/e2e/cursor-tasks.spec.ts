@@ -60,6 +60,21 @@ function detail(page: Page) {
     return page.locator('#studio-typed-root main[data-region="task-detail"]');
 }
 
+async function activeClass(page: Page): Promise<string> {
+    return page.evaluate(() => {
+        const active = document.activeElement as HTMLElement | null;
+        return active === null ? '' : `${active.tagName}:${active.className}`;
+    });
+}
+
+async function openRailIfClosed(page: Page): Promise<void> {
+    const rail = page.locator('#studio-typed-root [data-region="task-rail"]');
+    if (await rail.isHidden()) {
+        await page.locator('#studio-typed-root [data-action="toggle-projects"]').click();
+        await expect(rail).toBeVisible();
+    }
+}
+
 test.describe('Task 14 browser task detail, timeline, approvals and errors', () => {
     test('replay_detail_collapses_deltas_pairs_tools_and_never_fabricates_output', async ({ page }) => {
         await openStudio(page);
@@ -196,5 +211,110 @@ test.describe('Task 14 browser task detail, timeline, approvals and errors', () 
         await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
         await selectTask(page, fixture.taskId);
         await expect(detail(page).locator('[data-timeline-kind="assistant"]')).toContainText('shared owner replay text');
+    });
+
+    test('a_persisted_cancelling_projection_reloads_as_cancelling_without_an_enabled_stop', async ({ page }) => {
+        await openStudio(page);
+        await call<Outcome>(page, 'open');
+        const seeded = await call<{ taskId: string }>(page, 'createTaskAndEvents', { mode: 'cancelling' });
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        await selectTask(page, seeded.taskId);
+        await expect(detail(page).locator('.run-status-label')).toHaveText('Cancelling');
+        const stop = detail(page).locator('.run-status .run-stop');
+        if (await stop.count() > 0) await expect(stop).toBeDisabled();
+        await expect(detail(page).locator('.run-progress')).toHaveCount(0);
+        await expect(detail(page).locator('.run-status')).not.toContainText('Running');
+    });
+
+    test('back_clears_the_runtime_selection_returns_row_focus_and_cannot_send_to_a_hidden_task', async ({ page }) => {
+        await openStudio(page);
+        await call<Outcome>(page, 'open');
+        const seeded = await call<{ taskId: string; runId: string }>(page, 'createTaskAndEvents', {
+            mode: 'detail',
+            title: 'Back focus task',
+        });
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        await selectTask(page, seeded.taskId);
+        await expect.poll(() => activeClass(page)).toContain('task-detail-title');
+
+        await detail(page).getByRole('button', { name: 'Back to tasks', exact: true }).click();
+        await expect(page.locator('#studio-typed-root h1')).toHaveText('Agent');
+        await expect.poll(() => activeClass(page)).toContain('task-select');
+
+        const prompt = page.locator('#studio-typed-root textarea[aria-label="Prompt"]');
+        await prompt.fill('back then send');
+        const before = (await call<Outcome>(page, 'taskSnapshotForTest', seeded.taskId))
+            .record as LiveRunSnapshot;
+        await page.getByRole('button', { name: 'Send', exact: true }).click();
+        await page.waitForTimeout(200);
+        const after = (await call<Outcome>(page, 'taskSnapshotForTest', seeded.taskId))
+            .record as LiveRunSnapshot;
+        expect(after.runId).toBe(before.runId);
+        await expect(prompt).toHaveValue('back then send');
+    });
+
+    test('fresh_shell_send_stays_disabled_until_a_real_path_is_ready', async ({ page }) => {
+        await openStudio(page);
+        const prompt = page.locator('#studio-typed-root textarea[aria-label="Prompt"]');
+        await prompt.fill('fresh shell prompt');
+        await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+    });
+
+    test('an_out_of_range_approval_expiry_renders_not_recorded', async ({ page }) => {
+        await openStudio(page);
+        await call<Outcome>(page, 'open');
+        const seeded = await call<{ taskId: string }>(page, 'createTaskAndEvents', {
+            mode: 'approval',
+            title: 'Out of range approval',
+            expiresAtMs: Number.MAX_SAFE_INTEGER,
+        });
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        await selectTask(page, seeded.taskId);
+        const card = detail(page).locator('[data-approval-id="appr_reload_approval"]');
+        await expect(card).toContainText('Not recorded');
+        await expect(card.locator('time')).toHaveCount(0);
+        await expect(detail(page)).not.toContainText('RangeError');
+    });
+
+    test('detail_focus_returns_and_target_sizes_hold_at_390_and_1024', async ({ page }) => {
+        await openStudio(page);
+        await call<Outcome>(page, 'open');
+        const seeded = await call<{ taskId: string }>(page, 'createTaskAndEvents', {
+            mode: 'detail',
+            title: 'Responsive focus task',
+        });
+        for (const width of [390, 1024]) {
+            await page.setViewportSize({ width, height: 900 });
+            await page.reload();
+            await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+            await openRailIfClosed(page);
+            await selectTask(page, seeded.taskId);
+            await expect.poll(() => activeClass(page)).toContain('task-detail-title');
+            const undersized = await page.evaluate(() => {
+                const root = document.querySelector<HTMLElement>('#studio-typed-root main[data-region="task-detail"]');
+                if (root === null) return [{ name: 'missing detail', width: 0, height: 0 }];
+                const result: Array<{ name: string; width: number; height: number }> = [];
+                for (const element of Array.from(root.querySelectorAll<HTMLElement>('button, a[href], summary'))) {
+                    if ((element as HTMLButtonElement).disabled) continue;
+                    const style = getComputedStyle(element);
+                    const rect = element.getBoundingClientRect();
+                    if (style.display === 'none' || style.visibility === 'hidden' || rect.width === 0 || rect.height === 0) continue;
+                    if (rect.width + 0.01 < 24 || rect.height + 0.01 < 24) {
+                        result.push({
+                            name: (element.getAttribute('aria-label') || element.textContent || element.tagName).trim().slice(0, 60),
+                            width: Math.round(rect.width * 10) / 10,
+                            height: Math.round(rect.height * 10) / 10,
+                        });
+                    }
+                }
+                return result;
+            });
+            expect(undersized, `width ${width}`).toEqual([]);
+            await detail(page).getByRole('button', { name: 'Back to tasks', exact: true }).click();
+            await expect.poll(() => activeClass(page)).toContain('task-select');
+        }
     });
 });

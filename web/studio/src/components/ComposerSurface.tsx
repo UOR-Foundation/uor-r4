@@ -29,6 +29,7 @@ export interface ComposerSurfaceProps {
     onForce?(prompt: string): SendResult;
     onStop?(): void;
     onStopRun?(): void;
+    showGenerationStop?: boolean;
     onActionError?(error: unknown): void;
     activeRun?: RunSummary | null;
     mode: PermissionMode;
@@ -351,6 +352,6 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
             onSteer={() => runPromptAction(steerRef.current)}
             onForce={() => runPromptAction(forceRef.current)}
             onStop={() => props.onStopRun?.()}
-        /><button type="button" disabled={!props.generating || props.canStop === false} onClick={() => props.onStop?.()}>Stop</button></div>
+        />{props.showGenerationStop !== false && <button type="button" disabled={!props.generating || props.canStop === false} onClick={() => props.onStop?.()}>Stop</button>}</div>
     </div>;
 }

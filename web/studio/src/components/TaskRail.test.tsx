@@ -395,7 +395,7 @@ describe('TaskRail legacy session presentation', () => {
         expect(navs[0].querySelector('.session-list [data-action="new-session"]')).not.toBeNull();
     });
 
-    it('omits the legacy session list when an AgentClient is mounted', async () => {
+    it('keeps the labelled Local sessions group collapsed when an AgentClient has runtime tasks', async () => {
         const transport = new FixtureTransport({ nowMs: Date.now() - 60_000, projectId: PROJECT_A });
         const client = new AgentClient({ transport });
         const created = await client.createTask({ projectId: PROJECT_A, title: 'Task with client', repo: 'uor-r4' });
@@ -406,9 +406,12 @@ describe('TaskRail legacy session presentation', () => {
         await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks and local sessions"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
         const navs = host.querySelectorAll('nav[aria-label="Tasks and local sessions"]');
         expect(navs).toHaveLength(1);
-        expect(navs[0].querySelector('.session-list')).toBeNull();
-        expect(navs[0].querySelector('#task-rail-local-sessions')).toBeNull();
-        expect(host.querySelector('.session-list')).toBeNull();
+        const heading = navs[0].querySelector<HTMLElement>('h3#task-rail-local-sessions');
+        expect(heading).not.toBeNull();
+        const group = heading!.closest('details[data-task-group="local-sessions"]') as HTMLDetailsElement | null;
+        expect(group).not.toBeNull();
+        expect(group!.open).toBe(false);
+        expect(navs[0].querySelector('.session-list')).not.toBeNull();
     });
 });
 

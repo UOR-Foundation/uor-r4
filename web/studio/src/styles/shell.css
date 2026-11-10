@@ -174,8 +174,8 @@
 .task-plan-steps li { padding-inline-start: .2rem; }
 .task-plan-state { margin-inline-start: .45rem; color: var(--uor-muted); font-size: .7rem; text-transform: uppercase; }
 .task-plan-steps li[data-step-state="active"] { color: var(--uor-accent); }
-.task-plan-steps li[data-step-state="blocked"] { color: #d85d4a; }
-.task-error { display: grid; gap: .2rem; padding: .55rem .65rem; border: 1px solid var(--uor-border); border-inline-start: 3px solid #d85d4a; border-radius: var(--uor-radius-sm); background: var(--uor-surface); }
+.task-plan-steps li[data-step-state="blocked"] { color: var(--uor-danger); }
+.task-error { display: grid; gap: .2rem; padding: .55rem .65rem; border: 1px solid var(--uor-border); border-inline-start: 3px solid var(--uor-danger); border-radius: var(--uor-radius-sm); background: var(--uor-surface); }
 .task-error-code { margin: 0; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .76rem; }
 .task-error-message { margin: 0; overflow-wrap: anywhere; font-size: .82rem; }
 .task-error-retry { justify-self: start; }
@@ -188,9 +188,9 @@
 .timeline-tool-request, .timeline-tool-result { display: grid; gap: .15rem; margin: 0; font-size: .8rem; }
 .timeline-tool-request span, .timeline-tool-result span { color: var(--uor-muted); font-size: .7rem; text-transform: uppercase; }
 .timeline-tool-request code, .timeline-tool-result code { overflow-wrap: anywhere; font-size: .76rem; }
-.timeline-tool-failure { margin: 0; color: #d85d4a; font-size: .8rem; }
+.timeline-tool-failure { margin: 0; color: var(--uor-danger); font-size: .8rem; }
 .timeline-unknown, .timeline-usage { margin: 0; color: var(--uor-muted); font-size: .76rem; }
-.timeline-delivery { padding: .4rem .55rem; border-inline-start: 2px solid #d85d4a; background: var(--uor-surface-raised); font-size: .78rem; }
+.timeline-delivery { padding: .4rem .55rem; border-inline-start: 2px solid var(--uor-danger); background: var(--uor-surface-raised); font-size: .78rem; }
 .timeline-delivery span { font-weight: 650; }
 .approval-card { display: grid; gap: .4rem; margin-block-start: .3rem; padding: .55rem .65rem; border: 1px solid var(--uor-border); border-radius: var(--uor-radius-sm); background: var(--uor-surface-raised); }
 .approval-heading { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }

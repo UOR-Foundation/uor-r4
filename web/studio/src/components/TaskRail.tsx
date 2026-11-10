@@ -20,6 +20,7 @@ export interface TaskRailProps {
     showEmpty?: boolean;
     legacySessions?: ComponentChildren;
     legacySessionsEmpty?: boolean;
+    collapseLocalSessions?: boolean;
 }
 
 export interface TaskBuckets {
@@ -89,6 +90,7 @@ export function TaskRail({
     showEmpty = true,
     legacySessions,
     legacySessionsEmpty = false,
+    collapseLocalSessions = false,
 }: TaskRailProps) {
     const displayTasks = tasks.map((task) =>
         task.unresolvedRunId ||
@@ -110,7 +112,7 @@ export function TaskRail({
         </header>
         <TaskSearch value={query} onInput={onQuery} resultCount={visible.length} totalCount={total} />
         {loading && <p class="task-loading" role="status">Loading tasks…</p>}
-        {runtimeUnavailable && <p class="task-runtime-error" role="alert">The task runtime is not initialized. Tasks appear here after the local task runtime starts.</p>}
+        {runtimeUnavailable && <p class="task-runtime-error" role="alert">The task runtime is not initialized. Reload the page.</p>}
         {error !== null && <p class="task-load-error" role="alert">{error}</p>}
         {empty && showEmpty && !loading && !runtimeUnavailable && error === null && <p class="task-empty">No tasks yet. Tasks appear here when this project records one.</p>}
         {noMatches && <p class="task-empty" role="status">No tasks match “{query.trim()}”.</p>}
@@ -120,12 +122,18 @@ export function TaskRail({
             {buckets.older.length > 0 && <TaskGroup kind="older" label="Older" tasks={buckets.older} selectedTaskId={selectedTaskId} onSelect={onSelect} onPin={onPin} onArchive={onArchive} collapsed />}
         </div>}
         {buckets.archived.length > 0 && <TaskGroup kind="archived" label="Archived" tasks={buckets.archived} selectedTaskId={selectedTaskId} onSelect={onSelect} onPin={onPin} onArchive={onArchive} collapsed />}
-        {legacySessions != null && <div class="task-group task-legacy-sessions" data-task-group="local-sessions">
-            <header class="task-group-header">
-                <h3 id={LOCAL_SESSIONS_LABEL_ID}>Local sessions</h3>
-            </header>
-            {legacySessionsEmpty && <p class="task-empty">No sessions yet</p>}
-            {legacySessions}
-        </div>}
+        {legacySessions != null && (collapseLocalSessions
+            ? <details class="task-group task-legacy-sessions" data-task-group="local-sessions">
+                <summary><h3 id={LOCAL_SESSIONS_LABEL_ID}>Local sessions</h3></summary>
+                {legacySessionsEmpty && <p class="task-empty">No sessions yet</p>}
+                {legacySessions}
+            </details>
+            : <div class="task-group task-legacy-sessions" data-task-group="local-sessions">
+                <header class="task-group-header">
+                    <h3 id={LOCAL_SESSIONS_LABEL_ID}>Local sessions</h3>
+                </header>
+                {legacySessionsEmpty && <p class="task-empty">No sessions yet</p>}
+                {legacySessions}
+            </div>)}
     </nav>;
 }

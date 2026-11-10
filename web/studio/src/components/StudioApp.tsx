@@ -56,6 +56,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     const [taskQuery, setTaskQuery] = useState('');
     const [taskRevision, setTaskRevision] = useState(0);
     const [detailOpen, setDetailOpen] = useState(false);
+    const [focusTaskId, setFocusTaskId] = useState<string | null>(null);
     const [taskList, setTaskList] = useState<TaskListState>(() => ({ phase: agentClient === null ? 'ready' : 'loading', message: null }));
     const [editorSettings, setEditorSettings] = useState(() => ui.getSettings());
     useScopedShortcuts({ onPalette: () => setPaletteOpen(true), onSettings: () => setSettingsOpen(true) });
@@ -156,6 +157,21 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         document.addEventListener('uor-view-changed', viewChanged); document.addEventListener('uor-files-changed', filesChanged);
         return () => { document.removeEventListener('uor-view-changed', viewChanged); document.removeEventListener('uor-files-changed', filesChanged); };
     }, [store]);
+    useEffect(() => {
+        if (focusTaskId === null) return;
+        const restore = () => {
+            const row = document.querySelector<HTMLButtonElement>(`[data-task-id="${focusTaskId}"] .task-select`);
+            row?.focus();
+            setFocusTaskId(null);
+        };
+        const rail = document.querySelector<HTMLElement>('[data-region="task-rail"]');
+        if (rail?.hidden === true) {
+            document.querySelector<HTMLButtonElement>('[data-action="toggle-projects"]')?.click();
+            window.setTimeout(restore, 0);
+            return;
+        }
+        restore();
+    }, [focusTaskId, taskRevision]);
     useEffect(() => { if (secondarySection === activeSection) setSecondarySection(null); }, [activeSection, secondarySection]);
     useEffect(() => { if (state.file.phase === 'saved' && error?.surface === 'file' && error.operation === `file:save:${state.file.path}`) setError(null); }, [state.file.phase, state.file.path, error?.surface, error?.operation]);
     const selected = state.selectedSource;
@@ -189,10 +205,21 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     const selectTask = (taskId: string) => {
         if (agentClient === null) return;
         agentClient.store.selectTask(taskId);
+        if (window.innerWidth < 1024) {
+            const rail = document.querySelector<HTMLElement>('[data-region="task-rail"]');
+            if (rail !== null && !rail.hidden) document.querySelector<HTMLButtonElement>('[data-action="toggle-projects"]')?.click();
+        }
         setDetailOpen(true);
+        setFocusTaskId(null);
         setTaskRevision((value) => value + 1);
     };
-    const closeDetail = () => setDetailOpen(false);
+    const closeDetail = () => {
+        const taskId = agentClient?.store.snapshot().selectedTaskId ?? null;
+        agentClient?.store.clearSelection();
+        setDetailOpen(false);
+        setFocusTaskId(taskId);
+        setTaskRevision((value) => value + 1);
+    };
     const commands: PaletteCommand[] = [
         { id: 'agent', group: 'Navigation', label: 'Go to Agent', description: 'Chat and context', run: () => setActiveSection('agent') },
         { id: 'workspace', group: 'Navigation', label: 'Go to Workspace', description: 'Files and editor', run: () => setActiveSection('workspace') },
@@ -211,7 +238,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     ];
     const renderSection = (section: StudioSection, secondary = false) => {
         const idPrefix = secondary ? 'secondary-' : '';
-        if (section === 'agent') return <AgentComposer key={`${state.session.activeId || 'new'}:${state.session.revision}:${sessionRevision}`} store={store} sessions={sessions} files={files} ui={ui} generation={agent} draft={agentDraft} pasted={agentPasted} onDraftChange={setAgentDraft} onPastedChange={setAgentPasted} agentClient={agentClient} agentTask={selectedRuntime?.task ?? null} activeRun={selectedRuntime?.activeRun ?? null} unresolvedRun={selectedRuntime?.unresolvedRun ?? false} showTaskDetail={detailOpen} onTaskBack={closeDetail} onOpenSurface={(surface) => setActiveSection(surface === 'changes' ? 'changes' : 'terminal')} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} download={download} />;
+        if (section === 'agent') return <AgentComposer key={`${state.session.activeId || 'new'}:${state.session.revision}:${sessionRevision}`} store={store} sessions={sessions} files={files} ui={ui} generation={agent} draft={agentDraft} pasted={agentPasted} onDraftChange={setAgentDraft} onPastedChange={setAgentPasted} agentClient={agentClient} agentTask={selectedRuntime?.task ?? null} activeRun={selectedRuntime?.activeRun ?? null} unresolvedRun={selectedRuntime?.unresolvedRun ?? false} runtimeTasksLoading={taskList.phase === 'loading'} runtimeTasksReady={taskList.phase === 'ready'} runtimeTaskCount={tasks.length} showTaskDetail={detailOpen} onTaskBack={closeDetail} onOpenSurface={(surface) => setActiveSection(surface === 'changes' ? 'changes' : 'terminal')} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} download={download} />;
         if (section === 'workspace') return <WorkspaceEditor store={store} files={files} operations={operations} onError={reportFile} onSuccess={succeed} settings={editorSettings} />;
         if (section === 'changes') return <ChangesPanel actions={desktopActions} files={files} idPrefix={idPrefix} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} />;
         if (section === 'terminal') return <TerminalPanel actions={desktopActions} files={files} idPrefix={idPrefix} />;
@@ -236,8 +263,9 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             loading={taskList.phase === 'loading'}
             error={taskList.phase === 'error' ? taskList.message : null}
             showEmpty={!taskReadyZero}
-            legacySessions={agentClient === null || tasks.length === 0 ? <SessionList store={store} agent={agent} download={download} onError={report} onSuccess={succeed} onChange={(operation) => { succeed(operation); setSessionRevision((value) => value + 1); }} showHeader={false} showEmpty={false} labelId={LOCAL_SESSIONS_LABEL_ID} /> : undefined}
-            legacySessionsEmpty={(agentClient === null || tasks.length === 0) && state.session.items.length === 0}
+            legacySessions={<SessionList store={store} agent={agent} download={download} onError={report} onSuccess={succeed} onChange={(operation) => { succeed(operation); setSessionRevision((value) => value + 1); }} showHeader={false} showEmpty={false} labelId={LOCAL_SESSIONS_LABEL_ID} />}
+            legacySessionsEmpty={state.session.items.length === 0}
+            collapseLocalSessions={tasks.length > 0}
         />}
         alert={error && <p role="alert" class="workbench-alert">{error.message}</p>} primary={renderSection(activeSection)}>
         <Inspector store={store} ui={ui} open={inspectorOpen} onClose={() => setInspectorOpen(false)} />

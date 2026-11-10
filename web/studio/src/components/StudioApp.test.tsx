@@ -2,7 +2,7 @@ import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LifecycleStore } from '../state/lifecycle.js';
-import { AgentClient } from '../agent/client.js';
+import { AgentClient, type TaskSummary } from '../agent/client.js';
 import { FixtureTransport } from '../agent/fixtureTransport.js';
 import { canonicalJson } from '../agent/generated/agentCanonical.js';
 import { createAgentStore, type AgentIncomingEvent } from '../state/agent.js';
@@ -746,7 +746,7 @@ function runtimeEvent(sequence: number, type: string, data: Record<string, unkno
     } as unknown as AgentIncomingEvent;
 }
 
-function runtimeClient(): AgentClient {
+function runtimeClientFixture(): { client: AgentClient; transport: FixtureTransport } {
     const store = createAgentStore();
     expect(store.apply(runtimeEvent(0, 'run.queued', { queued_at_ms: 1_794_283_200_000 })).status).toBe('applied');
     expect(store.apply(runtimeEvent(1, 'run.started', {
@@ -765,7 +765,23 @@ function runtimeClient(): AgentClient {
         createdAtMs: 1_794_283_200_000,
         latestRunId: RUNTIME_RUN,
     });
-    return new AgentClient({ store, transport: new FixtureTransport() });
+    const transport = new FixtureTransport();
+    return { client: new AgentClient({ store, transport }), transport };
+}
+
+function runtimeClient(): AgentClient {
+    return runtimeClientFixture().client;
+}
+
+class PendingListTransport extends FixtureTransport {
+    private resolveList!: (tasks: TaskSummary[]) => void;
+    private readonly pending = new Promise<TaskSummary[]>((resolve) => { this.resolveList = resolve; });
+    override listTasks(): Promise<TaskSummary[]> {
+        return this.pending;
+    }
+    resolve(tasks: TaskSummary[] = []): void {
+        this.resolveList(tasks);
+    }
 }
 
 describe('StudioApp runtime task detail', () => {
@@ -811,9 +827,98 @@ describe('StudioApp runtime task detail', () => {
             render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
             await Promise.resolve();
         });
-        await vi.waitFor(() => expect(host.textContent).toContain('task runtime is not initialized'));
+        await vi.waitFor(() => expect(host.textContent).toContain('The task runtime is not initialized. Reload the page.'));
         expect(host.textContent).toContain('Local sessions');
         expect(host.querySelector('.agent-composer')).not.toBeNull();
         expect(host.querySelector('textarea[aria-label="Prompt"]')).not.toBeNull();
+    });
+
+    it('clears the real selection on Back, restores row focus and cannot start a hidden run', async () => {
+        const { client, transport } = runtimeClientFixture();
+        await act(async () => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+            await Promise.resolve();
+        });
+        await act(async () => { host.querySelector<HTMLButtonElement>(`[data-task-id="${RUNTIME_TASK}"] .task-select`)!.click(); await Promise.resolve(); });
+        expect(host.querySelector('[data-task-detail-header]')).not.toBeNull();
+        await act(async () => { button('Back to tasks').click(); await Promise.resolve(); });
+        expect(client.store.snapshot().selectedTaskId).toBeNull();
+        expect(client.store.snapshot().selectedTask).toBeNull();
+        await vi.waitFor(() => expect((document.activeElement as HTMLElement | null)?.className ?? '').toContain('task-select'));
+        const startsBefore = transport.calls.filter((call) => call.method === 'startRun').length;
+        const prompt = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
+        act(() => { prompt.value = 'back then send'; prompt.dispatchEvent(new Event('input', { bubbles: true })); });
+        await act(async () => { button('Send').click(); await Promise.resolve(); });
+        expect(transport.calls.filter((call) => call.method === 'startRun')).toHaveLength(startsBefore);
+        expect(prompt.value).toBe('back then send');
+    });
+
+    it('disables Send while the runtime task list is loading and uses legacy readiness when it is empty', async () => {
+        const store = new LifecycleStore();
+        vi.spyOn(store, 'canRun').mockReturnValue(true);
+        const transport = new PendingListTransport();
+        const client = new AgentClient({ transport });
+        await act(async () => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+            await Promise.resolve();
+        });
+        const prompt = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
+        act(() => { prompt.value = 'ready check'; prompt.dispatchEvent(new Event('input', { bubbles: true })); });
+        expect(button('Send').disabled, 'Send must wait for the task list').toBe(true);
+
+        await act(async () => { transport.resolve([]); await new Promise((resolve) => setTimeout(resolve, 0)); });
+        await vi.waitFor(() => expect(host.textContent).toContain('No tasks yet'));
+        expect(button('Send').disabled, 'an empty runtime list falls back to lifecycle readiness').toBe(false);
+    });
+
+    it('keeps Send disabled for an unresolved restored run without starting another path', async () => {
+        const store = createAgentStore();
+        store.upsertTask({
+            taskId: RUNTIME_TASK,
+            projectId: RUNTIME_PROJECT,
+            title: 'Unresolved restore task',
+            createdAtMs: 1_794_283_200_000,
+            latestRunId: RUNTIME_RUN,
+        });
+        const transport = new FixtureTransport();
+        const client = new AgentClient({ store, transport });
+        await act(async () => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+            await Promise.resolve();
+        });
+        await act(async () => { host.querySelector<HTMLButtonElement>(`[data-task-id="${RUNTIME_TASK}"] .task-select`)!.click(); await Promise.resolve(); });
+        const prompt = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
+        act(() => { prompt.value = 'unresolved send'; prompt.dispatchEvent(new Event('input', { bubbles: true })); });
+        expect(button('Send').disabled).toBe(true);
+        const startsBefore = transport.calls.filter((call) => call.method === 'startRun').length;
+        await act(async () => { button('Send').click(); await Promise.resolve(); });
+        expect(transport.calls.filter((call) => call.method === 'startRun')).toHaveLength(startsBefore);
+    });
+
+    it('hides the legacy lifecycle Stop while the runtime detail is active', async () => {
+        const client = runtimeClient();
+        await act(async () => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+            await Promise.resolve();
+        });
+        await act(async () => { host.querySelector<HTMLButtonElement>(`[data-task-id="${RUNTIME_TASK}"] .task-select`)!.click(); await Promise.resolve(); });
+        const composerStops = Array.from(host.querySelectorAll<HTMLButtonElement>('.agent-composer .composer-footer button'))
+            .filter((node) => (node.textContent ?? '').trim() === 'Stop');
+        expect(composerStops).toHaveLength(0);
+        expect(host.querySelector('.run-status .run-stop')).not.toBeNull();
+    });
+
+    it('keeps the labelled Local sessions group available when runtime tasks exist', async () => {
+        const client = runtimeClient();
+        await act(async () => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+            await Promise.resolve();
+        });
+        await vi.waitFor(() => expect(host.querySelector(`[data-task-id="${RUNTIME_TASK}"]`)).not.toBeNull());
+        const heading = host.querySelector<HTMLElement>('nav[aria-label="Tasks and local sessions"] h3#task-rail-local-sessions');
+        expect(heading).not.toBeNull();
+        const group = heading!.closest('details[data-task-group="local-sessions"]') as HTMLDetailsElement | null;
+        expect(group).not.toBeNull();
+        expect(group!.open).toBe(false);
     });
 });

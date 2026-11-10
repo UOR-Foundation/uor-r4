@@ -196,7 +196,8 @@ describe('TaskDetail', () => {
         await renderDetail(fixture(detailEvents()));
         const header = host.querySelector('[data-task-detail-header]')!;
         expect(header.textContent).toContain('Finished');
-        expect(header.textContent).toContain('Prompt');
+        expect(header.textContent).toContain('Title');
+        expect(header.textContent).toContain('Starting prompt not recorded');
         expect(header.textContent).toContain(TASK_ID);
         expect(header.textContent).toContain(PROJECT_ID);
         expect(header.textContent).toContain('browser-runtime');
@@ -389,5 +390,91 @@ describe('TaskDetail', () => {
         expect(onOpenSurface).toHaveBeenCalledWith('changes');
         await act(async () => { buttonNamed('Open terminal')!.click(); });
         expect(onOpenSurface).toHaveBeenCalledWith('terminal');
+    });
+
+    it('renders a persisted cancelling projection without an enabled stop', async () => {
+        const value = fixture([
+            queued(),
+            started(),
+            event(2, 'run.status', { status: 'cancelling' }),
+        ]);
+        const projected = value.task.runs[0]!;
+        expect(projected.state).toBe('running');
+        expect(projected.statusProjection).toBe('cancelling');
+        await renderDetail(value);
+        expect(host.querySelector('.run-status-label')?.textContent).toBe('Cancelling');
+        const stop = host.querySelector<HTMLButtonElement>('.run-stop');
+        expect(stop === null || stop.disabled).toBe(true);
+        expect(host.querySelector('.run-progress')).toBeNull();
+    });
+
+    it('labels the task title honestly and does not invent a starting prompt', async () => {
+        const value = fixture(detailEvents());
+        value.store.upsertTask({
+            taskId: TASK_ID,
+            projectId: PROJECT_ID,
+            title: 'Client resume fixture',
+            createdAtMs: 1_794_283_200_000,
+            latestRunId: RUN_ID,
+        });
+        await renderDetail({ ...value, task: taskNow(value) });
+        const header = host.querySelector('[data-task-detail-header]')!;
+        const labels = Array.from(header.querySelectorAll('dt')).map((node) => node.textContent);
+        expect(labels).toContain('Title');
+        expect(labels).not.toContain('Prompt');
+        expect(labels).toContain('Starting prompt');
+        expect(header.textContent).toContain('Client resume fixture');
+        expect(header.textContent).toContain('Starting prompt not recorded');
+        expect(header.textContent).not.toContain('resume fixture prompt');
+    });
+
+    it('tolerates an approval expiry outside the JavaScript Date range', async () => {
+        const value = fixture([
+            queued(0),
+            started(1),
+            event(2, 'tool.approval_required', {
+                approval_id: 'apr_2222222222222222',
+                tool_call_id: 'tool_1',
+                tool: 'write_file',
+                scope: 'tool:write_file',
+                request_digest: DIGEST,
+                expires_at_ms: Number.MAX_SAFE_INTEGER,
+            }),
+        ]);
+        await renderDetail(value);
+        const card = host.querySelector('[data-approval-id="apr_2222222222222222"]')!;
+        expect(card).not.toBeNull();
+        expect(card.textContent).toContain('Not recorded');
+        expect(card.querySelector('time')).toBeNull();
+        expect(host.textContent).not.toContain('RangeError');
+    });
+
+    it('keeps the approval heading directly under the task heading when no plan exists', async () => {
+        const value = fixture([
+            queued(0),
+            started(1),
+            event(2, 'tool.approval_required', {
+                approval_id: 'apr_3333333333333333',
+                tool_call_id: 'tool_1',
+                tool: 'write_file',
+                scope: 'tool:write_file',
+                request_digest: DIGEST,
+                expires_at_ms: 1_794_283_800_000,
+            }),
+        ]);
+        await renderDetail(value);
+        const levels = Array.from(host.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6'))
+            .map((node) => node.tagName);
+        expect(levels[0]).toBe('H1');
+        expect(levels[1]).toBe('H2');
+        expect(levels).not.toContain('H3');
+        expect(host.querySelector('[data-approval-id="apr_3333333333333333"] h2')?.textContent).toBe('Approval required');
+    });
+
+    it('moves focus to the detail heading when the task detail opens', async () => {
+        await renderDetail(fixture(detailEvents()));
+        const heading = host.querySelector<HTMLHeadingElement>('.task-detail-title')!;
+        expect(heading.getAttribute('tabindex')).toBe('-1');
+        expect(document.activeElement).toBe(heading);
     });
 });

@@ -35,6 +35,9 @@ interface AgentComposerProps {
     agentTask?: TaskView | null;
     activeRun?: RunView | null;
     unresolvedRun?: boolean;
+    runtimeTasksLoading?: boolean;
+    runtimeTasksReady?: boolean;
+    runtimeTaskCount?: number;
     showTaskDetail?: boolean;
     onTaskBack?(): void;
     onOpenSurface?(surface: 'changes' | 'terminal'): void;
@@ -55,7 +58,7 @@ function revokePreview(draft: AttachmentDraft): void {
     }
 }
 
-export function AgentComposer({ store, sessions, files, ui, generation, copy, download, draft: controlledDraft, pasted: controlledPasted, onDraftChange, onPastedChange, agentClient = null, agentTask = null, activeRun = null, unresolvedRun = false, showTaskDetail = false, onTaskBack, onOpenSurface }: AgentComposerProps) {
+export function AgentComposer({ store, sessions, files, ui, generation, copy, download, draft: controlledDraft, pasted: controlledPasted, onDraftChange, onPastedChange, agentClient = null, agentTask = null, activeRun = null, unresolvedRun = false, runtimeTasksLoading = false, runtimeTasksReady = true, runtimeTaskCount, showTaskDetail = false, onTaskBack, onOpenSurface }: AgentComposerProps) {
     const state = useLifecycle(store);
     const [pastedState, setPastedState] = useState('');
     const pasted = controlledPasted ?? pastedState;
@@ -202,17 +205,20 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
         : selected.kind === 'artifact' ? 'Local generation' : 'API chat';
 
     const activeTaskRun = isActiveRun(activeRun) ? activeRun : null;
-    const agentMode = agentClient !== null;
-    const sendDisabled = agentMode
+    const taskCount = runtimeTaskCount ?? agentClient?.store.snapshot().tasks.length ?? 0;
+    const runtimeTaskPath = agentClient !== null && runtimeTasksReady && taskCount > 0;
+    const agentMode = runtimeTaskPath;
+    const legacyReady = store.canRun();
+    const sendDisabled = runtimeTaskPath
         ? Boolean(activeTaskRun) || unresolvedRun
-        : !store.canRun();
+        : runtimeTasksLoading || !legacyReady;
 
     function failureMessage(prefix: string, failure: unknown): string {
         return `${prefix}: ${failure instanceof Error ? failure.message : String(failure)}`;
     }
 
     function send(prompt: string): boolean | Promise<boolean> {
-        if (agentClient !== null && agentClient.store.snapshot().tasks.length > 0) {
+        if (runtimeTaskPath && agentClient !== null) {
             if (!agentTask) {
                 ui.toast('Select a task before sending.', 'error');
                 return false;
@@ -233,6 +239,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                 return false;
             });
         }
+        if (runtimeTasksLoading) return false;
         if (!generation.send(prompt)) return false;
         refresh();
         return true;
@@ -481,6 +488,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                 onForce={agentMode ? force : undefined}
                 onStop={() => { generation.stop(); refresh(); }}
                 onStopRun={stopTaskRun}
+                showGenerationStop={!showTaskDetail}
                 onActionError={(error) => ui.toast(failureMessage('Composer action failed', error), 'error')}
                 activeRun={activeTaskRun}
                 mode={permissionMode}
