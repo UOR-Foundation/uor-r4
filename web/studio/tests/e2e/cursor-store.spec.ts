@@ -1113,6 +1113,38 @@ test.describe('browser agent task store', () => {
         expect(db.eventRecords[0]!.event_id).toContain(heldRun);
     });
 
+    test('pre_gate_append_blocks_a_successful_import_until_it_commits', async ({ page }) => {
+        await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const exported = await call<string>(page, 'exportNdjson');
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+
+        const heldTask = 'tsk_aaaaaaaaaaaaaaaa';
+        const heldRun = 'run_bbbbbbbbbbbbbbbb';
+        await call(page, 'beginHeldQueuedAppend', heldTask, heldRun);
+        await call(page, 'awaitAppendHeld');
+        await call(page, 'beginImport', exported);
+        const importOutcome = call<Outcome>(page, 'whenImport');
+        const raced = await Promise.race([
+            importOutcome.then((result) => ({ kind: 'import' as const, result })),
+            page.waitForTimeout(3_000).then(() => ({ kind: 'blocked' as const })),
+        ]);
+        // The import must stay fenced while a write that started before it is still in flight.
+        expect(raced.kind).toBe('blocked');
+
+        await call(page, 'releaseHeldAppend');
+        const held = await call<Outcome>(page, 'finishHeldAppend');
+        expect(held.status).toBe('applied');
+        const imported = await importOutcome;
+        expect(imported.ok).toBe(false);
+        expect(imported.code).toBe('duplicate_event');
+
+        const db = await readDb(page);
+        expect(db.eventRecords).toHaveLength(1);
+        expect(db.eventRecords[0]!.event_id).toContain(heldRun);
+        expect(db.leaseRecords).toHaveLength(0);
+    });
+
     test('cross_tab_import_fence_blocks_a_foreign_append', async ({ page, context }) => {
         await call<FixtureSummary>(page, 'createTaskAndEvents');
         const exported = await call<string>(page, 'exportNdjson');
@@ -1137,6 +1169,86 @@ test.describe('browser agent task store', () => {
 
         const imported = await call<Outcome>(page, 'whenImport');
         expect(imported.ok, JSON.stringify(imported)).toBe(true);
+        await pageTwo.close();
+    });
+
+    test('long_import_heartbeat_keeps_the_fence_live_and_blocks_takeover', async ({ page, context }) => {
+        await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const exported = await call<string>(page, 'exportNdjson');
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+
+        const pageTwo = await context.newPage();
+        await openStudio(pageTwo);
+        expect((await call<RestoreView>(pageTwo, 'open')).phase).toBe('ready');
+
+        await call(page, 'beginImport', exported);
+        const acquired = await readDb(page);
+        expect(acquired.leaseRecords).toHaveLength(1);
+        const leaseBefore = acquired.leaseRecords[0] as {
+            started_at_ms: number;
+            heartbeat_at_ms: number;
+        };
+        const advanced = await call<Outcome>(page, 'advanceImportClock', 45_000);
+        expect(advanced.ok, JSON.stringify(advanced)).toBe(true);
+        expect((await call<Outcome>(pageTwo, 'advanceImportClock', 45_000)).ok).toBe(true);
+        const blocked = await call<Outcome>(pageTwo, 'importNdjson', exported);
+        expect(blocked.ok).toBe(false);
+        expect(blocked.code).toBe('stale_generation');
+
+        const refreshed = (await readDb(page)).leaseRecords[0] as {
+            started_at_ms: number;
+            heartbeat_at_ms: number;
+        };
+        expect(refreshed.started_at_ms).toBe(leaseBefore.started_at_ms);
+        expect(refreshed.heartbeat_at_ms).toBe(leaseBefore.heartbeat_at_ms + 45_000);
+        const untouched = await readDb(page);
+        expect(untouched.eventRecords).toHaveLength(0);
+        expect(untouched.taskRecords).toHaveLength(0);
+        expect(untouched.leaseRecords).toHaveLength(1);
+
+        const imported = await call<Outcome>(page, 'whenImport');
+        expect(imported.ok, JSON.stringify(imported)).toBe(true);
+        expect(await call<CursorView>(page, 'cursor')).toMatchObject({ sequence: 2 });
+        const committed = await readDb(page);
+        expect(committed.leaseRecords).toHaveLength(0);
+        expect(committed.taskRecords).toHaveLength(1);
+        await pageTwo.close();
+    });
+
+    test('frozen_importers_late_cleanup_preserves_the_takeover_records', async ({ page, context }) => {
+        await call<FixtureSummary>(page, 'createTaskAndEvents');
+        const exported = await call<string>(page, 'exportNdjson');
+        await call(page, 'reset');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+
+        const pageTwo = await context.newPage();
+        await openStudio(pageTwo);
+        expect((await call<RestoreView>(pageTwo, 'open')).phase).toBe('ready');
+
+        await call(page, 'beginImport', exported);
+        expect((await call<Outcome>(page, 'freezeImportClock', 60_000)).ok).toBe(true);
+        expect((await call<Outcome>(pageTwo, 'advanceImportClock', 60_000)).ok).toBe(true);
+        await call(pageTwo, 'beginImport', exported);
+        const takeoverLease = (await readDb(page)).leaseRecords[0] as {
+            started_at_ms: number;
+            heartbeat_at_ms: number;
+        };
+        expect(takeoverLease.started_at_ms).toBe(takeoverLease.heartbeat_at_ms);
+
+        const first = await call<Outcome>(page, 'whenImport');
+        expect(first.ok).toBe(false);
+        expect(first.code).toBe('stale_generation');
+
+        const takeover = await call<Outcome>(pageTwo, 'whenImport');
+        expect(takeover.ok, JSON.stringify(takeover)).toBe(true);
+        const committed = await readDb(page);
+        expect(committed.taskRecords).toHaveLength(1);
+        expect(committed.leaseRecords).toHaveLength(0);
+        expect(committed.eventRecords.length).toBeGreaterThan(0);
+        expect(await call<CursorView>(pageTwo, 'cursor')).toMatchObject({
+            sequence: 2,
+        });
         await pageTwo.close();
     });
 

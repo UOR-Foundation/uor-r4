@@ -58,6 +58,7 @@ const RUN_ID_PATTERN = /^run_[0-9a-f]{16}$/;
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const RUN_STATES: ReadonlySet<string> = new Set(AGENT_RUN_STATES);
 const IMPORT_FENCE_KEY = '__import__';
+const IMPORT_HEARTBEAT_MS = Math.max(1, Math.floor(LEASE_STALE_MS / 3));
 
 interface StoreFaults {
     abort_next_append: boolean;
@@ -66,12 +67,21 @@ interface StoreFaults {
     fail_import_cleanup: boolean;
 }
 
+export interface AgentTaskStoreTimers {
+    setInterval(
+        handler: () => void | Promise<void>,
+        timeout: number,
+    ): unknown;
+    clearInterval(handle: unknown): void;
+}
+
 export interface AgentTaskStoreOptions {
     store: AgentStore;
     indexedDB?: IDBFactory;
     now?: () => number;
     writerId?: string;
     faults?: StoreFaults;
+    timers?: AgentTaskStoreTimers;
 }
 
 interface EventPair {
@@ -631,10 +641,14 @@ export class AgentTaskStore {
     private readonly clock: () => number;
     private readonly writerId: string;
     private readonly faults: StoreFaults;
+    private readonly timers: AgentTaskStoreTimers;
     private db: IDBDatabase | null = null;
     private opened = false;
     private importInProgress = false;
     private importGate: Promise<void> | null = null;
+    private importHeartbeatHandle: unknown = null;
+    private importHeartbeatTask: Promise<void> = Promise.resolve();
+    private importHeartbeatError: AgentStoreError | null = null;
     private activeWrites = 0;
     private readonly writeWaiters: Array<() => void> = [];
     private appendGate: Promise<void> | null = null;
@@ -654,6 +668,14 @@ export class AgentTaskStore {
         }
         this.clock = options.now ?? (() => Date.now());
         this.writerId = options.writerId ?? `writer-${randomHex(8)}`;
+        this.timers = options.timers ?? {
+            setInterval: (handler, timeout) => globalThis.setInterval(handler, timeout),
+            clearInterval: (handle) => {
+                globalThis.clearInterval(
+                    handle as ReturnType<typeof globalThis.setInterval>,
+                );
+            },
+        };
         this.faults = options.faults ?? {
             abort_next_append: false,
             abort_next_task_write: false,
@@ -701,6 +723,57 @@ export class AgentTaskStore {
         return new Promise((resolve) => this.writeWaiters.push(resolve));
     }
 
+    private startImportHeartbeat(): void {
+        this.stopImportHeartbeat();
+        this.importHeartbeatError = null;
+        this.importHeartbeatTask = Promise.resolve();
+        this.importHeartbeatHandle = this.timers.setInterval(() => {
+            if (!this.importInProgress || this.importHeartbeatError !== null) {
+                return;
+            }
+            this.importHeartbeatTask = this.importHeartbeatTask.then(async () => {
+                if (!this.importInProgress || this.importHeartbeatError !== null) {
+                    return;
+                }
+                try {
+                    await this.renewImportFence(this.clock());
+                } catch (error) {
+                    this.importHeartbeatError =
+                        error instanceof AgentStoreError
+                            ? error
+                            : new AgentStoreError(
+                                  'runtime_unavailable',
+                                  errorMessage(error),
+                              );
+                }
+            });
+            return this.importHeartbeatTask;
+        }, IMPORT_HEARTBEAT_MS);
+    }
+
+    private stopImportHeartbeat(): void {
+        if (this.importHeartbeatHandle !== null) {
+            this.timers.clearInterval(this.importHeartbeatHandle);
+            this.importHeartbeatHandle = null;
+        }
+    }
+
+    private async settleImportHeartbeat(): Promise<void> {
+        this.stopImportHeartbeat();
+        await this.importHeartbeatTask;
+    }
+
+    private takeImportHeartbeatError(): AgentStoreError | null {
+        const error = this.importHeartbeatError;
+        this.importHeartbeatError = null;
+        return error;
+    }
+
+    private throwImportHeartbeatError(): void {
+        const error = this.takeImportHeartbeatError();
+        if (error !== null) throw error;
+    }
+
     async open(): Promise<OpenReport> {
         if (this.importInProgress) {
             throw new AgentStoreError(
@@ -730,6 +803,7 @@ export class AgentTaskStore {
             this.closeRequested = true;
             return;
         }
+        this.stopImportHeartbeat();
         this.db?.close();
         this.db = null;
         this.opened = false;
@@ -1716,11 +1790,13 @@ export class AgentTaskStore {
         await this.drainWrites();
         await this.acquireImportFence(this.clock());
         fenceAcquired = true;
+        this.startImportHeartbeat();
         if (this.importGate !== null) {
             const gate = this.importGate;
             this.importGate = null;
             await gate;
         }
+        this.throwImportHeartbeatError();
         if (typeof text !== 'string' || byteLength(text) > MAX_EXPORT_BYTES) {
             throw new AgentStoreError('limit_exceeded', 'import exceeds max_export_bytes');
         }
@@ -1881,6 +1957,7 @@ export class AgentTaskStore {
         for (const bundle of snapshots.values()) {
             this.assertSnapshotBundleSize(bundle);
         }
+        this.throwImportHeartbeatError();
         const scratch = createAgentStore();
         const scratchResult = await this.replayInto(scratch, input);
         for (const change of changes) {
@@ -1919,9 +1996,12 @@ export class AgentTaskStore {
             );
         }
 
+        await this.settleImportHeartbeat();
+        this.throwImportHeartbeatError();
         const db = this.requireDb();
         const transaction = db.transaction([...AGENT_DB_STORES], 'readwrite');
         try {
+            let fenceRecord: LeaseRecord | null = null;
             for (const name of AGENT_DB_STORES) {
                 const store = transaction.objectStore(name);
                 const count = await requestResult(store.count());
@@ -1954,13 +2034,18 @@ export class AgentTaskStore {
                         'import fence ownership changed before commit',
                     );
                 }
+                fenceRecord = fence;
+            }
+            if (fenceRecord === null) {
+                throw new AgentStoreError(
+                    'stale_generation',
+                    'import fence is missing before commit',
+                );
             }
             await requestResult(
                 transaction.objectStore('leases').put(
                     jsonClean({
-                        task_id: IMPORT_FENCE_KEY,
-                        writer_id: this.importFenceWriter,
-                        started_at_ms: this.clock(),
+                        ...fenceRecord,
                         heartbeat_at_ms: this.clock(),
                     } satisfies LeaseRecord),
                     IMPORT_FENCE_KEY,
@@ -2022,6 +2107,8 @@ export class AgentTaskStore {
             );
         }
         if (fenceAcquired) {
+            await this.settleImportHeartbeat();
+            this.takeImportHeartbeatError();
             await this.releaseImportFence();
             fenceAcquired = false;
         }
@@ -2044,6 +2131,8 @@ export class AgentTaskStore {
             changes: changes.length,
         };
         } catch (error) {
+            await this.settleImportHeartbeat();
+            this.takeImportHeartbeatError();
             this.store.restore(checkpoint);
             if (written) {
                 try {
@@ -2200,6 +2289,49 @@ export class AgentTaskStore {
                 'stale_generation',
                 'an import fence is held by another writer',
             );
+        }
+    }
+
+    private async renewImportFence(now: number): Promise<void> {
+        if (this.db === null) {
+            throw new AgentStoreError(
+                'runtime_unavailable',
+                'durable task store connection is unavailable',
+            );
+        }
+        const transaction = this.db.transaction('leases', 'readwrite');
+        try {
+            const leases = transaction.objectStore('leases');
+            const existing = (await requestResult(
+                leases.get(IMPORT_FENCE_KEY),
+            )) as LeaseRecord | undefined;
+            if (
+                existing === undefined ||
+                existing.writer_id !== this.importFenceWriter
+            ) {
+                throw new AgentStoreError(
+                    'stale_generation',
+                    'import fence ownership changed before its heartbeat',
+                );
+            }
+            requireStoredLease(existing);
+            await requestResult(
+                leases.put(
+                    jsonClean({
+                        ...existing,
+                        heartbeat_at_ms: now,
+                    } satisfies LeaseRecord),
+                    IMPORT_FENCE_KEY,
+                ),
+            );
+            await transactionDone(transaction);
+        } catch (error) {
+            try {
+                transaction.abort();
+            } catch {
+                // The transaction may already be finished.
+            }
+            throw storageError(error);
         }
     }
 

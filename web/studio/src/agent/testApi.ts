@@ -154,6 +154,8 @@ export interface StudioTestApi {
     finishHeldAppend(): Promise<Outcome>;
     beginImport(text: string): void;
     whenImport(): Promise<Outcome>;
+    advanceImportClock(ms: number): Promise<Outcome>;
+    freezeImportClock(ms: number): Promise<Outcome>;
     appendAssistantSafe(
         text: string,
         options?: { writerId?: string; nowMs?: number },
@@ -189,6 +191,15 @@ interface TestState {
     appendGateRelease: (() => void) | null;
     appendGateReached: Promise<void> | null;
     heldAppend: Promise<Outcome> | null;
+    timers: TestTimer[];
+    nextTimerHandle: number;
+}
+
+interface TestTimer {
+    handle: number;
+    periodMs: number;
+    nextAtMs: number;
+    callback: () => void | Promise<void>;
 }
 
 let state: TestState = freshState();
@@ -217,6 +228,8 @@ function freshState(): TestState {
         appendGateRelease: null,
         appendGateReached: null,
         heldAppend: null,
+        timers: [],
+        nextTimerHandle: 1,
     };
 }
 
@@ -226,6 +239,27 @@ function randomHex(bytes: number): string {
     return [...values]
         .map((value) => value.toString(16).padStart(2, '0'))
         .join('');
+}
+
+function testSetInterval(
+    handler: () => void | Promise<void>,
+    timeout: number,
+): number {
+    const periodMs = Math.max(1, timeout);
+    const handle = state.nextTimerHandle;
+    state.nextTimerHandle += 1;
+    state.timers.push({
+        handle,
+        periodMs,
+        nextAtMs: state.nowMs + periodMs,
+        callback: handler,
+    });
+    return handle;
+}
+
+function testClearInterval(handle: unknown): void {
+    const index = state.timers.findIndex((timer) => timer.handle === handle);
+    if (index >= 0) state.timers.splice(index, 1);
 }
 
 class SummaryTransport extends FixtureTransport {
@@ -245,6 +279,10 @@ function ensureClient(): AgentClient {
         store,
         now: () => state.nowMs,
         faults: state.faults,
+        timers: {
+            setInterval: testSetInterval,
+            clearInterval: testClearInterval,
+        },
     });
     const client = new AgentClient({
         transport: new FixtureTransport(),
@@ -1400,6 +1438,44 @@ export function installStudioTestApi(): void {
             const result = await state.importPromise;
             state.importPromise = null;
             return result;
+        },
+        async advanceImportClock(ms: number) {
+            if (!Number.isFinite(ms) || ms < 0) {
+                return {
+                    ok: false,
+                    code: 'invalid_arguments',
+                    message: 'ms must be a non-negative number',
+                };
+            }
+            state.nowMs += ms;
+            const due = state.timers.filter((timer) => timer.nextAtMs <= state.nowMs);
+            for (const timer of due) {
+                if (!state.timers.includes(timer)) continue;
+                timer.nextAtMs += timer.periodMs;
+                try {
+                    await timer.callback();
+                } catch (error) {
+                    return failure(error);
+                }
+            }
+            return {
+                ok: true,
+                record: { now_ms: state.nowMs, timers: state.timers.length },
+            };
+        },
+        async freezeImportClock(ms: number) {
+            if (!Number.isFinite(ms) || ms < 0) {
+                return {
+                    ok: false,
+                    code: 'invalid_arguments',
+                    message: 'ms must be a non-negative number',
+                };
+            }
+            state.nowMs += ms;
+            return {
+                ok: true,
+                record: { now_ms: state.nowMs, timers: state.timers.length },
+            };
         },
         appendAssistantSafe,
         async appendAssistant(
