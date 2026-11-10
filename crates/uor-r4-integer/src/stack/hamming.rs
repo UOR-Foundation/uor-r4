@@ -252,8 +252,8 @@ impl CopyHeads {
         }
     }
 
-    /// Read under `rule` from here on ([`Self::mean`]); the forced replay and the trace keep the
-    /// artifact's own rule.
+    /// Read under `rule` from here on: [`Self::mean`], and with it the forced replay and the
+    /// trace, which pick their positions by the rule in force.
     pub fn set_rule(&mut self, rule: CopyRule) {
         self.rule = rule;
     }
@@ -271,18 +271,7 @@ impl CopyHeads {
         let Some(t) = tokens.len().checked_sub(1) else {
             return Vec::new();
         };
-        let query = self.query_at(tokens, t, h);
-        let mut best: Option<(usize, u32)> = None;
-        for s in 1..t {
-            let d = popcount_swar(query ^ self.key_at(tokens, s, h));
-            if exact && d != 0 {
-                continue;
-            }
-            if best.is_none_or(|(_, least)| d <= least) {
-                best = Some((s, d));
-            }
-        }
-        best.into_iter().collect()
+        latest_of(self.query_at(tokens, t, h), t, exact, |s| self.key_at(tokens, s, h))
     }
 
     /// The positions [`Self::mean`] reads for head `h`, by the head's [`CopyRule`].
@@ -333,14 +322,21 @@ impl CopyHeads {
         nearest(self.query_at(tokens, t, h), t, self.kept, |s| self.key_at(tokens, s, h))
     }
 
-    /// [`Self::choose`] with the codes `force` names in place of the computed ones (Q5's forced
-    /// replay, claude-249): the row's query, and each candidate `s`'s key.
+    /// The positions [`Self::mean`] reads for head `h`, with the codes `force` names in place of
+    /// the computed ones (Q5's forced replay, claude-249): the row's query, and each candidate
+    /// `s`'s key. The positions are picked by the head's [`CopyRule`], as the served read picks
+    /// them, so a replay that forces nothing is the served read (claude-345).
     fn choose_forced(&self, h: usize, tokens: &[u32], force: &HeadForce) -> Vec<(usize, u32)> {
         let Some(t) = tokens.len().checked_sub(1) else {
             return Vec::new();
         };
         let query = force.query(t).unwrap_or_else(|| self.query_at(tokens, t, h));
-        nearest(query, t, self.kept, |s| force.key(s).unwrap_or_else(|| self.key_at(tokens, s, h)))
+        let key = |s: usize| force.key(s).unwrap_or_else(|| self.key_at(tokens, s, h));
+        match self.rule {
+            CopyRule::Mean => nearest(query, t, self.kept, key),
+            CopyRule::LatestExact => latest_of(query, t, true, key),
+            CopyRule::LatestNearest => latest_of(query, t, false, key),
+        }
     }
 
     /// The copy heads' mean at the last row of `tokens`, at [`COPY_MEAN_EXP`], or `None` when no
@@ -433,6 +429,23 @@ fn vocab_codes(units: &[[i64; 4]], table: &[i16], vocab: usize, width: usize, al
 
 /// The `min(kept, t − 1)` positions `1 ≤ s < t` nearest to `query` by `popcount(query XOR key(s))`,
 /// with their distances, in ascending distance and then ascending `s` (the design's tie rule).
+/// The one position a latest rule reads at row `t`: over every `1 ≤ s < t`, the latest `s` whose
+/// key is at distance 0 from `query` when `exact`, else the latest `s` at the smallest distance.
+/// Empty when there is no such position.
+fn latest_of(query: u64, t: usize, exact: bool, key: impl Fn(usize) -> u64) -> Vec<(usize, u32)> {
+    let mut best: Option<(usize, u32)> = None;
+    for s in 1..t {
+        let d = popcount_swar(query ^ key(s));
+        if exact && d != 0 {
+            continue;
+        }
+        if best.is_none_or(|(_, least)| d <= least) {
+            best = Some((s, d));
+        }
+    }
+    best.into_iter().collect()
+}
+
 fn nearest(query: u64, t: usize, kept: usize, key: impl Fn(usize) -> u64) -> Vec<(usize, u32)> {
     let mut candidates: Vec<(u32, usize)> = (1..t)
         // The SWAR popcount, not `count_ones`, which lowers to a NEON `cnt` and `fmov` on arm64
@@ -459,7 +472,7 @@ mod candidate_range_tests {
 
 #[cfg(test)]
 mod copy_rule_tests {
-    use super::{CopyHeads, CopyRule};
+    use super::{CopyHeads, CopyRule, HeadForce};
 
     /// One copy head on copy key 1 over a vocabulary of 4, with 4-bit codes and a 4-bit margin,
     /// and the table whose row `v` is `[10 * v + 1; 4]`.
@@ -532,6 +545,31 @@ mod copy_rule_tests {
             let (latest, table) = heads(2, rule);
             assert_eq!(latest.mean(&tokens, &table), row(3, FULL), "{}", rule.name());
         }
+    }
+
+    /// A replay that forces no code is the served read under every rule, and a forced query is
+    /// read by the rule in force: under the exact rule a query no key equals reads nothing.
+    #[test]
+    fn a_forced_replay_picks_its_positions_by_the_rule_in_force() {
+        let tokens = [1, 2, 0, 1, 3, 0, 1];
+        for rule in [CopyRule::Mean, CopyRule::LatestExact, CopyRule::LatestNearest] {
+            let (heads, table) = heads(16, rule);
+            let free = HeadForce::default();
+            let replay = heads.mean_by(&tokens, &table, |h| heads.choose_forced(h, &tokens, &free));
+            assert_eq!(replay, heads.mean(&tokens, &table), "{}", rule.name());
+        }
+        let at_row_6 = |query: u64| HeadForce { query: [vec![None; 6], vec![Some(query)]].concat(), key: Vec::new() };
+        let (exact, table) = heads(16, CopyRule::LatestExact);
+        let (near, _) = heads(16, CopyRule::LatestNearest);
+        // The keys at s = 1..=5 are 0b1111, 0b0011, 0b0000, 0b1111 and 0b0001. A query forced to
+        // 0b0110 is 2 bits from the first four and 3 from the last: the exact rule reads nothing,
+        // the nearest rule the latest at 2 bits, s = 4 (row 3), at that distance's half weight.
+        let off = at_row_6(0b0110);
+        assert_eq!(exact.mean_by(&tokens, &table, |h| exact.choose_forced(h, &tokens, &off)), None);
+        assert_eq!(near.mean_by(&tokens, &table, |h| near.choose_forced(h, &tokens, &off)), row(3, 1 << 30));
+        // A query forced to 0b0001 equals only the key at s = 5 (row 0), not the unforced s = 4.
+        let moved = at_row_6(0b0001);
+        assert_eq!(exact.mean_by(&tokens, &table, |h| exact.choose_forced(h, &tokens, &moved)), row(0, FULL));
     }
 
     #[test]

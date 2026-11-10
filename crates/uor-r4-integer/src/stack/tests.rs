@@ -4201,6 +4201,10 @@ fn the_copy_rule_is_recorded_only_when_latest() {
         // The serving switch still overrides the artifact's own rule.
         assert!(model.set_copy_rule(CopyRule::LatestNearest));
         assert_eq!(model.copy_rule(), Some(CopyRule::LatestNearest));
+        // The mean is a rule to switch to like the others: on the latest artifact it is not its
+        // own rule, and the switch must take it (`uor-chat --copy-rule mean`).
+        assert!(model.set_copy_rule(CopyRule::Mean));
+        assert_eq!(model.copy_rule(), Some(CopyRule::Mean));
     }
     // Only the header changed: the artifact equals the mean one with that one header field set.
     let by_hand = with_header(&mean, |h| h["hamming"]["copy_latest"] = serde_json::json!(true));
@@ -7831,7 +7835,13 @@ fn a_memory_chain_record_round_trips_in_lut_stack_9_and_bad_records_are_refused(
     schema_refused("a chain under /7", &with_header(&chained, |h| h["schema"] = json!(super::STACK_FBS_MEMORY_SCHEMA)));
     schema_refused("a chain under /8", &with_header(&chained, |h| h["schema"] = json!(super::STACK_FBS_POINT_SCHEMA)));
     schema_refused("/9 without a chain", &with_header(&plain, |h| h["schema"] = json!(super::STACK_FBS_CHAIN_SCHEMA)));
-    for (what, record) in [("a tail of 0", json!({ "tail": 0 })), ("an unknown field", json!({ "tail": 9, "x": 1 }))] {
+    // The largest tail a header can name is refused, not added to until it wraps.
+    let bad_records = [
+        ("a tail of 0", json!({ "tail": 0 })),
+        ("an unknown field", json!({ "tail": 9, "x": 1 })),
+        ("the largest tail", json!({ "tail": u64::MAX })),
+    ];
+    for (what, record) in bad_records {
         let bad = with_header(&chained, |h| h["memory_chain"] = record);
         assert!(super::format::Container::parse(&bad).is_err(), "{what}");
     }

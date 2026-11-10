@@ -139,10 +139,11 @@ impl StackMemoryChain {
         let Some(turn) = memory.and_then(|m| m.reply_turn) else {
             return Err(StackError::Shape("a memory chain needs a turn memory with a reply table"));
         };
-        if self.tail == 0 || self.tail + 5 > MEMORY_REPLY_KEY_LEN {
+        // Compared without adding to `tail` or doubling `turn`: both come from the header as read.
+        if self.tail == 0 || self.tail > MEMORY_REPLY_KEY_LEN - 5 {
             return Err(StackError::Shape("a memory chain's tail must be from 1 to 15 ids"));
         }
-        if 2 * turn + 4 > MEMORY_REPLY_KEY_LEN {
+        if turn > (MEMORY_REPLY_KEY_LEN - 4) / 2 {
             return Err(StackError::Shape("a memory chain's ends key does not fit the reply row"));
         }
         Ok(())

@@ -1306,6 +1306,9 @@ fn start_memory(
         if config.turn_memory_dropout > 0 {
             return Err(invalid("--turn-memory-dropout needs --turn-memory K"));
         }
+        if config.turn_memory_tail > 0 {
+            return Err(invalid("--turn-memory-tail needs --turn-memory K"));
+        }
         return Ok((None, Vec::new(), Vec::new()));
     }
     if config.turn_memory_tail > 0 && !config.turn_memory_reply {
@@ -1408,7 +1411,7 @@ fn start_memory(
         }
         if tail > 0 {
             println!(
-                "[memory] reply key chain: tail {tail}; keys that yield to a copied key {}; TRAIN rows named {} of {}",
+                "[memory] reply key chain: tail {tail}; keys that yield to a copied key {}; TRAIN rows named right {} of {}",
                 built.yielded,
                 built.named,
                 later.len()

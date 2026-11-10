@@ -55,8 +55,9 @@ struct CliArgs {
     /// Literal-role dialogue version for the stack artifact (default 2).
     protocol: u8,
     threads: usize,
-    /// The rule the stack's copy heads read under (`--copy-rule`, default the artifact's mean).
-    copy_rule: CopyRule,
+    /// The rule the stack's copy heads read under in place of the artifact's own (`--copy-rule`);
+    /// `None` serves the artifact's own rule.
+    copy_rule: Option<CopyRule>,
     /// Serve the stack without its turn memory (`--no-turn-memory`).
     no_turn_memory: bool,
     /// One-shot turn: answer this message, print the record and exit.
@@ -209,7 +210,7 @@ impl Default for CliArgs {
             prompt_reply_path: None,
             protocol: 2,
             threads: 1,
-            copy_rule: CopyRule::Mean,
+            copy_rule: None,
             no_turn_memory: false,
             say: None,
             prompt_ids: None,
@@ -451,7 +452,7 @@ fn parse_cli_args() -> CliArgs {
             "--copy-rule" => {
                 idx += 1;
                 match raw.get(idx).map(String::as_str).and_then(CopyRule::parse) {
-                    Some(rule) => args.copy_rule = rule,
+                    Some(rule) => args.copy_rule = Some(rule),
                     None => {
                         eprintln!(
                             "{ANSI_RED_BOLD}error:{ANSI_RESET} '--copy-rule' takes mean, latest-exact or latest-nearest"
@@ -1747,16 +1748,22 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
             "{ANSI_YELLOW_BOLD}[notice]{ANSI_RESET} Serving without the artifact's turn memory, not as it was exported and scored."
         );
     }
-    if cli.copy_rule != CopyRule::Mean {
-        if !model.set_copy_rule(cli.copy_rule) {
+    // The artifact's own rule, read before any switch: the sieve words its line for the rule the
+    // model was trained under, whatever rule this run serves.
+    let own_copy_rule = model.copy_rule();
+    if let Some(rule) = cli.copy_rule {
+        if !model.set_copy_rule(rule) {
             return Err(StackCliError::Usage(
                 "--copy-rule needs a stack artifact with Hamming reads".into(),
             ));
         }
-        println!(
-            "{ANSI_YELLOW_BOLD}[notice]{ANSI_RESET} Copy heads read under '{}', not the mean this artifact was exported and scored under.",
-            cli.copy_rule.name()
-        );
+        if own_copy_rule != Some(rule) {
+            println!(
+                "{ANSI_YELLOW_BOLD}[notice]{ANSI_RESET} Copy heads read under '{}', not the '{}' this artifact was exported and scored under.",
+                rule.name(),
+                own_copy_rule.map_or("mean", CopyRule::name)
+            );
+        }
     }
     let content_readout_identity = if let Some(path) = cli.content_readout_path.as_deref() {
         let path_string = path
@@ -1942,7 +1949,7 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
     let mut reader = stdin.lock();
     let mut turns = 0usize;
     let mut memory = ConversationMemory::new(cli.memory.clone(), cli.memory_sieve)
-        .worded_for(model.copy_rule());
+        .worded_for(own_copy_rule);
     loop {
         print!("{ANSI_CYAN_BOLD}User>{ANSI_RESET} ");
         if io::stdout().flush().is_err() {

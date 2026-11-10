@@ -104,18 +104,51 @@ struct Counts {
     pair_line_names_value: usize,
     pair_noline_names_value: usize,
     pair_control_names_value: usize,
+    pair_reference_names_value_closed: usize,
+    pair_line_names_value_closed: usize,
+    pair_noline_names_value_closed: usize,
+    pair_control_names_value_closed: usize,
+    /// Samples of the no-line pass whose prompt and reference repeat an
+    /// earlier sample's; only the first of each can be a partner.
+    noline_repeated_keys: usize,
+    /// Matched pairs whose partner an earlier pair already took.
+    pairs_on_a_taken_partner: usize,
+}
+
+/// The value's ids without the id that closes the line, when it has more than one.
+fn value_core(value: &[u32]) -> &[u32] {
+    if value.len() > 1 {
+        &value[..value.len() - 1]
+    } else {
+        value
+    }
 }
 
 /// Whether `ids`, up to its end marker, holds the line's value as one run.
 /// The value's last id (the full stop that closes the line) is left out when
 /// the value has more than one id, so "is Maya." and "Maya, right?" both count.
+/// This is a loose count: the run may be the start of a longer word, and a
+/// reply that lists several values counts for each. [`names_value_closed`] is
+/// the strict one.
 fn names_value(ids: &[u32], value: &[u32], eos: u32) -> bool {
-    let core = if value.len() > 1 {
-        &value[..value.len() - 1]
-    } else {
-        value
-    };
+    let core = value_core(value);
     !core.is_empty() && cut(ids, eos).windows(core.len()).any(|run| run == core)
+}
+
+/// Whether `ids`, up to its end marker, holds the line's value as one run
+/// that then ends: the next id is the id that closes the line, or the end
+/// marker. So "is Maya." counts, and neither "Maya, right?" nor a longer word
+/// that starts with the value's ids does. A one-id value has no closing id
+/// and must be followed by the end marker.
+fn names_value_closed(ids: &[u32], value: &[u32], eos: u32) -> bool {
+    let core = value_core(value);
+    let close = (value.len() > 1).then(|| value[value.len() - 1]);
+    let ids = cut(ids, eos);
+    !core.is_empty()
+        && (0..ids.len().saturating_sub(core.len())).any(|at| {
+            let next = ids[at + core.len()];
+            ids[at..at + core.len()] == *core && (next == eos || Some(next) == close)
+        })
 }
 
 /// The ids up to and including the first end marker, or all of them.
@@ -212,8 +245,10 @@ fn count(
         noline_exact_all: noline.iter().filter(|s| exact(s, eos)).count(),
         line_complete_all: line.iter().filter(|s| complete(s, eos)).count(),
         noline_complete_all: noline.iter().filter(|s| complete(s, eos)).count(),
+        noline_repeated_keys: noline.len() - by_key.len(),
         ..Counts::default()
     };
+    let mut taken = std::collections::HashSet::new();
 
     for sample in line {
         let Some(value) = closing_line_value(&sample.prompt, markers) else {
@@ -239,6 +274,7 @@ fn count(
             counts.unmatched_with_other_window += usize::from(other_window);
             continue;
         };
+        counts.pairs_on_a_taken_partner += usize::from(!taken.insert(partner));
         let partner = &noline[partner];
         counts.matched_pairs += 1;
         counts.pair_line_exact += usize::from(exact(sample, eos));
@@ -249,16 +285,35 @@ fn count(
             usize::from(names_value(&sample.reference, value, eos));
         counts.pair_line_names_value += usize::from(names_value(&sample.reply, value, eos));
         counts.pair_noline_names_value += usize::from(names_value(&partner.reply, value, eos));
+        counts.pair_reference_names_value_closed +=
+            usize::from(names_value_closed(&sample.reference, value, eos));
+        counts.pair_line_names_value_closed +=
+            usize::from(names_value_closed(&sample.reply, value, eos));
+        counts.pair_noline_names_value_closed +=
+            usize::from(names_value_closed(&partner.reply, value, eos));
         if let (Some(samples), Some(map)) = (control, control_by_key.as_ref()) {
             if let Some(&at) = map.get(&key(&partner.prompt, &partner.reference, eos)) {
                 counts.control_pairs += 1;
                 counts.pair_control_exact += usize::from(exact(&samples[at], eos));
                 counts.pair_control_names_value +=
                     usize::from(names_value(&samples[at].reply, value, eos));
+                counts.pair_control_names_value_closed +=
+                    usize::from(names_value_closed(&samples[at].reply, value, eos));
             }
         }
     }
     counts
+}
+
+/// The arm's share minus the control's, only when the control pass holds a
+/// partner for every matched pair. Without that the two shares are taken over
+/// different replies and their difference is not the reading.
+fn against_control(covered: bool, arm: Option<f64>, control: Option<f64>) -> Option<f64> {
+    if covered {
+        Some(arm? - control?)
+    } else {
+        None
+    }
 }
 
 /// `part / whole`, or nothing when `whole` is zero.
@@ -337,7 +392,16 @@ fn run(arguments: &[String]) -> Result<String, String> {
         .get("control")
         .map(|path| read_samples(path))
         .transpose()?;
+    if !noline.iter().any(|sample| sample.reference.contains(&eos)) {
+        return Err(format!(
+            "no reference of the no-line pass holds the end marker {eos}: is eos= right?"
+        ));
+    }
     let counts = count(&line, &noline, control.as_deref(), &markers);
+    let covered = control.is_some() && counts.control_pairs == counts.matched_pairs;
+    let closed_line = share(counts.pair_line_names_value_closed, counts.matched_pairs);
+    let closed_noline = share(counts.pair_noline_names_value_closed, counts.matched_pairs);
+    let closed_control = share(counts.pair_control_names_value_closed, counts.control_pairs);
 
     let e_line = share(counts.pair_line_exact, counts.matched_pairs);
     let e_noline = share(counts.pair_noline_exact, counts.matched_pairs);
@@ -353,14 +417,20 @@ fn run(arguments: &[String]) -> Result<String, String> {
         "D": minus(e_line, e_noline),
         "E_line_recall": share(counts.recall_line_exact, counts.recall_replies),
         "E_control": e_control,
-        "G": minus(e_line, e_control),
+        "G": against_control(covered, e_line, e_control),
         "V_reference": share(counts.pair_reference_names_value, counts.matched_pairs),
         "V_line": v_line,
         "V_noline": v_noline,
         "V_D": minus(v_line, v_noline),
         "V_control": v_control,
-        "V_G": minus(v_line, v_control),
-        "control_covers_every_pair": control.is_some() && counts.control_pairs == counts.matched_pairs,
+        "V_G": against_control(covered, v_line, v_control),
+        "V_closed_reference": share(counts.pair_reference_names_value_closed, counts.matched_pairs),
+        "V_closed_line": closed_line,
+        "V_closed_noline": closed_noline,
+        "V_closed_D": minus(closed_line, closed_noline),
+        "V_closed_control": closed_control,
+        "V_closed_G": against_control(covered, closed_line, closed_control),
+        "control_covers_every_pair": covered,
         "markers": markers,
     });
     serde_json::to_string_pretty(&report).map_err(|error| error.to_string())
@@ -528,6 +598,12 @@ mod tests {
                 pair_line_names_value: 2,
                 pair_noline_names_value: 1,
                 pair_control_names_value: 1,
+                pair_reference_names_value_closed: 2,
+                pair_line_names_value_closed: 2,
+                pair_noline_names_value_closed: 1,
+                pair_control_names_value_closed: 1,
+                noline_repeated_keys: 0,
+                pairs_on_a_taken_partner: 0,
             }
         );
         assert_eq!(
@@ -553,6 +629,54 @@ mod tests {
         // A one-id value is looked for whole.
         assert!(names_value(&[70, 40, 1], &[40], 1));
         assert!(!names_value(&[70, 1], &[], 1));
+    }
+
+    #[test]
+    fn a_closed_value_is_not_the_start_of_a_longer_word() {
+        // The line's value is [30, 3]: one id and the id that closes the line.
+        let value = [30, 3];
+        // The value, then another id: a longer word. Loose yes, closed no.
+        assert!(names_value(&[70, 30, 45, 1], &value, 1));
+        assert!(!names_value_closed(&[70, 30, 45, 1], &value, 1));
+        // The value, then the closing id or the end marker.
+        assert!(names_value_closed(&[70, 30, 3, 1], &value, 1));
+        assert!(names_value_closed(&[70, 30, 1], &value, 1));
+        // A decode cut right after the value has not closed it.
+        assert!(!names_value_closed(&[70, 30], &value, 1));
+        // Ids after the end marker do not count.
+        assert!(!names_value_closed(&[70, 1, 30, 3], &value, 1));
+        // A one-id value has no closing id: only the end marker closes it.
+        assert!(names_value_closed(&[70, 40, 1], &[40], 1));
+        assert!(!names_value_closed(&[70, 40, 41, 1], &[40], 1));
+        assert!(!names_value_closed(&[70, 1], &[], 1));
+    }
+
+    #[test]
+    fn the_gap_to_the_control_is_withheld_without_full_cover() {
+        assert_eq!(against_control(true, Some(0.5), Some(0.25)), Some(0.25));
+        assert_eq!(against_control(false, Some(0.5), Some(0.25)), None);
+        assert_eq!(against_control(true, Some(0.5), None), None);
+    }
+
+    #[test]
+    fn a_repeated_window_is_counted() {
+        let m = markers();
+        let recall = sample(&[0, 20, 21, 9, 5, 6, 30, 3, 9, 7], &[30, 1], &[30, 1]);
+        let partner = sample(&[0, 20, 21, 9, 7], &[31, 1], &[30, 1]);
+        let counts = count(
+            &[recall.clone(), recall],
+            &[partner.clone(), partner],
+            None,
+            &m,
+        );
+        assert_eq!(
+            (
+                counts.matched_pairs,
+                counts.noline_repeated_keys,
+                counts.pairs_on_a_taken_partner
+            ),
+            (2, 1, 1)
+        );
     }
 
     #[test]

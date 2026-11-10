@@ -1262,6 +1262,12 @@ fn main() -> Result<()> {
         return Ok(());
     }
     if reply {
+        if reply_chain_tail > 0 && (reply_dirs.0.is_none() || reply_dirs.1.is_none()) {
+            return Err(FloatTrainError::Invalid(
+                "--reply-chain-tail needs --reply-bound-train and --reply-bound-dev".to_owned(),
+            )
+            .into());
+        }
         let rows = match &reply_dirs {
             (Some(train), Some(dev)) => {
                 // claude-345: the trainer's own table, without a tail and with this one.
