@@ -114,6 +114,10 @@ function prompt(value: string) {
     });
 }
 
+async function flushAsync() {
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+}
+
 describe('AgentComposer', () => {
     it('requires a ready source and keeps generation source/privacy pinned', () => {
         const { store, generation } = mount();
@@ -247,9 +251,10 @@ describe('AgentComposer', () => {
         expect(host.textContent).not.toContain('API chat');
     });
 
-    it('supports current-file, pasted, remove, and clear attachments plus six templates', () => {
+    it('supports current-file, pasted, remove, and clear attachments plus six templates', async () => {
         const { uiApi } = mount();
         act(() => { button('Attach current file').click(); });
+        await flushAsync();
         expect(uiApi.api.addAttachment).toHaveBeenCalledWith({ name: 'notes.md', content: 'context text', source: 'editor' });
         act(() => {
             const input = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Pasted context"]')!;
@@ -257,6 +262,7 @@ describe('AgentComposer', () => {
             input.dispatchEvent(new Event('input', { bubbles: true }));
         });
         act(() => { button('Attach pasted text').click(); });
+        await flushAsync();
         expect(uiApi.api.addAttachment).toHaveBeenCalledWith({ name: 'pasted-context.txt', content: 'pasted text', source: 'paste' });
         act(() => { button('Remove notes.md').click(); });
         expect(uiApi.api.removeAttachment).toHaveBeenCalledWith('notes.md');
@@ -426,7 +432,7 @@ describe('composer interactions', () => {
         expect(generation.send).toHaveBeenCalledWith('@unknown');
     });
 
-    it('inserts mentions with complete keyboard, mouse, focus, and empty-state behavior', () => {
+    it('inserts mentions with complete keyboard, mouse, focus, and empty-state behavior', async () => {
         const { store, generation, fileApi, uiApi } = mount();
         store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
         const textarea = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
@@ -447,6 +453,7 @@ describe('composer interactions', () => {
         pressKey(textarea, 'ArrowDown');
         expect(textarea.getAttribute('aria-activedescendant')).toBe(options[0].id);
         pressKey(textarea, 'Enter');
+        await flushAsync();
         expect(textarea.value).toBe('@notes.md');
         expect(document.activeElement).toBe(textarea);
         expect(uiApi.api.addAttachment).toHaveBeenCalledTimes(1);
@@ -560,7 +567,7 @@ describe('composer interactions', () => {
         expect(onPastedChange).not.toHaveBeenCalled();
     });
 
-    it('splices mentions into the visible recalled prompt without losing surrounding text', () => {
+    it('splices mentions into the visible recalled prompt without losing surrounding text', async () => {
         const { store, generation } = mount();
         store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
         const textarea = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
@@ -573,6 +580,7 @@ describe('composer interactions', () => {
         const option = host.querySelector<HTMLElement>('[role="option"][data-attachment="notes.md"]')!;
         expect(option).not.toBeNull();
         act(() => { option.click(); });
+        await flushAsync();
         expect(textarea.value).toBe('old @notes.md');
         expect(generation.send).toHaveBeenCalledTimes(1);
     });

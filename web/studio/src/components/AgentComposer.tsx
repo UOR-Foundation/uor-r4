@@ -38,7 +38,10 @@ function nextInsertName(): string {
 }
 
 function revokePreview(draft: AttachmentDraft): void {
-    if (draft.previewUrl && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(draft.previewUrl);
+    if (draft.previewUrl && typeof URL.revokeObjectURL === 'function') {
+        URL.revokeObjectURL(draft.previewUrl);
+        draft.previewUrl = undefined;
+    }
 }
 
 export function AgentComposer({ store, sessions, files, ui, generation, copy, download, draft: controlledDraft, pasted: controlledPasted, onDraftChange, onPastedChange }: AgentComposerProps) {
@@ -57,6 +60,61 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     const controllerRef = useRef<ComposerInputController | null>(null);
     const imageDraftsRef = useRef<AttachmentDraft[]>([]);
     const mountedRef = useRef(true);
+    const attachmentQueueRef = useRef<Promise<void>>(Promise.resolve());
+    const attachmentEpochRef = useRef(0);
+    const attachmentAbortsRef = useRef<Set<() => void>>(new Set());
+
+    function isAttachmentOperationCurrent(epoch: number): boolean {
+        return mountedRef.current && epoch === attachmentEpochRef.current;
+    }
+
+    function invalidateAttachmentOperations(): void {
+        attachmentEpochRef.current += 1;
+        const aborts = Array.from(attachmentAbortsRef.current);
+        attachmentAbortsRef.current.clear();
+        for (const abort of aborts) abort();
+    }
+
+    function toastIfCurrent(epoch: number, text: string, tone = 'error'): void {
+        if (isAttachmentOperationCurrent(epoch)) ui.toast(text, tone);
+    }
+
+    interface AttachmentOperationSignal {
+        aborted: Promise<null>;
+        isCurrent(): boolean;
+    }
+
+    function enqueueAttachmentOperation<T>(task: (epoch: number, signal: AttachmentOperationSignal) => Promise<T>, fallback: T): Promise<T> {
+        const epoch = attachmentEpochRef.current;
+        const run = attachmentQueueRef.current.then(async () => {
+            if (!isAttachmentOperationCurrent(epoch)) return fallback;
+            let abort: () => void = () => {};
+            const aborted = new Promise<null>((resolve) => { abort = () => resolve(null); });
+            attachmentAbortsRef.current.add(abort);
+            const signal: AttachmentOperationSignal = { aborted, isCurrent: () => isAttachmentOperationCurrent(epoch) };
+            try {
+                return await task(epoch, signal);
+            } catch (error) {
+                if (isAttachmentOperationCurrent(epoch)) ui.toast(`Attachments could not be read: ${String(error)}`, 'error');
+                return fallback;
+            } finally {
+                attachmentAbortsRef.current.delete(abort);
+            }
+        });
+        attachmentQueueRef.current = run.then(() => undefined, () => undefined);
+        return run;
+    }
+
+    async function awaitAttachmentRead<T>(read: Promise<T>, signal: AttachmentOperationSignal): Promise<T | null> {
+        if (!signal.isCurrent()) return null;
+        const result = await Promise.race([read, signal.aborted]);
+        return result === null ? null : result;
+    }
+
+    function commitImageDrafts(next: AttachmentDraft[]): void {
+        imageDraftsRef.current = next;
+        setImageDrafts(next);
+    }
 
     function notifyDraftChange(value: string) {
         ownControlledDraft.current = value;
@@ -81,7 +139,9 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
 
     useEffect(() => () => {
         mountedRef.current = false;
+        invalidateAttachmentOperations();
         for (const draft of imageDraftsRef.current) revokePreview(draft);
+        imageDraftsRef.current = [];
     }, []);
 
     const selected = state.selectedSource;
@@ -110,8 +170,6 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
         : predictionMode ? 'Local next-token prediction'
         : selected.kind === 'artifact' ? 'Local generation' : 'API chat';
 
-    imageDraftsRef.current = imageDrafts;
-
     function send(prompt: string): boolean {
         if (!generation.send(prompt)) return false;
         refresh();
@@ -125,15 +183,16 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                 size: attachmentSize(attachment),
                 kind: attachment.kind === 'image' ? 'image' as const : attachment.source === 'file' ? 'document' as const : 'text' as const,
             })),
-            ...imageDraftsRef.current.map((attachment) => ({ name: attachment.name, size: attachment.bytes.byteLength, kind: 'image' as const })),
+            ...imageDraftsRef.current.map((attachment) => ({ name: attachment.name, size: attachment.size, kind: 'image' as const })),
         ];
     }
 
     function removeStoredOrImage(id: string) {
+        invalidateAttachmentOperations();
         const image = imageDraftsRef.current.find((attachment) => attachment.id === id);
         if (image) {
             revokePreview(image);
-            setImageDrafts((current) => current.filter((attachment) => attachment.id !== id));
+            commitImageDrafts(imageDraftsRef.current.filter((attachment) => attachment.id !== id));
             return;
         }
         if (id.startsWith('stored:')) {
@@ -143,79 +202,95 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     }
 
     function clearAllAttachments() {
+        invalidateAttachmentOperations();
         for (const attachment of imageDraftsRef.current) revokePreview(attachment);
-        setImageDrafts([]);
+        commitImageDrafts([]);
         ui.clearAttachments();
         refresh();
     }
 
-    function addBudgetedAttachment(entry: Attachment): boolean {
-        const plan = planAttachmentBatch([{ name: entry.name, size: attachmentSize(entry), type: entry.kind === 'image' ? 'image/png' : 'text/plain' }], budgetItems());
-        for (const error of plan.errors) ui.toast(error, 'error');
-        if (!plan.accepted.length) return false;
-        const previous = imageDraftsRef.current.find((attachment) => attachment.name === entry.name);
-        if (previous) {
-            revokePreview(previous);
-            setImageDrafts((current) => current.filter((attachment) => attachment.id !== previous.id));
-        }
-        ui.addAttachment(entry);
-        refresh();
-        return true;
+    function addBudgetedAttachment(entry: Attachment): Promise<boolean> {
+        return enqueueAttachmentOperation(async (epoch, signal) => {
+            const plan = planAttachmentBatch([{ name: entry.name, size: attachmentSize(entry), type: entry.kind === 'image' ? 'image/png' : 'text/plain' }], budgetItems());
+            for (const error of plan.errors) toastIfCurrent(epoch, error, 'error');
+            if (!plan.accepted.length || !signal.isCurrent()) return false;
+            const previous = imageDraftsRef.current.find((attachment) => attachment.name === entry.name);
+            if (previous) {
+                revokePreview(previous);
+                commitImageDrafts(imageDraftsRef.current.filter((attachment) => attachment.id !== previous.id));
+            }
+            ui.addAttachment(entry);
+            refresh();
+            return true;
+        }, false);
     }
 
-    async function handleAttachFiles(filesToAttach: File[]) {
-        const plan = planAttachmentBatch(filesToAttach, budgetItems());
-        for (const error of plan.errors) ui.toast(error, 'error');
-        if (!plan.accepted.length) return;
-        const planned = new Map<string, { file: File; kind: 'image' | 'document' }>();
-        for (const entry of plan.accepted) planned.set(entry.file.name, entry);
-        const images = new Map<string, File>();
-        const documents = new Map<string, File>();
-        for (const entry of planned.values()) {
-            if (entry.kind === 'image') images.set(entry.file.name, entry.file);
-            else documents.set(entry.file.name, entry.file);
-        }
-        if (images.size) {
+    function handleAttachFiles(filesToAttach: File[]): Promise<void> {
+        return enqueueAttachmentOperation<void>(async (epoch, signal) => {
+            const plan = planAttachmentBatch(filesToAttach, budgetItems());
+            for (const error of plan.errors) toastIfCurrent(epoch, error, 'error');
+            if (!plan.accepted.length || !signal.isCurrent()) return;
+            const planned = new Map<string, { file: File; kind: 'image' | 'document' }>();
+            for (const entry of plan.accepted) planned.set(entry.file.name, entry);
+            const images = new Map<string, File>();
+            const documents = new Map<string, File>();
+            for (const entry of planned.values()) {
+                if (entry.kind === 'image') images.set(entry.file.name, entry.file);
+                else documents.set(entry.file.name, entry.file);
+            }
             const nextDrafts: AttachmentDraft[] = [];
-            for (const [name, file] of images) {
-                try {
-                    const bytes = new Uint8Array(await file.arrayBuffer());
-                    const previewUrl = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : undefined;
-                    nextDrafts.push({ id: `image:${name}:${++imageSequence}`, name, kind: 'image', bytes, mediaType: file.type || 'application/octet-stream', previewUrl });
-                } catch (error) {
-                    ui.toast(`${name} could not be read: ${String(error)}`, 'error');
-                }
-            }
-            if (nextDrafts.length && !mountedRef.current) {
-                for (const draft of nextDrafts) revokePreview(draft);
-                return;
-            }
-            if (nextDrafts.length) {
-                const names = new Set(nextDrafts.map((attachment) => attachment.name));
-                for (const previous of imageDraftsRef.current.filter((attachment) => names.has(attachment.name))) revokePreview(previous);
-                for (const name of names) if (ui.getAttachments().some((attachment) => attachment.name === name)) ui.removeAttachment(name);
-                setImageDrafts((current) => [...current.filter((attachment) => !names.has(attachment.name)), ...nextDrafts]);
-            }
-        }
-        if (documents.size) {
-            const existing = ui.getAttachments().filter((attachment) => attachment.kind !== 'image');
+            let imagesCommitted = false;
             try {
-                const result = await readTextFiles(Array.from(documents.values()), {
-                    existingAttachments: existing,
-                    maxFileBytes: MAX_DOCUMENT_BYTES,
-                    maxTotalBytes: MAX_TOTAL_ATTACHMENT_BYTES,
-                }) as { attachments: Attachment[]; errors: string[] };
-                for (const attachment of result.attachments) ui.addAttachment(attachment);
-                for (const error of result.errors) ui.toast(error, 'error');
-                const storedNames = new Set(result.attachments.map((attachment) => attachment.name));
-                const replacedImages = imageDraftsRef.current.filter((attachment) => storedNames.has(attachment.name));
-                for (const previous of replacedImages) revokePreview(previous);
-                if (replacedImages.length) setImageDrafts((current) => current.filter((attachment) => !storedNames.has(attachment.name)));
-            } catch (error) {
-                ui.toast(`Attachments could not be read: ${String(error)}`, 'error');
+                if (images.size) {
+                    for (const [name, file] of images) {
+                        let bytes: Uint8Array;
+                        try {
+                            const data = await awaitAttachmentRead(file.arrayBuffer(), signal);
+                            if (!data) return;
+                            bytes = new Uint8Array(data);
+                        } catch (error) {
+                            toastIfCurrent(epoch, `${name} could not be read: ${String(error)}`, 'error');
+                            continue;
+                        }
+                        if (!signal.isCurrent()) return;
+                        const previewUrl = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : undefined;
+                        nextDrafts.push({ id: `image:${name}:${++imageSequence}`, name, kind: 'image', bytes, size: bytes.byteLength, mediaType: file.type || 'application/octet-stream', previewUrl, memoryOnly: true });
+                    }
+                    if (!signal.isCurrent()) return;
+                    if (nextDrafts.length) {
+                        const names = new Set(nextDrafts.map((attachment) => attachment.name));
+                        for (const previous of imageDraftsRef.current.filter((attachment) => names.has(attachment.name))) revokePreview(previous);
+                        for (const name of names) if (ui.getAttachments().some((attachment) => attachment.name === name)) ui.removeAttachment(name);
+                        commitImageDrafts([...imageDraftsRef.current.filter((attachment) => !names.has(attachment.name)), ...nextDrafts]);
+                        imagesCommitted = true;
+                    }
+                }
+                if (documents.size) {
+                    const existing = ui.getAttachments().filter((attachment) => attachment.kind !== 'image');
+                    let result: { attachments: Attachment[]; errors: string[] } | null = null;
+                    try {
+                        result = await awaitAttachmentRead(readTextFiles(Array.from(documents.values()), {
+                            existingAttachments: existing,
+                            maxFileBytes: MAX_DOCUMENT_BYTES,
+                            maxTotalBytes: MAX_TOTAL_ATTACHMENT_BYTES,
+                        }) as Promise<{ attachments: Attachment[]; errors: string[] }>, signal);
+                    } catch (error) {
+                        toastIfCurrent(epoch, `Attachments could not be read: ${String(error)}`, 'error');
+                        return;
+                    }
+                    if (!result || !signal.isCurrent()) return;
+                    for (const attachment of result.attachments) ui.addAttachment(attachment);
+                    for (const error of result.errors) toastIfCurrent(epoch, error, 'error');
+                    const storedNames = new Set(result.attachments.map((attachment) => attachment.name));
+                    const replacedImages = imageDraftsRef.current.filter((attachment) => storedNames.has(attachment.name));
+                    for (const previous of replacedImages) revokePreview(previous);
+                    if (replacedImages.length) commitImageDrafts(imageDraftsRef.current.filter((attachment) => !storedNames.has(attachment.name)));
+                }
+                if (signal.isCurrent()) refresh();
+            } finally {
+                if (!imagesCommitted) for (const draft of nextDrafts) revokePreview(draft);
             }
-        }
-        refresh();
+        }, undefined);
     }
 
     useEffect(() => {
@@ -230,6 +305,8 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     }, [controlledDraft]);
 
     const modelLabel = selected ? selected.id : 'Choose model';
+    const storedImageCount = attachments.filter((attachment) => attachment.kind === 'image' && !attachment.memoryOnly).length;
+    const memoryImageCount = attachments.filter((attachment) => attachment.kind === 'image' && attachment.memoryOnly).length;
 
     return (
         <section aria-label="Agent composer" class="agent-workspace">
@@ -238,10 +315,10 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
             {activeGeneration && <p class="generation-banner">Generating with {activeGeneration.source.id} ({activeGeneration.privacy})</p>}
             <AgentTranscript messages={messages} canRun={store.canRun()} copy={copy} insert={(content) => files.insertText(content, nextInsertName())} download={(content) => download('studio-message.md', content)} retry={(content) => generation.send(content)} />
             <details class="context-drawer" aria-label="Context attachments"><summary><span><Icon name="attach" />Context</span><span class="attachment-count">{attachments.length}</span></summary><div class="context-content">
-                <div class="context-actions"><button type="button" disabled={!activeFile} onClick={() => { const file = files.activeFile(); if (file) addBudgetedAttachment({ name: file.path, content: file.content, source: 'editor' }); }}>Attach current file</button><button type="button" disabled={!attachments.length} onClick={clearAllAttachments}>Clear attachments</button></div>
+                <div class="context-actions"><button type="button" disabled={!activeFile} onClick={() => { const file = files.activeFile(); if (file) void addBudgetedAttachment({ name: file.path, content: file.content, source: 'editor' }); }}>Attach current file</button><button type="button" disabled={!attachments.length} onClick={clearAllAttachments}>Clear attachments</button></div>
                 <label>Pasted context<textarea aria-label="Pasted context" value={pasted} onInput={(event) => setPasted(event.currentTarget.value)} /></label>
-                <button type="button" disabled={!pasted.trim()} onClick={() => { if (addBudgetedAttachment({ name: 'pasted-context.txt', content: pasted, source: 'paste' })) setPasted(''); }}>Attach pasted text</button>
-                <p class="composer-attachment-note">Images stay in this browser tab and are not sent for visual understanding.</p>
+                <button type="button" disabled={!pasted.trim()} onClick={() => { void addBudgetedAttachment({ name: 'pasted-context.txt', content: pasted, source: 'paste' }).then((accepted) => { if (accepted) setPasted(''); }); }}>Attach pasted text</button>
+                {(storedImageCount > 0 || memoryImageCount > 0) && <p class="composer-attachment-note">{storedImageCount > 0 && 'Stored image context comes from the existing Studio store and is not guaranteed after reload. '}{memoryImageCount > 0 && 'New images stay in this browser tab and are not sent for visual understanding.'}</p>}
             </div></details>
             <details class="build-tasks" aria-label="Build task templates"><summary><span><Icon name="command" />Build tasks</span><span class="attachment-count">{LOCAL_TEMPLATES.length}</span></summary><div class="build-task-grid">{LOCAL_TEMPLATES.map(([kind, label]) => <button type="button" data-template={kind} onClick={() => { setDraft(ui.templatePrompt(kind)); }}>{label}</button>)}</div></details>
             <ComposerSurface
@@ -268,7 +345,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                 editorFile={activeFile}
                 artifacts={[]}
                 templatePrompt={(kind) => ui.templatePrompt(kind)}
-                onMentionAdd={(entry) => { addBudgetedAttachment(entry); }}
+                onMentionAdd={(entry) => addBudgetedAttachment(entry)}
                 onController={(controller) => { controllerRef.current = controller; }}
             />
         </section>

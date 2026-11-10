@@ -38,7 +38,7 @@ export interface ComposerSurfaceProps {
     editorFile?: ComposerEditorFile | null;
     artifacts?: readonly ComposerArtifact[];
     templatePrompt?(kind: string): string;
-    onMentionAdd?(attachment: { name: string; content: string; source: string }): void;
+    onMentionAdd?(attachment: { name: string; content: string; source: string }): boolean | Promise<boolean>;
     onController?(controller: ComposerInputController | null): void;
 }
 
@@ -56,7 +56,7 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
     const draftChangeRef = useRef<(value: string) => void>(() => {});
     const inputChangeRef = useRef<(value: string) => void>(() => {});
     const templatePromptRef = useRef<(kind: string) => string>(() => '');
-    const mentionAddRef = useRef<(attachment: { name: string; content: string; source: string }) => void>(() => {});
+    const mentionAddRef = useRef<(attachment: { name: string; content: string; source: string }) => boolean | Promise<boolean>>(() => false);
     const editorFileRef = useRef<ComposerEditorFile | null>(null);
     const onControllerRef = useRef<((controller: ComposerInputController | null) => void) | undefined>(undefined);
     const sendRef = useRef<(prompt: string) => boolean>(() => false);
@@ -98,23 +98,46 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
         if (trigger) textarea.focus();
     }
 
-    function selectOption(option: ComposerOption) {
+    async function selectOption(option: ComposerOption) {
         const textarea = textareaRef.current;
         if (option.kind === 'command') {
             setDraft(templatePromptRef.current(option.template));
-        } else {
-            const currentMenu = menuRef.current;
-            if (!currentMenu || !textarea) return;
-            const mention = `@${option.attachment.name}`;
+            setMenu(null);
+            textarea?.focus();
+            return;
+        }
+        const currentMenu = menuRef.current;
+        if (!currentMenu || !textarea) return;
+        const mention = `@${option.attachment.name}`;
+        if (!option.add) {
             const visiblePrompt = textarea.value;
             setDraft(`${visiblePrompt.slice(0, currentMenu.start)}${mention}${visiblePrompt.slice(currentMenu.end)}`);
-            if (option.add) {
-                const editor = editorFileRef.current;
-                if (editor && editor.path === option.attachment.name) mentionAddRef.current({ name: editor.path, content: editor.content, source: 'editor' });
-            }
+            setMenu(null);
+            textarea.focus();
+            return;
         }
+        const editor = editorFileRef.current;
         setMenu(null);
-        textarea?.focus();
+        if (!editor || editor.path !== option.attachment.name) {
+            textarea.focus();
+            return;
+        }
+        const original = textarea.value;
+        const accepted = await mentionAddRef.current({ name: editor.path, content: editor.content, source: 'editor' });
+        if (!accepted) {
+            textareaRef.current?.focus();
+            return;
+        }
+        const current = textareaRef.current;
+        if (!current) return;
+        const unchanged = current.value.slice(0, currentMenu.start) === original.slice(0, currentMenu.start)
+            && current.value.slice(currentMenu.end) === original.slice(currentMenu.end);
+        if (!unchanged) {
+            current.focus();
+            return;
+        }
+        setDraft(`${current.value.slice(0, currentMenu.start)}${mention}${current.value.slice(currentMenu.end)}`);
+        current.focus();
     }
 
     function interceptMenuKey(event: KeyboardEvent): boolean {
@@ -160,7 +183,7 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
     draftChangeRef.current = (value) => props.onDraftChange?.(value);
     inputChangeRef.current = props.onChange;
     templatePromptRef.current = props.templatePrompt ?? ((kind: string) => `Prompt for ${kind}`);
-    mentionAddRef.current = (attachment) => props.onMentionAdd?.(attachment);
+    mentionAddRef.current = (attachment) => props.onMentionAdd?.(attachment) ?? false;
     editorFileRef.current = props.editorFile ?? null;
     onControllerRef.current = props.onController;
 

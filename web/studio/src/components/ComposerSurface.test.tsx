@@ -162,6 +162,28 @@ function fakeFile(name: string, size: number, type: string): File {
     return { name, size, type } as File;
 }
 
+function deferredImage(name: string, size: number) {
+    const file = new File([new Uint8Array(1)], name, { type: 'image/png' });
+    Object.defineProperty(file, 'size', { value: size });
+    let resolve!: () => void;
+    const pending = new Promise<ArrayBuffer>((done) => { resolve = () => done(new Uint8Array(size).buffer); });
+    Object.defineProperty(file, 'arrayBuffer', { value: () => pending });
+    return { file, resolve };
+}
+
+function deferredDocument(name: string, size: number, content = 'x') {
+    const file = new File([content], name, { type: 'text/plain' });
+    Object.defineProperty(file, 'size', { value: size });
+    let resolve!: () => void;
+    const pending = new Promise<string>((done) => { resolve = () => done(content); });
+    Object.defineProperty(file, 'text', { value: () => pending });
+    return { file, resolve };
+}
+
+async function flushAsync() {
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+}
+
 describe('composer surface regression and editor behaviour', () => {
     it('existing_ime_composition_regression keeps Enter, IME composition, and history intact', () => {
         const { generation } = mount();
@@ -293,11 +315,12 @@ describe('bounded shared attachment budget', () => {
         expect(replacement.accepted).toHaveLength(2);
     });
 
-    it('applies the shared count budget to current-file and pasted text attachments', () => {
+    it('applies the shared count budget to current-file and pasted text attachments', async () => {
         const { uiApi } = mount();
         for (let index = 0; index < 5; index += 1) uiApi.attachments.push({ name: `seed-${index}.md`, content: 'x', size: 1, source: 'file' });
         act(() => { document.dispatchEvent(new CustomEvent('uor-attachments-changed')); });
         act(() => { button('Attach current file').click(); });
+        await flushAsync();
         expect(uiApi.api.addAttachment).not.toHaveBeenCalled();
         expect(uiApi.api.toast).toHaveBeenCalledWith('notes.md exceeds the 5-attachment limit (6 attachments requested).', 'error');
     });
@@ -378,6 +401,163 @@ describe('memory-only image and document attachments', () => {
         await vi.waitFor(() => { expect(uiApi.api.addAttachment).toHaveBeenCalledWith(expect.objectContaining({ name: 'mixed.md' })); });
         expect(host.querySelectorAll('[data-attachment-kind="image"]')).toHaveLength(1);
         expect(host.querySelectorAll('[data-attachment-kind="document"]')).toHaveLength(1);
+    });
+});
+
+describe('serialized attachment operations', () => {
+    it('serializes overlapping file batches so four retained plus two 1-byte documents cannot exceed five', async () => {
+        const { uiApi } = mount();
+        for (let index = 0; index < 4; index += 1) uiApi.attachments.push({ name: `seed-${index}.md`, content: 'x', source: 'file', size: 1 });
+        act(() => { document.dispatchEvent(new CustomEvent('uor-attachments-changed')); });
+        const textarea = promptElement();
+        const first = deferredDocument('first.md', 1);
+        const second = deferredDocument('second.md', 1);
+        pasteFiles(textarea, [first.file]);
+        pasteFiles(textarea, [second.file]);
+        first.resolve();
+        await flushAsync();
+        second.resolve();
+        await flushAsync();
+        expect(uiApi.attachments).toHaveLength(5);
+        expect(uiApi.attachments.map((attachment) => attachment.name)).toContain('first.md');
+        expect(uiApi.attachments.map((attachment) => attachment.name)).not.toContain('second.md');
+        expect(uiApi.api.toast).toHaveBeenCalledWith('second.md exceeds the 5-attachment limit (6 attachments requested).', 'error');
+    });
+
+    it('serializes overlapping image batches so the shared 25 MiB total is never exceeded', async () => {
+        const { uiApi } = mount();
+        uiApi.attachments.push({ name: 'existing.png', kind: 'image', content: '', size: 10 * 1024 * 1024 });
+        act(() => { document.dispatchEvent(new CustomEvent('uor-attachments-changed')); });
+        const textarea = promptElement();
+        const first = deferredImage('first.png', 10 * 1024 * 1024);
+        const second = deferredImage('second.png', 10 * 1024 * 1024);
+        pasteFiles(textarea, [first.file]);
+        pasteFiles(textarea, [second.file]);
+        first.resolve();
+        await flushAsync();
+        second.resolve();
+        await flushAsync();
+        expect(host.querySelectorAll('[data-attachment-kind="image"]')).toHaveLength(2);
+        expect(uiApi.api.toast).toHaveBeenCalledWith('second.png exceeds the 26214400-byte total attachment limit (31457280 bytes).', 'error');
+    });
+
+    it('serializes same-name overlapping images, keeps one draft, and revokes the replaced URL', async () => {
+        mount();
+        const textarea = promptElement();
+        const first = deferredImage('same.png', 4);
+        const second = deferredImage('same.png', 5);
+        pasteFiles(textarea, [first.file]);
+        pasteFiles(textarea, [second.file]);
+        first.resolve();
+        second.resolve();
+        await flushAsync();
+        expect(host.querySelectorAll('[data-attachment-kind="image"]')).toHaveLength(1);
+        expect(createObjectURL).toHaveBeenCalledTimes(2);
+        expect(revokeObjectURL).toHaveBeenCalledWith('blob:test/1');
+        expect(revokeObjectURL).not.toHaveBeenCalledWith('blob:test/2');
+        expect(host.querySelector<HTMLImageElement>('.composer-attachment-preview')?.src).toBe('blob:test/2');
+    });
+
+    it('queues current-file and pasted additions behind a pending file batch', async () => {
+        const { uiApi } = mount();
+        for (let index = 0; index < 4; index += 1) uiApi.attachments.push({ name: `seed-${index}.md`, content: 'x', source: 'file', size: 1 });
+        act(() => { document.dispatchEvent(new CustomEvent('uor-attachments-changed')); });
+        const pending = deferredDocument('pending.md', 1);
+        pasteFiles(promptElement(), [pending.file]);
+        act(() => { button('Attach current file').click(); });
+        const pasted = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Pasted context"]')!;
+        act(() => {
+            pasted.value = 'pasted text';
+            pasted.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        act(() => { button('Attach pasted text').click(); });
+        pending.resolve();
+        await flushAsync();
+        expect(uiApi.attachments).toHaveLength(5);
+        expect(uiApi.attachments.map((attachment) => attachment.name)).toContain('pending.md');
+        expect(uiApi.attachments.map((attachment) => attachment.name)).not.toContain('notes.md');
+        expect(uiApi.attachments.map((attachment) => attachment.name)).not.toContain('pasted-context.txt');
+        expect(uiApi.api.toast).toHaveBeenCalledWith('notes.md exceeds the 5-attachment limit (6 attachments requested).', 'error');
+        expect(uiApi.api.toast).toHaveBeenCalledWith('pasted-context.txt exceeds the 5-attachment limit (6 attachments requested).', 'error');
+    });
+
+    it('queues an active-file mention behind a pending batch and preserves the draft on rejection', async () => {
+        const { uiApi } = mount();
+        for (let index = 0; index < 4; index += 1) uiApi.attachments.push({ name: `seed-${index}.md`, content: 'x', source: 'file', size: 1 });
+        act(() => { document.dispatchEvent(new CustomEvent('uor-attachments-changed')); });
+        const pending = deferredDocument('pending.md', 1);
+        pasteFiles(promptElement(), [pending.file]);
+        typePrompt('@');
+        const option = host.querySelector<HTMLElement>('[role="option"][data-attachment="notes.md"]')!;
+        act(() => { option.click(); });
+        pending.resolve();
+        await flushAsync();
+        expect(uiApi.attachments).toHaveLength(5);
+        expect(uiApi.attachments.map((attachment) => attachment.name)).toContain('pending.md');
+        expect(uiApi.attachments.map((attachment) => attachment.name)).not.toContain('notes.md');
+        expect(promptElement().value).toBe('@');
+        expect(uiApi.api.toast).toHaveBeenCalledWith('notes.md exceeds the 5-attachment limit (6 attachments requested).', 'error');
+    });
+
+    it('drops a late image completion after clear without creating or adding a preview', async () => {
+        const { uiApi } = mount();
+        uiApi.attachments.push({ name: 'seed.md', content: 'x', source: 'file', size: 1 });
+        act(() => { document.dispatchEvent(new CustomEvent('uor-attachments-changed')); });
+        const pending = deferredImage('late.png', 4);
+        pasteFiles(promptElement(), [pending.file]);
+        act(() => { button('Clear attachments').click(); });
+        pending.resolve();
+        await flushAsync();
+        expect(host.querySelector('[data-attachment-kind="image"]')).toBeNull();
+        expect(uiApi.api.addAttachment).not.toHaveBeenCalled();
+        expect(createObjectURL).not.toHaveBeenCalled();
+        expect(uiApi.api.toast).not.toHaveBeenCalled();
+    });
+
+    it('revokes an already-created preview URL when the remaining batch becomes stale', async () => {
+        const { uiApi } = mount();
+        uiApi.attachments.push({ name: 'seed.md', content: 'x', source: 'file', size: 1 });
+        act(() => { document.dispatchEvent(new CustomEvent('uor-attachments-changed')); });
+        const first = deferredImage('first.png', 4);
+        const second = deferredImage('second.png', 4);
+        pasteFiles(promptElement(), [first.file, second.file]);
+        first.resolve();
+        await flushAsync();
+        expect(createObjectURL).toHaveBeenCalledOnce();
+        act(() => { button('Clear attachments').click(); });
+        second.resolve();
+        await flushAsync();
+        expect(host.querySelector('[data-attachment-kind="image"]')).toBeNull();
+        expect(revokeObjectURL).toHaveBeenCalledWith('blob:test/1');
+        expect(createObjectURL).toHaveBeenCalledOnce();
+    });
+
+    it('does not attach or toast a late document after unmount', async () => {
+        const { uiApi } = mount();
+        const pending = deferredDocument('late-document.md', 1);
+        pasteFiles(promptElement(), [pending.file]);
+        act(() => { render(null, host); });
+        pending.resolve();
+        await flushAsync();
+        expect(uiApi.api.addAttachment).not.toHaveBeenCalled();
+        expect(uiApi.api.toast).not.toHaveBeenCalled();
+    });
+
+    it('shows stored image size and labels it differently from a memory-only image', async () => {
+        const { uiApi } = mount();
+        uiApi.attachments.push({ name: 'legacy.png', kind: 'image', content: '', size: 10 * 1024 * 1024 });
+        act(() => { document.dispatchEvent(new CustomEvent('uor-attachments-changed')); });
+        const budget = host.querySelector('[aria-label="Attachment budget"]')!;
+        expect(budget.textContent).toContain('10 MiB/25 MiB');
+        const legacy = host.querySelector<HTMLElement>('[data-attachment-id="stored:legacy.png"]')!;
+        expect(legacy.textContent).toContain('image · stored context');
+        expect(legacy.querySelector('[data-attachment-size]')?.getAttribute('data-attachment-size')).toBe(String(10 * 1024 * 1024));
+        expect(host.textContent).toContain('Stored image context');
+        pasteFiles(promptElement(), [new File([new Uint8Array(1024 * 1024)], 'new.png', { type: 'image/png' })]);
+        await vi.waitFor(() => { expect(host.querySelector('[data-attachment-id^="image:new.png:"]')).not.toBeNull(); });
+        const memory = host.querySelector<HTMLElement>('[data-attachment-id^="image:new.png:"]')!;
+        expect(memory.textContent).toContain('image · memory only');
+        expect(budget.textContent).toContain('11 MiB/25 MiB');
     });
 });
 

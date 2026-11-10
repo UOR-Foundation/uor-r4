@@ -32,12 +32,15 @@ export const LOCAL_TEMPLATES = [
     ['test', 'Write a verification plan'],
 ] as const;
 
+const encoder = new TextEncoder();
+
 function editorDraft(file: ComposerEditorFile): AttachmentDraft {
-    return { id: `editor:${file.path}`, name: file.path, kind: 'document', bytes: new Uint8Array(0), mediaType: 'text/plain' };
+    return { id: `editor:${file.path}`, name: file.path, kind: 'document', bytes: new Uint8Array(0), size: encoder.encode(file.content).byteLength, mediaType: 'text/plain' };
 }
 
 function artifactDraft(artifact: ComposerArtifact): AttachmentDraft {
-    return { id: `artifact:${artifact.name}`, name: artifact.name, kind: 'document', bytes: new TextEncoder().encode(artifact.content), mediaType: 'text/plain' };
+    const bytes = encoder.encode(artifact.content);
+    return { id: `artifact:${artifact.name}`, name: artifact.name, kind: 'document', bytes, size: bytes.byteLength, mediaType: 'text/plain' };
 }
 
 export function commandOptions(query: string): ComposerOption[] {

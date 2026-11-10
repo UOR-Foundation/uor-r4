@@ -13,8 +13,10 @@ export interface AttachmentDraft {
     name: string;
     kind: 'image' | 'document' | 'text';
     bytes: Uint8Array;
+    size: number;
     mediaType: string;
     previewUrl?: string;
+    memoryOnly?: boolean;
 }
 
 export interface AttachmentBudgetItem {
@@ -59,8 +61,10 @@ export function draftFromStoredAttachment(entry: Attachment, idPrefix = 'stored'
         name: entry.name,
         kind,
         bytes: kind === 'image' ? new Uint8Array(0) : encoder.encode(String(entry.content || '')),
+        size: attachmentSize(entry),
         mediaType: entry.kind === 'image' ? 'image/*' : 'text/plain',
         previewUrl: entry.previewUrl,
+        memoryOnly: false,
     };
     storedDrafts.set(entry, draft);
     return draft;
@@ -126,7 +130,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function ComposerAttachments({ attachments, onRemove, pickerRef }: ComposerAttachmentsProps) {
-    const totalBytes = attachments.reduce((sum, attachment) => sum + attachment.bytes.byteLength, 0);
+    const totalBytes = attachments.reduce((sum, attachment) => sum + attachment.size, 0);
     return <div class="composer-attachments">
         <div class="composer-attachment-actions">
             <button type="button" class="composer-attach-button" onClick={() => pickerRef.current?.click()}>Attach files</button>
@@ -137,7 +141,8 @@ export function ComposerAttachments({ attachments, onRemove, pickerRef }: Compos
             {attachments.map((attachment) => <li key={attachment.id} class="composer-attachment-chip" data-attachment-id={attachment.id} data-attachment-kind={attachment.kind}>
                 {attachment.kind === 'image' && attachment.previewUrl && <img class="composer-attachment-preview" src={attachment.previewUrl} alt="" />}
                 <span class="composer-attachment-name">{attachment.name}</span>
-                <span class="composer-attachment-kind">{attachment.kind === 'image' ? 'image · memory only' : attachment.kind}</span>
+                <span class="composer-attachment-kind">{attachment.kind === 'image' ? (attachment.memoryOnly ? 'image · memory only' : 'image · stored context') : attachment.kind}</span>
+                <span class="composer-attachment-size" data-attachment-size={attachment.size}>{formatBytes(attachment.size)}</span>
                 <button type="button" onClick={() => onRemove(attachment.id)}>{`Remove ${attachment.name}`}</button>
             </li>)}
         </ul>}
