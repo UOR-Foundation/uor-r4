@@ -1193,6 +1193,9 @@ pub fn export_saved_checkpoint(
     artifact_out: &Path,
     snaps: FbsExportSnaps,
 ) -> Result<(String, String), String> {
+    if snapshot_out == artifact_out {
+        return Err(invalid("snapshot and artifact output paths must differ"));
+    }
     if snapshot_out.exists() || artifact_out.exists() {
         return Err(invalid("snapshot or artifact output already exists"));
     }
@@ -1569,6 +1572,23 @@ mod tests {
     }
 
     #[test]
+    fn type_spin_is_refused_by_name() {
+        let mut tensors = hamming_tensor_map(32, 2, false);
+        tensors.push((
+            "d2.step_rotation",
+            Dtype::F32,
+            vec![8, 4],
+            f32_bytes(vec![0.0; 32]),
+        ));
+        let bytes = tensor_file(tensors);
+        let error = parse_hamming(&bytes, 32, 256, 2, 6).unwrap_err();
+        assert!(
+            error.contains("d2.step_rotation is the type-spin form"),
+            "{error}"
+        );
+    }
+
+    #[test]
     fn complete_cpu_export_attaches_ask_heads_and_readout_carry() {
         use uor_r4_integer::stack::{
             read_hamming_uorlut01,
@@ -1933,5 +1953,22 @@ mod tests {
         assert!(error.contains("output already exists"), "{error}");
         assert_eq!(std::fs::read(&snapshot).unwrap(), b"occupied");
         assert!(!artifact.exists());
+    }
+
+    #[test]
+    fn export_refuses_identical_output_paths_before_reading_the_checkpoint() {
+        let root = TestDir::new("same-output");
+        let output = root.0.join("model.out");
+
+        let error = export_saved_checkpoint(
+            &root.0.join("absent-checkpoint"),
+            &root.0.join("absent-run-config.json"),
+            &output,
+            &output,
+            FbsExportSnaps::SNAPPED,
+        )
+        .unwrap_err();
+        assert!(error.contains("output paths must differ"), "{error}");
+        assert!(!output.exists());
     }
 }
