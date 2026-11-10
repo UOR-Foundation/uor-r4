@@ -43,7 +43,7 @@ Lab: deepseek. Order: [ORDER.md](ORDER.md).
   is the complete path.
 - Documented the one-command CPU export in `crates/uor-r4-cpu-train/README.md`.
 
-Size: **536 code/build/test lines added and 43 changed**, plus **20 exporter
+Size: **534 code/build/test lines added and 43 changed**, plus **20 exporter
 README lines** before this report. The ORDER gave no numeric estimate.
 
 ## Measurements
