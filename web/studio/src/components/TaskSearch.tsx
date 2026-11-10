@@ -18,6 +18,6 @@ export function TaskSearch({ value, onInput, resultCount, totalCount }: TaskSear
                 onInput={(event) => onInput(event.currentTarget.value)}
             />
         </label>
-        {active && <p class="task-search-count" aria-live="polite">{resultCount} of {totalCount} tasks</p>}
+        {active && <p class="task-search-count" aria-live="polite">{resultCount} of {totalCount} {totalCount === 1 ? 'task' : 'tasks'}</p>}
     </div>;
 }

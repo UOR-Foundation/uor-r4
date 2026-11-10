@@ -3,6 +3,8 @@ import type { TaskSummary } from '../agent/client.js';
 import { TaskGroup } from './TaskGroup.js';
 import { TaskSearch } from './TaskSearch.js';
 
+export const LOCAL_SESSIONS_LABEL_ID = 'task-rail-local-sessions';
+
 export interface TaskRailProps {
     tasks: TaskSummary[];
     query: string;
@@ -15,7 +17,9 @@ export interface TaskRailProps {
     runtimeUnavailable?: boolean;
     loading?: boolean;
     error?: string | null;
+    showEmpty?: boolean;
     legacySessions?: ComponentChildren;
+    legacySessionsEmpty?: boolean;
 }
 
 export interface TaskBuckets {
@@ -82,7 +86,9 @@ export function TaskRail({
     runtimeUnavailable = false,
     loading = false,
     error = null,
+    showEmpty = true,
     legacySessions,
+    legacySessionsEmpty = false,
 }: TaskRailProps) {
     const visible = filterTasks(tasks, query);
     const buckets = groupTasks(visible, nowMs);
@@ -91,7 +97,7 @@ export function TaskRail({
     const empty = total === 0;
     const noMatches = !empty && visible.length === 0;
 
-    return <nav aria-label="Tasks" class="task-rail">
+    return <nav aria-label="Tasks and local sessions" class="task-rail">
         <header class="task-rail-header">
             <h2 class="sidebar-label">Tasks</h2>
             <p class="task-pin-scope">Pins stay on this device.</p>
@@ -100,7 +106,7 @@ export function TaskRail({
         {loading && <p class="task-loading" role="status">Loading tasks…</p>}
         {runtimeUnavailable && <p class="task-runtime-error" role="alert">The task runtime is not initialized. Tasks appear here after the local task runtime starts.</p>}
         {error !== null && <p class="task-load-error" role="alert">{error}</p>}
-        {empty && !loading && !runtimeUnavailable && error === null && <p class="task-empty">No tasks yet. Tasks appear here when this project records one.</p>}
+        {empty && showEmpty && !loading && !runtimeUnavailable && error === null && <p class="task-empty">No tasks yet. Tasks appear here when this project records one.</p>}
         {noMatches && <p class="task-empty" role="status">No tasks match “{query.trim()}”.</p>}
         {!empty && activeCount > 0 && <div class="task-groups">
             {buckets.today.length > 0 && <TaskGroup kind="today" label="Today" tasks={buckets.today} selectedTaskId={selectedTaskId} onSelect={onSelect} onPin={onPin} onArchive={onArchive} />}
@@ -108,6 +114,12 @@ export function TaskRail({
             {buckets.older.length > 0 && <TaskGroup kind="older" label="Older" tasks={buckets.older} selectedTaskId={selectedTaskId} onSelect={onSelect} onPin={onPin} onArchive={onArchive} collapsed />}
         </div>}
         {buckets.archived.length > 0 && <TaskGroup kind="archived" label="Archived" tasks={buckets.archived} selectedTaskId={selectedTaskId} onSelect={onSelect} onPin={onPin} onArchive={onArchive} collapsed />}
-        {legacySessions != null && <div class="task-legacy-sessions">{legacySessions}</div>}
+        {legacySessions != null && <div class="task-group task-legacy-sessions" data-task-group="local-sessions">
+            <header class="task-group-header">
+                <h3 id={LOCAL_SESSIONS_LABEL_ID}>Local sessions</h3>
+            </header>
+            {legacySessionsEmpty && <p class="task-empty">No sessions yet</p>}
+            {legacySessions}
+        </div>}
     </nav>;
 }

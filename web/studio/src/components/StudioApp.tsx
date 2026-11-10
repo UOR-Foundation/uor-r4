@@ -19,7 +19,7 @@ import { ModelPicker } from './ModelPicker.js';
 import { ProjectSidebar, TaskRailCountContext } from './ProjectSidebar.js';
 import { SessionList } from './SessionList.js';
 import { Settings } from './Settings.js';
-import { TaskRail } from './TaskRail.js';
+import { LOCAL_SESSIONS_LABEL_ID, TaskRail } from './TaskRail.js';
 import { WorkspaceEditor } from './WorkspaceEditor.js';
 import { createDesktopActions } from '../adapters/desktopActions.js';
 import type { DesktopActions } from '../adapters/desktopActions.js';
@@ -77,6 +77,21 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         });
         return () => { active = false; };
     }, [agentClient]);
+    useEffect(() => {
+        if (agentClient === null) return;
+        let stream: ReturnType<AgentClient['subscribe']>;
+        try { stream = agentClient.subscribe(); } catch { return; }
+        let active = true;
+        void (async () => {
+            try {
+                for await (const _event of stream) {
+                    if (!active) return;
+                    setTaskRevision((value) => value + 1);
+                }
+            } catch { /* a closed stream is not a task failure */ }
+        })();
+        return () => { active = false; stream.close(); };
+    }, [agentClient]);
     const selectedTaskId = useMemo<string | null>(() => agentClient?.store.snapshot().selectedTaskId ?? null, [agentClient, taskRevision]);
     const tasks = useMemo<TaskSummary[]>(() => {
         if (agentClient === null) return [];
@@ -93,6 +108,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             state: task.state,
         }));
     }, [agentClient, taskRevision]);
+    const taskReadyZero = taskList.phase === 'ready' && tasks.length === 0;
     useEffect(() => {
         const viewChanged = (event: Event) => {
             const view = (event as CustomEvent<{ view?: string }>).detail?.view;
@@ -128,11 +144,11 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     };
     const pinTask = (taskId: string, pinned: boolean) => {
         if (agentClient === null) return;
-        void agentClient.pinTask({ taskId, pinned }).then(() => setTaskRevision((value) => value + 1)).catch(reportTaskFailure);
+        void agentClient.pinTask({ taskId, pinned }).then(() => { setTaskList({ phase: 'ready', message: null }); setTaskRevision((value) => value + 1); }).catch(reportTaskFailure);
     };
     const archiveTask = (taskId: string, archived: boolean) => {
         if (agentClient === null) return;
-        void agentClient.archiveTask({ taskId, archived }).then(() => setTaskRevision((value) => value + 1)).catch(reportTaskFailure);
+        void agentClient.archiveTask({ taskId, archived }).then(() => { setTaskList({ phase: 'ready', message: null }); setTaskRevision((value) => value + 1); }).catch(reportTaskFailure);
     };
     const selectTask = (taskId: string) => {
         if (agentClient === null) return;
@@ -165,7 +181,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         if (section === 'browser') return <section class="browser-placeholder" aria-label="Browser preview"><span class="browser-placeholder-icon" aria-hidden="true">↗</span><h1>Browser</h1><p>Browser preview requires a harness service</p><p>This static preview does not launch a browser, import cookies, or give the model access to your existing tabs. Connect the local or hosted harness service to enable an isolated preview.</p></section>;
         return <Guide />;
     };
-    return <div data-reduce-motion={editorSettings.reduceMotion ? '1' : '0'}><TaskRailCountContext.Provider value={taskList.phase === 'ready' ? tasks.length : null}><AppShell
+    return <div data-reduce-motion={editorSettings.reduceMotion ? '1' : '0'}><TaskRailCountContext.Provider value={taskReadyZero}><AppShell
         activeSection={activeSection} onSection={setActiveSection} status={status}
         onPalette={() => setPaletteOpen(true)} onSettings={() => setSettingsOpen(true)} onInspector={() => setInspectorOpen((value) => !value)} inspectorOpen={inspectorOpen}
         onModels={() => setActiveSection('models')} onOpenFolder={async () => { await files.openFolder(); succeed('workspace:open-folder'); return files.treeSummary().rootName || files.workspaceName() || 'selected-folder'; }}
@@ -181,7 +197,9 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             runtimeUnavailable={taskList.phase === 'runtime_unavailable'}
             loading={taskList.phase === 'loading'}
             error={taskList.phase === 'error' ? taskList.message : null}
-            legacySessions={agentClient === null ? <SessionList store={store} agent={agent} download={download} onError={report} onSuccess={succeed} onChange={(operation) => { succeed(operation); setSessionRevision((value) => value + 1); }} /> : undefined}
+            showEmpty={!taskReadyZero}
+            legacySessions={agentClient === null ? <SessionList store={store} agent={agent} download={download} onError={report} onSuccess={succeed} onChange={(operation) => { succeed(operation); setSessionRevision((value) => value + 1); }} showHeader={false} showEmpty={false} labelId={LOCAL_SESSIONS_LABEL_ID} /> : undefined}
+            legacySessionsEmpty={agentClient === null && state.session.items.length === 0}
         />}
         alert={error && <p role="alert" class="workbench-alert">{error.message}</p>} primary={renderSection(activeSection)}>
         <Inspector store={store} ui={ui} open={inspectorOpen} onClose={() => setInspectorOpen(false)} />

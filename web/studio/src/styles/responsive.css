@@ -30,3 +30,8 @@
     .task-workspace .harness-body[data-rail-open="true"] { grid-template-columns: minmax(0, 1fr); }
     .task-workspace .project-home { padding: .55rem .65rem; }
 }
+
+@media (max-width: 800px) {
+    .task-workspace .task-rail { padding: .45rem; }
+    .task-workspace .task-row { padding: .35rem; }
+}

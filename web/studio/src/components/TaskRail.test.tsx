@@ -121,7 +121,7 @@ describe('TaskRail groups', () => {
         ];
         renderRail({ tasks });
 
-        expect(host.querySelector('nav[aria-label="Tasks"]')).not.toBeNull();
+        expect(host.querySelector('nav[aria-label="Tasks and local sessions"]')).not.toBeNull();
         expect(rowIds('today')).toEqual(['tsk_0000000000000001']);
         expect(rowIds('last-7-days')).toEqual(['tsk_0000000000000002', 'tsk_0000000000000003']);
         const older = host.querySelector<HTMLDetailsElement>('details[data-task-group="older"]')!;
@@ -148,6 +148,18 @@ describe('TaskRail groups', () => {
         expect(host.querySelector('li[data-task-id="tsk_0000000000000011"]')?.textContent).toContain('This device');
     });
 
+    it('uses singular grammar and heading semantics in collapsed group labels', () => {
+        const sevenDaysStart = atLocalDay(-7, 0);
+        const tasks = [task({ taskId: 'tsk_0000000000000012', title: 'Old one', createdAtMs: sevenDaysStart - 1 })];
+        renderRail({ tasks });
+        const older = host.querySelector<HTMLDetailsElement>('details[data-task-group="older"]')!;
+        expect(older).not.toBeNull();
+        expect(older.querySelector('summary')?.textContent).toContain('1 task');
+        expect(older.querySelector('summary')?.textContent).not.toContain('1 tasks');
+        expect(older.querySelector('summary [role="heading"]')?.textContent).toBe('Older');
+        expect(older.querySelector('summary')?.getAttribute('aria-label')).toBeNull();
+    });
+
     it('derives the visible task state from the loaded run projection', async () => {
         const transport = new FixtureTransport({ nowMs: Date.now() - 60_000, projectId: PROJECT_A });
         const client = new AgentClient({ transport });
@@ -157,10 +169,13 @@ describe('TaskRail groups', () => {
         act(() => {
             render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
         });
-        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
-        expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-id="${created.taskId}"]`)?.textContent).toContain('Running');
+        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks and local sessions"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
+        expect(host.querySelector(`nav[aria-label="Tasks and local sessions"] [data-task-id="${created.taskId}"]`)?.textContent).toContain('Running');
         expect(client.store.snapshot().tasks.find((candidate) => candidate.taskId === created.taskId)?.state).toBe('running');
-        expect(host.querySelector('section[aria-label="Project home"]')).toBeNull();
+        const home = host.querySelector('section[aria-label="Project home"]');
+        expect(home).not.toBeNull();
+        expect(home!.textContent).toContain('uor-r4');
+        expect(home!.textContent).not.toContain('No tasks yet');
         expect(host.textContent).not.toContain('No tasks yet');
     });
 
@@ -172,12 +187,12 @@ describe('TaskRail groups', () => {
         act(() => {
             render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
         });
-        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
+        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks and local sessions"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
 
-        const open = host.querySelector<HTMLButtonElement>('nav[aria-label="Tasks"] button[aria-label="Open Selectable task"]')!;
+        const open = host.querySelector<HTMLButtonElement>('nav[aria-label="Tasks and local sessions"] button[aria-label="Open Selectable task"]')!;
         act(() => { open.click(); });
         await vi.waitFor(() => expect(client.store.snapshot().selectedTaskId).toBe(created.taskId));
-        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-id="${created.taskId}"]`)?.getAttribute('aria-current')).toBe('true'));
+        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks and local sessions"] [data-task-id="${created.taskId}"]`)?.getAttribute('aria-current')).toBe('true'));
     });
 });
 
@@ -212,9 +227,9 @@ describe('TaskRail search', () => {
             task({ taskId: 'tsk_0000000000000031', title: 'Beta', createdAtMs: NOW - 2_000 }),
         ];
         renderRail({ tasks });
-        const input = host.querySelector<HTMLInputElement>('label span')!;
-        expect(host.querySelector('input[aria-label="Search tasks"]')).not.toBeNull();
-        expect(input.textContent).toBe('Search tasks');
+        const input = host.querySelector<HTMLInputElement>('input[aria-label="Search tasks"]')!;
+        expect(input.getAttribute('aria-label')).toBe('Search tasks');
+        expect(input.labels?.[0]?.textContent).toContain('Search tasks');
         setSearch('alpha');
         expect(host.textContent).toContain('1 of 2 tasks');
     });
@@ -245,9 +260,9 @@ describe('TaskRail pins', () => {
         act(() => {
             render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
         });
-        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
+        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks and local sessions"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
 
-        const pin = host.querySelector<HTMLButtonElement>(`nav[aria-label="Tasks"] button[aria-label="Pin Pinned task on this device"]`)!;
+        const pin = host.querySelector<HTMLButtonElement>(`nav[aria-label="Tasks and local sessions"] button[aria-label="Pin Pinned task on this device"]`)!;
         act(() => { pin.click(); });
         await vi.waitFor(() => expect(transport.calls.some((call) => call.method === 'pinTask' && JSON.stringify(call.payload) === JSON.stringify({ taskId: created.taskId, pinned: true }))).toBe(true));
         await vi.waitFor(() => expect(host.textContent).toContain('This device'));
@@ -266,15 +281,15 @@ describe('TaskRail archive', () => {
         act(() => {
             render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
         });
-        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
+        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks and local sessions"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
 
-        const archive = host.querySelector<HTMLButtonElement>(`nav[aria-label="Tasks"] button[aria-label="Archive Archived task"]`)!;
+        const archive = host.querySelector<HTMLButtonElement>(`nav[aria-label="Tasks and local sessions"] button[aria-label="Archive Archived task"]`)!;
         act(() => { archive.click(); });
         await vi.waitFor(() => expect(transport.calls.some((call) => call.method === 'archiveTask' && JSON.stringify(call.payload) === JSON.stringify({ taskId: created.taskId, archived: true }))).toBe(true));
-        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-group="today"] [data-task-id="${created.taskId}"]`)).toBeNull());
+        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks and local sessions"] [data-task-group="today"] [data-task-id="${created.taskId}"]`)).toBeNull());
         expect(client.store.snapshot().tasks.find((candidate) => candidate.taskId === created.taskId)?.archived).toBe(true);
 
-        const archived = host.querySelector<HTMLDetailsElement>('nav[aria-label="Tasks"] details[data-task-group="archived"]')!;
+        const archived = host.querySelector<HTMLDetailsElement>('nav[aria-label="Tasks and local sessions"] details[data-task-group="archived"]')!;
         expect(archived).not.toBeNull();
         expect(archived.querySelector('summary')?.textContent).toContain('Archived');
         expect(archived.querySelector('summary')?.textContent).toContain('1');
@@ -286,8 +301,8 @@ describe('TaskRail archive', () => {
         expect(restore).not.toBeNull();
         act(() => { restore.click(); });
         await vi.waitFor(() => expect(transport.calls.some((call) => call.method === 'archiveTask' && JSON.stringify(call.payload) === JSON.stringify({ taskId: created.taskId, archived: false }))).toBe(true));
-        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-group="today"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
-        expect(host.querySelector('nav[aria-label="Tasks"] details[data-task-group="archived"]')).toBeNull();
+        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks and local sessions"] [data-task-group="today"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
+        expect(host.querySelector('nav[aria-label="Tasks and local sessions"] details[data-task-group="archived"]')).toBeNull();
         expect(client.store.snapshot().tasks.find((candidate) => candidate.taskId === created.taskId)?.archived).toBe(false);
     });
 });
@@ -297,11 +312,11 @@ describe('TaskRail legacy session presentation', () => {
         act(() => {
             render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
         });
-        const navs = host.querySelectorAll('nav[aria-label="Tasks"]');
+        const navs = host.querySelectorAll('nav[aria-label="Tasks and local sessions"]');
         expect(navs).toHaveLength(1);
         expect(navs[0].querySelector('.session-list')).not.toBeNull();
         expect(host.querySelectorAll('.session-list')).toHaveLength(1);
-        expect(host.querySelector('.session-list')?.closest('nav[aria-label="Tasks"]')).toBe(navs[0]);
+        expect(host.querySelector('.session-list')?.closest('nav[aria-label="Tasks and local sessions"]')).toBe(navs[0]);
         expect(navs[0].querySelector('.session-list [data-action="new-session"]')).not.toBeNull();
     });
 
@@ -313,18 +328,102 @@ describe('TaskRail legacy session presentation', () => {
         act(() => {
             render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
         });
-        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
-        const navs = host.querySelectorAll('nav[aria-label="Tasks"]');
+        await vi.waitFor(() => expect(host.querySelector(`nav[aria-label="Tasks and local sessions"] [data-task-id="${created.taskId}"]`)).not.toBeNull());
+        const navs = host.querySelectorAll('nav[aria-label="Tasks and local sessions"]');
         expect(navs).toHaveLength(1);
         expect(navs[0].querySelector('.session-list')).toBeNull();
+        expect(navs[0].querySelector('#task-rail-local-sessions')).toBeNull();
         expect(host.querySelector('.session-list')).toBeNull();
+    });
+});
+
+describe('TaskRail integration rulings', () => {
+    it('renders one Tasks and local sessions nav with a Local sessions group', () => {
+        act(() => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        const navs = host.querySelectorAll('nav[aria-label="Tasks and local sessions"]');
+        expect(navs).toHaveLength(1);
+        const nav = navs[0];
+        expect(nav.querySelector('h2')?.textContent).toBe('Tasks');
+        expect(nav.querySelector('h3#task-rail-local-sessions')?.textContent).toBe('Local sessions');
+        const sessionList = nav.querySelector('.session-list');
+        expect(sessionList).not.toBeNull();
+        expect(sessionList?.getAttribute('role')).toBe('group');
+        expect(sessionList?.getAttribute('aria-labelledby')).toBe('task-rail-local-sessions');
+        expect(Array.from(nav.querySelectorAll('h2')).map((node) => node.textContent)).not.toContain('Sessions');
+        expect(host.querySelectorAll('nav[aria-label="Tasks"]')).toHaveLength(0);
+        expect(host.querySelectorAll('.session-list')).toHaveLength(1);
+        expect(sessionList?.closest('nav[aria-label="Tasks and local sessions"]')).toBe(nav);
+        expect(nav.querySelector('.task-legacy-sessions')?.textContent).toContain('No sessions yet');
+    });
+
+    it('shows the no-tasks message once and leaves it to ProjectHome', () => {
+        act(() => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} />, host);
+        });
+        const nav = host.querySelector('nav[aria-label="Tasks and local sessions"]');
+        expect(nav).not.toBeNull();
+        expect(nav!.textContent).not.toContain('No tasks yet');
+        expect(host.textContent!.match(/No tasks yet/g) ?? []).toHaveLength(1);
+        const home = host.querySelector('section[aria-label="Project home"]');
+        expect(home).not.toBeNull();
+        expect(home!.textContent).toContain('uor-r4');
+        expect(home!.textContent).toContain('Local browser');
+        expect(home!.textContent).toContain('No tasks yet');
+    });
+
+    it('updates the visible task projection when a transport event arrives after mount', async () => {
+        const transport = new FixtureTransport({ nowMs: Date.now() - 60_000, projectId: PROJECT_A });
+        const client = new AgentClient({ transport });
+        const created = await client.createTask({ projectId: PROJECT_A, title: 'Live task', repo: 'uor-r4' });
+        const subscribeSpy = vi.spyOn(client, 'subscribe');
+
+        act(() => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+        });
+        await vi.waitFor(() => expect(host.querySelector(`[data-task-id="${created.taskId}"]`)?.textContent).toContain('Idle'));
+
+        await client.startRun({ taskId: created.taskId, prompt: 'Run after mount' });
+        await vi.waitFor(() => expect(host.querySelector(`[data-task-id="${created.taskId}"]`)?.textContent).toContain('Running'));
+        expect(subscribeSpy).toHaveBeenCalledTimes(1);
+        expect(client.store.snapshot().tasks.find((candidate) => candidate.taskId === created.taskId)?.state).toBe('running');
+
+        const stream = subscribeSpy.mock.results[0]?.value as { close(): void } | undefined;
+        const closeSpy = stream === undefined ? null : vi.spyOn(stream, 'close');
+        act(() => { render(null, host); });
+        expect(closeSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears a failed pin after a successful retry without hiding ProjectHome', async () => {
+        const transport = new FixtureTransport({ nowMs: Date.now() - 60_000, projectId: PROJECT_A });
+        const client = new AgentClient({ transport });
+        const created = await client.createTask({ projectId: PROJECT_A, title: 'Retry task', repo: 'uor-r4' });
+        vi.spyOn(transport, 'pinTask').mockRejectedValueOnce(new Error('pin failed once'));
+
+        act(() => {
+            render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+        });
+        await vi.waitFor(() => expect(host.querySelector(`[data-task-id="${created.taskId}"]`)?.textContent).toContain('Idle'));
+
+        const pin = host.querySelector<HTMLButtonElement>('button[aria-label="Pin Retry task on this device"]')!;
+        act(() => { pin.click(); });
+        await vi.waitFor(() => expect(host.querySelector('[role="alert"]')?.textContent).toContain('pin failed once'));
+        expect(host.querySelector('section[aria-label="Project home"]')).not.toBeNull();
+        expect(pin.getAttribute('aria-pressed')).toBe('false');
+
+        act(() => { pin.click(); });
+        await vi.waitFor(() => expect(host.querySelector('[role="alert"]')).toBeNull());
+        await vi.waitFor(() => expect(host.querySelector(`[data-task-id="${created.taskId}"]`)?.textContent).toContain('This device'));
+        expect(client.store.snapshot().tasks.find((candidate) => candidate.taskId === created.taskId)?.pinnedLocal).toBe(true);
+        expect(host.querySelector('section[aria-label="Project home"]')).not.toBeNull();
     });
 });
 
 describe('TaskRail empty and failure states', () => {
     it('empty_state_explains_runtime_unavailable only when initialization failed', async () => {
         renderRail();
-        expect(host.querySelector('nav[aria-label="Tasks"]')?.textContent).toContain('No tasks yet');
+        expect(host.querySelector('nav[aria-label="Tasks and local sessions"]')?.textContent).toContain('No tasks yet');
         expect(host.textContent).not.toMatch(/runtime_unavailable|runtime is not initialized/i);
 
         render(null, host);
@@ -342,14 +441,14 @@ describe('TaskRail empty and failure states', () => {
         act(() => {
             render(<StudioApp store={new LifecycleStore()} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={makeSessions()} ui={makeUi()} download={vi.fn()} agentClient={new AgentClient()} />, host);
         });
-        await vi.waitFor(() => expect(host.querySelector('nav[aria-label="Tasks"] [role="alert"]')?.textContent).toContain('task runtime is not initialized'));
-        expect(host.querySelector('nav[aria-label="Tasks"]')?.textContent).not.toContain('No tasks yet');
+        await vi.waitFor(() => expect(host.querySelector('nav[aria-label="Tasks and local sessions"] [role="alert"]')?.textContent).toContain('task runtime is not initialized'));
+        expect(host.querySelector('nav[aria-label="Tasks and local sessions"]')?.textContent).not.toContain('No tasks yet');
     });
 
     it('shows no fabricated task rows or counts for an empty list', () => {
         renderRail();
         expect(host.querySelectorAll('[data-task-id]')).toHaveLength(0);
         expect(host.querySelector('details[data-task-group="archived"]')).toBeNull();
-        expect(host.querySelector('nav[aria-label="Tasks"]')?.textContent).not.toMatch(/\b[1-9]\d* tasks?\b/);
+        expect(host.querySelector('nav[aria-label="Tasks and local sessions"]')?.textContent).not.toMatch(/\b[1-9]\d* tasks?\b/);
     });
 });

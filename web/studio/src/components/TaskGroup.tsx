@@ -13,6 +13,10 @@ interface TaskGroupProps {
     collapsed?: boolean;
 }
 
+function taskCountLabel(count: number): string {
+    return `${count} ${count === 1 ? 'task' : 'tasks'}`;
+}
+
 function stateLabel(state: TaskSummary['state']): string {
     switch (state) {
         case 'waiting_for_approval': return 'Waiting for approval';
@@ -41,21 +45,25 @@ function TaskRow({ task, selected, archived, onSelect, onPin, onArchive }: TaskR
         <button type="button" class="task-select" aria-label={`Open ${task.title}`} onClick={() => onSelect(task.taskId)}>
             <strong>{task.title}</strong>
         </button>
-        <span class="task-project" title={task.projectId}>{projectLabel(task)}</span>
-        <span class="task-state">{stateLabel(task.state)}</span>
-        {!archived && <button
-            type="button"
-            class="task-pin"
-            aria-pressed={task.pinned}
-            aria-label={`${task.pinned ? 'Unpin' : 'Pin'} ${task.title} on this device`}
-            onClick={() => onPin(task.taskId, !task.pinned)}
-        >{task.pinned ? 'This device' : 'Pin'}</button>}
-        <button
-            type="button"
-            class="task-archive"
-            aria-label={`${archived ? 'Restore' : 'Archive'} ${task.title}`}
-            onClick={() => onArchive(task.taskId, !archived)}
-        >{archived ? 'Restore' : 'Archive'}</button>
+        <div class="task-meta">
+            <span class="task-project" title={task.projectId}>{projectLabel(task)}</span>
+            <span class="task-state">{stateLabel(task.state)}</span>
+        </div>
+        <div class="task-actions">
+            {!archived && <button
+                type="button"
+                class="task-pin"
+                aria-pressed={task.pinned}
+                aria-label={`${task.pinned ? 'Unpin' : 'Pin'} ${task.title} on this device`}
+                onClick={() => onPin(task.taskId, !task.pinned)}
+            >{task.pinned ? 'This device' : 'Pin'}</button>}
+            <button
+                type="button"
+                class="task-archive"
+                aria-label={`${archived ? 'Restore' : 'Archive'} ${task.title}`}
+                onClick={() => onArchive(task.taskId, !archived)}
+            >{archived ? 'Restore' : 'Archive'}</button>
+        </div>
     </li>;
 }
 
@@ -67,7 +75,7 @@ function TaskRows({ tasks, selectedTaskId, archived, onSelect, onPin, onArchive 
     onPin(taskId: string, pinned: boolean): void;
     onArchive(taskId: string, archived: boolean): void;
 }) {
-    return <ul class="task-list" style={{ display: 'grid', gap: '0.25rem', margin: 0, padding: 0, listStyle: 'none' }}>
+    return <ul class="task-list">
         {tasks.map((task) => <TaskRow
             key={task.taskId}
             task={task}
@@ -84,17 +92,17 @@ export function TaskGroup({ kind, label, tasks, selectedTaskId, onSelect, onPin,
     const archived = kind === 'archived';
     if (collapsed) {
         return <details class="task-group" data-task-group={kind}>
-            <summary aria-label={`${label}, ${tasks.length} tasks`}>
-                <span data-group-label>{label}</span>{' '}
-                <span class="task-group-count">{tasks.length}</span>
+            <summary>
+                <span data-group-label role="heading" aria-level={3}>{label}</span>{' '}
+                <span class="task-group-count">{taskCountLabel(tasks.length)}</span>
             </summary>
             <TaskRows tasks={tasks} selectedTaskId={selectedTaskId} archived={archived} onSelect={onSelect} onPin={onPin} onArchive={onArchive} />
         </details>;
     }
-    return <section class="task-group" data-task-group={kind} aria-label={label}>
+    return <section class="task-group" data-task-group={kind} aria-labelledby={`task-group-${kind}`}>
         <header class="task-group-header">
-            <h3 data-group-label>{label}</h3>
-            <span class="task-group-count">{tasks.length}</span>
+            <h3 id={`task-group-${kind}`} data-group-label>{label}</h3>
+            <span class="task-group-count">{taskCountLabel(tasks.length)}</span>
         </header>
         <TaskRows tasks={tasks} selectedTaskId={selectedTaskId} archived={archived} onSelect={onSelect} onPin={onPin} onArchive={onArchive} />
     </section>;

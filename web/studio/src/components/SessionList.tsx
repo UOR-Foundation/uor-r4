@@ -6,9 +6,9 @@ import { useLifecycle } from '../state/useLifecycle.js';
 import { Modal } from './Modal.js';
 import { Icon } from './ui/Icon.js';
 
-interface SessionListProps { store: LifecycleStore; agent: AgentSessionController; download(name: string, content: string): void; onError(message: string, operation: string): void; onChange?(operation: string): void; onSuccess?(operation: string): void }
+interface SessionListProps { store: LifecycleStore; agent: AgentSessionController; download(name: string, content: string): void; onError(message: string, operation: string): void; onChange?(operation: string): void; onSuccess?(operation: string): void; showHeader?: boolean; showEmpty?: boolean; labelId?: string }
 
-export function SessionList({ store, agent, download, onError, onChange, onSuccess }: SessionListProps) {
+export function SessionList({ store, agent, download, onError, onChange, onSuccess, showHeader = true, showEmpty = true, labelId }: SessionListProps) {
     const state = useLifecycle(store);
     const [, setRevision] = useState(0);
     const [renaming, setRenaming] = useState<SessionSummary | null>(null);
@@ -22,9 +22,15 @@ export function SessionList({ store, agent, download, onError, onChange, onSucce
     const reportError = (message: string, operation: string) => { if (operation.startsWith('session:rename:') || operation.startsWith('session:delete:')) setError({ message, operation }); onError(message, operation); };
     const items = state.session.items;
     function rename(session: SessionSummary) { setError(null); setRenaming(session); setTitle(session.title); }
-    return <section aria-label="Sessions" class="session-list">
-        <div class="session-list-header"><h2>Sessions</h2><button type="button" data-action="new-session" disabled={generating} onClick={() => { if (agent.create()) activate('session:new'); else reportError('Could not create a session.', 'session:new'); }}><Icon name="plus" /><span>New session</span></button></div>
-        {items.length === 0 && <p class="session-empty">No sessions yet</p>}
+    const grouped = !showHeader && labelId !== undefined;
+    return <section
+        aria-label={showHeader ? 'Sessions' : undefined}
+        aria-labelledby={grouped ? labelId : undefined}
+        role={grouped ? 'group' : undefined}
+        class="session-list"
+    >
+        <div class={`session-list-header${showHeader ? '' : ' session-list-header-grouped'}`}>{showHeader && <h2>Sessions</h2>}<button type="button" data-action="new-session" disabled={generating} onClick={() => { if (agent.create()) activate('session:new'); else reportError('Could not create a session.', 'session:new'); }}><Icon name="plus" /><span>New session</span></button></div>
+        {showEmpty && items.length === 0 && <p class="session-empty">No sessions yet</p>}
         <ul>{items.map((session) => <li data-session-id={session.id} aria-current={session.id === state.session.activeId ? 'true' : undefined}>
             <strong aria-hidden="true" class="visually-hidden">{session.title}</strong>
             <button type="button" class="session-resume" data-action="resume-session" data-title={session.title} data-meta={`${session.messageCount} messages`} data-preview={session.preview || 'No messages yet'} disabled={generating} onClick={() => { if (agent.resume(session.id)) activate(`session:select:${session.id}`); else reportError('Could not select that session.', `session:select:${session.id}`); }}>{`Select ${session.title}`}</button>

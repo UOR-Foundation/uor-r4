@@ -109,29 +109,45 @@ test('project_home_shows_project_environment_and_empty_tasks_without_runtime_cla
     await expect(root).not.toContainText('runtime is not initialized');
 });
 
-test('task_rail_exposes_search_local_pins_and_an_honest_empty_state', async ({ page }) => {
+test('task_rail_unifies_local_sessions_and_an_honest_empty_state', async ({ page }) => {
     await openTypedAt(page, 1440);
     const root = page.locator('#studio-typed-root');
     const rail = root.locator('[data-region="task-rail"]');
-    const tasks = rail.locator('nav[aria-label="Tasks"]');
+    const tasks = rail.locator('nav[aria-label="Tasks and local sessions"]');
 
     await expect(tasks).toBeVisible();
     await expect(tasks.getByRole('heading', { name: 'Tasks', exact: true })).toBeVisible();
     await expect(tasks.locator('input[aria-label="Search tasks"]')).toBeVisible();
     await expect(tasks).toContainText('Pins stay on this device.');
-    await expect(tasks).toContainText('No tasks yet');
+    await expect(tasks.getByRole('heading', { name: 'Local sessions', exact: true })).toBeVisible();
+    await expect(tasks.locator('.session-list')).toHaveCount(1);
+    await expect(tasks.locator('.session-list')).toHaveAttribute('role', 'group');
+    await expect(tasks.locator('.session-list')).toHaveAttribute('aria-labelledby', 'task-rail-local-sessions');
+    await expect(tasks.locator('h2')).toHaveCount(1);
+    await expect(tasks.locator('h2')).toHaveText('Tasks');
+    await expect(tasks).not.toContainText('No tasks yet');
     await expect(tasks.locator('[data-task-id]')).toHaveCount(0);
     await expect(tasks.locator('details[data-task-group="archived"]')).toHaveCount(0);
-    await expect(root.locator('nav[aria-label="Tasks"]')).toHaveCount(1);
+    await expect(root.locator('nav[aria-label="Tasks and local sessions"]')).toHaveCount(1);
+    await expect(root.locator('nav[aria-label="Tasks"]')).toHaveCount(0);
     await expect(root.locator('nav[aria-label="Studio"]')).toBeVisible();
+    await expect(root.getByText('No tasks yet')).toHaveCount(1);
     await expect(root).not.toContainText('runtime_unavailable');
     await expect(root).not.toContainText('runtime is not initialized');
     await expect(root).not.toContainText('This Week');
     await expect(root).not.toContainText('This Month');
 
+    const railStyle = await tasks.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { display: style.display, gap: style.gap };
+    });
+    expect(railStyle.display).toBe('grid');
+    expect(railStyle.gap).not.toBe('normal');
+
     await tasks.locator('input[aria-label="Search tasks"]').fill('no such task');
     await expect(tasks.locator('[data-task-id]')).toHaveCount(0);
-    await expect(tasks).toContainText('No tasks yet');
+    await expect(tasks).not.toContainText('No tasks yet');
+    await expect(root.getByText('No tasks yet')).toHaveCount(1);
 });
 
 test('work_surface_region_appears_for_the_split_pane', async ({ page }) => {
