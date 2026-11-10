@@ -4,8 +4,8 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 ## What did not work, first
 
-- **The model did not memorize one reply.** Trained 231 times over 1,133 windows of 1,000 short dialogues, it reproduced 0 of 1,072 replies at seed 1 and 0 of 1,072 at seed 2. That is row 3 of the sheet at both seeds.
-- **It says one sentence to every prompt.** Seed 1 opens every one of its 1,117 decoded replies with "Got it, your dog is". Seed 2 opens every one with "Got it, your friend is". The true replies open 818 different ways.
+- **This recipe at 4,096 steps did not memorize one reply.** Trained 231 times over 1,133 windows of 1,000 short dialogues, it reproduced 0 of 1,072 replies at seed 1 and 0 of 1,072 at seed 2. That is row 3 of the sheet at both seeds.
+- **It says one sentence to every prompt.** Seed 1 opens every one of its 1,117 decoded replies with "Got it, your dog is". Seed 2 opens every one with "Got it, your friend is". The 1,117 true replies are 818 different sentences.
 - **The miss is at the first word of the reply, and it is there under teacher forcing too.** With the true text fed in, the first reply token is right 36 times in 1,117 at both seeds (3.2%). None of the 1,117 true replies opens with "Got". The 36 are replies that happen to share its first token, " G": "Goodbye! Have a great day." (15), "Glad I could help." (13), "Good night." (2) and six names. All 36 leave the reference at the next token. So the decode is not what loses the reply; the model never has it.
 - **What it did learn is the template, not the set.** Token fit on the trained set is 0.602 and 0.607. On DEV, a file it never trained on, the same count is 7,819 and 7,816 of 14,287 (0.547). After 231 passes it fits its own training text barely better than unseen text of the same kind. DEV's mix of dialogue families is not the set's, so the two shares are an observation, not a controlled comparison.
 - **The loss was still falling when the run ended.** It went from 0.997 to 0.717 (seed 1) and 0.998 to 0.739 (seed 2), with the last 512 steps moving it 0.013 and 0.011 as the learning rate reached 0. So this closes this recipe at 4,096 steps on this set, and nothing more (CHARTER §4.1). It does not show that a longer run cannot fit.
@@ -35,7 +35,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 **Instrument or model?** A model result, for four reasons.
 1. The counts above match the sheet's, taken from the set before any run.
 2. R1 and R2r agree by two paths: free-running and teacher-forced both give 0.
-3. The first reply token is a scored row in every sample, and the trainer's loss is a mean over its scored rows (`in_space_long.rs`, the same `assemble` the scorer uses). So the first token was trained on and not learned.
+3. The first reply token is a scored row in every sample (no sample's first position is missing from the rows file), and the trainer builds its loss rows the way the scorer builds its rows: both call `assemble`, which takes each window's `scored_offsets` (`in_space_long.rs` at the pin, lines 2017 to 2021 for the training step and 2458 for the scorer). The loss is a mean over those rows. So the first token was trained on and not learned. What the model writes there agrees: "Got" opens 32 of the 128 true first replies and none of the last ones, so it is a reply opening the model took from trained rows of this kind, not the output of a row that was never a target.
 4. The loss moved every 512 steps, so the optimizer was reaching the values.
 
 **Where the replies leave the reference** (complete samples).
@@ -57,7 +57,7 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 **First tokens.** The true first tokens of the 1,117 samples: " It" 161, " Your" 124, " That" 114, " I" 105, " You" 99, " The" 45, and others. The model's first two tokens at seed 1: " G" then "ot", 1,117 times.
 
 **Recorded only.**
-- Distinct replies: the model writes 116 (seed 1) and 152 (seed 2); the truth has 818. The commonest model reply is "Got it, your dog is." 408 times at seed 1 and "Got it, your friend is." 448 times at seed 2.
+- Distinct replies, each cut at its end marker, over all 1,117 samples: the model writes 116 (seed 1) and 152 (seed 2); the truth has 818 (823 if the 45 window-cut references are counted uncut). The commonest model reply is "Got it, your dog is." at seed 1, 428 times in the 1,117 samples and 408 in the 1,072 complete ones, and "Got it, your friend is." at seed 2, 462 and 448 times.
 - Replies holding an end marker: 997 and 1,039 of 1,117. The rest run to the 48-token cap, most of them repeating one token.
 - The first-opening pass (128 windows' first reply): 0 of 128 exact at both seeds. Here 32 of the 128 true replies do open with "Got it", and the model's first token is right on exactly those 32. It still gets none of them whole: it names the wrong thing and gives no value.
 - DEV at step 4,096: nearest 7,819 and 7,816 of 14,287; reply openings 161 of 1,226 at both seeds, where the commonest single opening is 161. The model's DEV openings are one opening.
@@ -100,7 +100,7 @@ Every 45th complete sample, starting at the 8th. "Asked" is the user's last line
 
 The sheet's row 3: **the address memory's first test is this same set, at the same steps and seeds, with the same bars.** T0 is that test's no-memory arm. The address memory is built in claude-346 (PR #3913).
 
-What T0 adds to the design's first gap. The model has 1,112,576 learned values, 1,048,576 of them the token table, and no learned step between a state and the next. The reading fits that: it learned what follows from the last few tokens, and nothing that depends on which conversation it is in. The first word of a reply is the cleanest case, because there the last few tokens are the same in every conversation ("Assistant:"), and the model gives one answer to all of them.
+What T0 adds to the design's first gap. The model has 1,112,576 learned values, 1,048,576 of them the token table, and no learned step between a state and the next. The reading fits that, and it is a **hypothesis**, not something T0 proves: at the first word of a reply the model learned nothing that depends on which conversation it is in. That word is the cleanest case, because there the last few tokens are the same in every conversation ("Assistant:"), and the model gives one answer to all of them. At later reply tokens it is right about half the time under teacher forcing, and T0 does not separate the template's words from the conversation's there.
 
 ## Evidence
 
@@ -123,6 +123,7 @@ What T0 adds to the design's first gap. The model has 1,112,576 learned values, 
 - Both scored runs were fetched and checked against their sealed `SHA256SUMS` and file lists (`shasum -a 256 -c SHA256SUMS`: both files OK at each seed).
 - No trainer, scorer, recipe, bar or inference rule changed.
 - `uor-harness ratchet d23`, `d25` and `d32`: OK, nothing added.
+- **Fresh-context review, round 1,** at `1fb08d4e583575443693e96784a965ba10b53f4a`: two reviewers, both CHANGES. One re-derived the main table, the row read and the instrument checks from the sealed runs; all reproduce. It asked for the counting bases of three recorded-only numbers (given above; 818, 408 and 448 reproduce on the bases now stated), two narrower sentences (narrowed), and a check that the trainer scores the first reply token (done; reason 3 under "Instrument or model?"). The other read [DESIGN.md](DESIGN.md) against the charter and the repository; its findings and what changed are that document's section 10.11. The largest: the design's state-keyed read no longer sums over a whole window at any step.
 - **Another lab's commit is in this PR.** DeepSeek pushed `c4449e7daed7fd4d6876f13637d0524f9b4c0562` onto this branch on 10 Nov. It added this section and the three after it, which the REPORT shape rule requires and this lab had left out, and gave the sheet the `Steps`, `Cost` and `Minimum test power` headings the prep rule requires, under a dated note that names the commit the pods ran from. This lab read every added line against the sealed runs and the harness source (`REPORT_SECTIONS`, `REQUIRED_BLOCKS`, D22 §3's 2 seeds or 200 rows) and changed two sentences below.
 
 ## Skills used
