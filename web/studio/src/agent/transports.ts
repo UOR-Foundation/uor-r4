@@ -1,15 +1,23 @@
-import { AgentClientError } from './client.js';
 import type {
     AgentTransport,
     ApprovalReceipt,
     HostCapabilities,
 } from './client.js';
-import type { AgentErrorCode } from './generated/agentContract.js';
+import {
+    AgentClientError,
+    isAgentErrorCode,
+    isPlainObject,
+    toClientError,
+} from './storeTypes.js';
 import { canonicalJson } from './generated/agentCanonical.js';
 import {
     HOST_RESULT_SCHEMA,
+    boundedPreview,
     sha256Canonical,
     type HostApprovalInput,
+    type HostClientTimers,
+    type HostDataRequest,
+    type HostInvokeResponse,
     type HostStreamingKind,
     type HostSubscribeOptions,
     type HostSubscription,
@@ -25,40 +33,44 @@ const LOOPBACK_INTENTS_PATH = '/v1/studio/host/intents';
 const LOOPBACK_RESULTS_PATH = '/v1/studio/host/results';
 const LOOPBACK_ORIGIN_PATTERN =
     /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/;
-const HOST_ERROR_CODES: ReadonlySet<AgentErrorCode> = new Set([
-    'invalid_arguments',
-    'invalid_event',
-    'malformed_event',
-    'truncated_frame',
-    'out_of_order',
-    'stale_generation',
-    'cross_task_event',
-    'cursor_expired',
-    'approval_forbidden',
-    'approval_expired',
-    'approval_digest_mismatch',
-    'host_unavailable',
-    'host_denied',
-    'transport_closed',
-    'limit_exceeded',
-    'internal',
-]);
+const DEFAULT_POLL_INTERVAL_MS = 250;
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-        return false;
+function errorCode(value: unknown): string {
+    if (isPlainObject(value) && typeof value.code === 'string') {
+        return isAgentErrorCode(value.code) ? value.code : 'host_unavailable';
     }
-    const prototype = Object.getPrototypeOf(value);
-    return prototype === Object.prototype || prototype === null;
+    return 'host_unavailable';
 }
 
-function toClientError(error: unknown): AgentClientError {
-    if (error instanceof AgentClientError) return error;
-    return new AgentClientError(
-        'internal',
-        error instanceof Error ? error.message : String(error),
-    );
+function errorForCode(code: string, message: string): AgentClientError {
+    if (code === 'quota_exceeded') {
+        return new AgentClientError('host_unavailable', message);
+    }
+    if (isAgentErrorCode(code)) {
+        return new AgentClientError(code, message);
+    }
+    return new AgentClientError('host_unavailable', message);
 }
+
+function notifyError(
+    options: HostSubscribeOptions,
+    error: AgentClientError,
+): void {
+    try {
+        options.onError?.(error);
+    } catch {
+        // A subscriber cannot break the transport lifecycle.
+    }
+}
+
+function notifyResync(options: HostSubscribeOptions): void {
+    try {
+        options.onResync?.('cursor_expired');
+    } catch {
+        // A subscriber cannot break the transport lifecycle.
+    }
+}
+
 
 function falseCapabilities(
     kind: HostTransportKind,
@@ -114,17 +126,6 @@ function asHostResult(value: unknown): HostToolResult | null {
     return null;
 }
 
-function errorCode(value: unknown): AgentErrorCode {
-    if (
-        isPlainObject(value) &&
-        typeof value.code === 'string' &&
-        HOST_ERROR_CODES.has(value.code as AgentErrorCode)
-    ) {
-        return value.code as AgentErrorCode;
-    }
-    return 'host_unavailable';
-}
-
 abstract class UnavailableHostTransport implements HostTransport {
     abstract readonly kind: HostTransportKind;
     protected abstract readonly message: string;
@@ -155,11 +156,12 @@ export class NullHostTransport extends UnavailableHostTransport {
 export class StaticHostTransport extends UnavailableHostTransport {
     readonly kind = 'static' as const;
     protected readonly message =
-        'This action needs the local host companion. Approve it in the local companion.';
+        'This action needs host approval. Approve it in the local companion.';
 }
 
 export interface TauriChannelHandle {
     onmessage: (message: unknown) => void;
+    close?(): void;
 }
 
 export interface TauriHostBridge {
@@ -169,11 +171,14 @@ export interface TauriHostBridge {
         payload?: Record<string, unknown>,
     ): Promise<unknown>;
     channel(onMessage: (message: unknown) => void): TauriChannelHandle;
+    closeChannel?(channel: TauriChannelHandle): void;
 }
 
 export interface TauriHostTransportOptions {
     bridge?: TauriHostBridge | null;
     cursor?: string | null;
+    scheduler?: HostClientTimers;
+    pollIntervalMs?: number;
 }
 
 function readPoll(value: unknown): {
@@ -198,15 +203,51 @@ function readPoll(value: unknown): {
     return { cursor: null, results: [] };
 }
 
+function isInvokeAccepted(value: unknown): boolean {
+    return (
+        value === null ||
+        (isPlainObject(value) &&
+            (value.accepted === true || value.queued === true))
+    );
+}
+
+interface TauriPollState {
+    listener: (result: HostToolResult) => void;
+    options: HostSubscribeOptions;
+    cursor: string | null;
+    closed: boolean;
+    timer: unknown;
+}
+
+interface TauriChannelState {
+    channel: TauriChannelHandle;
+    closed: boolean;
+}
+
 export class TauriHostTransport implements HostTransport {
     readonly kind = 'tauri' as const;
+    readonly supportsStream = true;
     private readonly bridge: TauriHostBridge | null;
-    private readonly listeners = new Set<(result: HostToolResult) => void>();
+    private readonly scheduler: HostClientTimers;
+    private readonly pollIntervalMs: number;
+    private readonly pollStates = new Set<TauriPollState>();
+    private readonly channelStates = new Set<TauriChannelState>();
     private cursor: string | null;
+    private closed = false;
 
     constructor(options: TauriHostTransportOptions = {}) {
         this.bridge = options.bridge ?? null;
         this.cursor = options.cursor ?? null;
+        this.scheduler = options.scheduler ?? {
+            setTimeout: (handler, timeoutMs) =>
+                globalThis.setTimeout(handler, timeoutMs),
+            clearTimeout: (handle) =>
+                globalThis.clearTimeout(
+                    handle as ReturnType<typeof setTimeout>,
+                ),
+        };
+        this.pollIntervalMs =
+            options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     }
 
     async capabilities(): Promise<HostTransportCapabilities> {
@@ -218,34 +259,18 @@ export class TauriHostTransport implements HostTransport {
         );
     }
 
-    async invoke(intent: HostToolIntent): Promise<HostToolResult> {
+    async invoke(intent: HostToolIntent): Promise<HostInvokeResponse> {
         const bridge = this.requireBridge();
         const invoked = await bridge.invoke('agent_host_invoke', { intent });
-        if (bridge.hasChannel) {
-            const result = asHostResult(invoked);
-            if (result !== null) return result;
-            throw new AgentClientError(
-                'host_unavailable',
-                'agent_host_invoke did not return a host result',
-            );
+        const result = asHostResult(invoked);
+        if (result !== null) return result;
+        if (isInvokeAccepted(invoked)) {
+            return { accepted: true, intent_id: intent.intent_id };
         }
-        const polled = readPoll(
-            await bridge.invoke('agent_host_poll', {
-                cursor: this.cursor,
-            }),
+        throw new AgentClientError(
+            'invalid_event',
+            'agent_host_invoke returned an invalid response',
         );
-        if (polled.cursor !== null) this.cursor = polled.cursor;
-        for (const result of polled.results) this.publish(result);
-        const match = polled.results.find(
-            (result) => result.intent_id === intent.intent_id,
-        );
-        if (match === undefined) {
-            throw new AgentClientError(
-                'host_unavailable',
-                'agent_host_poll returned no result for the intent',
-            );
-        }
-        return match;
     }
 
     subscribe(
@@ -253,30 +278,16 @@ export class TauriHostTransport implements HostTransport {
         options: HostSubscribeOptions = {},
     ): HostSubscription {
         const bridge = this.requireBridge();
-        if (!bridge.hasChannel) {
-            this.listeners.add(listener);
-            return {
-                close: () => {
-                    this.listeners.delete(listener);
-                },
-                cursor: () => this.cursor,
-            };
+        if (this.closed) {
+            throw new AgentClientError(
+                'transport_closed',
+                'the Tauri host transport is closed',
+            );
         }
-        const channel = bridge.channel((message) => {
-            const result = asHostResult(message);
-            if (result !== null) listener(result);
-        });
-        void bridge
-            .invoke('agent_subscribe', { channel })
-            .catch((error: unknown) => {
-                options.onError?.(toClientError(error));
-            });
-        return {
-            close: () => {
-                this.listeners.delete(listener);
-            },
-            cursor: () => this.cursor,
-        };
+        if (bridge.hasChannel) {
+            return this.subscribeChannel(bridge, listener, options);
+        }
+        return this.subscribePoll(bridge, listener, options);
     }
 
     async approve(input: HostApprovalInput): Promise<ApprovalReceipt> {
@@ -306,6 +317,129 @@ export class TauriHostTransport implements HostTransport {
         };
     }
 
+    close(): void {
+        if (this.closed) return;
+        this.closed = true;
+        for (const state of [...this.pollStates]) {
+            if (state.timer !== null) {
+                this.scheduler.clearTimeout(state.timer);
+                state.timer = null;
+            }
+            state.closed = true;
+            this.pollStates.delete(state);
+        }
+        for (const state of [...this.channelStates]) {
+            this.releaseChannel(state);
+        }
+    }
+
+    private subscribeChannel(
+        bridge: TauriHostBridge,
+        listener: (result: HostToolResult) => void,
+        options: HostSubscribeOptions,
+    ): HostSubscription {
+        const state: TauriChannelState = {
+            channel: null as unknown as TauriChannelHandle,
+            closed: false,
+        };
+        const channel = bridge.channel((message) => {
+            if (state.closed) return;
+            const result = asHostResult(message);
+            if (result !== null) listener(result);
+        });
+        state.channel = channel;
+        this.channelStates.add(state);
+        void bridge
+            .invoke('agent_subscribe', { channel })
+            .catch((error: unknown) => {
+                if (state.closed) return;
+                state.closed = true;
+                this.channelStates.delete(state);
+                this.releaseChannel(state);
+                notifyError(options, toClientError(error));
+            });
+        return {
+            close: () => {
+                if (state.closed) return;
+                state.closed = true;
+                this.channelStates.delete(state);
+                this.releaseChannel(state);
+            },
+            cursor: () => this.cursor,
+        };
+    }
+
+    private subscribePoll(
+        bridge: TauriHostBridge,
+        listener: (result: HostToolResult) => void,
+        options: HostSubscribeOptions,
+    ): HostSubscription {
+        const state: TauriPollState = {
+            listener,
+            options,
+            cursor: options.cursor ?? this.cursor,
+            closed: false,
+            timer: null,
+        };
+        this.pollStates.add(state);
+        const tick = async (): Promise<void> => {
+            if (state.closed) return;
+            try {
+                const polled = readPoll(
+                    await bridge.invoke('agent_host_poll', {
+                        cursor: state.cursor,
+                    }),
+                );
+                if (state.closed) return;
+                if (polled.cursor !== null) {
+                    state.cursor = polled.cursor;
+                    this.cursor = polled.cursor;
+                }
+                for (const result of polled.results) {
+                    if (state.closed) return;
+                    state.listener(result);
+                }
+                if (state.closed) return;
+                state.timer = this.scheduler.setTimeout(() => {
+                    void tick();
+                }, this.pollIntervalMs);
+            } catch (error) {
+                if (state.closed) return;
+                state.closed = true;
+                this.pollStates.delete(state);
+                notifyError(state.options, toClientError(error));
+            }
+        };
+        void tick();
+        return {
+            close: () => {
+                if (state.closed) return;
+                state.closed = true;
+                if (state.timer !== null) {
+                    this.scheduler.clearTimeout(state.timer);
+                    state.timer = null;
+                }
+                this.pollStates.delete(state);
+            },
+            cursor: () => state.cursor,
+        };
+    }
+
+    private releaseChannel(state: TauriChannelState): void {
+        this.channelStates.delete(state);
+        const bridge = this.bridge;
+        try {
+            state.channel.close?.();
+        } catch {
+            // Closing a channel is best effort.
+        }
+        try {
+            bridge?.closeChannel?.(state.channel);
+        } catch {
+            // Closing a channel is best effort.
+        }
+    }
+
     private requireBridge(): TauriHostBridge {
         if (this.bridge === null) {
             throw new AgentClientError(
@@ -315,14 +449,11 @@ export class TauriHostTransport implements HostTransport {
         }
         return this.bridge;
     }
-
-    private publish(result: HostToolResult): void {
-        for (const listener of this.listeners) listener(result);
-    }
 }
 
 export interface LoopbackHostTransportOptions {
     baseUrl?: string;
+    pageOrigin?: string;
     token: string;
     fetch?: typeof fetch | null;
     cursor?: string | null;
@@ -332,6 +463,7 @@ export interface LoopbackHostTransportOptions {
 
 export class LoopbackHostTransport implements HostTransport {
     readonly kind = 'loopback' as const;
+    readonly supportsStream = true;
     private readonly baseUrl: string;
     private readonly token: string;
     private readonly fetchImpl: typeof fetch | null;
@@ -342,20 +474,35 @@ export class LoopbackHostTransport implements HostTransport {
     private cursor: string | null;
 
     constructor(options: LoopbackHostTransportOptions) {
-        const baseUrl = options.baseUrl ?? '';
-        if (baseUrl !== '' && !LOOPBACK_ORIGIN_PATTERN.test(baseUrl)) {
-            throw new AgentClientError(
-                'invalid_arguments',
-                'loopback base URL must be a local http origin',
-            );
-        }
         if (typeof options.token !== 'string' || options.token.length === 0) {
             throw new AgentClientError(
                 'invalid_arguments',
                 'loopback transport requires a per-launch token',
             );
         }
-        this.baseUrl = baseUrl.replace(/\/+$/, '');
+        const supplied = options.baseUrl;
+        const pageOrigin =
+            options.pageOrigin ??
+            (globalThis as { location?: { origin?: string } }).location
+                ?.origin;
+        const candidate =
+            supplied === undefined || supplied === ''
+                ? pageOrigin
+                : supplied;
+        if (candidate === undefined || candidate === '') {
+            throw new AgentClientError(
+                'invalid_arguments',
+                'loopback transport requires a local http page origin',
+            );
+        }
+        const normalized = candidate.replace(/\/+$/, '');
+        if (!LOOPBACK_ORIGIN_PATTERN.test(normalized)) {
+            throw new AgentClientError(
+                'invalid_arguments',
+                'loopback base URL must be a local http origin',
+            );
+        }
+        this.baseUrl = normalized;
         this.token = options.token;
         this.fetchImpl = options.fetch ?? null;
         this.capabilityValues = options.capabilities ?? {};
@@ -379,7 +526,7 @@ export class LoopbackHostTransport implements HostTransport {
         };
     }
 
-    async invoke(intent: HostToolIntent): Promise<HostToolResult> {
+    async invoke(intent: HostToolIntent): Promise<HostInvokeResponse> {
         const response = await this.requireFetch()(this.url(LOOPBACK_INTENTS_PATH), {
             method: 'POST',
             headers: this.headers('application/json'),
@@ -388,14 +535,22 @@ export class LoopbackHostTransport implements HostTransport {
             cache: 'no-store',
         });
         await this.ensureOk(response);
-        const result = asHostResult(await this.safeJson(response));
-        if (result === null) {
-            throw new AgentClientError(
-                'invalid_event',
-                'loopback host response is not a HostToolResult',
+        const body = await this.safeJson(response);
+        if (isPlainObject(body) && typeof body.code === 'string') {
+            throw errorForCode(
+                errorCode(body),
+                'loopback host request failed',
             );
         }
-        return result;
+        const result = asHostResult(body);
+        if (result !== null) return result;
+        if (body === null || isInvokeAccepted(body)) {
+            return { accepted: true, intent_id: intent.intent_id };
+        }
+        throw new AgentClientError(
+            'invalid_event',
+            'loopback host response is not a HostToolResult',
+        );
     }
 
     subscribe(
@@ -420,11 +575,15 @@ export class LoopbackHostTransport implements HostTransport {
                 if (closed) return;
                 const clientError = toClientError(error);
                 if (clientError.code === 'cursor_expired') {
-                    options.onResync?.('cursor_expired');
-                    this.onResync?.('cursor_expired');
+                    notifyResync(options);
+                    try {
+                        this.onResync?.('cursor_expired');
+                    } catch {
+                        // A subscriber cannot break the transport lifecycle.
+                    }
                     return;
                 }
-                options.onError?.(clientError);
+                notifyError(options, clientError);
             },
         );
         return {
@@ -484,12 +643,15 @@ export class LoopbackHostTransport implements HostTransport {
             for (const line of lines) {
                 const trimmed = line.trim();
                 if (trimmed.length === 0) continue;
+                if (controller?.signal.aborted === true) return;
                 listener(this.parseLine(trimmed));
             }
         }
         buffer += decoder.decode();
         const trailing = buffer.trim();
-        if (trailing.length > 0) listener(this.parseLine(trailing));
+        if (trailing.length > 0 && controller?.signal.aborted !== true) {
+            listener(this.parseLine(trailing));
+        }
     }
 
     private parseLine(line: string): HostToolResult {
@@ -537,7 +699,7 @@ export class LoopbackHostTransport implements HostTransport {
                 'host cursor expired; a snapshot resync is required',
             );
         }
-        throw new AgentClientError(
+        throw errorForCode(
             response.status === 403 ? 'host_denied' : code,
             'loopback host request was refused',
         );
@@ -578,6 +740,7 @@ export class LoopbackHostTransport implements HostTransport {
 
 export class AgentTransportHostTransport implements HostTransport {
     readonly kind = 'bridge' as const;
+    readonly supportsStream = false;
 
     constructor(private readonly transport: AgentTransport) {}
 
@@ -598,7 +761,10 @@ export class AgentTransportHostTransport implements HostTransport {
         };
     }
 
-    async invoke(intent: HostToolIntent): Promise<HostToolResult> {
+    async invoke(
+        intent: HostToolIntent,
+        context?: HostDataRequest,
+    ): Promise<HostToolResult> {
         const args = intent.arguments;
         if (intent.tool === 'file.tree') {
             const entries = await this.transport.tree({
@@ -616,9 +782,18 @@ export class AgentTransportHostTransport implements HostTransport {
             });
         }
         if (intent.tool === 'git.changes') {
+            const taskId = context === undefined ? intent.task_id : context.taskId;
+            if (taskId === undefined) {
+                throw new AgentClientError(
+                    'invalid_arguments',
+                    'the host bridge requires a task for a branch snapshot',
+                );
+            }
+            const runId =
+                context === undefined ? intent.run_id : context.runId;
             const snapshot = await this.transport.changesSnapshot({
-                taskId: intent.task_id,
-                runId: intent.run_id,
+                taskId,
+                ...(runId === undefined ? {} : { runId }),
                 scope: 'branch',
             });
             return hostResultFor(intent, {
@@ -635,7 +810,9 @@ export class AgentTransportHostTransport implements HostTransport {
         }
         if (intent.tool === 'artifact.read') {
             const content = await this.transport.readArtifact({
-                taskId: intent.task_id,
+                ...(context?.taskId === undefined
+                    ? {}
+                    : { taskId: context.taskId }),
                 ...(typeof args.path === 'string' ? { path: args.path } : {}),
                 ...(typeof args.artifact_id === 'string'
                     ? { artifactId: args.artifact_id }
@@ -699,10 +876,11 @@ async function hostResultFor(
         run_id: intent.run_id,
         generation: intent.generation,
         tool_call_id: intent.tool_call_id,
+        request_scope: intent.request_scope ?? 'task',
         status,
         output: JSON.parse(canonical) as unknown,
         output_digest: await sha256Canonical(output),
-        output_preview: canonical.slice(0, 512),
+        output_preview: boundedPreview(canonical),
         occurred_at_ms: Date.now(),
     };
 }

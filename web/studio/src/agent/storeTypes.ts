@@ -1,6 +1,7 @@
-import type {
-    AgentErrorCode,
-    RunState,
+import {
+    AGENT_ERROR_CODES,
+    type AgentErrorCode,
+    type RunState,
 } from './generated/agentContract.js';
 import type { AgentIncomingEvent } from '../state/agent.js';
 
@@ -196,4 +197,59 @@ export class AgentStoreError extends Error {
         this.code = code;
         this.storage = storage;
     }
+}
+
+export class AgentClientError extends Error {
+    readonly code: AgentErrorCode;
+    readonly retryable: boolean;
+    readonly storage: 'indexeddb' | null;
+
+    constructor(
+        code: AgentErrorCode,
+        message: string,
+        retryable = false,
+        storage: 'indexeddb' | null = null,
+    ) {
+        super(`${code}: ${message}`);
+        this.name = 'AgentClientError';
+        this.code = code;
+        this.retryable = retryable;
+        this.storage = storage;
+    }
+}
+
+export function isPlainObject(
+    value: unknown,
+): value is Record<string, unknown> {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return false;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+}
+
+export function isAgentErrorCode(value: unknown): value is AgentErrorCode {
+    return (
+        typeof value === 'string' &&
+        (AGENT_ERROR_CODES as readonly string[]).includes(value)
+    );
+}
+
+export function toClientError(error: unknown): AgentClientError {
+    if (error instanceof AgentClientError) return error;
+    if (error instanceof AgentStoreError) {
+        const prefix = `${error.code}: `;
+        return new AgentClientError(
+            error.code,
+            error.message.startsWith(prefix)
+                ? error.message.slice(prefix.length)
+                : error.message,
+            false,
+            error.storage,
+        );
+    }
+    return new AgentClientError(
+        'internal',
+        error instanceof Error ? error.message : String(error),
+    );
 }

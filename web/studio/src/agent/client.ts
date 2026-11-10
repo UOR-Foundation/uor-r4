@@ -1,6 +1,5 @@
 import type {
     AgentCursor,
-    AgentErrorCode,
     AgentEvent,
     RunState,
 } from './generated/agentContract.js';
@@ -13,37 +12,23 @@ import {
     type AgentStore,
     type AgentTaskRecord,
 } from '../state/agent.js';
-import { AgentStoreError } from './storeTypes.js';
+import {
+    AgentClientError,
+    isPlainObject,
+    toClientError,
+} from './storeTypes.js';
 import type { AgentTaskStore } from './store.js';
 import type { AgentRuntime } from './runtime.js';
-import { HostClient, type HostToolResult } from './hostClient.js';
+import { HostClient, sha256Bytes, type HostToolResult } from './hostClient.js';
 import {
     AgentTransportHostTransport,
     NullHostTransport,
 } from './transports.js';
 
+export { AgentClientError } from './storeTypes.js';
 export type { AgentIncomingEvent } from '../state/agent.js';
 
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
-
-export class AgentClientError extends Error {
-    readonly code: AgentErrorCode;
-    readonly retryable: boolean;
-    readonly storage: 'indexeddb' | null;
-
-    constructor(
-        code: AgentErrorCode,
-        message: string,
-        retryable = false,
-        storage: 'indexeddb' | null = null,
-    ) {
-        super(`${code}: ${message}`);
-        this.name = 'AgentClientError';
-        this.code = code;
-        this.retryable = retryable;
-        this.storage = storage;
-    }
-}
 
 export interface ListTasksInput {
     includeArchived?: boolean;
@@ -358,6 +343,7 @@ export class AgentClient {
     private readonly taskStore: AgentTaskStore | null;
     private readonly runtime: AgentRuntime | null;
     private readonly hostClient: HostClient;
+    private readonly explicitHostClient: boolean;
     private readonly streams = new Set<BufferedAgentEventStream>();
     private readonly localFiles = new Map<string, LocalAgentFile>();
     private readonly localArtifactIds = new Map<string, string>();
@@ -395,6 +381,7 @@ export class AgentClient {
             this.store = this.runtime.store;
             this.transport = this.runtime as unknown as AgentTransport;
             this.taskStore = null;
+            this.explicitHostClient = false;
             this.hostClient =
                 options.hostClient ??
                 this.runtime.hostClient ??
@@ -410,6 +397,8 @@ export class AgentClient {
         this.transport = options.transport ?? null;
         this.store = options.store ?? createAgentStore();
         this.taskStore = options.taskStore ?? null;
+        this.explicitHostClient =
+            options.hostClient !== undefined && options.hostClient !== null;
         this.hostClient =
             options.hostClient ??
             (this.transport === null
@@ -449,7 +438,7 @@ export class AgentClient {
                                   );
                               }
                           } catch (error) {
-                              this.persistenceError = this.toClientError(error);
+                              this.persistenceError = toClientError(error);
                           }
                       });
                   });
@@ -466,7 +455,7 @@ export class AgentClient {
             try {
                 await this.runtime.open();
             } catch (error) {
-                throw this.toClientError(error);
+                throw toClientError(error);
             }
             return;
         }
@@ -474,7 +463,7 @@ export class AgentClient {
         try {
             await this.taskStore.open();
         } catch (error) {
-            throw this.toClientError(error);
+            throw toClientError(error);
         }
     }
 
@@ -591,6 +580,15 @@ export class AgentClient {
             approvalId: input.approvalId,
             decision: input.decision,
         };
+        if (this.runtime !== null) {
+            return this.runtime.resolveApproval(payload);
+        }
+        if (this.transport !== null) {
+            return this.transport.resolveApproval(payload);
+        }
+        if (this.explicitHostClient) {
+            return this.hostClient.approve(payload);
+        }
         return this.requireTransport().resolveApproval(payload);
     }
 
@@ -734,10 +732,17 @@ export class AgentClient {
             },
             ...(input.taskId === undefined ? {} : { taskId: input.taskId }),
         });
-        return hostArtifactContent(result);
+        return await hostArtifactContent(result);
     }
 
     async hostCapabilities(): Promise<HostCapabilities> {
+        if (
+            this.runtime === null &&
+            this.transport === null &&
+            this.explicitHostClient
+        ) {
+            return this.hostClient.capabilities();
+        }
         this.requireTransport();
         return this.hostClient.capabilities();
     }
@@ -751,7 +756,7 @@ export class AgentClient {
             try {
                 await this.runtime.dispose();
             } catch (error) {
-                this.persistenceError = this.toClientError(error);
+                this.persistenceError = toClientError(error);
             }
             return;
         }
@@ -810,7 +815,7 @@ export class AgentClient {
                 ...(record.hold === undefined ? {} : { hold: record.hold }),
             });
         } catch (error) {
-            throw this.toClientError(error);
+            throw toClientError(error);
         }
     }
 
@@ -870,25 +875,6 @@ export class AgentClient {
             );
         }
         return result;
-    }
-
-    private toClientError(error: unknown): AgentClientError {
-        if (error instanceof AgentClientError) return error;
-        if (error instanceof AgentStoreError) {
-            const prefix = `${error.code}: `;
-            return new AgentClientError(
-                error.code,
-                error.message.startsWith(prefix)
-                    ? error.message.slice(prefix.length)
-                    : error.message,
-                false,
-                error.storage,
-            );
-        }
-        return new AgentClientError(
-            'internal',
-            error instanceof Error ? error.message : String(error),
-        );
     }
 
     private requireTransport(): AgentTransport {
@@ -996,25 +982,17 @@ export class AgentClient {
     }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-        return false;
-    }
-    const prototype = Object.getPrototypeOf(value);
-    return prototype === Object.prototype || prototype === null;
-}
-
 function invalidHostData(message: string): never {
     throw new AgentClientError('invalid_event', message);
 }
 
 function hostTreeEntries(result: HostToolResult): TreeEntry[] {
-    if (!isRecord(result.output) || !Array.isArray(result.output.entries)) {
+    if (!isPlainObject(result.output) || !Array.isArray(result.output.entries)) {
         return invalidHostData('host file tree result has no entries array');
     }
     return result.output.entries.map((value) => {
         if (
-            !isRecord(value) ||
+            !isPlainObject(value) ||
             typeof value.path !== 'string' ||
             (value.kind !== 'file' && value.kind !== 'directory')
         ) {
@@ -1041,30 +1019,45 @@ function hostTreeEntries(result: HostToolResult): TreeEntry[] {
 function hostChangesSnapshot(
     result: HostToolResult,
 ): ChangesSnapshot | null {
-    if (!isRecord(result.output) || !('snapshot' in result.output)) {
+    if (!isPlainObject(result.output) || !('snapshot' in result.output)) {
         return invalidHostData('host branch result has no snapshot');
     }
     const snapshot = result.output.snapshot;
     if (snapshot === null) return null;
     if (
-        !isRecord(snapshot) ||
+        !isPlainObject(snapshot) ||
         snapshot.scope !== 'branch' ||
         !Array.isArray(snapshot.files) ||
         typeof snapshot.head_digest !== 'string' ||
-        typeof snapshot.captured_at_ms !== 'number'
+        !DIGEST_PATTERN.test(snapshot.head_digest) ||
+        typeof snapshot.captured_at_ms !== 'number' ||
+        !Number.isSafeInteger(snapshot.captured_at_ms) ||
+        snapshot.captured_at_ms < 0
     ) {
         return invalidHostData('host branch snapshot is malformed');
     }
+    const files = snapshot.files.map((value) => {
+        if (
+            !isPlainObject(value) ||
+            typeof value.path !== 'string' ||
+            value.path.length === 0
+        ) {
+            return invalidHostData('host branch file record is malformed');
+        }
+        return value;
+    });
     return {
         scope: 'branch',
-        files: snapshot.files as Array<Record<string, unknown>>,
+        files,
         headDigest: snapshot.head_digest,
         capturedAtMs: snapshot.captured_at_ms,
     };
 }
 
-function hostArtifactContent(result: HostToolResult): ArtifactContent {
-    if (!isRecord(result.output)) {
+async function hostArtifactContent(
+    result: HostToolResult,
+): Promise<ArtifactContent> {
+    if (!isPlainObject(result.output)) {
         return invalidHostData('host artifact result has no output');
     }
     const output = result.output;
@@ -1093,6 +1086,9 @@ function hostArtifactContent(result: HostToolResult): ArtifactContent {
     }
     if (bytes.byteLength !== output.size_bytes) {
         return invalidHostData('host artifact size does not match its bytes');
+    }
+    if ((await sha256Bytes(bytes)) !== output.digest) {
+        return invalidHostData('host artifact digest does not match its bytes');
     }
     return {
         path: output.path,

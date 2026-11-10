@@ -1,6 +1,10 @@
 import { canonicalJson } from './generated/agentCanonical.js';
-import { AgentClientError } from './client.js';
 import type { ApprovalReceipt, HostCapabilities } from './client.js';
+import {
+    AgentClientError,
+    isPlainObject,
+    toClientError,
+} from './storeTypes.js';
 
 export const HOST_INTENT_SCHEMA = 'uor-r4.studio.host-intent/1' as const;
 export const HOST_RESULT_SCHEMA = 'uor-r4.studio.host-result/1' as const;
@@ -25,6 +29,7 @@ const AUTHORITY_KEYS = [
 ] as const;
 
 export type HostToolStatus = 'ok' | 'error' | 'cancelled';
+export type HostRequestScope = 'task' | 'data';
 export type HostTransportKind =
     | 'null'
     | 'static'
@@ -51,6 +56,7 @@ export interface HostToolIntent {
     tool: string;
     arguments: Record<string, unknown>;
     arguments_digest: string;
+    request_scope?: HostRequestScope;
     approval_id?: string;
 }
 
@@ -61,6 +67,7 @@ export interface HostToolResult {
     run_id: string;
     generation: number;
     tool_call_id: string;
+    request_scope?: HostRequestScope;
     status: HostToolStatus;
     output?: unknown;
     output_digest: string;
@@ -73,6 +80,16 @@ export interface HostToolResult {
     truncated?: boolean;
     cursor?: string;
 }
+
+export interface HostInvokeAccepted {
+    accepted: true;
+    intent_id?: string;
+}
+
+export type HostInvokeResponse =
+    | HostToolResult
+    | HostInvokeAccepted
+    | null;
 
 export interface HostToolRequest {
     taskId: string;
@@ -116,8 +133,12 @@ export interface HostTransportCapabilities extends HostCapabilities {
 
 export interface HostTransport {
     readonly kind: HostTransportKind;
+    readonly supportsStream?: boolean;
     capabilities(): Promise<HostTransportCapabilities>;
-    invoke(intent: HostToolIntent): Promise<HostToolResult>;
+    invoke(
+        intent: HostToolIntent,
+        context?: HostDataRequest,
+    ): Promise<HostInvokeResponse>;
     subscribe(
         listener: (result: HostToolResult) => void,
         options?: HostSubscribeOptions,
@@ -125,16 +146,20 @@ export interface HostTransport {
     approve(input: HostApprovalInput): Promise<ApprovalReceipt>;
 }
 
-export interface HostClientOptions {
-    transport: HostTransport;
+export interface HostClientTimers {
+    setTimeout(handler: () => void, timeoutMs: number): unknown;
+    clearTimeout(handle: unknown): void;
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-        return false;
-    }
-    const prototype = Object.getPrototypeOf(value);
-    return prototype === Object.prototype || prototype === null;
+export interface HostClientOptions {
+    transport: HostTransport;
+    pendingTimeoutMs?: number;
+    timers?: HostClientTimers;
+}
+
+export interface HostExecuteOptions {
+    signal?: AbortSignal;
+    timeoutMs?: number;
 }
 
 function errorMessage(error: unknown): string {
@@ -165,8 +190,18 @@ export function canonicalToolArguments(
     return JSON.parse(canonical) as Record<string, unknown>;
 }
 
-export async function sha256Canonical(value: unknown): Promise<string> {
-    const canonical = canonicalJson(value);
+export function boundedPreview(
+    text: string,
+    maxLength = MAX_PREVIEW_LENGTH,
+): string {
+    if (text.length <= maxLength) return text;
+    let end = Math.max(0, maxLength);
+    const code = text.charCodeAt(end - 1);
+    if (code >= 0xd800 && code <= 0xdbff) end -= 1;
+    return text.slice(0, end);
+}
+
+export async function sha256Bytes(bytes: Uint8Array): Promise<string> {
     const subtle = globalThis.crypto?.subtle;
     if (subtle === undefined) {
         throw new AgentClientError(
@@ -175,11 +210,15 @@ export async function sha256Canonical(value: unknown): Promise<string> {
         );
     }
     const digest = new Uint8Array(
-        await subtle.digest('SHA-256', new TextEncoder().encode(canonical)),
+        await subtle.digest('SHA-256', bytes as unknown as BufferSource),
     );
     let hex = '';
     for (const byte of digest) hex += byte.toString(16).padStart(2, '0');
     return `sha256:${hex}`;
+}
+
+export async function sha256Canonical(value: unknown): Promise<string> {
+    return sha256Bytes(new TextEncoder().encode(canonicalJson(value)));
 }
 
 async function argumentsDigest(value: Record<string, unknown>): Promise<string> {
@@ -219,6 +258,12 @@ export async function validateHostToolIntent(
     if (typeof input.intent_id !== 'string' || input.intent_id.length === 0) {
         return invalidArguments('host tool intent requires an intent_id');
     }
+    const scope = input.request_scope ?? 'task';
+    if (scope !== 'task' && scope !== 'data') {
+        return invalidArguments(
+            'host tool intent request_scope must be task | data',
+        );
+    }
     if (
         typeof input.task_id !== 'string' ||
         !TASK_ID_PATTERN.test(input.task_id)
@@ -231,7 +276,17 @@ export async function validateHostToolIntent(
     ) {
         return invalidArguments('host tool intent requires a canonical run_id');
     }
-    if (
+    if (scope === 'data') {
+        if (
+            input.task_id !== DATA_TASK_ID ||
+            input.run_id !== DATA_RUN_ID ||
+            input.generation !== DATA_GENERATION
+        ) {
+            return invalidArguments(
+                'host data intent must not claim a real task, run or generation',
+            );
+        }
+    } else if (
         !Number.isSafeInteger(input.generation) ||
         input.generation < 1
     ) {
@@ -278,7 +333,7 @@ export async function validateHostToolIntent(
             `host tool intent is not canonical: ${errorMessage(error)}`,
         );
     }
-    return { ...input, arguments: argumentsValue };
+    return { ...input, request_scope: scope, arguments: argumentsValue };
 }
 
 export async function validateHostToolResult(
@@ -307,23 +362,55 @@ export async function validateHostToolResult(
             'host tool result does not match the intent_id',
         );
     }
-    if (value.task_id !== intent.task_id) {
-        throw new AgentClientError(
-            'cross_task_event',
-            'host tool result belongs to a different task',
-        );
-    }
-    if (value.run_id !== intent.run_id) {
+    const intentScope = intent.request_scope ?? 'task';
+    const resultScope = value.request_scope ?? 'task';
+    if (resultScope !== intentScope) {
         throw new AgentClientError(
             'out_of_order',
-            'host tool result belongs to a different run',
+            'host tool result request_scope does not match the intent',
         );
     }
-    if (value.generation !== intent.generation) {
-        throw new AgentClientError(
-            'stale_generation',
-            'host tool result belongs to a stale generation',
-        );
+    if (intentScope === 'task') {
+        if (value.task_id !== intent.task_id) {
+            throw new AgentClientError(
+                'cross_task_event',
+                'host tool result belongs to a different task',
+            );
+        }
+        if (value.run_id !== intent.run_id) {
+            throw new AgentClientError(
+                'out_of_order',
+                'host tool result belongs to a different run',
+            );
+        }
+        if (value.generation !== intent.generation) {
+            throw new AgentClientError(
+                'stale_generation',
+                'host tool result belongs to a stale generation',
+            );
+        }
+    } else {
+        if (value.task_id !== undefined && value.task_id !== intent.task_id) {
+            throw new AgentClientError(
+                'cross_task_event',
+                'host data result may not claim a real task',
+            );
+        }
+        if (value.run_id !== undefined && value.run_id !== intent.run_id) {
+            throw new AgentClientError(
+                'out_of_order',
+                'host data result may not claim a real run',
+            );
+        }
+        if (
+            value.generation !== undefined &&
+            value.generation !== intent.generation
+        ) {
+            throw new AgentClientError(
+                'stale_generation',
+                'host data result may not claim a real generation',
+            );
+        }
     }
     if (value.tool_call_id !== intent.tool_call_id) {
         throw new AgentClientError(
@@ -378,6 +465,12 @@ export async function validateHostToolResult(
     }
     if (value.code !== undefined && typeof value.code !== 'string') {
         return invalidEvent('host tool result code must be a string');
+    }
+    if (value.code === 'quota_exceeded') {
+        throw new AgentClientError(
+            'host_unavailable',
+            'quota_exceeded is a future service code and is not a local host result',
+        );
     }
     if (value.message !== undefined && typeof value.message !== 'string') {
         return invalidEvent('host tool result message must be a string');
@@ -446,25 +539,74 @@ export async function validateHostToolResult(
     return value as unknown as HostToolResult;
 }
 
-function isHostToolIntent(
-    value: HostToolIntent | HostToolRequest | HostDataRequest,
-): value is HostToolIntent {
-    return 'schema' in value;
+function isHostToolIntent(value: unknown): value is HostToolIntent {
+    return isPlainObject(value) && value.schema === HOST_INTENT_SCHEMA;
 }
 
-function isHostToolRequest(
-    value: HostToolIntent | HostToolRequest | HostDataRequest,
-): value is HostToolRequest {
-    return 'toolCallId' in value;
+function isHostToolRequest(value: unknown): value is HostToolRequest {
+    return isPlainObject(value) && 'toolCallId' in value;
 }
+
+function isHostToolResultLike(value: unknown): value is HostToolResult {
+    return isPlainObject(value) && value.schema === HOST_RESULT_SCHEMA;
+}
+
+function asHostToolResult(value: unknown): HostToolResult | null {
+    if (isHostToolResultLike(value)) return value;
+    if (isPlainObject(value) && isHostToolResultLike(value.result)) {
+        return value.result;
+    }
+    return null;
+}
+
+function isInvokeAccepted(value: unknown): boolean {
+    return (
+        value === null ||
+        (isPlainObject(value) &&
+            (value.accepted === true || value.queued === true))
+    );
+}
+
+interface PendingEntry {
+    intent: HostToolIntent;
+    promise: Promise<HostToolResult>;
+    resolve: (result: HostToolResult) => void;
+    reject: (error: AgentClientError) => void;
+    settled: boolean;
+    timer: unknown;
+    removeAbort: (() => void) | null;
+}
+
+interface StreamListenerEntry {
+    listener: (result: HostToolResult) => void;
+    onError?: (error: AgentClientError) => void;
+    onResync?: (reason: 'cursor_expired') => void;
+}
+
+const DEFAULT_PENDING_TIMEOUT_MS = 30_000;
+
+const defaultHostTimers: HostClientTimers = {
+    setTimeout: (handler, timeoutMs) =>
+        globalThis.setTimeout(handler, timeoutMs),
+    clearTimeout: (handle) =>
+        globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+};
 
 export class HostClient {
     private readonly transport: HostTransport;
-    private readonly pending = new Map<string, HostToolIntent>();
+    private readonly pending = new Map<string, PendingEntry>();
+    private readonly streamListeners = new Set<StreamListenerEntry>();
+    private readonly timers: HostClientTimers;
+    private readonly pendingTimeoutMs: number;
+    private subscription: HostSubscription | null = null;
+    private closed = false;
     private intentCounter = 0;
 
     constructor(options: HostClientOptions) {
         this.transport = options.transport;
+        this.timers = options.timers ?? defaultHostTimers;
+        this.pendingTimeoutMs =
+            options.pendingTimeoutMs ?? DEFAULT_PENDING_TIMEOUT_MS;
     }
 
     async capabilities(): Promise<HostCapabilities> {
@@ -529,56 +671,134 @@ export class HostClient {
             tool: input.tool,
             arguments: argumentsValue,
             arguments_digest: digest,
+            request_scope: 'task',
             ...(input.approvalId === undefined
                 ? {}
                 : { approval_id: input.approvalId }),
         });
     }
 
-    async execute(input: HostToolIntent): Promise<HostToolResult>;
-    async execute(input: HostToolRequest): Promise<HostToolResult>;
-    async execute(input: HostDataRequest): Promise<HostToolResult>;
     async execute(
-        input: HostToolIntent | HostToolRequest | HostDataRequest,
+        input: HostToolIntent,
+        options?: HostExecuteOptions,
+    ): Promise<HostToolResult>;
+    async execute(
+        input: HostToolRequest,
+        options?: HostExecuteOptions,
+    ): Promise<HostToolResult>;
+    async execute(
+        input: HostDataRequest,
+        options?: HostExecuteOptions,
+    ): Promise<HostToolResult>;
+    async execute(
+        input: unknown,
+        options: HostExecuteOptions = {},
     ): Promise<HostToolResult> {
+        if (!isPlainObject(input)) {
+            return invalidArguments('host tool request must be an object');
+        }
+        if (this.closed) {
+            throw new AgentClientError(
+                'transport_closed',
+                'host client is closed',
+            );
+        }
+        const dataContext = isHostToolIntent(input) || isHostToolRequest(input)
+            ? undefined
+            : (input as unknown as HostDataRequest);
         const intent = isHostToolIntent(input)
             ? await validateHostToolIntent(input)
             : isHostToolRequest(input)
               ? await this.createIntent(input)
-              : await this.createDataIntent(input);
+              : await this.createDataIntent(input as unknown as HostDataRequest);
         if (this.pending.has(intent.intent_id)) {
             throw new AgentClientError(
                 'out_of_order',
                 'a host intent with this intent_id is already in flight',
             );
         }
-        this.pending.set(intent.intent_id, intent);
+        const entry = this.createPending(intent, options);
+        if (entry.settled) return entry.promise;
         try {
-            return await validateHostToolResult(
-                intent,
-                await this.transport.invoke(intent),
-            );
-        } finally {
-            this.pending.delete(intent.intent_id);
+            this.ensureSubscription();
+        } catch (error) {
+            this.rejectPending(entry, toClientError(error));
+            return entry.promise;
         }
+        if (entry.settled) return entry.promise;
+        try {
+            const response = await this.transport.invoke(intent, dataContext);
+            const direct = asHostToolResult(response);
+            if (direct !== null) {
+                await this.settleFromResult(entry, direct);
+            } else if (!isInvokeAccepted(response)) {
+                this.rejectPending(
+                    entry,
+                    new AgentClientError(
+                        'invalid_event',
+                        'host invoke returned an invalid response',
+                    ),
+                );
+            }
+        } catch (error) {
+            this.rejectPending(entry, toClientError(error));
+        }
+        return entry.promise;
     }
 
     subscribe(
         listener: (result: HostToolResult) => void,
         options: HostSubscribeOptions = {},
     ): HostSubscription {
-        return this.transport.subscribe((result) => {
-            const intent = this.pending.get(result.intent_id);
-            if (intent === undefined) return;
-            void validateHostToolResult(intent, result)
-                .then((validated) => listener(validated))
-                .catch((error: unknown) => {
-                    options.onError?.(toClientError(error));
-                });
-        }, options);
+        if (this.closed) {
+            throw new AgentClientError(
+                'transport_closed',
+                'host client is closed',
+            );
+        }
+        this.ensureSubscription();
+        const entry: StreamListenerEntry = {
+            listener,
+            ...(options.onError === undefined
+                ? {}
+                : { onError: options.onError }),
+            ...(options.onResync === undefined
+                ? {}
+                : { onResync: options.onResync }),
+        };
+        this.streamListeners.add(entry);
+        let closed = false;
+        return {
+            close: () => {
+                if (closed) return;
+                closed = true;
+                this.streamListeners.delete(entry);
+            },
+            cursor: () => this.subscription?.cursor() ?? null,
+        };
+    }
+
+    close(): void {
+        if (this.closed) return;
+        this.closed = true;
+        this.subscription?.close();
+        this.subscription = null;
+        this.failAll(
+            new AgentClientError(
+                'transport_closed',
+                'host client closed before the result arrived',
+            ),
+        );
+        this.streamListeners.clear();
     }
 
     async approve(input: HostApprovalInput): Promise<ApprovalReceipt> {
+        if (this.closed) {
+            throw new AgentClientError(
+                'transport_closed',
+                'host client is closed',
+            );
+        }
         if (!isPlainObject(input)) {
             return invalidArguments('page approval input must be an object');
         }
@@ -607,6 +827,150 @@ export class HostClient {
             approvalId: input.approvalId,
             decision: input.decision,
         });
+    }
+
+    private createPending(
+        intent: HostToolIntent,
+        options: HostExecuteOptions,
+    ): PendingEntry {
+        let resolve!: (result: HostToolResult) => void;
+        let reject!: (error: AgentClientError) => void;
+        const promise = new Promise<HostToolResult>((innerResolve, innerReject) => {
+            resolve = innerResolve;
+            reject = innerReject;
+        });
+        const entry: PendingEntry = {
+            intent,
+            promise,
+            resolve,
+            reject,
+            settled: false,
+            timer: null,
+            removeAbort: null,
+        };
+        this.pending.set(intent.intent_id, entry);
+        entry.timer = this.timers.setTimeout(() => {
+            this.rejectPending(
+                entry,
+                new AgentClientError(
+                    'transport_closed',
+                    'host result timed out before it arrived',
+                ),
+            );
+        }, options.timeoutMs ?? this.pendingTimeoutMs);
+        if (options.signal !== undefined) {
+            const abort = () => {
+                this.rejectPending(
+                    entry,
+                    new AgentClientError(
+                        'transport_closed',
+                        'host result was aborted',
+                    ),
+                );
+            };
+            if (options.signal.aborted) {
+                abort();
+            } else {
+                options.signal.addEventListener('abort', abort, {
+                    once: true,
+                });
+                entry.removeAbort = () =>
+                    options.signal?.removeEventListener('abort', abort);
+            }
+        }
+        return entry;
+    }
+
+    private ensureSubscription(): void {
+        if (this.subscription !== null || this.closed) return;
+        if (this.transport.supportsStream === false) return;
+        this.subscription = this.transport.subscribe(
+            (result) => {
+                void this.onStreamResult(result);
+            },
+            {
+                onResync: () =>
+                    this.failAll(
+                        new AgentClientError(
+                            'cursor_expired',
+                            'host result stream requires a snapshot resync',
+                        ),
+                        'resync',
+                    ),
+                onError: (error) => this.failAll(error),
+            },
+        );
+    }
+
+    private async onStreamResult(result: HostToolResult): Promise<void> {
+        const entry = this.pending.get(result.intent_id);
+        if (entry === undefined) return;
+        await this.settleFromResult(entry, result);
+    }
+
+    private async settleFromResult(
+        entry: PendingEntry,
+        value: unknown,
+    ): Promise<void> {
+        if (entry.settled) return;
+        entry.settled = true;
+        this.cleanupPending(entry);
+        try {
+            const validated = await validateHostToolResult(
+                entry.intent,
+                value,
+            );
+            entry.resolve(validated);
+            for (const listener of this.streamListeners) {
+                try {
+                    listener.listener(validated);
+                } catch {
+                    // A consumer cannot break result delivery for other consumers.
+                }
+            }
+        } catch (error) {
+            entry.reject(toClientError(error));
+        }
+    }
+
+    private rejectPending(
+        entry: PendingEntry,
+        error: AgentClientError,
+    ): void {
+        if (entry.settled) return;
+        entry.settled = true;
+        this.cleanupPending(entry);
+        entry.reject(error);
+    }
+
+    private cleanupPending(entry: PendingEntry): void {
+        if (entry.timer !== null) {
+            this.timers.clearTimeout(entry.timer);
+            entry.timer = null;
+        }
+        entry.removeAbort?.();
+        entry.removeAbort = null;
+        this.pending.delete(entry.intent.intent_id);
+    }
+
+    private failAll(
+        error: AgentClientError,
+        reason?: 'resync',
+    ): void {
+        for (const entry of [...this.pending.values()]) {
+            this.rejectPending(entry, error);
+        }
+        for (const listener of this.streamListeners) {
+            try {
+                if (reason === 'resync') {
+                    listener.onResync?.('cursor_expired');
+                } else {
+                    listener.onError?.(error);
+                }
+            } catch {
+                // Listener failures do not mask the transport failure.
+            }
+        }
     }
 
     private async createDataIntent(
@@ -640,21 +1004,14 @@ export class HostClient {
         return validateHostToolIntent({
             schema: HOST_INTENT_SCHEMA,
             intent_id: `hti_data_${suffix}`,
-            task_id: input.taskId ?? DATA_TASK_ID,
-            run_id: input.runId ?? DATA_RUN_ID,
-            generation: input.generation ?? DATA_GENERATION,
+            task_id: DATA_TASK_ID,
+            run_id: DATA_RUN_ID,
+            generation: DATA_GENERATION,
             tool_call_id: `tc_data_${suffix}`,
             tool: input.tool,
             arguments: argumentsValue,
             arguments_digest: digest,
+            request_scope: 'data',
         });
     }
-}
-
-function toClientError(error: unknown): AgentClientError {
-    if (error instanceof AgentClientError) return error;
-    return new AgentClientError(
-        'internal',
-        error instanceof Error ? error.message : String(error),
-    );
 }

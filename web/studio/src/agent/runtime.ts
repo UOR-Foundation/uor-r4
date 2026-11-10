@@ -12,7 +12,6 @@ import {
     sha256Canonical,
 } from './hostClient.js';
 import {
-    AgentClientError,
     type AgentEventStream,
     type ApprovalReceipt,
     type ArchiveTaskInput,
@@ -44,7 +43,12 @@ import {
     type TreeInput,
 } from './client.js';
 import type { AgentTaskStore } from './store.js';
-import { AgentStoreError, LEASE_STALE_MS } from './storeTypes.js';
+import {
+    AgentClientError,
+    AgentStoreError,
+    isPlainObject,
+    LEASE_STALE_MS,
+} from './storeTypes.js';
 import {
     createAgentStore,
     parseAgentEventWire,
@@ -242,14 +246,6 @@ interface RunControl {
 interface RuntimeListener {
     listener: (event: AgentIncomingEvent, digest?: string) => void;
     filter: SubscribeInput;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-        return false;
-    }
-    const prototype = Object.getPrototypeOf(value);
-    return prototype === Object.prototype || prototype === null;
 }
 
 function isTerminalState(state: RunState): boolean {
