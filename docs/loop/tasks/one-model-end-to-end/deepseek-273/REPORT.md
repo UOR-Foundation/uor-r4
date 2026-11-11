@@ -3,12 +3,12 @@
 Lab: deepseek. Item:
 [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md)
 (#3407). Order: [ORDER.md](./ORDER.md). Base code: `7a450a88f`; launch code:
-`dcef39da1b55531ade6b7afa21b61198c4d1277e`; contract implementation source:
+`7d8e8a9ae75072853579a7816eb790d110c3ccc9`; contract implementation source:
 `894869f262973d64c6d44661fa71afaa7ebe9241`. All invoked-script hashes and
 the exact reviewed execution-head procedure are in
 [`launch-pins.env`](./launch-pins.env).
 
-**Status:** pre-run, pending fresh-context review 5. No GPU job has started.
+**Status:** pre-run, pending fresh-context review 6. No GPU job has started.
 
 ## What did not work
 
@@ -26,7 +26,10 @@ training seed. A fourth review then found a guaranteed 192-versus-256 corpus
 context failure in scoring, stale contract implementation provenance, an
 incomplete score command graph, a store check that did not reserve the prefix,
 and a healthy-run cancellation that conflicted with CHARTER §5.4. Those
-findings are repaired in the current registration.
+findings were repaired. A fifth review then found that preflight reports were
+field-checked but not byte-pinned, a fixed reservation path could overwrite an
+older claim, a failed TERM had no escalation, and the score command graph
+omitted `--out`. Those findings are also repaired in the current registration.
 
 ## What changed
 
@@ -39,9 +42,11 @@ score, exact file-set failure sealing, a post-readback teardown sentinel,
 persistent cumulative time/cost accounting, stage heartbeats and full
 model/table/base row identity checks. The contract now names the implementing
 source, describes all four score commands plus classification and preflight,
-and an uploaded/read-back reservation object claims the unique store prefix
-before model work. Healthy ceiling crossings are explicitly extended and
-persisted instead of terminating a training run.
+and an absent high-entropy prefix is claimed by an uploaded/read-back
+per-run object before model work. Preflight reports are byte-pinned as well as
+structurally checked. Healthy ceiling crossings are explicitly extended and
+persisted instead of terminating a training run; stalled process groups are
+TERMed, retried, then KILLed with an unsealed pod preserved.
 
 ## Measurements
 
@@ -52,12 +57,13 @@ the count table produced zero on every scored metric.
 
 ## Checks run at the head
 
-- `scenario_grade`: 10 passed.
+- `scenario_grade`: 11 passed, including the TRAIN-context mismatch refusal.
 - CPU scenario-grade CLI: 3 passed.
-- Full `uor-r4-cpu-train` library: 505 passed, 5 ignored.
+- Full `uor-r4-cpu-train` library: 506 passed, 5 ignored.
 - Stack-contract generation and check: 5 contracts current.
 - `xtask`: 228 passed.
-- Pinned preflight gate: development and Fresh pass with corpus context 256.
+- Byte-pinned preflight gate: both reports match their frozen SHA-256s and pass
+  with corpus context 256.
 - Decision program: parses the four pinned preflight reports and emits schema
   `/3` row 4 as expected for the unchanged base.
 - Shell syntax and ShellCheck: pass.
@@ -71,11 +77,11 @@ kept the correction bounded and checked against the registered evidence path.
 
 ## Still open
 
-Review 5, the GPU smoke, bound export, held-out scenario reads, row
+Review 6, the GPU smoke, bound export, held-out scenario reads, row
 classification, final cost and post-run exact-head review remain. This file
 will be replaced with the completed report before merge.
 
 ## Plain summary
 
-The registration and its control instrument are now ready for review 5. No
+The registration and its control instrument are now ready for review 6. No
 model result has been claimed.

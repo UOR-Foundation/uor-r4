@@ -5,7 +5,7 @@ Lab: deepseek. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to
 configuration probe after the aligned scenario readout: the current
 FBS/Hamming model has not been trained on the aligned TRAIN.
 
-TEST FITNESS: pending fresh-context non-author review 5.
+TEST FITNESS: pending fresh-context non-author review 6.
 
 PRE-RUN REVIEW: pending.
 
@@ -45,15 +45,15 @@ while retaining the wrong-memory and no-memory abstention controls?
   --turn-memory-dropout 500 --turn-memory-leave-copied 1 --batch 16
   --steps 1024 --eval-every 256 --samples 6 --reply-tokens 48`.
 - **Frozen identity:** the code/config pin is
-  `dcef39da1b55531ade6b7afa21b61198c4d1277e`; the contract's implementation
+  `7d8e8a9ae75072853579a7816eb790d110c3ccc9`; the contract's implementation
   source is `894869f262973d64c6d44661fa71afaa7ebe9241`, and the later contract
   bytes are bound by semantic hash
-  `705fa688316af9ae72b1cfacc8fb874dab2f13e0efd3209c7b784ce952bea6e3`.
+  `6f1ab73f3ff9891ce313efc265f50d67be9f198a98ae2660fcaaa83ae770adec`.
   Every later execution head
   must be a clean, pushed descendant whose `crates`, `conformance`, `scripts`,
   `xtask`, `Cargo.toml` and `Cargo.lock` trees are byte-identical to that pin.
   The exact reviewed execution head is frozen in the review receipt at
-  `local/deepseek/scenario-gpu-smoke-2026-11-11/fresh-review-5.md`; the launcher
+  `local/deepseek/scenario-gpu-smoke-2026-11-11/fresh-review-6.md`; the launcher
   requires `TEST FITNESS: FIT`, `PRE-RUN REVIEW: GO` and a matching
   `REVIEWED HEAD: <sha>` line from that receipt.
   [`launch-pins.env`](../../loop/tasks/one-model-end-to-end/deepseek-273/launch-pins.env)
@@ -145,7 +145,7 @@ The exact execution path is:
 
 - after the final input/pin commit, read the exact
   `REVIEWED HEAD:` value from
-  `local/deepseek/scenario-gpu-smoke-2026-11-11/fresh-review-5.md`, set
+  `local/deepseek/scenario-gpu-smoke-2026-11-11/fresh-review-6.md`, set
   `RUN_HEAD` to it, then run
   `uor-pod up --lab deepseek --session deepseek-scenario-gpu-smoke
   --purpose "aligned-corpus geometric smoke" --hours 3 --count 1 --gpu 5090
@@ -154,8 +154,9 @@ The exact execution path is:
   the sealed input after verifying the same pod commit and unchanged code
   subtree, starts the watcher, and calls `uor-pod run`;
 - `.../job.sh` runs training, smoke scoring, final snapshot and bound export;
-- the job uploads and reads back a unique `store-reservation.json`, proves the
-  prefix contains exactly that reservation, then seals and uploads its run root,
+- the job checks that a 128-bit-nonce run prefix is absent, uploads and reads
+  back a per-claim `claim-<run-id>.json`, proves the prefix contains exactly
+  that claim, then seals and uploads its run root,
   downloads it back, verifies `SHA256SUMS` and the exact file count, then writes
   a separate post-readback sentinel naming the terminal `COMPLETE` or `FAILED`
   state;
@@ -273,7 +274,9 @@ zero.
 
 - **I-p:** clean tracked checkout at the exact reviewed branch tip on the pod;
   the launcher and job fail unless the reviewed head, all four invoked-script
-  hashes and the unchanged code/config subtree equal the frozen values.
+  hashes and the unchanged code/config subtree equal the frozen values. The
+  launcher and scorer also require the exact development and Fresh preflight
+  report SHA-256s before applying the structural gate.
 - **I-h:** every tokenizer, corpus receipt, split manifest, label, token, mask
   and trainer-`ft/dev` hash equals the table above before model work; the
   trainer logs the usable TRAIN window count.
@@ -289,7 +292,7 @@ zero.
   records stack contract
   `fbs-deepseek-scenario-smoke`, implementation source
   `894869f262973d64c6d44661fa71afaa7ebe9241`, and semantic hash
-  `705fa688316af9ae72b1cfacc8fb874dab2f13e0efd3209c7b784ce952bea6e3`.
+  `6f1ab73f3ff9891ce313efc265f50d67be9f198a98ae2660fcaaa83ae770adec`.
   The artifact, snapshot and checkpoint SHA-256s are recorded.
 - **I-c:** `config.json` names objective `cell`, width 256, four Hamming reads,
   context 192, batch 16, no micro-batch, 1,024 steps, seed 273,
@@ -300,12 +303,14 @@ zero.
   192.
 - **I-d:** both scenario reads contain 1,024 case rows with zero
   prompt-ineligible rows and include the previous-token table rows.
-- **Seal:** the pod claims an otherwise empty, high-entropy unique store root by
-  uploading and reading back `store-reservation.json` before model work, then
+- **Seal:** the pod claims an otherwise empty, 128-bit-nonce unique store root by
+  uploading and reading back `claim-<run-id>.json` before model work, then
   seals its run folder with a file list and SHA-256 sums, uploads it, downloads
   it back and verifies both hashes and the exact file set. Only then does it
   write the external post-readback sentinel that permits teardown. A run is
   never written into an existing root (L-002). An exit trap seals failures too.
+  `decision.json` records the implementation source, scenario receipt, both
+  preflight report hashes and every other reviewed identity used below.
 
 ## Minimum test power
 
@@ -317,9 +322,9 @@ miss cannot retire a mechanism.
 ## Compute and stop rule
 
 - Status at preflight: **0 running pods**, **$0/h**, no live lease; the Vast
-  listing showed 17 verified RTX 5090 offers, cheapest `$0.563/h`. This check is
+  listing showed 18 verified RTX 5090 offers, cheapest `$0.563/h`. This check is
   repeated immediately before `uor-pod up`; the captured review-time output is
-  `local/deepseek/scenario-gpu-smoke-2026-11-11/pod-status-before-review-5.txt`.
+  `local/deepseek/scenario-gpu-smoke-2026-11-11/pod-status-before-review-6.txt`.
 - One Vast RTX 5090 pod at no more than `$1.60/h`, one GPU only, leased for
   three hours and renewed by the watcher while the job moves.
 - Expected: about 10 minutes of build/tests, 5 minutes of smoke, 20 to
@@ -332,13 +337,18 @@ miss cannot retire a mechanism.
   §5.4 requires; it is not cancelled for reaching a self-set budget. The job has
   a separate 12-hour fail-safe deadline. A stalled job is stopped by process
   group after 35 minutes with no GPU process and no training-log or
-  stage-heartbeat progress (L-004).
+  stage-heartbeat progress (L-004); TERM is retried, then KILL is sent, and an
+  unsealed process-group stop preserves the pod with `pending-stop.json`.
 - Stop immediately on non-finite loss, a missing checkpoint or export, an input
   or artifact hash mismatch, or a stalled job with no GPU activity.
 - The watcher is armed before the job ships (L-004). Release and destroy the pod
   only after the post-readback seal sentinel exists, the job exits and the GPU
   query reports no compute process. A failed or unknown shutdown state is held
   for a person rather than deleting unique evidence.
+- The launcher releases/destroys an owned pod if local review, pin, budget or
+  staging validation fails before the watcher is armed. The watcher allows
+  15 minutes for the registered job path to appear before preserving the pod as
+  a start failure.
 
 ## Cost
 
