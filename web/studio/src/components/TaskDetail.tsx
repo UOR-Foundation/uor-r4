@@ -265,7 +265,7 @@ export function TaskDetail({ task, client, onBack, onNewRun, onOpenSurface }: Ta
             <div class="task-detail-actions">
                 <button type="button" onClick={() => onOpenSurface('changes')}>Open changes</button>
                 <button type="button" onClick={() => onOpenSurface('terminal')}>Open terminal</button>
-                {run !== null && isTerminalRunState(run.state) && !task.archived && onNewRun !== undefined && <button type="button" class="task-new-run" onClick={onNewRun}>New run</button>}
+                {run !== null && isTerminalRunState(run.state) && !task.archived && task.hold === null && onNewRun !== undefined && <button type="button" class="task-new-run" onClick={onNewRun}>New run</button>}
             </div>
             {isSynthetic(run) && <p class="task-synthetic">Synthetic replay: deterministic fixture output, not an R4 model or a task brain.</p>}
         </header>
@@ -280,7 +280,7 @@ export function TaskDetail({ task, client, onBack, onNewRun, onOpenSurface }: Ta
         {run?.error != null && <TaskError code={run.error.code} message={run.error.message} />}
         {retryable && <div class="task-run-actions"><button type="button" class="retry-run" disabled={retrying} onClick={retry}>Retry</button></div>}
         {actionError !== null && <TaskError scope="action" code={actionError.code} message={actionError.message} />}
-        <div class="agent-transcript task-detail-transcript" aria-label="Task transcript" aria-busy={busy ? 'true' : 'false'}>
+        <div class="agent-transcript task-detail-transcript" aria-label="Task transcript" aria-live="polite" aria-busy={busy ? 'true' : 'false'}>
             <TaskTimeline events={entries} approvals={approvals} onResolve={resolve} />
         </div>
     </section>;

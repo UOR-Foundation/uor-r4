@@ -24,6 +24,10 @@ export function useScopedShortcuts(handlers: ScopedShortcutHandlers): void {
             else handlersRef.current.onSettings();
         };
         window.addEventListener('keydown', onKeyDown, true);
-        return () => { window.removeEventListener('keydown', onKeyDown, true); };
+        return () => {
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('keydown', onKeyDown, true);
+            }
+        };
     }, []);
 }

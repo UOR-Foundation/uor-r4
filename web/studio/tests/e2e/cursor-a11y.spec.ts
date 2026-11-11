@@ -1,5 +1,23 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { openTypedAt } from './support';
+
+async function callTest<T>(page: Page, method: string, ...args: unknown[]): Promise<T> {
+    return page.evaluate(({ method, args }) => {
+        const api = (window as unknown as {
+            __studioTest?: Record<string, (...callArgs: unknown[]) => Promise<unknown>>;
+        }).__studioTest;
+        if (!api) throw new Error('window.__studioTest is missing');
+        return api[method]!(...args);
+    }, { method, args }) as Promise<T>;
+}
+
+async function waitForSecondWriter(context: BrowserContext): Promise<Page> {
+    const tabA = await context.newPage();
+    await tabA.goto('/?typed=1&studioTest=1');
+    await expect(tabA.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+    await callTest(tabA, 'open');
+    return tabA;
+}
 
 interface TargetViolation {
     label?: string;
@@ -220,41 +238,74 @@ test('no_aria_hidden_content_is_focusable', async ({ page }) => {
 });
 
 test('transcript_is_a_polite_live_region_with_real_busy_state', async ({ page }) => {
-    await openTypedAt(page, 1440);
-    await selectFixtureProvider(page);
-    const transcript = page.locator('#studio-typed-root .agent-transcript');
-    await expect(transcript).toHaveAttribute('aria-live', 'polite');
-    await expect(transcript).toHaveAttribute('aria-busy', 'false');
-    await page.evaluate(() => {
-        (window as unknown as { __studioUi: Record<string, unknown> }).__studioUi.sendPrompt = () => 525252;
+    await page.goto('/?typed=1&studioTest=1');
+    await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+    const seeded = await page.evaluate(async () => {
+        const api = (window as unknown as {
+            __studioTest?: {
+                open(): Promise<unknown>;
+                createTaskAndEvents(options: { mode: string; title: string }): Promise<{ taskId: string }>;
+            };
+        }).__studioTest;
+        if (!api) throw new Error('window.__studioTest is missing');
+        await api.open();
+        return api.createTaskAndEvents({ mode: 'message', title: 'Live region task' });
     });
-    const prompt = promptLocator(page);
-    await prompt.fill('busy state');
-    await prompt.focus();
-    await page.keyboard.press('Enter');
-    await expect(page.locator('#studio-typed-root .session-phase')).toContainText('generating');
+    await page.reload();
+    await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+    const row = page.locator(`#studio-typed-root [data-task-id="${seeded.taskId}"] .task-select`);
+    await expect(row).toBeVisible();
+    await row.click();
+    const transcript = page.locator('#studio-typed-root .task-detail-transcript');
+    await expect(transcript).toHaveAttribute('aria-live', 'polite');
     await expect(transcript).toHaveAttribute('aria-busy', 'true');
+    const stop = page.locator('#studio-typed-root .run-status').getByRole('button', { name: 'Stop', exact: true });
+    await expect(stop).toBeEnabled();
+    await stop.click();
+    await expect(transcript).toHaveAttribute('aria-busy', 'false');
     await expect(transcript).toHaveAttribute('aria-live', 'polite');
 });
 
-test('errors_use_alert_and_session_status_is_polite', async ({ page }) => {
-    await openTypedAt(page, 1440);
-    await selectFixtureProvider(page);
-    await page.evaluate(() => {
-        (window as unknown as { __studioUi: Record<string, unknown> }).__studioUi.sendPrompt = () => {
-            throw new Error('fixture send failure');
-        };
+test('errors_use_alert_and_session_status_is_polite', async ({ context, page: tabB }) => {
+    await tabB.goto('/?typed=1&studioTest=1');
+    await expect(tabB.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+    await callTest(tabB, 'open');
+    const seeded = await callTest<{ taskId: string }>(tabB, 'createTaskAndEvents', {
+        mode: 'finished',
+        title: 'Error task',
     });
-    const prompt = promptLocator(page);
-    await prompt.fill('will fail');
-    await prompt.focus();
-    await page.keyboard.press('Enter');
-    const alert = page.locator('#studio-typed-root [role="alert"]');
-    await expect(alert).toBeVisible();
-    await expect(alert).toContainText('Generation could not be started');
-    await expect(prompt).toHaveValue('will fail');
-    const status = page.locator('#studio-typed-root [role="status"][aria-live="polite"]');
-    await expect(status).toBeVisible();
+    await tabB.reload();
+    await expect(tabB.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+    const tabA = await waitForSecondWriter(context);
+    try {
+        const rowA = tabA.locator(`#studio-typed-root [data-task-id="${seeded.taskId}"] .task-select`);
+        await expect(rowA).toBeVisible();
+        await rowA.click();
+        await tabA.getByRole('button', { name: 'New run', exact: true }).click();
+        const promptA = tabA.locator('#studio-typed-root textarea[aria-label="Prompt"]');
+        await promptA.fill('tab A holds the error-test lease');
+        await promptA.press('Enter');
+        await expect(
+            tabA.locator(`#studio-typed-root [data-task-id="${seeded.taskId}"] .task-state`),
+        ).toHaveText('Running');
+
+        const rowB = tabB.locator(`#studio-typed-root [data-task-id="${seeded.taskId}"] .task-select`);
+        await expect(rowB).toBeVisible();
+        await rowB.click();
+        await tabB.getByRole('button', { name: 'New run', exact: true }).click();
+        const prompt = promptLocator(tabB);
+        await prompt.fill('will fail');
+        await prompt.focus();
+        await tabB.keyboard.press('Enter');
+        const alert = tabB.locator('#studio-typed-root [role="alert"]');
+        await expect(alert).toBeVisible();
+        await expect(alert).toContainText('Run could not start');
+        await expect(prompt).toHaveValue('will fail');
+        const status = tabB.locator('#studio-typed-root [role="status"][aria-live="polite"]');
+        await expect(status).toBeVisible();
+    } finally {
+        await tabA.close();
+    }
 });
 
 test('menus_expose_expanded_listbox_and_option_semantics', async ({ page }) => {

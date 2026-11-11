@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 const TEST_URL = '/?typed=1&studioTest=1';
 
@@ -257,11 +257,16 @@ test.describe('Task 14 browser task detail, timeline, approvals and errors', () 
         await expect(prompt).toHaveValue('back then send');
     });
 
-    test('fresh_shell_send_stays_disabled_until_a_real_path_is_ready', async ({ page }) => {
+    test('fresh_shell_send_creates_the_first_runtime_task', async ({ page }) => {
         await openStudio(page);
         const prompt = page.locator('#studio-typed-root textarea[aria-label="Prompt"]');
         await prompt.fill('fresh shell prompt');
-        await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+        const send = page.getByRole('button', { name: 'Send', exact: true });
+        await expect(send).toBeEnabled();
+        await prompt.press('Enter');
+        await expect(page.locator('#studio-typed-root [data-task-id]')).toHaveCount(1);
+        await expect(page.locator('#studio-typed-root [data-task-id] .task-state')).toHaveText(/Running|Finished/);
+        await expect(prompt).toHaveValue('');
     });
 
     test('an_out_of_range_approval_expiry_renders_not_recorded', async ({ page }) => {
@@ -499,5 +504,156 @@ test.describe('Final fix: restored run and approval reconciliation', () => {
         // The static host has no approval authority, so the existing static
         // guidance stays; the runtime surface proves no active owner exists.
         await expect(card).toContainText('This action needs host approval. Approve it in the local companion.');
+    });
+});
+
+async function seedFinishedCrossTabTask(
+    page: Page,
+): Promise<{ taskId: string; runId: string }> {
+    await openStudio(page);
+    await call<Outcome>(page, 'open');
+    const seeded = await call<{ taskId: string; runId: string }>(page, 'createTaskAndEvents', {
+        mode: 'finished',
+        title: 'Cross-tab lease task',
+    });
+    await page.reload();
+    await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+    await expect(
+        page.locator(`#studio-typed-root [data-task-id="${seeded.taskId}"]`),
+    ).toBeVisible();
+    return seeded;
+}
+
+async function startSecondWriter(
+    context: BrowserContext,
+    taskId: string,
+): Promise<{ tabA: Page; runId: string }> {
+    const tabA = await context.newPage();
+    await openStudio(tabA);
+    await selectTask(tabA, taskId);
+    await tabA.getByRole('button', { name: 'New run', exact: true }).click();
+    const prompt = tabA.locator('#studio-typed-root textarea[aria-label="Prompt"]');
+    await prompt.fill('tab A holds the lease');
+    await prompt.press('Enter');
+    const row = tabA.locator(`#studio-typed-root [data-task-id="${taskId}"]`);
+    await expect(row.locator('.task-state')).toHaveText('Running');
+    const snapshot = (
+        await call<Outcome>(tabA, 'taskSnapshotForTest', taskId)
+    ).record as LiveRunSnapshot;
+    expect(snapshot.runState).toBe('running');
+    expect(snapshot.runId).toMatch(/^run_[0-9a-f]{16}$/);
+    return { tabA, runId: snapshot.runId! };
+}
+
+async function reopenFreshStore(
+    context: BrowserContext,
+): Promise<{ phase: string; error: unknown }> {
+    const tabC = await context.newPage();
+    try {
+        await openStudio(tabC);
+        return await call<{ phase: string; error: unknown }>(tabC, 'open');
+    } finally {
+        await tabC.close();
+    }
+}
+
+test.describe('Residual: cross-tab lease and run generation safety', () => {
+    test('stale_tab_cannot_displace_a_fresh_active_writer', async ({ context, page: tabB }) => {
+        const seeded = await seedFinishedCrossTabTask(tabB);
+        const { tabA, runId } = await startSecondWriter(context, seeded.taskId);
+        try {
+            await expect(
+                tabB.locator(`#studio-typed-root [data-task-id="${seeded.taskId}"] .task-state`),
+            ).toHaveText('Finished');
+            await selectTask(tabB, seeded.taskId);
+            const leaseBefore = (await call<Outcome>(tabB, 'lease')).record as {
+                writer_id: string;
+            };
+            expect(leaseBefore.writer_id.length).toBeGreaterThan(0);
+
+            await tabB.getByRole('button', { name: 'New run', exact: true }).click();
+            await tabB.evaluate(() => {
+                const target = window as unknown as {
+                    __studioToastCalls: string[];
+                    __studioUi: { toast(text: string, tone?: string): void };
+                };
+                target.__studioToastCalls = [];
+                const original = target.__studioUi.toast;
+                target.__studioUi.toast = (text: string, tone?: string) => {
+                    target.__studioToastCalls.push(String(text));
+                    original.call(target.__studioUi, text, tone);
+                };
+            });
+            const prompt = tabB.locator('#studio-typed-root textarea[aria-label="Prompt"]');
+            await prompt.fill('stale tab colliding run');
+            await prompt.press('Enter');
+            await tabB.waitForTimeout(500);
+            const toasts = await tabB.evaluate(
+                () => (window as unknown as { __studioToastCalls: string[] }).__studioToastCalls,
+            );
+            expect(toasts.some((text) => text.includes('stale_generation'))).toBe(true);
+            await expect(
+                tabB.locator(`#studio-typed-root [data-task-id="${seeded.taskId}"] .task-state`),
+            ).toHaveText('Finished');
+
+            const leaseAfter = (await call<Outcome>(tabB, 'lease')).record as {
+                writer_id: string;
+            };
+            expect(leaseAfter.writer_id).toBe(leaseBefore.writer_id);
+
+            await expect(
+                tabA.locator(`#studio-typed-root [data-task-id="${seeded.taskId}"] .task-state`),
+            ).toHaveText('Running');
+            const stillActive = (
+                await call<Outcome>(tabA, 'taskSnapshotForTest', seeded.taskId)
+            ).record as LiveRunSnapshot;
+            expect(stillActive.runId).toBe(runId);
+            expect(stillActive.runState).toBe('running');
+
+            const fresh = await reopenFreshStore(context);
+            expect(fresh.phase).toBe('ready');
+            expect(fresh.error).toBeNull();
+        } finally {
+            await tabA.close();
+        }
+    });
+
+    test('commit_event_rejects_a_colliding_run_without_the_lease_path', async ({ context, page: tabB }) => {
+        const seeded = await seedFinishedCrossTabTask(tabB);
+        const { tabA, runId } = await startSecondWriter(context, seeded.taskId);
+        try {
+            const lease = (await call<Outcome>(tabB, 'lease')).record as {
+                writer_id: string;
+            };
+            expect(lease.writer_id.length).toBeGreaterThan(0);
+
+            const collided = await call<Outcome>(
+                tabB,
+                'appendCollidingRunQueuedForTest',
+                seeded.taskId,
+                lease.writer_id,
+            );
+            expect(collided.ok, JSON.stringify(collided)).toBe(false);
+            expect(collided.code).toBe('stale_generation');
+
+            const leaseAfter = (await call<Outcome>(tabB, 'lease')).record as {
+                writer_id: string;
+            };
+            expect(leaseAfter.writer_id).toBe(lease.writer_id);
+            await expect(
+                tabA.locator(`#studio-typed-root [data-task-id="${seeded.taskId}"] .task-state`),
+            ).toHaveText('Running');
+            const stillActive = (
+                await call<Outcome>(tabA, 'taskSnapshotForTest', seeded.taskId)
+            ).record as LiveRunSnapshot;
+            expect(stillActive.runId).toBe(runId);
+            expect(stillActive.runState).toBe('running');
+
+            const fresh = await reopenFreshStore(context);
+            expect(fresh.phase).toBe('ready');
+            expect(fresh.error).toBeNull();
+        } finally {
+            await tabA.close();
+        }
     });
 });

@@ -521,11 +521,35 @@ export class AgentRuntime {
         if (this.taskStore !== null) await this.taskStore.open();
         this.opened = true;
         this.reconstructApprovals();
+        await this.reconcileTerminalHolds();
         if (this.taskStore !== null && this.heartbeatHandle === null) {
             this.heartbeatHandle = this.timers.setInterval(() => {
                 this.tickHeartbeat();
             }, this.leaseHeartbeatMs);
         }
+    }
+
+    // A hold whose run is terminal cannot block new work forever. Reconcile it
+    // through the same task-record path; a write failure propagates so the
+    // caller sees an error instead of a silently stuck task.
+    private async reconcileTerminalHolds(): Promise<void> {
+        for (const task of this.store.snapshot().tasks) {
+            if (task.hold === null) continue;
+            const held = this.store.getRun(task.taskId, task.hold.run_id);
+            if (held === null) {
+                await this.setTaskHold(task.taskId, null);
+                continue;
+            }
+            if (!isTerminalState(held.state)) continue;
+            if (this.isDesignedBackgroundHold(held)) continue;
+            await this.setTaskHold(task.taskId, null);
+        }
+    }
+
+    // A stop_unacknowledged failure plus a hold is the designed background
+    // wait; it must be resolved explicitly, not swept away as stale.
+    private isDesignedBackgroundHold(run: RunView): boolean {
+        return run.state === 'failed' && run.error?.code === 'stop_unacknowledged';
     }
 
     private recordPersistenceError(error: unknown): void {
@@ -939,10 +963,7 @@ export class AgentRuntime {
             }
             const task = this.requireTaskView(input.taskId);
             if (task.hold !== null) {
-                throw new AgentClientError(
-                    'out_of_order',
-                    'background hold must be resolved before retry',
-                );
+                await this.clearTerminalHold(task, 'retry');
             }
             const prompt = this.promptByRun.get(input.runId);
             if (prompt === undefined) {
@@ -1658,10 +1679,7 @@ export class AgentRuntime {
             );
         }
         if (task.hold !== null) {
-            throw new AgentClientError(
-                'out_of_order',
-                'background hold must be resolved before a new run',
-            );
+            await this.clearTerminalHold(task, 'a new run');
         }
         const latestRun = task.latestRunId === null ? null : this.store.getRun(
             input.taskId,
@@ -3228,6 +3246,25 @@ export class AgentRuntime {
             if (record !== undefined) return record;
         }
         return null;
+    }
+
+    private async clearTerminalHold(
+        task: AgentTaskView,
+        action: string,
+    ): Promise<void> {
+        if (task.hold === null) return;
+        const held = this.store.getRun(task.taskId, task.hold.run_id);
+        if (held === null) {
+            await this.setTaskHold(task.taskId, null);
+            return;
+        }
+        if (!isTerminalState(held.state) || this.isDesignedBackgroundHold(held)) {
+            throw new AgentClientError(
+                'out_of_order',
+                `background hold must be resolved before ${action}`,
+            );
+        }
+        await this.setTaskHold(task.taskId, null);
     }
 
     private async setTaskHold(

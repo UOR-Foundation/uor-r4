@@ -42,7 +42,7 @@ export function ApprovalCard({ approval, hostIdentity, resolvable = true, onReso
             <div><dt>Expiry</dt><dd>{expiry === null ? <span data-approval-expiry="unrecorded">Not recorded</span> : <time dateTime={expiry}>{expiry}</time>}</dd></div>
         </dl>
         <p class="approval-host">Host: {hostIdentity === null ? 'not connected' : hostIdentity.id}</p>
-        {!canResolve && resolved === null && <p class="approval-guidance">{ownerless ? 'This approval has no active run owner in this page, so it cannot be approved or denied here. Start a new run for a new approval.' : 'This action needs host approval. Approve it in the local companion.'}</p>}
+        {!canResolve && resolved === null && <p class="approval-guidance">{ownerless ? 'This approval has no active run owner in this page. Stop the restored run before starting a new run.' : 'This action needs host approval. Approve it in the local companion.'}</p>}
         {resolved === null && <div class="approval-actions">
             <button type="button" disabled={!canResolve} onClick={() => onResolve(approval.approvalId, 'approved')}>Approve</button>
             <button type="button" disabled={!canResolve} onClick={() => onResolve(approval.approvalId, 'denied')}>Deny</button>

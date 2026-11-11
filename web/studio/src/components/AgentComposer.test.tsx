@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LifecycleStore } from '../state/lifecycle.js';
 import type { GenerationAdapter } from '../adapters/generation.js';
 import type { Attachment, SessionApi, StudioSettings, StudioUiApi, WorkspaceApi } from '../adapters/workflow.js';
+import { AgentClient } from '../agent/client.js';
+import { FixtureTransport } from '../agent/fixtureTransport.js';
 import { AgentComposer } from './AgentComposer.js';
 
 let host: HTMLDivElement;
@@ -637,5 +639,63 @@ describe('composer interactions', () => {
             });
         });
         expect(uiApi.api.addAttachment).not.toHaveBeenCalled();
+    });
+});
+
+describe('AgentComposer runtime-owned empty task list', () => {
+    it('empty_runtime_list_send_creates_a_task_and_never_calls_legacy_generation', async () => {
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'api/selected', sourceId: 'api-a', endpoint: 'https://api.example.com/v1' });
+        const sessionApi = sessions();
+        const fileApi = workspace();
+        const uiApi = ui();
+        const generation: GenerationAdapter = {
+            send: vi.fn(() => true),
+            stop: vi.fn(),
+            dispose: vi.fn(),
+        };
+        const transport = new FixtureTransport();
+        const client = new AgentClient({ transport });
+        const onCreateTask = vi.fn(async () => {
+            const task = await client.createTask({ title: 'Composer-created task' });
+            client.store.selectTask(task.taskId);
+            return task.taskId;
+        });
+        act(() => {
+            render(
+                <AgentComposer
+                    store={store}
+                    sessions={sessionApi}
+                    files={fileApi}
+                    ui={uiApi.api}
+                    generation={generation}
+                    copy={vi.fn(async () => undefined)}
+                    download={vi.fn()}
+                    agentClient={client}
+                    agentTask={null}
+                    runtimeTasksReady
+                    runtimeTaskCount={0}
+                    onCreateTask={onCreateTask}
+                />,
+                host,
+            );
+        });
+        const input = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
+        act(() => {
+            input.value = 'first runtime prompt';
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await act(async () => {
+            button('Send').click();
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        await vi.waitFor(() =>
+            expect(transport.calls.some((call) => call.method === 'startRun')).toBe(true),
+        );
+        expect(onCreateTask).toHaveBeenCalledOnce();
+        expect(transport.calls.some((call) => call.method === 'createTask')).toBe(true);
+        expect(generation.send).not.toHaveBeenCalled();
+        expect(client.store.snapshot().selectedTask?.title).toBe('Composer-created task');
     });
 });

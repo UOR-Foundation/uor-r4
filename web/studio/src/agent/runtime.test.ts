@@ -210,6 +210,7 @@ class FakeTaskStore {
     failNextAppend = false;
     failNextList = false;
     failNextRelease = false;
+    failNextTaskWrite = false;
     heartbeatGate: Promise<void> | null = null;
     private readonly records = new Map<string, TaskRecord>();
     private readonly leases = new Map<string, { task_id: string; writer_id: string; started_at_ms: number; heartbeat_at_ms: number }>();
@@ -268,6 +269,14 @@ class FakeTaskStore {
     }
 
     async writeTaskRecord(record: TaskRecord): Promise<TaskRecord> {
+        if (this.failNextTaskWrite) {
+            this.failNextTaskWrite = false;
+            throw new AgentStoreError(
+                'limit_exceeded',
+                'injected task write failure',
+                'indexeddb',
+            );
+        }
         const existing = this.records.get(record.task_id);
         const normalized: TaskRecord = {
             ...record,
@@ -4813,5 +4822,145 @@ describe('AgentRuntime restored and disposing reconciliation', () => {
         await expect(
             client.readDiffComments(INGEST_TASK_A),
         ).rejects.toMatchObject({ code: 'runtime_unavailable' });
+    });
+});
+
+describe('AgentRuntime terminal background holds', () => {
+    async function seedHold(
+        store: AgentStore,
+        taskStore: FakeTaskStore,
+        terminal: boolean,
+    ): Promise<{ taskId: string; runId: string }> {
+        await seedRunInStore(store);
+        if (terminal) {
+            await appendToStore(
+                store,
+                runtimeEvent({
+                    taskId: INGEST_TASK_A,
+                    runId: INGEST_RUN_A,
+                    sequence: 2,
+                    type: 'run.finished',
+                    data: {
+                        status: 'finished',
+                        finished_at_ms: 1_800_000_000_002,
+                        duration_ms: 2,
+                    },
+                }),
+            );
+        }
+        const task = store
+            .snapshot()
+            .tasks.find((candidate) => candidate.taskId === INGEST_TASK_A)!;
+        await taskStore.writeTaskRecord({
+            task_id: task.taskId,
+            project_id: task.projectId,
+            title: task.title,
+            created_at_ms: task.createdAtMs,
+            archived: false,
+            pinned_local: false,
+            latest_run_id: task.latestRunId,
+            hold: {
+                reason: 'waiting_for_background',
+                run_id: INGEST_RUN_A,
+                tool_call_id: 'tool_terminal_hold',
+            },
+        });
+        return { taskId: INGEST_TASK_A, runId: INGEST_RUN_A };
+    }
+
+    function holdFor(store: AgentStore): unknown {
+        return store
+            .snapshot()
+            .tasks.find((candidate) => candidate.taskId === INGEST_TASK_A)?.hold;
+    }
+
+    function runtimeWith(
+        store: AgentStore,
+        clock: TestClock,
+        taskStore: FakeTaskStore,
+    ): AgentRuntime {
+        return new AgentRuntime({
+            store,
+            taskStore: taskStore as unknown as AgentTaskStore,
+            now: clock.now,
+            timers: clock,
+            ids: deterministicIds(),
+            writerId: 'writer-runtime-test',
+            leaseHeartbeatMs: LEASE_HEARTBEAT_MS,
+        });
+    }
+
+    test('open_clears_a_hold_whose_run_is_terminal', async () => {
+        const store = createAgentStore();
+        const clock = new TestClock();
+        const taskStore = new FakeTaskStore(store, clock);
+        await seedHold(store, taskStore, true);
+        expect(holdFor(store)).not.toBeNull();
+        const runtime = runtimeWith(store, clock, taskStore);
+        await runtime.open();
+        try {
+            expect(holdFor(store)).toBeNull();
+        } finally {
+            await runtime.dispose();
+        }
+    });
+
+    test('a_failed_open_hold_clear_is_not_swallowed_and_a_later_start_clears_it', async () => {
+        const store = createAgentStore();
+        const clock = new TestClock();
+        const taskStore = new FakeTaskStore(store, clock);
+        await seedHold(store, taskStore, true);
+        taskStore.failNextTaskWrite = true;
+        const runtime = runtimeWith(store, clock, taskStore);
+        await expect(runtime.open()).rejects.toMatchObject({
+            code: 'limit_exceeded',
+        });
+        expect(holdFor(store)).not.toBeNull();
+        const next = await runtime.startRun({
+            taskId: INGEST_TASK_A,
+            prompt: 'after a failed open hold clear',
+        });
+        await until(
+            () => runView(store, INGEST_TASK_A, next.runId).state === 'finished',
+            'new run after failed open hold clear',
+        );
+        expect(holdFor(store)).toBeNull();
+        await runtime.dispose();
+    });
+
+    test('a_failed_hold_clear_after_a_restored_stop_does_not_block_a_later_start', async () => {
+        const store = createAgentStore();
+        const clock = new TestClock();
+        const taskStore = new FakeTaskStore(store, clock);
+        await seedHold(store, taskStore, false);
+        const runtime = runtimeWith(store, clock, taskStore);
+        await runtime.open();
+        try {
+            taskStore.failNextTaskWrite = true;
+            await expect(
+                runtime.stop({
+                    taskId: INGEST_TASK_A,
+                    runId: INGEST_RUN_A,
+                }),
+            ).rejects.toMatchObject({ code: 'limit_exceeded' });
+            expect(holdFor(store)).not.toBeNull();
+            expect(runView(store, INGEST_TASK_A, INGEST_RUN_A).state).toBe(
+                'cancelled',
+            );
+
+            const next = await runtime.startRun({
+                taskId: INGEST_TASK_A,
+                prompt: 'after a failed restored hold clear',
+            });
+            await until(
+                () =>
+                    runView(store, INGEST_TASK_A, next.runId).state ===
+                    'finished',
+                'new run after failed restored hold clear',
+            );
+            expect(holdFor(store)).toBeNull();
+        } finally {
+            await runtime.dispose();
+        }
     });
 });

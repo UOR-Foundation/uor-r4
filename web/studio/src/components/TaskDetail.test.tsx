@@ -569,11 +569,39 @@ describe('TaskDetail restored and archived honesty', () => {
         expect(buttonNamed('Approve')?.disabled).toBe(true);
         expect(buttonNamed('Deny')?.disabled).toBe(true);
         expect(host.textContent).toContain('no active run owner');
+        expect(host.textContent).toContain('Stop the restored run before starting a new run');
         expect(host.textContent).not.toContain('approval is not pending');
     });
 });
 
 describe('TaskDetail new run path', () => {
+    it('does_not_offer_a_new_run_while_a_background_hold_exists', async () => {
+        const finished = fixture(detailEvents());
+        const held: TaskView = {
+            ...finished.task,
+            state: 'waiting_for_background',
+            hold: {
+                reason: 'waiting_for_background',
+                run_id: RUN_ID,
+                tool_call_id: 'tool_1',
+            },
+        };
+        await act(async () => {
+            render(
+                <TaskDetail
+                    task={held}
+                    client={finished.client}
+                    onBack={vi.fn()}
+                    onOpenSurface={vi.fn()}
+                    onNewRun={vi.fn()}
+                />,
+                host,
+            );
+            await Promise.resolve();
+        });
+        expect(buttonNamed('New run')).toBeNull();
+    });
+
     it('offers_a_new_run_for_a_terminal_task_and_never_for_an_active_run', async () => {
         const finished = fixture(detailEvents());
         const onNewRun = vi.fn();

@@ -962,14 +962,14 @@ test.describe('Default build independent acceptance', () => {
             const root = page.locator('#studio-typed-root');
             await expect(root).toHaveAttribute('data-active', 'true');
             expect(await page.evaluate(() => typeof (window as unknown as { __studioTest?: unknown }).__studioTest)).toBe('undefined');
+            await expect(root.locator('[data-action="new-task"]')).toBeVisible();
 
-            await root.locator('[data-action="new-task"]').click();
-            const row = root.locator('[data-task-id]').filter({ hasText: 'New task' }).first();
-            await expect(row).toBeVisible();
             const prompt = root.locator('textarea[aria-label="Prompt"]');
             await expect(prompt).toBeVisible();
             await prompt.fill('first default-build prompt');
             await prompt.press('Enter');
+            const row = root.locator('[data-task-id]').filter({ hasText: 'New task' }).first();
+            await expect(row).toBeVisible();
 
             const stopRun = root.locator('.composer-run-modes').getByRole('button', { name: 'Stop run', exact: true });
             await expect(stopRun).toBeEnabled();
@@ -1023,9 +1023,6 @@ test.describe('Default build independent acceptance', () => {
             await page.goto(`${server.url}/?typed=1`);
             const root = page.locator('#studio-typed-root');
             await expect(root).toHaveAttribute('data-active', 'true');
-            await root.locator('[data-action="new-task"]').click();
-            const row = root.locator('[data-task-id]').filter({ hasText: 'New task' }).first();
-            await expect(row).toBeVisible();
             const prompt = root.locator('textarea[aria-label="Prompt"]');
             const cdp = await page.context().newCDPSession(page);
 
@@ -1048,12 +1045,14 @@ test.describe('Default build independent acceptance', () => {
                 windowsVirtualKeyCode: 13,
                 nativeVirtualKeyCode: 13,
             });
-            await expect(row.locator('.task-state')).toHaveText('Idle');
+            await expect(root.locator('[data-task-id]')).toHaveCount(0);
             await cdp.send('Input.insertText', { text: '日本' });
             await expect(prompt).toHaveValue('existing 日本');
 
             await prompt.press('Enter');
-            await expect(row.locator('.task-state')).toHaveText(/Running|Finished/);
+            const row = root.locator('[data-task-id]').filter({ hasText: 'New task' }).first();
+            await expect(row).toBeVisible();
+            await expect(row.locator('.task-state')).toHaveText('Running');
             await expect(root.locator('.send-button')).toBeDisabled();
             await prompt.fill('disabled during the active run');
             await prompt.press('Enter');

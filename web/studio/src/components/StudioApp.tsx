@@ -227,16 +227,22 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         setFocusTaskId(null);
         setTaskRevision((value) => value + 1);
     };
+    const createRuntimeTask = async (): Promise<TaskSummary> => {
+        if (agentClient === null) throw new Error('the browser task runtime is not initialized');
+        const task = await agentClient.createTask({ title: 'New task' });
+        agentClient.store.selectTask(task.taskId);
+        setDetailOpen(false);
+        setTaskList({ phase: 'ready', message: null });
+        setTaskRevision((value) => value + 1);
+        return task;
+    };
     const createTask = () => {
         if (agentClient === null || creatingTask) return;
         setCreatingTask(true);
-        void agentClient.createTask({ title: 'New task' }).then((task) => {
-            selectTask(task.taskId);
-            setDetailOpen(false);
-            setTaskList({ phase: 'ready', message: null });
-            setTaskRevision((value) => value + 1);
-        }).catch(reportTaskFailure).finally(() => setCreatingTask(false));
+        void createRuntimeTask().catch(reportTaskFailure).finally(() => setCreatingTask(false));
     };
+    const createTaskForSend = async (): Promise<string | null> =>
+        (await createRuntimeTask()).taskId;
     const startNewRun = () => {
         setActiveSection('agent');
         setDetailOpen(false);
@@ -270,7 +276,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     ];
     const renderSection = (section: StudioSection, secondary = false) => {
         const idPrefix = secondary ? 'secondary-' : '';
-        if (section === 'agent') return <AgentComposer key={`${state.session.activeId || 'new'}:${state.session.revision}:${sessionRevision}`} store={store} sessions={sessions} files={files} ui={ui} generation={agent} draft={agentDraft} pasted={agentPasted} onDraftChange={setAgentDraft} onPastedChange={setAgentPasted} agentClient={agentClient} agentTask={selectedRuntime?.task ?? null} activeRun={selectedRuntime?.activeRun ?? null} unresolvedRun={selectedRuntime?.unresolvedRun ?? false} runtimeTasksLoading={taskList.phase === 'loading'} runtimeTasksReady={taskList.phase === 'ready'} runtimeTaskCount={tasks.length} showTaskDetail={detailOpen} onTaskBack={closeDetail} onNewRun={startNewRun} onOpenSurface={(surface) => setActiveSection(surface === 'changes' ? 'changes' : 'terminal')} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} download={download} />;
+        if (section === 'agent') return <AgentComposer key={`${state.session.activeId || 'new'}:${state.session.revision}:${sessionRevision}`} store={store} sessions={sessions} files={files} ui={ui} generation={agent} draft={agentDraft} pasted={agentPasted} onDraftChange={setAgentDraft} onPastedChange={setAgentPasted} agentClient={agentClient} agentTask={selectedRuntime?.task ?? null} activeRun={selectedRuntime?.activeRun ?? null} unresolvedRun={selectedRuntime?.unresolvedRun ?? false} runtimeTasksLoading={taskList.phase === 'loading'} runtimeTasksReady={taskList.phase === 'ready'} runtimeTaskCount={tasks.length} showTaskDetail={detailOpen} onTaskBack={closeDetail} onNewRun={startNewRun} onCreateTask={agentClient !== null ? createTaskForSend : undefined} onOpenSurface={(surface) => setActiveSection(surface === 'changes' ? 'changes' : 'terminal')} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} download={download} />;
         if (section === 'workspace') return <WorkspaceEditor store={store} files={files} operations={operations} onError={reportFile} onSuccess={succeed} settings={editorSettings} agentClient={agentClient} />;
         if (section === 'changes') return <ChangesPanel actions={desktopActions} files={files} idPrefix={idPrefix} agentClient={agentClient} taskId={selectedTaskId} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} />;
         if (section === 'pr') return <PrPanel summary={null} unavailableReason="No local or imported pull request summary is available in this session." />;

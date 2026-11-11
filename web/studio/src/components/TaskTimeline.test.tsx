@@ -152,5 +152,6 @@ describe('restored approval availability', () => {
         expect(approve.disabled).toBe(true);
         expect(deny.disabled).toBe(true);
         expect(card.textContent).toContain('no active run owner');
+        expect(card.textContent).toContain('Stop the restored run before starting a new run');
     });
 });

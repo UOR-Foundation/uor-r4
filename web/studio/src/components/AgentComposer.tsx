@@ -41,6 +41,7 @@ interface AgentComposerProps {
     showTaskDetail?: boolean;
     onTaskBack?(): void;
     onNewRun?(): void;
+    onCreateTask?(): Promise<string | null>;
     onOpenSurface?(surface: 'changes' | 'terminal'): void;
 }
 
@@ -59,13 +60,14 @@ function revokePreview(draft: AttachmentDraft): void {
     }
 }
 
-export function AgentComposer({ store, sessions, files, ui, generation, copy, download, draft: controlledDraft, pasted: controlledPasted, onDraftChange, onPastedChange, agentClient = null, agentTask = null, activeRun = null, unresolvedRun = false, runtimeTasksLoading = false, runtimeTasksReady = true, runtimeTaskCount, showTaskDetail = false, onTaskBack, onNewRun, onOpenSurface }: AgentComposerProps) {
+export function AgentComposer({ store, sessions, files, ui, generation, copy, download, draft: controlledDraft, pasted: controlledPasted, onDraftChange, onPastedChange, agentClient = null, agentTask = null, activeRun = null, unresolvedRun = false, runtimeTasksLoading = false, runtimeTasksReady = true, runtimeTaskCount, showTaskDetail = false, onTaskBack, onNewRun, onCreateTask, onOpenSurface }: AgentComposerProps) {
     const state = useLifecycle(store);
     const [pastedState, setPastedState] = useState('');
     const pasted = controlledPasted ?? pastedState;
     const setPasted = (value: string) => { setPastedState(value); onPastedChange?.(value); };
     const [visibleDraft, setVisibleDraft] = useState(controlledDraft ?? '');
     const [imageDrafts, setImageDrafts] = useState<AttachmentDraft[]>([]);
+    const [runtimeError, setRuntimeError] = useState<string | null>(null);
     const [permissionMode, setPermissionMode] = useState<PermissionMode>('ask');
     const initialDraftRef = useRef(controlledDraft ?? '');
     const previousControlledDraft = useRef(controlledDraft);
@@ -207,13 +209,14 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
 
     const activeTaskRun = isActiveRun(activeRun) ? activeRun : null;
     const taskCount = runtimeTaskCount ?? agentClient?.store.snapshot().tasks.length ?? 0;
-    const runtimeTaskPath = agentClient !== null && runtimeTasksReady && taskCount > 0;
-    const emptyReadyRuntimeList = agentClient !== null && runtimeTasksReady && taskCount === 0 && agentTask === null;
-    const legacyAllowed = agentClient === null || emptyReadyRuntimeList;
-    const agentMode = runtimeTaskPath;
+    const runtimeOwned = agentClient !== null;
+    const runtimeTaskPath = runtimeOwned && runtimeTasksReady && taskCount > 0;
+    const legacyAllowed = agentClient === null;
+    const agentMode = runtimeOwned;
     const legacyReady = store.canRun();
-    const sendDisabled = runtimeTaskPath
-        ? agentTask === null || Boolean(activeTaskRun) || unresolvedRun
+    const autoCreateTask = runtimeOwned && taskCount === 0 && onCreateTask !== undefined;
+    const sendDisabled = runtimeOwned
+        ? runtimeTasksLoading || !runtimeTasksReady || (!agentTask && !autoCreateTask) || Boolean(activeTaskRun) || unresolvedRun
         : runtimeTasksLoading || !legacyAllowed || !legacyReady;
 
     function failureMessage(prefix: string, failure: unknown): string {
@@ -221,11 +224,8 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     }
 
     function send(prompt: string): boolean | Promise<boolean> {
-        if (runtimeTaskPath && agentClient !== null) {
-            if (!agentTask) {
-                ui.toast('Select a task before sending.', 'error');
-                return false;
-            }
+        if (runtimeOwned && agentClient !== null) {
+            if (!runtimeTasksReady) return false;
             if (unresolvedRun) {
                 ui.toast('This task\'s current run is still loading. Wait for it to resume before starting another.', 'error');
                 return false;
@@ -234,13 +234,32 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                 ui.toast('This task already has an active run. Queue, steer or force the message instead.', 'error');
                 return false;
             }
-            return agentClient.startRun({ taskId: agentTask.taskId, prompt }).then(() => {
+            const start = (taskId: string) => agentClient.startRun({ taskId, prompt }).then(() => {
+                setRuntimeError(null);
                 refresh();
                 return true;
             }, (failure: unknown) => {
-                ui.toast(failureMessage('Run could not start', failure), 'error');
+                const message = failureMessage('Run could not start', failure);
+                setRuntimeError(message);
+                ui.toast(message, 'error');
                 return false;
             });
+            if (!agentTask) {
+                if (!autoCreateTask || onCreateTask === undefined) {
+                    ui.toast('Select a task before sending.', 'error');
+                    return false;
+                }
+                return onCreateTask().then((taskId) => {
+                    if (taskId === null) return false;
+                    return start(taskId);
+                }, (failure: unknown) => {
+                    const message = failureMessage('Task could not be created', failure);
+                    setRuntimeError(message);
+                    ui.toast(message, 'error');
+                    return false;
+                });
+            }
+            return start(agentTask.taskId);
         }
         if (runtimeTasksLoading || !legacyAllowed) return false;
         if (!generation.send(prompt)) return false;
@@ -468,6 +487,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                 : <>
                     <header class="agent-heading"><div><h1>Agent</h1><p>{selectionLabel}</p></div><span class="session-phase">Session: {state.session.phase}</span></header>
                     {state.session.error && <p role="alert" class="workbench-alert">{state.session.error}</p>}
+                    {runtimeError !== null && <p role="alert" class="workbench-alert">{runtimeError}</p>}
                     {activeGeneration && <p class="generation-banner">Generating with {activeGeneration.source.id} ({activeGeneration.privacy})</p>}
                     <AgentTranscript messages={messages} canRun={store.canRun()} busy={generating} copy={copy} insert={(content) => files.insertText(content, nextInsertName())} download={(content) => download('studio-message.md', content)} retry={(content) => generation.send(content)} />
                 </>}

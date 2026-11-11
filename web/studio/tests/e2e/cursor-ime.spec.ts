@@ -194,15 +194,16 @@ test('shift_enter_inserts_newline_at_the_real_caret', async ({ page }) => {
     expect(await sentPrompts(page)).toEqual([]);
 });
 
-test('plain_enter_submits_through_the_instrumented_send', async ({ page }) => {
-    await openAgentWithFixtureProvider(page);
+test('plain_enter_submits_through_the_runtime_run_path', async ({ page }) => {
+    await openTypedAt(page, 1440);
     await installSendSpy(page);
     const prompt = promptLocator(page);
     await prompt.fill('send control');
     await expect(page.locator('#studio-typed-root .send-button')).toBeEnabled();
     await prompt.focus();
     await page.keyboard.press('Enter');
-    await expect.poll(async () => (await sentPrompts(page)).length).toBe(1);
-    expect(await sentPrompts(page)).toEqual(['send control']);
+    await expect(page.locator('#studio-typed-root [data-task-id]')).toHaveCount(1);
+    await expect(page.locator('#studio-typed-root [data-task-id] .task-state')).toHaveText(/Running|Finished/);
     await expect(prompt).toHaveValue('');
+    expect(await sentPrompts(page)).toEqual([]);
 });

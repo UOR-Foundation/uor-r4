@@ -342,6 +342,10 @@ export interface StudioTestApi {
     seedFailedRunForRetryProbe(): Promise<Outcome>;
     retryRestoredRunForTest(taskId: string, runId: string): Promise<Outcome>;
     clearHoldNullForTest(taskId: string): Promise<Outcome>;
+    appendCollidingRunQueuedForTest(
+        taskId: string,
+        writerId: string,
+    ): Promise<Outcome>;
     acquireLease(writerId: string, nowMs?: number): Promise<Outcome>;
     heartbeatLease(writerId: string, nowMs?: number): Promise<Outcome>;
     releaseLease(writerId: string): Promise<Outcome>;
@@ -2383,6 +2387,48 @@ async function seedFailedRunForRetryProbe(): Promise<Outcome> {
     }
 }
 
+async function appendCollidingRunQueuedForTest(
+    taskId: string,
+    writerId: string,
+): Promise<Outcome> {
+    try {
+        const task = requireClient()
+            .store.snapshot()
+            .tasks.find((candidate) => candidate.taskId === taskId);
+        if (task === undefined) throw new Error(`task ${taskId} is missing`);
+        const generation =
+            task.runs.reduce((max, run) => Math.max(max, run.generation), 0) + 1;
+        const runId = `run_${randomHex(8)}`;
+        const event = {
+            schema: AGENT_EVENT_SCHEMA,
+            event_id: `evt_${runId}_${generation}_000000000000`,
+            project_id: task.projectId,
+            task_id: taskId,
+            run_id: runId,
+            generation,
+            sequence: 0,
+            recorded_at_ms: state.nowMs,
+            type: 'run.queued',
+            data: { queued_at_ms: state.nowMs },
+        } as unknown as AgentIncomingEvent;
+        const result = await requireTaskStore().appendEvent({
+            event,
+            writer_id: writerId,
+            now_ms: state.nowMs,
+        });
+        if (result.status === 'applied') {
+            return { ok: true, record: result };
+        }
+        return {
+            ok: false,
+            code: result.code ?? 'internal',
+            message: result.message ?? 'colliding run was rejected',
+        };
+    } catch (error) {
+        return failure(error);
+    }
+}
+
 async function clearHoldNullForTest(taskId: string): Promise<Outcome> {
     try {
         const store = requireTaskStore();
@@ -2843,6 +2889,7 @@ export function installStudioTestApi(owner?: StudioAgentOwnerForTest): void {
         seedFailedRunForRetryProbe,
         retryRestoredRunForTest,
         clearHoldNullForTest,
+        appendCollidingRunQueuedForTest,
         async acquireLease(writerId: string, nowMs?: number) {
             try {
                 const fixture = currentFixture();

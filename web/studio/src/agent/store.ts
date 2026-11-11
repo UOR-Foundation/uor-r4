@@ -2004,13 +2004,11 @@ export class AgentTaskStore {
         if (task === undefined) {
             throw new AgentStoreError('task_not_found', 'task is not present in AgentStore');
         }
-        let latestRunState: string | null = null;
         if (task.latestRunId !== null) {
             const read = await this.readRun(taskId, task.latestRunId);
             if (!read.ok) {
                 throw new AgentStoreError(read.code, read.message);
             }
-            latestRunState = read.run.state;
             const storedSnapshot = await this.readOne<SnapshotRecord>(
                 'snapshots',
                 [taskId, task.latestRunId],
@@ -2032,10 +2030,49 @@ export class AgentTaskStore {
             }
         }
         if (!isNonNegativeInteger(nowMs)) invalidArgument('now_ms is invalid');
-        const transaction = this.requireDb().transaction('leases', 'readwrite');
+        const transaction = this.requireDb().transaction(
+            ['tasks', 'runs', 'leases'],
+            'readwrite',
+        );
         try {
+            const tasks = transaction.objectStore('tasks');
+            const runs = transaction.objectStore('runs');
             const stores = transaction.objectStore('leases');
             await this.checkImportFence(stores, nowMs);
+            const durableTask = (await requestResult(
+                tasks.get(taskId),
+            )) as TaskRecord | undefined;
+            if (durableTask === undefined) {
+                throw new AgentStoreError(
+                    'task_not_found',
+                    'task is not present in durable storage',
+                );
+            }
+            requireStoredTask(durableTask);
+            const durableLatest = durableTask.latest_run_id ?? null;
+            if (durableLatest !== task.latestRunId) {
+                // The local view is stale: another tab committed a different
+                // latest run. Never let a local terminal projection displace a
+                // fresh active writer.
+                throw new AgentStoreError(
+                    'stale_generation',
+                    'durable task latest run does not match the local task view',
+                );
+            }
+            let durableLatestState: string | null = null;
+            if (durableLatest !== null) {
+                const durableRun = (await requestResult(
+                    runs.get([taskId, durableLatest]),
+                )) as RunRecord | undefined;
+                if (durableRun === undefined) {
+                    throw new AgentStoreError(
+                        'snapshot_missing',
+                        'durable task latest run record is missing',
+                    );
+                }
+                requireStoredRun(durableRun);
+                durableLatestState = durableRun.state;
+            }
             const existing = (await requestResult(stores.get(taskId))) as LeaseRecord | undefined;
             if (existing !== undefined) {
                 requireStoredLease(existing);
@@ -2045,9 +2082,10 @@ export class AgentTaskStore {
                 existing.writer_id !== writerId &&
                 nowMs - existing.heartbeat_at_ms <= LEASE_STALE_MS &&
                 // A lease cannot belong to a terminal run: the writer that
-                // owned it has nothing left to do. This is the reload/crash
-                // case where a page disappeared before releasing its lease.
-                !(latestRunState !== null && TERMINAL_RUN_STATES.has(latestRunState));
+                // owned it has nothing left to do. The terminal exception is
+                // derived only from the durable latest run, never a stale
+                // in-memory projection.
+                !(durableLatestState !== null && TERMINAL_RUN_STATES.has(durableLatestState));
             if (activeOther) {
                 throw new AgentStoreError(
                     'stale_generation',
@@ -3879,11 +3917,46 @@ export class AgentTaskStore {
                         'event sequence does not follow the durable run cursor',
                     );
                 }
-            } else if (event.type !== 'run.queued' || event.sequence !== 0) {
-                throw new AgentStoreError(
-                    'snapshot_missing',
-                    'durable run record is missing for a non-initial event',
-                );
+            } else {
+                if (event.type !== 'run.queued' || event.sequence !== 0) {
+                    throw new AgentStoreError(
+                        'snapshot_missing',
+                        'durable run record is missing for a non-initial event',
+                    );
+                }
+                // Independent defense: a new run may only follow the durable
+                // task's current latest run when that run is absent or
+                // terminal, and its generation must be strictly newer. This
+                // rejects a stale writer's colliding generation even if it
+                // managed to acquire a lease.
+                const durableTask = (await requestResult(
+                    tasks.get(event.task_id),
+                )) as TaskRecord | undefined;
+                if (durableTask !== undefined) {
+                    requireStoredTask(durableTask);
+                    const durableLatest = durableTask.latest_run_id ?? null;
+                    if (durableLatest !== null) {
+                        const durableLatestRun = (await requestResult(
+                            runs.get([event.task_id, durableLatest]),
+                        )) as RunRecord | undefined;
+                        if (durableLatestRun === undefined) {
+                            throw new AgentStoreError(
+                                'snapshot_missing',
+                                'durable task latest run record is missing',
+                            );
+                        }
+                        requireStoredRun(durableLatestRun);
+                        if (
+                            !TERMINAL_RUN_STATES.has(durableLatestRun.state) ||
+                            durableLatestRun.generation >= event.generation
+                        ) {
+                            throw new AgentStoreError(
+                                'stale_generation',
+                                'new run collides with the durable task latest run',
+                            );
+                        }
+                    }
+                }
             }
             let anchorRecord: SnapshotRecord | undefined;
             if (input.snapshot_anchor !== undefined) {
