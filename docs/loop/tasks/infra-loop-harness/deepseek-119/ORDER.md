@@ -1,8 +1,7 @@
 # ORDER: infra-loop-harness, deepseek-119 (resolve contract decision locators)
 
-Lab: deepseek. Item:
-[infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904).
-Base: `c0f7db014`.
+Lab: deepseek. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md)
+(#2904). Base: `c0f7db014`.
 
 ## Goal
 

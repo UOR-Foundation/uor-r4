@@ -1,8 +1,7 @@
 # REPORT: infra-loop-harness, deepseek-119 (resolve contract decision locators)
 
-Lab: deepseek. Item:
-[infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904).
-Order: [ORDER.md](./ORDER.md). Laptop only; no GPU, pod or spend.
+Lab: deepseek. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md)
+(#2904). Order: [ORDER.md](./ORDER.md). Laptop only; no GPU, pod or spend.
 
 **In one line:** stack contracts now refuse a decision or legacy-grandfather
 locator that is missing or escapes the repository; all four existing
