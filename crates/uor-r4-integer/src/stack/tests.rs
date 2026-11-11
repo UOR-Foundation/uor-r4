@@ -3,6 +3,7 @@
 //! depends on both engines.
 
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 use super::format::MAX_READ_CACHE_BYTES;
 use super::{IntegerStackModel, StackError, StackShape, MAGIC};
@@ -1927,6 +1928,11 @@ const FBS_CHAT_CONTEXT: usize = 32;
 /// with a tokenizer of its vocabulary. Also returns the opening keys a turn can open with: the
 /// stored keys holding no `<|bos|>` or `<|eos|>`, which would move the turn's anchor.
 fn fbs_chat(seed: u64) -> Result<(IntegerStackModel, Vec<u8>, Vec<Vec<u32>>), StackError> {
+    fbs_chat_with(seed, false)
+}
+
+/// [`fbs_chat`]'s model with either head: `nearest` reads the whole table's nearest token.
+fn fbs_chat_with(seed: u64, nearest: bool) -> Result<(IntegerStackModel, Vec<u8>, Vec<Vec<u32>>), StackError> {
     let mut snap = synthetic_fbs_trunk_with(
         seed,
         FbsSynth {
@@ -1934,6 +1940,7 @@ fn fbs_chat(seed: u64) -> Result<(IntegerStackModel, Vec<u8>, Vec<Vec<u32>>), St
             ..FBS_SYNTH_SMALL
         },
     );
+    snap.readout_nearest = nearest;
     let memory = synthetic_turn_memory(snap.vocab, snap.width, 8, 192, true, 40, seed ^ 0x5eed);
     let keys = memory
         .opening
@@ -2045,6 +2052,110 @@ fn stack_chat_marks_each_turn_of_an_fbs_conversation() -> ChatTest {
         chat.position() - steps_before <= second_history.len() - first_history.len() + second.ids.len(),
         "the session replayed the history"
     );
+    Ok(())
+}
+
+/// claude-348: the chat reads every prompt token but the last without choosing a token
+/// ([`super::IntegerStackSession::read_step`]). Under the nearest head, where that skips the
+/// whole-table scan, two turns still serve what sessions stepped in full serve.
+#[test]
+fn stack_chat_reads_the_prompt_without_choosing_under_the_nearest_head() -> ChatTest {
+    let (model, json, keys) = fbs_chat_with(43, true)?;
+    assert!(model.shape().head_nearest() && model.turn_memory().is_some());
+    let mut chat = open_chat(&model, &json)?;
+    let (bos, eos) = (chat.protocol().bos_id, chat.protocol().eos_id);
+    let mut replies = std::collections::BTreeSet::new();
+    for pair in keys.windows(2) {
+        chat.seed(&[bos])?;
+        let first_history = [&[bos][..], &pair[0]].concat();
+        let first = chat.reply_history(&first_history, 6)?;
+        assert_eq!(first.ids, served_reference(&model, &first_history, 6, eos, true)?, "first turn");
+        let mut second_history = [first_history.as_slice(), &first.ids].concat();
+        if first.stop != super::StackStop::Eos {
+            second_history.push(eos);
+        }
+        second_history.extend_from_slice(&pair[1]);
+        let second = chat.reply_history(&second_history, 6)?;
+        assert_eq!(second.ids, served_reference(&model, &second_history, 6, eos, true)?, "second turn");
+        replies.insert(first.ids);
+        replies.insert(second.ids);
+    }
+    assert!(replies.len() > 1, "every reply is the same: the test cannot see a changed state");
+    Ok(())
+}
+
+/// claude-348: a read step leaves the session where a choosing step leaves it. Under the nearest
+/// head it names no token; the query and every later choice are the same. Under the writer head
+/// it is a full step.
+#[test]
+fn a_read_step_leaves_the_session_as_a_choosing_step_does() {
+    let synth = FbsSynth {
+        context: 32,
+        ..FBS_SYNTH_SMALL
+    };
+    let mut snap = synthetic_fbs_trunk_with(20261110, synth);
+    snap.readout_nearest = true;
+    let model = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&snap).expect("export")).expect("parse");
+    assert!(model.shape().head_nearest());
+    let vocab = model.shape().vocab as u32;
+    let (mut full, mut read) = (model.session(), model.session());
+    let mut picks = std::collections::BTreeSet::new();
+    let mut token = 3u32;
+    for t in 0..24u32 {
+        let (pick, _) = full.serve_step(token).expect("a full step");
+        if t % 3 == 2 {
+            assert_eq!(read.serve_step(token).expect("a choosing step"), (pick, 0), "step {t}");
+            assert_eq!(read.last_native_token(), Some(pick), "step {t}");
+        } else {
+            read.read_step(token).expect("a read step");
+            assert_eq!(read.last_native_token(), None, "step {t}: a read step names no token");
+        }
+        assert_eq!(read.last_query_q12(), full.last_query_q12(), "step {t}: the same query");
+        picks.insert(pick);
+        token = (pick + t) % vocab;
+    }
+    assert!(picks.len() > 1, "one pick throughout: the test cannot see a changed state");
+    snap.readout_nearest = false;
+    let writer = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&snap).expect("export")).expect("parse");
+    let (mut full, mut read) = (writer.session(), writer.session());
+    let (pick, _) = full.serve_step(3).expect("a full step");
+    read.read_step(3).expect("a read step");
+    assert_eq!(read.last_native_token(), Some(pick), "the writer head still chooses");
+}
+
+/// claude-348: a read step that is refused clears its mark, so the next step chooses again.
+#[test]
+fn a_refused_read_step_leaves_the_next_step_choosing() {
+    let mut snap = synthetic_fbs_trunk(20261110);
+    snap.readout_nearest = true;
+    let model = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&snap).expect("export")).expect("parse");
+    let vocab = model.shape().vocab as u32;
+    let (mut fresh, mut refused) = (model.session(), model.session());
+    assert!(refused.read_step(vocab).is_err(), "an id outside the vocabulary is refused");
+    assert_eq!(refused.serve_step(3).expect("a choosing step"), fresh.serve_step(3).expect("a choosing step"));
+    assert!(refused.last_native_token().is_some(), "the step after a refused read step chooses");
+}
+
+/// claude-348: a feed that stops on an id outside the vocabulary has read its last stepped token
+/// without a choice. Asking for a reply to the history up to that token steps it again, and the
+/// reply is what a session stepped in full serves. The model has no turn memory, whose own reset
+/// would hide this.
+#[test]
+fn stack_chat_serves_the_last_token_after_a_feed_that_stopped_on_an_error() -> ChatTest {
+    let (model, json) = chat(7)?;
+    assert!(model.turn_memory().is_none());
+    let mut chat = open_chat(&model, &json)?;
+    let (bos, eos) = (chat.protocol().bos_id, chat.protocol().eos_id);
+    let vocab = model.shape().vocab as u32;
+    // The fixture's context is six tokens: two read, the refused id, and two of reply fit.
+    let good = [bos, 5 % vocab];
+    let bad = [&good[..], &[vocab]].concat();
+    assert!(
+        matches!(chat.reply_history(&bad, 2), Err(super::StackChatError::Stack(_))),
+        "the engine refuses an id outside the vocabulary after reading the two before it"
+    );
+    let reply = chat.reply_history(&good, 2)?;
+    assert_eq!(reply.ids, served_reference(&model, &good, 2, eos, false)?);
     Ok(())
 }
 
@@ -4127,6 +4238,178 @@ fn hamming_reads_round_trip_in_lut_stack_6() {
     }
 }
 
+#[test]
+fn artifact_metadata_reports_validated_identity_and_sections() {
+    let mut snap = synthetic_fbs_trunk(3894);
+    snap.hamming = Some(synthetic_hamming(
+        snap.width,
+        snap.layers.len(),
+        4,
+        3894,
+    ));
+    let bytes = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+    let metadata = super::inspect_uorlut01(&bytes).expect("metadata");
+    assert_eq!(metadata.family, "uor-r4.lut-stack");
+    assert_eq!(metadata.schema, super::STACK_FBS_HAMMING_SCHEMA);
+    assert_eq!(metadata.sha256, hex::encode(Sha256::digest(&bytes)));
+    assert_eq!(metadata.bytes, bytes.len());
+    assert_eq!(
+        metadata.shape,
+        IntegerStackModel::parse(&bytes)
+            .expect("served model")
+            .shape()
+            .clone()
+    );
+    assert!(metadata.sections.iter().any(|name| name == "writer.table"));
+    assert!(metadata.hamming.is_some());
+    assert!(metadata.memory.is_none());
+    let mut sorted = metadata.sections.clone();
+    sorted.sort();
+    assert_eq!(metadata.sections, sorted);
+}
+
+#[test]
+fn contract_provenance_binds_identity_and_preserves_feature_bytes() {
+    let snap = synthetic_fbs_trunk(345);
+    let base = super::export_fbs_trunk_uorlut01_with(&snap, super::FbsExportSnaps::SNAPPED)
+        .expect("base export");
+    let without = super::export_fbs_trunk_uorlut01_with_provenance(
+        &snap,
+        super::FbsExportSnaps::SNAPPED,
+        None,
+        0,
+        None,
+    )
+    .expect("no-provenance export");
+    assert_eq!(without, base);
+
+    let provenance = super::FbsExportProvenance {
+        stack_contract: super::StackContractProvenance {
+            source: "conformance/stack/fbs-arm-r.toml".to_owned(),
+            sha256: "a".repeat(64),
+            semantic_blake3: "c".repeat(64),
+        },
+        tokenizer_sha256: "b".repeat(64),
+    };
+    let with = super::export_fbs_trunk_uorlut01_with_provenance(
+        &snap,
+        super::FbsExportSnaps::SNAPPED,
+        None,
+        0,
+        Some(&provenance),
+    )
+    .expect("provenance export");
+    assert_ne!(with, base);
+    let metadata = super::inspect_uorlut01(&with).expect("provenance metadata");
+    assert_eq!(metadata.schema, super::STACK_FBS_BOUND_SCHEMA);
+    assert_eq!(
+        metadata.source["stack_contract"]["source"],
+        "conformance/stack/fbs-arm-r.toml"
+    );
+    assert_eq!(
+        metadata.source["stack_contract"]["sha256"],
+        "a".repeat(64)
+    );
+    assert_eq!(
+        metadata.source["stack_contract"]["semantic_blake3"],
+        "c".repeat(64)
+    );
+    assert_eq!(metadata.source["tokenizer_sha256"], "b".repeat(64));
+    assert_eq!(
+        metadata.shape,
+        super::inspect_uorlut01(&base).expect("base metadata").shape
+    );
+    assert_eq!(
+        metadata.sections,
+        super::inspect_uorlut01(&base).expect("base metadata").sections
+    );
+    assert!(super::IntegerStackModel::parse(&with)
+        .expect("bound model")
+        .require_tokenizer_sha256(&"b".repeat(64))
+        .is_ok());
+    assert!(matches!(
+        super::IntegerStackModel::parse(&with)
+            .expect("bound model")
+            .require_tokenizer_sha256(&"d".repeat(64)),
+        Err(StackError::TokenizerBinding { .. })
+    ));
+
+    for (field, value) in [
+        ("source", serde_json::json!("")),
+        ("sha256", serde_json::json!("a")),
+        ("semantic_blake3", serde_json::json!(7)),
+    ] {
+        let broken = with.clone();
+        let header_len =
+            u64::from_le_bytes(broken[8..16].try_into().expect("header length")) as usize;
+        let mut header: Value =
+            serde_json::from_slice(&broken[16..16 + header_len]).expect("header");
+        header["source"]["stack_contract"][field] = value;
+        let replacement = serde_json::to_vec(&header).expect("header");
+        let mut candidate = Vec::new();
+        candidate.extend_from_slice(&broken[..8]);
+        candidate.extend_from_slice(&(replacement.len() as u64).to_le_bytes());
+        candidate.extend_from_slice(&replacement);
+        candidate.resize(candidate.len().div_ceil(64) * 64, 0);
+        candidate.extend_from_slice(&broken[((16 + header_len).div_ceil(64)) * 64..]);
+        assert!(super::inspect_uorlut01(&candidate).is_err());
+    }
+    assert!(
+        super::inspect_uorlut01(&with_header(&with, |header| {
+            header["source"].as_object_mut().unwrap().remove("stack_contract");
+        }))
+        .is_err(),
+        "a partial binding is refused"
+    );
+    assert!(
+        super::inspect_uorlut01(&with_header(&with, |header| {
+            header["source"]["tokenizer_sha256"] = json!("b");
+        }))
+        .is_err(),
+        "a malformed tokenizer binding is refused"
+    );
+}
+
+#[test]
+fn a_bound_point_key_stays_on_uor_r4_lut_stack_10() {
+    let bytes = point_key_test_stack(false);
+    let legacy_with_note = with_header(&bytes, |header| {
+        header["source"]["tokenizer_sha256"] = json!("b".repeat(64));
+    });
+    assert_eq!(
+        IntegerStackModel::parse(&legacy_with_note)
+            .expect("legacy provenance remains readable")
+            .tokenizer_sha256(),
+        None
+    );
+    let bound = with_header(&bytes, |header| {
+        header["schema"] = json!(super::STACK_FBS_BOUND_SCHEMA);
+        header["source"]["stack_contract"] = json!({
+            "source": "conformance/stack/fbs-arm-r.toml",
+            "sha256": "a".repeat(64),
+            "semantic_blake3": "c".repeat(64),
+        });
+        header["source"]["tokenizer_sha256"] = json!("b".repeat(64));
+    });
+    let image = synthetic_point_key(&bound, 5);
+    let with_point = super::add_point_key_uorlut01(&bound, &image).expect("bound point key");
+    let (header, _) = header_and_data(&with_point);
+    assert_eq!(header["schema"], super::STACK_FBS_BOUND_SCHEMA);
+    assert_eq!(
+        header["source"]["stack_contract"]["semantic_blake3"],
+        "c".repeat(64)
+    );
+    assert_eq!(header["source"]["tokenizer_sha256"], "b".repeat(64));
+    let model = IntegerStackModel::parse(&with_point).expect("bound point-key model");
+    model
+        .require_tokenizer_sha256(&"b".repeat(64))
+        .expect("matching tokenizer");
+    assert!(matches!(
+        model.require_tokenizer_sha256(&"d".repeat(64)),
+        Err(StackError::TokenizerBinding { .. })
+    ));
+}
+
 /// claude-188: the exporter refuses a Hamming read the trunk cannot carry.
 #[test]
 fn malformed_hamming_reads_are_refused() {
@@ -6017,6 +6300,10 @@ fn turn_memory_moves_the_readout_point() {
         let mv = mv.expect("a keyed row").clone();
         let (stored, weight) = if opening_hit { (42u32, 0.5f32) } else { (43, 0.25) };
         assert_eq!(mv.stored, Some(stored), "row {row}");
+        let observed = session.last_memory_move_state().expect("public move state");
+        assert_eq!(observed.key, mv.key);
+        assert_eq!(observed.stored, mv.stored);
+        assert_eq!(observed.opening, mv.opening);
         assert_eq!(session.fbs_norm_output_before_memory().len(), width);
         let target = session.fbs_writer_row(stored).expect("writer row");
         let expected = moved(session.fbs_norm_output_before_memory(), target, weight);
@@ -6728,6 +7015,40 @@ fn a_nearest_stack_serves_the_whole_tables_nearest_token() {
         }
     }
     assert!(differ > 0, "the writer's pick and the nearest token differ somewhere");
+}
+
+/// claude-348: the nearest scan stops reading a row once its partial distance passes the best so
+/// far. With every table row present twice, each query's nearest distance is tied between an id
+/// and its copy, and the served token is still the smaller id of the tied nearest rows, as a scan
+/// that reads every value finds it.
+#[test]
+fn the_early_stopping_nearest_scan_keeps_the_smaller_id_on_a_tie() {
+    let mut snap = synthetic_fbs_trunk(20261110);
+    snap.readout_nearest = true;
+    let (vocab, d) = (snap.vocab, snap.width);
+    let half = vocab / 2;
+    let (low, high) = snap.embed.split_at_mut(half * d);
+    high[..half * d].copy_from_slice(low);
+    let model = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&snap).expect("export")).expect("parse");
+    let table = model.fbs_image().expect("an FBS model").writer_table.to_vec();
+    assert!(table[..half * d] == table[half * d..2 * half * d], "every row is in the table twice");
+    let mut ties = 0usize;
+    for run in 0..4usize {
+        let mut session = model.session();
+        for step in 0..model.shape().context {
+            let token = ((step * 5 + run * 13 + 1) % vocab) as u32;
+            let near = session.step_native(token).expect("nearest step");
+            let distances: Vec<i64> = table
+                .chunks_exact(d)
+                .map(|row| near.query_q12.iter().zip(row).map(|(&x, &v)| (i64::from(x) - i64::from(v)).abs()).sum())
+                .collect();
+            let least = *distances.iter().min().expect("a table");
+            let first = distances.iter().position(|&l1| l1 == least).expect("the least") as u32;
+            ties += usize::from(distances.iter().filter(|&&l1| l1 == least).count() > 1);
+            assert_eq!(near.token, first, "run {run} step {step}: the smaller id of the tied nearest rows");
+        }
+    }
+    assert_eq!(ties, 4 * model.shape().context, "every query's nearest distance is tied");
 }
 
 /// claude-231: the point key's override of a missed opening holds under the nearest head, and the

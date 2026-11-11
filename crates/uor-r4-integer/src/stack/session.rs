@@ -540,6 +540,8 @@ pub struct IntegerStackModel {
     snapped: bool,
     transport_snap: Option<StackTransportSnap>,
     sha256: String,
+    /// Tokenizer identity carried by a bound `/10` artifact.
+    tokenizer_sha256: Option<String>,
     embed: PackedMatrix,
     head: PackedMatrix,
     pointer: Option<Box<Pointer>>,
@@ -972,6 +974,15 @@ impl IntegerStackModel {
                 }
             }
         }
+        let tokenizer_sha256 = if artifact.schema == super::STACK_FBS_BOUND_SCHEMA {
+            artifact
+                .source
+                .get("tokenizer_sha256")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+        } else {
+            None
+        };
         Ok(Self {
             head_dim: shape.head_dim(),
             lorentz: shape.lorentz(),
@@ -981,6 +992,7 @@ impl IntegerStackModel {
             shape,
             numerics,
             sha256: artifact.sha256,
+            tokenizer_sha256,
             embed,
             head,
             pointer,
@@ -1020,6 +1032,25 @@ impl IntegerStackModel {
 
     pub fn shape(&self) -> &StackShape {
         &self.shape
+    }
+
+    /// The tokenizer identity embedded by a bound `/10` artifact.
+    pub fn tokenizer_sha256(&self) -> Option<&str> {
+        self.tokenizer_sha256.as_deref()
+    }
+
+    /// Refuse a tokenizer whose SHA-256 differs from the artifact's binding.
+    /// Legacy artifacts carry no binding and are accepted unchanged.
+    pub fn require_tokenizer_sha256(&self, actual: &str) -> Result<(), StackError> {
+        if let Some(expected) = self.tokenizer_sha256() {
+            if expected != actual {
+                return Err(StackError::TokenizerBinding {
+                    expected: expected.to_owned(),
+                    actual: actual.to_owned(),
+                });
+            }
+        }
+        Ok(())
     }
 
     /// The integer conventions declared by the artifact.
@@ -1549,6 +1580,7 @@ impl IntegerStackModel {
                 cells: vec![0; if self.fbs.is_some() { 256 } else { 0 }],
                 native_kept: vec![0; self.fbs.as_ref().map_or(0, |f| f.kept_cells)],
                 native_token: 0,
+                read_only: false,
                 content_votes: vec![
                     0;
                     if self.content_readout.is_some() {
@@ -1753,6 +1785,17 @@ pub struct SnapTraceEntry {
     pub root: usize,
 }
 
+/// One step's turn-memory move, exposed for observation only.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MemoryMoveState {
+    /// The key formed for this row.
+    pub key: Vec<u32>,
+    /// The token the row stored or read, when it named one.
+    pub stored: Option<u32>,
+    /// Whether this was the reply's opening row.
+    pub opening: bool,
+}
+
 /// The trace buffer: one root index per (position, recurrence layer, lane),
 /// in step order. Writes are plain stores — no allocation in a step.
 struct SnapTrace {
@@ -1827,6 +1870,9 @@ struct Buffers {
     cells: Vec<i64>,
     native_kept: Vec<u32>,
     native_token: u32,
+    /// Set for the length of [`IntegerStackSession::read_step`]: under the nearest head the
+    /// step chooses no token (claude-348).
+    read_only: bool,
     /// Reused per-target vote counts and epochs for the optional content
     /// readout. Allocated with the session, never inside `serve_step`.
     content_votes: Vec<u32>,
@@ -2144,6 +2190,17 @@ impl IntegerStackSession<'_> {
     /// (claude-224), or `None` where it did not serve. Read-only, for the panel decode.
     pub fn last_point_key(&self) -> Option<(u32, i64)> {
         self.memory.last_point
+    }
+
+    /// The latest FBS step's turn-memory move, copied for diagnostic readers.
+    /// Like [`Self::last_point_key`], it is read after the step and is never
+    /// consulted by serving.
+    pub fn last_memory_move_state(&self) -> Option<MemoryMoveState> {
+        self.memory.last_move.as_ref().map(|moved| MemoryMoveState {
+            key: moved.key.clone(),
+            stored: moved.stored,
+            opening: moved.opening,
+        })
     }
 
     /// Clear the reply start: no row is keyed or moved, and the turn memory's moves are off.
@@ -2883,14 +2940,29 @@ impl IntegerStackSession<'_> {
     }
 
     /// The native writer or point-key fallback selected by the latest FBS step,
-    /// before any serving content-readout override.
+    /// before any serving content-readout override. `None` after a
+    /// [`Self::read_step`] that chose no token.
     pub fn last_native_token(&self) -> Option<u32> {
-        self.model.fbs.as_ref().map(|_| self.b.native_token)
+        let chosen = self.b.native_token;
+        self.model.fbs.as_ref().and_then(|_| (chosen != NO_CHOICE).then_some(chosen))
     }
 
     /// The final Q12 writer query produced by the latest FBS step.
     pub fn last_query_q12(&self) -> Option<&[i32]> {
         self.model.fbs.as_ref().map(|_| self.b.query_q12.as_slice())
+    }
+
+    /// Feed one token whose successor the caller already holds (a prompt token before the
+    /// last), so the step need not choose one (claude-348).
+    /// - It runs [`Self::step`]'s kernels and leaves the session's state as `step` leaves it.
+    /// - **A SpiralCore/FBS model with the nearest head** skips the whole-table scan, and
+    ///   [`Self::last_native_token`] is `None` until the next choosing step.
+    /// - **The writer head and a dense stack** step in full.
+    pub fn read_step(&mut self, token: u32) -> Result<(), StackError> {
+        self.b.read_only = true;
+        let stepped = self.step(token).map(|_| ());
+        self.b.read_only = false;
+        stepped
     }
 
     /// Feed one token and return the served greedy next token and its margin in Q16 units: what
@@ -3726,10 +3798,16 @@ fn stack_step_fbs(
         *q = to_exp_i32(v, NORM_FINE_EXP, Q12_EXP).clamp(-32768, 32767);
     }
     // A model trained with the cell or nearest objective decodes as the whole table's nearest token
-    // (integer-nearest-readout, claude-231); it keeps no cells.
+    // (integer-nearest-readout, claude-231); it keeps no cells. A read step's choice is never
+    // used and the scan only reads, so a read step skips it and leaves the session as a full
+    // step does (claude-348).
     b.native_token = if s.head_nearest() {
         b.native_kept.fill(0);
-        stack_whole_table_nearest(fbs, s.vocab, &b.query_q12)
+        if b.read_only {
+            NO_CHOICE
+        } else {
+            stack_whole_table_nearest(fbs, s.vocab, &b.query_q12)
+        }
     } else {
         stack_native_writer(fbs, s.vocab, &b.query_q12, &mut b.cells, &mut b.native_kept)
     };
@@ -3752,21 +3830,42 @@ fn stack_step_fbs(
     Ok(())
 }
 
+/// What `native_token` holds after a read step under the nearest head: no token. It is outside
+/// every vocabulary, so stepping it is refused (claude-348).
+const NO_CHOICE: u32 = u32::MAX;
+
+/// How many values the nearest scan reads between two looks at its bound (claude-348).
+const NEAREST_BLOCK: usize = 16;
+
 /// The whole-table nearest token to the query (`-L1` at Q12 over every
 /// writer-table row, ties to the smaller id): the readout a model trained
 /// with the cell objective decodes, timed beside the writer. It reads only.
+/// Since claude-348 it stops reading a row whose partial distance has passed
+/// the best full distance so far; every term is non-negative, so the token
+/// is the one a scan of every value finds.
 fn stack_whole_table_nearest(fbs: &FbsModel, vocab: usize, q: &[i32]) -> u32 {
     let d = q.len();
-    let (mut token, mut token_score) = (u32::MAX, i64::MIN);
+    let (mut token, mut best) = (u32::MAX, i64::MAX);
     let mut at = 0usize;
     for candidate in 0..vocab {
+        let row = &fbs.writer_table[at..at + d];
         let mut sum = 0i64;
-        for (&x, &t) in q.iter().zip(&fbs.writer_table[at..at + d]) {
-            sum = sum.wrapping_add(i64::from(core::hint::black_box(x).abs_diff(i32::from(t))));
+        let mut whole = true;
+        for (xs, ts) in q.chunks(NEAREST_BLOCK).zip(row.chunks(NEAREST_BLOCK)) {
+            for (&x, &t) in xs.iter().zip(ts) {
+                sum = sum.wrapping_add(i64::from(core::hint::black_box(x).abs_diff(i32::from(t))));
+            }
+            // A row already farther than the best can neither win nor tie: stop reading it
+            // (claude-348). The answer is the full scan's.
+            if sum > best {
+                whole = false;
+                break;
+            }
         }
-        let score = sum.wrapping_neg();
-        if score > token_score {
-            (token, token_score) = (candidate as u32, score);
+        // Rows go in id order and only a strictly nearer one replaces the best, so a tie keeps
+        // the smaller id.
+        if whole && sum < best {
+            (token, best) = (candidate as u32, sum);
         }
         at += d;
     }

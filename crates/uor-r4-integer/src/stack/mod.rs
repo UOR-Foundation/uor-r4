@@ -93,12 +93,13 @@ pub use format::{
 };
 pub use format::{
     decode_grid_code, encode_grid_code, export_fbs_trunk_uorlut01, export_fbs_trunk_uorlut01_carry, export_fbs_trunk_uorlut01_chain,
-    export_fbs_trunk_uorlut01_with, export_float_trunk_uorlut01, stack_schema_for, FbsExportSnaps,
+    export_fbs_trunk_uorlut01_with, export_fbs_trunk_uorlut01_with_provenance, export_float_trunk_uorlut01, inspect_uorlut01, stack_schema_for, FbsExportSnaps,
     FbsQuatMode, FbsReferenceSnaps, FbsRoutes, FbsTieMargins, FbsTrunkLayer, FbsTrunkSnapshot,
     FbsWriterOutput, Fixed, FloatTrunkLayer, FloatTrunkMixer, FloatTrunkRead, FloatTrunkRecurrence,
     FloatTrunkSnapshot, StackMemory, StackNumerics, StackPointer, StackReadSelect, StackShape,
-    StackTransportSnap, GROUP, MAGIC, MAX_POINTER_DIM, MAX_READ_SELECT, STACK_FBS_RAW_SCHEMA,
-    STACK_FBS_SCHEMA, STACK_POINTER_SCHEMA, STACK_READ_SCHEMA, STACK_SCHEMA,
+    FbsExportProvenance, StackArtifactMetadata, StackContractProvenance, StackTransportSnap, GROUP, MAGIC, MAX_POINTER_DIM, MAX_READ_SELECT, STACK_FBS_RAW_SCHEMA,
+    STACK_FBS_BOUND_SCHEMA, STACK_FBS_SCHEMA, STACK_POINTER_SCHEMA, STACK_READ_SCHEMA,
+    STACK_SCHEMA,
 };
 pub use format::{
     FbsHammingRead, FbsHammingSnapshot, StackHamming, HAMMING_KEPT, HAMMING_MARGIN_EXP,
@@ -130,9 +131,9 @@ pub use session::{
     sample_mean_sd_t_ci95, student_t_0975, student_t_975, validate_protocol_v3_energy_receipt,
     validate_protocol_v3_energy_receipt_with_mode, verify_step_disassembly_text, FbsImage,
     FbsLayerImage, FbsMapImage, IntegerStackModel, IntegerStackSession, NativeStep,
-    ProtocolV3ValidationError, SerializedStackLayerState, SerializedStackSession, SnapTraceEntry,
-    StackParameterBreakdown, StackPhaseParameters, StepPhaseTimingNs, CONVOLUTION_WIDTH,
-    STACK_SESSION_SCHEMA,
+    MemoryMoveState, ProtocolV3ValidationError, SerializedStackLayerState, SerializedStackSession,
+    SnapTraceEntry, StackParameterBreakdown, StackPhaseParameters, StepPhaseTimingNs,
+    CONVOLUTION_WIDTH, STACK_SESSION_SCHEMA,
 };
 
 /// SHA-256 of the 120 unit icosians of 2I (the transport snap's roots) as
@@ -216,6 +217,10 @@ pub enum StackError {
     ContentReadout(String),
     /// A prompt-reply retrieval sidecar is malformed, foreign or unsafe.
     PromptReply(String),
+    /// A bound artifact was presented with a different tokenizer.
+    TokenizerBinding { expected: String, actual: String },
+    /// A `/10` artifact's mandatory identity fields are missing or malformed.
+    ArtifactBinding(String),
 }
 
 impl fmt::Display for StackError {
@@ -292,6 +297,11 @@ impl fmt::Display for StackError {
             Self::Threads(reason) => write!(f, "stack engine threads: {reason}"),
             Self::ContentReadout(reason) => write!(f, "stack content readout: {reason}"),
             Self::PromptReply(reason) => write!(f, "stack prompt reply: {reason}"),
+            Self::TokenizerBinding { expected, actual } => write!(
+                f,
+                "bound artifact names tokenizer {expected}, supplied tokenizer is {actual}"
+            ),
+            Self::ArtifactBinding(reason) => write!(f, "stack artifact binding: {reason}"),
         }
     }
 }
