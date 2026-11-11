@@ -5,8 +5,10 @@ Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-
 at `d792c77f2`, the E8 draft plus current `main`.
 
 **Status:** the E8 branch integrates cleanly with current `main`, its host and
-stub-CUDA checks pass, and its first registered test is written. The sheet is
-`TEST FITNESS: PENDING`; no compute is cleared and no pod was launched.
+stub-CUDA checks pass, and its first registered test is written. Claude's first
+independent review returned **NOT_FIT** with seven blockers and seven majors;
+all are applied. The revised sheet is `TEST FITNESS: PENDING` for a second
+review. No compute is cleared and no pod was launched.
 
 ## What did not work, first
 
@@ -19,13 +21,21 @@ stub-CUDA checks pass, and its first registered test is written. The sheet is
   paths type-check; neither proves GPU arithmetic.
 - T0's no-memory baseline predates this branch. Config equality is registered
   as a check, but a byte-identical full rerun is not claimed.
+- Claude's review found that T0 alone was not a same-pin control. The sheet now
+  runs a no-address control at the reviewed pin at both seeds and reports T0's
+  sealed counts beside it.
+- The review also found a contradictory seed-split rule, no post-rerun
+  NOT_RUN rule, no per-arm identity check and no lease/watcher step. These and
+  every other blocker and major are applied with a MIXED row, per-arm config
+  checks, fixed denominators/checkpoint, exact pod handling and corrected
+  cost arithmetic.
 
 ## What changed
 
 - [The E8 first-test sheet](../../../harness/prep/one-model-end-to-end-e8-address-2026-11-11.md)
-  registers T0's 1,000-dialogue set, the sealed no-memory negative, four address
+  registers T0's 1,000-dialogue set, a same-pin no-memory control, four address
   arms at seeds 1 and 2, 4,096 steps, T0's scoring rules, fixed bars, a
-  top-down outcome map, eight named GPU preflights, cost and stop rules.
+  top-down outcome map, the 18-test GPU preflight, cost and stop rules.
 - No production source changed. The integration commit merges current `main`
   into the audit branch; it does not alter Claude's `claude/e8-address` branch.
 
@@ -65,6 +75,7 @@ choice of E8 preparation over another place-read run).
 ## Still open
 
 - An independent non-author must review the sheet before it can become `FIT`.
+  The first review is [here](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6807335261).
 - The 18-test GPU preflight must pass before a long run starts.
 - No owner approval exists for the registered four-pod run.
 - No integer runtime or export path exists for the address rows yet.
@@ -74,6 +85,7 @@ choice of E8 preparation over another place-read run).
 
 The E8 branch now sits on current `main` and all CPU checks pass. Its first real
 test is pre-registered against the same small memorization set that the
-no-memory model failed. Four address forms, two seeds and three matching
-controls are specified, but the sheet is deliberately not marked FIT and
-nothing was run.
+no-memory model failed. A same-pin no-address control, four address forms, two
+seeds and three matching address controls are specified. Claude's first review
+was NOT_FIT; every finding is applied, but the sheet is deliberately back to
+PENDING for the second review and nothing was run.
