@@ -317,8 +317,16 @@ pub fn clauses(x: &[u32], content: &Range<usize>, punct: &HashSet<u32>) -> Vec<R
     parts
 }
 
+/// The user turn the reply at `reply` answers, and the user turns before that one. A reply
+/// answers the latest user turn once, as the place register reads a conversation (claude-351):
+/// a model turn that follows another model turn, with no user turn between, answers nothing.
 fn user_turns_before(doc: &[Turn], reply: usize) -> Option<(usize, Vec<usize>)> {
-    let asked = (0..reply).rev().find(|&i| doc[i].role == Role::User)?;
+    let asked = (0..reply)
+        .rev()
+        .find(|&i| matches!(doc[i].role, Role::User | Role::Assistant))?;
+    if doc[asked].role == Role::Assistant {
+        return None;
+    }
     Some((
         asked,
         (0..asked).filter(|&i| doc[i].role == Role::User).collect(),
@@ -1696,6 +1704,8 @@ pub fn place_kit(
         places,
     };
     kit.check().map_err(|e| e.to_string())?;
+    // The marks a trainer's tables would refuse are refused here, before the kit is written.
+    kit.marks.check(vocab).map_err(|e| e.to_string())?;
     Ok(kit)
 }
 
@@ -2512,6 +2522,38 @@ mod tests {
         ] {
             assert!(out.iter().any(|line| line.contains(needle)), "missing {needle} in {out:#?}");
         }
+    }
+
+    #[test]
+    fn a_second_model_turn_with_no_user_turn_between_answers_nothing() {
+        // A reply answers the latest user turn once, as the register reads it. The memory line
+        // stands before the second of two model turns, so that turn is the recall reply; the
+        // register arms nothing there, so the census counts no case and the kit labels no place.
+        let turns = [
+            "User|my friend is maya .",
+            "Assistant|ok .",
+            "User|who is my friend",
+            "Assistant|ok .",
+            "Assistant|it's maya .",
+        ];
+        let [(plain, plain_mask), (lined, lined_mask)] = twins(&turns, "System|Memory : maya .");
+        let decode = |ids: &[u32]| words(ids).replace(" :", ":").replace(" .", ".");
+        let encode = |text: &str| ids(text);
+        let codec = Codec {
+            decode: &decode,
+            encode: &encode,
+        };
+        let docs = documents(&plain, &plain_mask, &marks()).expect("corpus");
+        let lined_docs = documents(&lined, &lined_mask, &marks()).expect("corpus");
+        let lines = pair_lines(&plain, &docs, &lined, &lined_docs).expect("twins");
+        let (replies, _) = cases(&plain, &docs, &lined, &lines, &codec).expect("cases");
+        // The one case is the "ok" that answers "who is my friend", a general reply.
+        let kinds: Vec<Kind> = replies.iter().map(|r| r.kind).collect();
+        assert_eq!(kinds, [Kind::General]);
+        let sha = "the split's hash".to_owned();
+        let kit = place_kit((&plain, &plain_mask), (&lined, &lined_mask), &marks(), &codec, WORDS.len(), sha)
+            .expect("a kit");
+        assert!(kit.places.is_empty(), "{:?}", kit.places);
     }
 
     #[test]

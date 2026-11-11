@@ -8423,7 +8423,7 @@ fn the_place_read_offers_the_tokens_point_through_the_copy_mix() {
 /// zero, the test `fbs_snapshot::place_pick` makes without the division.
 #[test]
 #[allow(clippy::single_range_in_vec_init)] // one user turn, as a slice of ranges
-fn the_place_picks_margin_is_the_copy_weights() {
+fn a_place_pick_is_inside_its_margin_exactly_when_the_copy_weight_is_positive() {
     for margin in [0, 1, 65_535, 65_536, 65_537, 3 << 16, (9 << 16) + 77, i32::MAX] {
         for d in 0..=64u32 {
             let inside = super::place_pick(&[0], &[margin], &[2..3], |_, _| if d == 64 { u64::MAX } else { (1u64 << d) - 1 }).is_some();

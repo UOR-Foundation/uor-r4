@@ -2435,6 +2435,15 @@ impl PlaceRead {
         Ok(self.counts()?.clone())
     }
 
+    /// A checkpoint's line in a run's `place.jsonl`: [`Self::reading`] with the step it was
+    /// taken at. The tally starts again, as it does for the reading.
+    pub fn line(&self, step: usize) -> Result<serde_json::Value> {
+        let mut line = serde_json::to_value(self.reading()?)
+            .map_err(|e| invalid(format!("the place reading does not serialize: {e}")))?;
+        line["step"] = step.into();
+        Ok(line)
+    }
+
     fn saved(&self) -> Result<PlaceSaved> {
         let stop = (0..self.stop.len() as u32).filter(|&v| self.stop[v as usize]).collect();
         Ok(PlaceSaved { marks: self.marks.clone(), stop, counts: self.counts()?.clone() })
@@ -6344,6 +6353,23 @@ mod place_tests {
             assert_eq!(step_on(&place, &labels, false).1, Vec::new());
             untouched(&place);
         }
+    }
+
+    /// A checkpoint's line in `place.jsonl` is the reading and the step, and taking it starts
+    /// the tally again, so the next line with no pull between has no mean pull.
+    #[test]
+    fn a_checkpoints_place_line_is_the_reading_and_the_step() {
+        let place = place();
+        place.counts().expect("counts").arm[ASK as usize] = 1;
+        place.tallied([[2, 1], [0, 3]], Some(0.25)).expect("a tally");
+        let line = place.line(40).expect("a line");
+        let want = serde_json::json!({
+            "armed": 1, "opening": 0, "arm_votes": [2, 1], "open_votes": [0, 3], "pull_mean": 0.25, "step": 40,
+        });
+        assert_eq!(line, want);
+        let next = place.line(80).expect("a line");
+        let want = serde_json::json!({ "armed": 1, "opening": 0, "arm_votes": [0, 0], "open_votes": [0, 0], "step": 80 });
+        assert_eq!(next, want);
     }
 
     #[test]

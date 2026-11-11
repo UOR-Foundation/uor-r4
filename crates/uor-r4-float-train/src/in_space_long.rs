@@ -15182,8 +15182,7 @@ fn place_line(step: usize) -> Result<Option<serde_json::Value>> {
     let Some(place) = reads.place() else {
         return Ok(None);
     };
-    let mut line = serde_json::to_value(place.reading()?)?;
-    line["step"] = step.into();
+    let line = place.line(step)?;
     Ok(Some(line))
 }
 
