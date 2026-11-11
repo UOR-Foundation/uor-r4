@@ -3,12 +3,12 @@
 Lab: deepseek. Item:
 [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md)
 (#3407). Order: [ORDER.md](./ORDER.md). Base code: `7a450a88f`; launch code:
-`7d8e8a9ae75072853579a7816eb790d110c3ccc9`; contract implementation source:
+`7ced32856dfffe291da94d3c48c52e52f56509a0`; contract implementation source:
 `894869f262973d64c6d44661fa71afaa7ebe9241`. All invoked-script hashes and
 the exact reviewed execution-head procedure are in
 [`launch-pins.env`](./launch-pins.env).
 
-**Status:** pre-run, pending fresh-context review 6. No GPU job has started.
+**Status:** pre-run, pending fresh-context review 7. No GPU job has started.
 
 ## What did not work
 
@@ -29,7 +29,12 @@ and a healthy-run cancellation that conflicted with CHARTER §5.4. Those
 findings were repaired. A fifth review then found that preflight reports were
 field-checked but not byte-pinned, a fixed reservation path could overwrite an
 older claim, a failed TERM had no escalation, and the score command graph
-omitted `--out`. Those findings are also repaired in the current registration.
+omitted `--out`. Those findings were repaired. A sixth review then found that
+P2 used 914 rows instead of the registered 882, caller-supplied run IDs could
+bypass the 128-bit nonce requirement, unsealed exits did not always preserve a
+pending-stop record, the command graph still abstracted required paths, and
+pre-watcher cleanup did not record its billed interval. Those findings are
+repaired in the current registration.
 
 ## What changed
 
@@ -42,11 +47,13 @@ score, exact file-set failure sealing, a post-readback teardown sentinel,
 persistent cumulative time/cost accounting, stage heartbeats and full
 model/table/base row identity checks. The contract now names the implementing
 source, describes all four score commands plus classification and preflight,
-and an absent high-entropy prefix is claimed by an uploaded/read-back
+and an absent internally generated 128-bit prefix is claimed by an uploaded/read-back
 per-run object before model work. Preflight reports are byte-pinned as well as
 structurally checked. Healthy ceiling crossings are explicitly extended and
 persisted instead of terminating a training run; stalled process groups are
 TERMed, retried, then KILLed with an unsealed pod preserved.
+P2 now counts exactly the 882 scored non-copy rows, with the 32 unscored
+general rows excluded. Job and scoring failures write row 0 explicitly.
 
 ## Measurements
 
@@ -77,11 +84,11 @@ kept the correction bounded and checked against the registered evidence path.
 
 ## Still open
 
-Review 6, the GPU smoke, bound export, held-out scenario reads, row
+Review 7, the GPU smoke, bound export, held-out scenario reads, row
 classification, final cost and post-run exact-head review remain. This file
 will be replaced with the completed report before merge.
 
 ## Plain summary
 
-The registration and its control instrument are now ready for review 6. No
+The registration and its control instrument are now ready for review 7. No
 model result has been claimed.
