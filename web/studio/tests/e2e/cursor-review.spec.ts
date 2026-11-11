@@ -576,12 +576,70 @@ test.describe('Task 21 changes review and local comments', () => {
     });
 });
 
+interface RecordedRequest {
+    method: string;
+    url: string;
+}
+
+function recordRequests(page: Page): RecordedRequest[] {
+    const requests: RecordedRequest[] = [];
+    page.on('request', (request) => {
+        requests.push({ method: request.method(), url: request.url() });
+    });
+    return requests;
+}
+
+async function settleInitialRequests(page: Page, requests: RecordedRequest[]): Promise<void> {
+    await page.waitForLoadState('networkidle', { timeout: 10_000 });
+    let last = requests.length;
+    let quietSince = Date.now();
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+        await page.waitForTimeout(50);
+        if (requests.length !== last) {
+            last = requests.length;
+            quietSince = Date.now();
+        } else if (Date.now() - quietSince >= 300) {
+            return;
+        }
+    }
+}
+
+async function assertNoNewRequests(
+    page: Page,
+    requests: RecordedRequest[],
+    before: number,
+    action: string,
+): Promise<void> {
+    let last = requests.length;
+    let quietSince = Date.now();
+    const deadline = Date.now() + 3_000;
+    while (Date.now() < deadline) {
+        await page.waitForTimeout(50);
+        if (requests.length !== last) {
+            last = requests.length;
+            quietSince = Date.now();
+        } else if (Date.now() - quietSince >= 300) {
+            break;
+        }
+    }
+    const added = requests.slice(before);
+    expect(
+        added,
+        `${action} issued a network request:\n${added
+            .map((request) => `${request.method} ${request.url}`)
+            .join('\n')}`,
+    ).toHaveLength(0);
+}
+
 test.describe('Task 22 read-only PR and digest-bound artifacts', () => {
     test('pr_tab_is_read_only_and_explicitly_unavailable_without_a_hosted_integration', async ({ page }) => {
+        const requests = recordRequests(page);
         await openStudio(page);
-        const requests: string[] = [];
-        page.on('request', (request) => requests.push(request.url()));
+        await settleInitialRequests(page, requests);
+        expect(requests.length).toBeGreaterThan(0);
 
+        const before = requests.length;
         await page.locator('#studio-typed-root [data-pane-target="pr"]').click();
         const panel = page.locator('#studio-typed-root [data-pr-panel]');
         await expect(panel).toBeVisible();
@@ -595,77 +653,91 @@ test.describe('Task 22 read-only PR and digest-bound artifacts', () => {
         ).toHaveCount(0);
         await expect(panel).not.toContainText(/restore checkpoint/i);
         await expect(panel).not.toContainText(/github connected/i);
-        expect(requests.filter((url) => /github\.com|pull\/\d+|merge/i.test(url))).toEqual([]);
+        await assertNoNewRequests(page, requests, before, 'Opening the PR tab');
     });
 
     test('artifact_preview_reads_verified_browser_bytes_without_a_network_request', async ({ page }) => {
+        const requests = recordRequests(page);
         await openStudio(page);
         expect((await call<{ phase: string }>(page, 'open')).phase).toBe('ready');
         const artifactId = `art_${'a1'.repeat(32)}`;
         const text = 'digest-bound local artifact';
         const seeded = await seedArtifactForReview(page, artifactId, text);
-
-        const requests: string[] = [];
-        page.on('request', (request) => requests.push(request.url()));
+        await settleInitialRequests(page, requests);
+        expect(requests.length).toBeGreaterThan(0);
 
         await page.locator('#studio-typed-root [data-pane-target="artifacts"]').click();
         const panel = page.locator('#studio-typed-root [data-artifact-panel]');
         await expect(panel).toBeVisible();
+        await settleInitialRequests(page, requests);
         const identity = panel.getByLabel('Artifact ID', { exact: true });
         await expect(identity).toBeVisible();
         await identity.fill(artifactId);
         await expect(identity).toHaveValue(artifactId);
-        await panel.getByRole('button', { name: 'Load artifact', exact: true }).click();
 
+        const before = requests.length;
+        await panel.getByRole('button', { name: 'Load artifact', exact: true }).click();
         const preview = panel.locator('[data-artifact-preview="text"]');
         await expect(preview).toBeVisible();
         await expect(preview).toHaveText(text);
         await expect(panel.locator('[data-artifact-metadata]')).toContainText(seeded.digest);
         await expect(panel.locator('[data-artifact-metadata]')).toContainText('text/plain');
         await expect(panel.locator('iframe')).toHaveCount(0);
-        expect(requests.filter((url) => url.includes(artifactId) || url.includes('example.com'))).toEqual([]);
+        await assertNoNewRequests(page, requests, before, 'Loading a local artifact');
 
         await page.reload();
         await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
         await expect.poll(async () => (await call<{ phase: string }>(page, 'open')).phase).toBe('ready');
         await page.locator('#studio-typed-root [data-pane-target="artifacts"]').click();
         const reloaded = page.locator('#studio-typed-root [data-artifact-panel]');
+        await expect(reloaded).toBeVisible();
+        await settleInitialRequests(page, requests);
         const reloadedIdentity = reloaded.getByLabel('Artifact ID', { exact: true });
         await reloadedIdentity.fill(artifactId);
         await expect(reloadedIdentity).toHaveValue(artifactId);
+
+        const beforeReloadLoad = requests.length;
         await reloaded.getByRole('button', { name: 'Load artifact', exact: true }).click();
         await expect(reloaded.locator('[data-artifact-preview="text"]')).toHaveText(text);
+        await assertNoNewRequests(page, requests, beforeReloadLoad, 'Loading a reloaded local artifact');
     });
 
     test('corrupt_artifact_and_expired_link_are_refused_without_preview_or_request', async ({ page }) => {
+        const requests = recordRequests(page);
         await openStudio(page);
         expect((await call<{ phase: string }>(page, 'open')).phase).toBe('ready');
         const corruptId = `art_${'c1'.repeat(32)}`;
         await seedArtifactForReview(page, corruptId, 'corrupt artifact', {
             digestOverride: `sha256:${'0'.repeat(64)}`,
         });
-
-        const requests: string[] = [];
-        page.on('request', (request) => requests.push(request.url()));
+        await settleInitialRequests(page, requests);
+        expect(requests.length).toBeGreaterThan(0);
 
         await page.locator('#studio-typed-root [data-pane-target="artifacts"]').click();
         const panel = page.locator('#studio-typed-root [data-artifact-panel]');
+        await expect(panel).toBeVisible();
+        await settleInitialRequests(page, requests);
         const identity = panel.getByLabel('Artifact ID', { exact: true });
         await identity.fill(corruptId);
         await expect(identity).toHaveValue(corruptId);
+
+        const beforeCorrupt = requests.length;
         await panel.getByRole('button', { name: 'Load artifact', exact: true }).click();
         await expect(panel.locator('[data-artifact-error]')).toContainText('failed verification');
         await expect(panel.locator('[data-artifact-preview]')).toHaveCount(0);
+        await assertNoNewRequests(page, requests, beforeCorrupt, 'Loading a corrupt artifact');
 
         const expired = `https://example.com/artifact?token=expired`;
         await identity.fill(expired);
         await expect(identity).toHaveValue(expired);
+
+        const beforeExpired = requests.length;
         await panel.getByRole('button', { name: 'Load artifact', exact: true }).click();
         await expect(panel.locator('[data-artifact-error]')).toContainText('Artifact ID must be art_');
         await expect(panel.locator('[data-artifact-preview]')).toHaveCount(0);
         await expect(identity).toHaveValue('');
         await expect(panel.locator('a[href*="example.com"]')).toHaveCount(0);
-        expect(requests.filter((url) => url.includes('example.com') || url.includes(corruptId))).toEqual([]);
+        await assertNoNewRequests(page, requests, beforeExpired, 'Submitting an expired artifact link');
     });
 });
 

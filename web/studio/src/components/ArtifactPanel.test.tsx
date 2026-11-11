@@ -112,6 +112,34 @@ async function readThroughHost(
     return client.readArtifact(input);
 }
 
+async function bridgeArtifactRead(
+    content: ArtifactContent,
+    requestedArtifactId = FULL64,
+): Promise<{ result: HostToolResult; client: AgentClient }> {
+    const bridge = new AgentTransportHostTransport({
+        readArtifact: async () => content,
+        hostCapabilities: async () => ({
+            tree: false,
+            changes: false,
+            readArtifact: true,
+            terminal: false,
+            git: false,
+            mcp: false,
+            approvals: false,
+        }),
+    } as unknown as AgentTransport);
+    const hostClient = new HostClient({ transport: bridge });
+    const result = await hostClient.execute({
+        tool: 'artifact.read',
+        arguments: {
+            artifact_id: requestedArtifactId,
+            start: 2,
+            end: 5,
+        },
+    });
+    return { result, client: new AgentClient({ hostClient }) };
+}
+
 async function renderArtifactPanel(props: {
     client: { readArtifact(input: ReadArtifactInput): Promise<ArtifactContent> } | null;
     reference?: unknown;
@@ -249,6 +277,117 @@ describe('ArtifactClient authority and bridge propagation', () => {
         });
     });
 
+    test('bridge_omits_artifact_reference_when_ranged_whole_digest_is_missing', async () => {
+        const returned = new TextEncoder().encode('234');
+        const digest = await sha256Bytes(returned);
+        const { result, client } = await bridgeArtifactRead({
+            artifactId: FULL64,
+            path: 'data.bin',
+            mediaType: 'application/octet-stream',
+            sizeBytes: returned.byteLength,
+            artifactSizeBytes: 10,
+            digest,
+            range: { start: 2, end: 5 },
+            bytes: returned,
+        });
+        const output = result.output as Record<string, unknown>;
+
+        expect(result.status).toBe('ok');
+        expect(output).toMatchObject({
+            artifact_id: FULL64,
+            artifact_size_bytes: 10,
+            size_bytes: 3,
+            digest,
+            range: { start: 2, end: 5 },
+        });
+        expect(output).not.toHaveProperty('whole_digest');
+        expect(result.artifact).toBeUndefined();
+
+        const content = await client.readArtifact({
+            artifactId: FULL64,
+            start: 2,
+            end: 5,
+        });
+        expect(content).toMatchObject({
+            sizeBytes: 3,
+            artifactSizeBytes: 10,
+            range: { start: 2, end: 5 },
+        });
+        expect(content.wholeDigest).toBeUndefined();
+    });
+
+    test('bridge_does_not_echo_requested_identity_when_source_omits_it', async () => {
+        const bytes = new TextEncoder().encode('hello');
+        const digest = await sha256Bytes(bytes);
+        const { result, client } = await bridgeArtifactRead({
+            path: 'legacy.txt',
+            mediaType: 'text/plain',
+            sizeBytes: bytes.byteLength,
+            digest,
+            bytes,
+        });
+        const output = result.output as Record<string, unknown>;
+
+        expect(result.status).toBe('ok');
+        expect(output).not.toHaveProperty('artifact_id');
+        expect(result.artifact).toBeUndefined();
+
+        const content = await client.readArtifact({ artifactId: FULL64 });
+        expect(content.artifactId).toBeUndefined();
+        expect(new TextDecoder().decode(content.bytes)).toBe('hello');
+    });
+
+    test('bridge_preserves_reported_mismatched_identity_and_client_refuses', async () => {
+        const bytes = new TextEncoder().encode('hello');
+        const digest = await sha256Bytes(bytes);
+        const { result, client } = await bridgeArtifactRead({
+            artifactId: OTHER64,
+            path: 'artifact.txt',
+            mediaType: 'text/plain',
+            sizeBytes: bytes.byteLength,
+            digest,
+            bytes,
+        });
+        const output = result.output as Record<string, unknown>;
+
+        expect(output).toMatchObject({ artifact_id: OTHER64 });
+        expect(result.artifact?.artifact_id).toBe(OTHER64);
+        await expect(
+            client.readArtifact({ artifactId: FULL64 }),
+        ).rejects.toMatchObject({ code: 'invalid_event' });
+    });
+
+    test('bridge_preserves_fully_known_ranged_reference', async () => {
+        const fullBytes = new TextEncoder().encode('0123456789');
+        const returned = fullBytes.slice(2, 5);
+        const digest = await sha256Bytes(returned);
+        const wholeDigest = await sha256Bytes(fullBytes);
+        const { result } = await bridgeArtifactRead({
+            artifactId: FULL64,
+            path: 'data.bin',
+            mediaType: 'application/octet-stream',
+            sizeBytes: returned.byteLength,
+            artifactSizeBytes: fullBytes.byteLength,
+            digest,
+            wholeDigest,
+            range: { start: 2, end: 5 },
+            bytes: returned,
+        });
+        const output = result.output as Record<string, unknown>;
+
+        expect(output).toMatchObject({
+            artifact_id: FULL64,
+            artifact_size_bytes: 10,
+            whole_digest: wholeDigest,
+            range: { start: 2, end: 5 },
+        });
+        expect(result.artifact).toMatchObject({
+            artifact_id: FULL64,
+            digest: wholeDigest,
+            size_bytes: 10,
+        });
+    });
+
     test('artifact_read_prefers_browser_bytes_before_host', async () => {
         const transport = new ArtifactHostTransport({});
         const client = new AgentClient({
@@ -370,6 +509,53 @@ describe('ArtifactPanel digest-bound reads', () => {
         });
         expect(overCap).not.toHaveBeenCalled();
         expect(host.querySelector('[data-artifact-preview]')).toBeNull();
+    });
+
+    test('artifact_panel_separates_requested_and_reported_identity', async () => {
+        const bytes = new TextEncoder().encode('hello');
+        const digest = await sha256Bytes(bytes);
+        const missingReported = vi.fn(async () => ({
+            path: 'artifact.txt',
+            mediaType: 'text/plain',
+            sizeBytes: bytes.byteLength,
+            digest,
+            bytes,
+        }));
+        await renderArtifactPanel({
+            client: { readArtifact: missingReported },
+            reference: { artifactId: FULL64 },
+        });
+        await submitArtifactForm();
+        await vi.waitFor(() => {
+            expect(host.querySelector('[data-artifact-metadata]')).not.toBeNull();
+        });
+        const missingText = host.querySelector('[data-artifact-metadata]')?.textContent ?? '';
+        expect(missingText).toContain('Reported artifact');
+        expect(missingText).toContain('not reported by source');
+        expect(missingText).toContain('Requested artifact');
+        expect(missingText).toContain(FULL64);
+
+        render(null, host);
+        const reported = vi.fn(async () => ({
+            artifactId: FULL64,
+            path: 'artifact.txt',
+            mediaType: 'text/plain',
+            sizeBytes: bytes.byteLength,
+            digest,
+            bytes,
+        }));
+        await renderArtifactPanel({
+            client: { readArtifact: reported },
+            reference: { artifactId: FULL64 },
+        });
+        await submitArtifactForm();
+        await vi.waitFor(() => {
+            expect(host.querySelector('[data-artifact-metadata]')).not.toBeNull();
+        });
+        const reportedText = host.querySelector('[data-artifact-metadata]')?.textContent ?? '';
+        expect(reportedText).toContain('Reported artifact');
+        expect(reportedText).toContain('Requested artifact');
+        expect(reportedText).toContain(FULL64);
     });
 
     test('expired_artifact_link_is_not_reused', async () => {

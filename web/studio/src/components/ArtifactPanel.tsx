@@ -59,7 +59,7 @@ type ReferenceValidation =
 type LoadState =
     | { phase: 'idle' }
     | { phase: 'loading' }
-    | { phase: 'ready'; content: ArtifactContent }
+    | { phase: 'ready'; content: ArtifactContent; requestedArtifactId: string }
     | { phase: 'unavailable'; message: string }
     | { phase: 'error'; message: string };
 
@@ -239,10 +239,11 @@ function failureMessage(error: unknown): { unavailable: boolean; message: string
     };
 }
 
-function contentMetadata(content: ArtifactContent, reference: ArtifactReference | null) {
-    const identity = content.artifactId ?? reference?.artifactId ?? null;
+function contentMetadata(content: ArtifactContent, requestedArtifactId: string) {
+    const reportedArtifactId = content.artifactId;
     return <dl class="artifact-meta" data-artifact-metadata>
-        <dt>Artifact</dt><dd style={{ overflowWrap: 'anywhere' }}><code>{identity ?? 'identity not reported'}</code></dd>
+        <dt>Reported artifact</dt><dd style={{ overflowWrap: 'anywhere' }}><code>{reportedArtifactId ?? 'not reported by source'}</code></dd>
+        <dt>Requested artifact</dt><dd style={{ overflowWrap: 'anywhere' }}><code>{requestedArtifactId}</code></dd>
         <dt>Media type</dt><dd>{content.mediaType}</dd>
         <dt>Size</dt><dd>
             {content.range === undefined || content.artifactSizeBytes === undefined
@@ -324,7 +325,11 @@ export function ArtifactPanel({ client = null, reference = null }: ArtifactPanel
                 setState({ phase: 'error', message: verified.message });
                 return;
             }
-            setState({ phase: 'ready', content });
+            setState({
+                phase: 'ready',
+                content,
+                requestedArtifactId: validation.reference.artifactId,
+            });
         } catch (error) {
             const failure = failureMessage(error);
             setState(
@@ -364,7 +369,7 @@ export function ArtifactPanel({ client = null, reference = null }: ArtifactPanel
         {state.phase === 'unavailable' && <p class="panel-summary" role="status" data-artifact-unavailable>{state.message}</p>}
         {state.phase === 'error' && <p class="diff-review-error" role="alert" data-artifact-error>{state.message}</p>}
         {state.phase === 'ready' && <div data-artifact-content>
-            {contentMetadata(state.content, reference)}
+            {contentMetadata(state.content, state.requestedArtifactId)}
             <ArtifactPreview content={state.content} />
         </div>}
     </section>;

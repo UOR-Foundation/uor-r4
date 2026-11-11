@@ -974,11 +974,7 @@ export class AgentTransportHostTransport implements HostTransport {
                 ...(typeof args.start === 'number' ? { start: args.start } : {}),
                 ...(typeof args.end === 'number' ? { end: args.end } : {}),
             });
-            const artifactId =
-                content.artifactId ??
-                (typeof args.artifact_id === 'string'
-                    ? args.artifact_id
-                    : undefined);
+            const reportedArtifactId = content.artifactId;
             const wholeSize =
                 content.artifactSizeBytes ??
                 (content.range === undefined ? content.sizeBytes : undefined);
@@ -986,20 +982,22 @@ export class AgentTransportHostTransport implements HostTransport {
                 content.wholeDigest ??
                 (content.range === undefined ? content.digest : undefined);
             const artifact: HostArtifactRef | undefined =
-                artifactId === undefined
+                reportedArtifactId === undefined ||
+                wholeSize === undefined ||
+                wholeDigest === undefined
                     ? undefined
                     : {
-                          artifact_id: artifactId,
-                          digest: wholeDigest ?? content.digest,
+                          artifact_id: reportedArtifactId,
+                          digest: wholeDigest,
                           media_type: content.mediaType,
-                          size_bytes: wholeSize ?? content.sizeBytes,
+                          size_bytes: wholeSize,
                       };
             return hostResultFor(
                 intent,
                 {
-                    ...(artifactId === undefined
+                    ...(reportedArtifactId === undefined
                         ? {}
-                        : { artifact_id: artifactId }),
+                        : { artifact_id: reportedArtifactId }),
                     path: content.path,
                     media_type: content.mediaType,
                     size_bytes: content.sizeBytes,
