@@ -102,8 +102,10 @@ token occurrences. Output manifest tokenizer path and SHA-256 match the split.
   `uor-r4-training`.
 - `git diff --check`: pass.
 - `uor-harness loop report --check --order .../ORDER.md`: pass.
-- The local PR check is run at the final committed head and recorded in the PR
-  review.
+- `UOR_LAB=deepseek uor-harness loop pr-check --local`: `PASS`. Its scope
+  advisory lists the five new scope entries because the gate reads item scope
+  at the merge base; the head updates those entries. Its file-map advisory is
+  pre-existing and names no file in this unit.
 
 ## Skills used
 
