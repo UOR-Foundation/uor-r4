@@ -249,6 +249,10 @@ export interface StudioTestApi {
     ): Promise<Outcome>;
     ingestThinkingHeartbeatForTest(runId: string): Promise<Outcome>;
     lateToolForTest(runId: string, path: string): Promise<Outcome>;
+    ownerIdentityForTest(): {
+        clientAdopted: boolean;
+        runtimeAdopted: boolean;
+    };
     seedTwoFinishedTasksForTest(): Promise<Outcome>;
     taskSnapshotForTest(taskId: string): Outcome;
     verifyRunForTest(taskId: string, runId: string): Promise<Outcome>;
@@ -298,6 +302,8 @@ interface TestState {
     taskStore: AgentTaskStore | null;
     store: AgentStore | null;
     runtime: AgentRuntime | null;
+    adoptedClient: AgentClient | null;
+    adoptedRuntime: AgentRuntime | null;
     liveModel: GatedTestModelPort | null;
     liveRuns: Map<string, { taskId: string; runId: string }>;
     nowMs: number;
@@ -343,6 +349,8 @@ function freshState(): TestState {
         taskStore: null,
         store: null,
         runtime: null,
+        adoptedClient: null,
+        adoptedRuntime: null,
         liveModel: null,
         liveRuns: new Map(),
         nowMs: 1_794_283_200_000,
@@ -534,6 +542,8 @@ function createTestClient(store: AgentStore, taskStore: AgentTaskStore): void {
     state.store = store;
     state.taskStore = taskStore;
     state.runtime = runtime;
+    state.adoptedClient = null;
+    state.adoptedRuntime = null;
     state.liveModel = liveModel;
     state.client = new AgentClient({ runtime });
 }
@@ -1854,7 +1864,7 @@ async function ingestTerminalForTest(
                     || view.runState === 'expired';
             },
             'terminal ingestion',
-        ).catch(() => undefined);
+        );
         return {
             ok: true,
             record: {
@@ -1933,6 +1943,19 @@ async function ingestThinkingHeartbeatForTest(runId: string): Promise<Outcome> {
     }
 }
 
+function ownerIdentityForTest(): {
+    clientAdopted: boolean;
+    runtimeAdopted: boolean;
+} {
+    return {
+        clientAdopted:
+            state.adoptedClient !== null && state.client === state.adoptedClient,
+        runtimeAdopted:
+            state.adoptedRuntime !== null &&
+            state.runtime === state.adoptedRuntime,
+    };
+}
+
 async function lateToolForTest(runId: string, path: string): Promise<Outcome> {
     try {
         const model = requireLiveModel();
@@ -1948,14 +1971,27 @@ async function lateToolForTest(runId: string, path: string): Promise<Outcome> {
             tool: 'write_file',
             arguments: { path },
         });
-        await new Promise<void>((resolve) =>
-            globalThis.setTimeout(resolve, 150),
-        );
+        let stableSamples = 0;
+        let previousSequence = before.lastSequence;
+        for (let attempt = 0; attempt < 40; attempt += 1) {
+            await new Promise<void>((resolve) =>
+                globalThis.setTimeout(resolve, 25),
+            );
+            const current = liveTaskSnapshot(entry.taskId);
+            if (current.lastSequence === previousSequence) {
+                stableSamples += 1;
+            } else {
+                stableSamples = 0;
+                previousSequence = current.lastSequence;
+            }
+            if (stableSamples >= 3) break;
+        }
         return {
             ok: true,
             record: {
                 before,
                 after: liveTaskSnapshot(entry.taskId),
+                quiescent: stableSamples >= 3,
             },
         };
     } catch (error) {
@@ -2387,6 +2423,8 @@ function adoptStudioAgentOwner(owner: StudioAgentOwnerForTest): void {
     state.store = owner.store;
     state.taskStore = owner.taskStore;
     state.runtime = owner.runtime;
+    state.adoptedClient = owner.client;
+    state.adoptedRuntime = owner.runtime;
     state.liveModel =
         owner.modelPort instanceof GatedTestModelPort ? owner.modelPort : null;
 }
@@ -2630,6 +2668,7 @@ export function installStudioTestApi(owner?: StudioAgentOwnerForTest): void {
         ingestTerminalForTest,
         ingestThinkingHeartbeatForTest,
         lateToolForTest,
+        ownerIdentityForTest,
         seedTwoFinishedTasksForTest,
         taskSnapshotForTest,
         verifyRunForTest,

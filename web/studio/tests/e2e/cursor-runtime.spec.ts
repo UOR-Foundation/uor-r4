@@ -16,6 +16,11 @@ interface Outcome {
     record?: unknown;
 }
 
+interface OwnerIdentity {
+    clientAdopted: boolean;
+    runtimeAdopted: boolean;
+}
+
 interface RestoreView {
     phase: 'idle' | 'loading' | 'ready' | 'incomplete' | 'error';
     sendEnabled: boolean;
@@ -227,6 +232,13 @@ test.describe('Task 15 browser runtime acceptance', () => {
                 ).__studioTest,
         );
         expect(enabled).toBe('object');
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        expect(
+            await call<OwnerIdentity>(page, 'ownerIdentityForTest'),
+        ).toEqual({
+            clientAdopted: true,
+            runtimeAdopted: true,
+        });
 
         await openStudio(page, '/?typed=1');
         await expect(page.locator('#studio-typed-root')).toHaveAttribute(
@@ -591,7 +603,9 @@ test.describe('Task 15 browser runtime acceptance', () => {
         const lateRecord = late.record as {
             before: LiveRunSnapshot;
             after: LiveRunSnapshot;
+            quiescent: boolean;
         };
+        expect(lateRecord.quiescent).toBe(true);
         expect(lateRecord.after.runState).toBe('cancelled');
         expect(lateRecord.after.lastSequence).toBe(
             lateRecord.before.lastSequence,
@@ -804,6 +818,15 @@ test.describe('Task 15 browser runtime acceptance', () => {
         // test-owned runtime/task-store over the same real IndexedDB factory
         // so the store fault switch is reachable. It is not a reload proof.
         expect((await call<RestoreView>(page, 'reopen')).phase).toBe('ready');
+        // Labelled fault harness: reopen rebuilt the test-owned runtime/task
+        // store over real IndexedDB. It is not the adopted bootstrap owner and
+        // is not used as restart evidence.
+        expect(
+            await call<OwnerIdentity>(page, 'ownerIdentityForTest'),
+        ).toEqual({
+            clientAdopted: false,
+            runtimeAdopted: false,
+        });
         const created = await call<FixtureSummary>(page, 'createTaskAndEvents');
         expect(
             (await call<Outcome>(
@@ -934,7 +957,9 @@ test.describe('Task 15 browser runtime acceptance', () => {
         const lateRecord = late.record as {
             before: LiveRunSnapshot;
             after: LiveRunSnapshot;
+            quiescent: boolean;
         };
+        expect(lateRecord.quiescent).toBe(true);
         expect(lateRecord.after.runState).toBe('finished');
         expect(lateRecord.after.lastSequence).toBe(
             lateRecord.before.lastSequence,

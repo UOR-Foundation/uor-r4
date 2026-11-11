@@ -437,6 +437,7 @@ export class AgentRuntime {
     private heartbeatInFlight = false;
     private opened = false;
     private disposed = false;
+    private disposing = false;
     private persistenceError: AgentClientError | null = null;
 
     constructor(options: AgentRuntimeOptions = {}) {
@@ -512,89 +513,108 @@ export class AgentRuntime {
         }
     }
 
+    private recordPersistenceError(error: unknown): void {
+        if (this.persistenceError !== null) return;
+        this.persistenceError = new AgentClientError(
+            errorCode(error),
+            errorMessage(error),
+            false,
+            error instanceof AgentStoreError ? error.storage : null,
+        );
+    }
+
     async dispose(): Promise<void> {
-        if (this.disposed) return;
-        this.disposed = true;
-        const record = (error: unknown): void => {
-            if (this.persistenceError === null) {
-                this.persistenceError = new AgentClientError(
-                    errorCode(error),
-                    errorMessage(error),
-                    false,
-                    error instanceof AgentStoreError ? error.storage : null,
-                );
-            }
-        };
-        if (this.heartbeatHandle !== null) {
-            try {
-                this.timers.clearInterval(this.heartbeatHandle);
-            } catch (error) {
-                record(error);
-            }
-            this.heartbeatHandle = null;
-        }
-        const controls = [...this.active.values()];
-        for (const control of controls) {
-            control.terminal = true;
-            control.cancelRequested = true;
-            this.clearTimersSafely(control, record);
-            control.pendingApproval?.resolve('cancelled');
-            control.pendingApproval = null;
-            control.stopDeferred?.resolve(false);
-            control.stopDeferred = null;
-        }
-        // Controls are terminal; close the host before any chain/iterator wait
-        // so a pending tool call can be rejected instead of holding cleanup.
-        let hostClosed = this.hostClientInstance === null;
-        const closeHost = (): void => {
-            if (hostClosed) return;
-            try {
-                this.hostClientInstance?.close();
-                hostClosed = true;
-            } catch (error) {
-                record(error);
-            }
-        };
-        closeHost();
+        if (this.disposed || this.disposing) return;
+        this.disposing = true;
         try {
-            try {
-                await this.heartbeatTask;
-            } catch (error) {
-                record(error);
+            const record = (error: unknown): void =>
+                this.recordPersistenceError(error);
+            for (const control of [...this.active.values()]) {
+                try {
+                    await this.failAcceptedMessages(
+                        control,
+                        record,
+                        'disposed',
+                    );
+                } catch (error) {
+                    record(error);
+                }
             }
+            this.disposed = true;
+            if (this.heartbeatHandle !== null) {
+                try {
+                    this.timers.clearInterval(this.heartbeatHandle);
+                } catch (error) {
+                    record(error);
+                }
+                this.heartbeatHandle = null;
+            }
+            const controls = [...this.active.values()];
             for (const control of controls) {
-                try {
-                    await control.modelIterator?.return?.();
-                } catch (error) {
-                    record(error);
-                }
-                this.active.delete(control.taskId);
-                try {
-                    await this.releaseLease(control.taskId);
-                } catch (error) {
-                    record(error);
-                }
+                control.terminal = true;
+                control.cancelRequested = true;
+                this.clearTimersSafely(control, record);
+                control.pendingApproval?.resolve('cancelled');
+                control.pendingApproval = null;
+                control.stopDeferred?.resolve(false);
+                control.stopDeferred = null;
             }
-            this.taskQueues.clear();
-            await Promise.allSettled([...this.chains.values()]);
-        } finally {
-            for (const stream of [...this.eventStreams]) {
+            // Controls are terminal; close the host before any chain/iterator
+            // wait so a pending tool call can be rejected instead of holding
+            // cleanup.
+            let hostClosed = this.hostClientInstance === null;
+            const closeHost = (): void => {
+                if (hostClosed) return;
                 try {
-                    stream.close();
+                    this.hostClientInstance?.close();
+                    hostClosed = true;
                 } catch (error) {
                     record(error);
                 }
-            }
-            this.eventStreams.clear();
-            this.listeners.clear();
-            this.restoredApprovals = [];
+            };
             closeHost();
             try {
-                if (this.ownsTaskStore) this.taskStore?.close();
-            } catch (error) {
-                record(error);
+                try {
+                    await this.heartbeatTask;
+                } catch (error) {
+                    record(error);
+                }
+                for (const control of controls) {
+                    try {
+                        await control.modelIterator?.return?.();
+                    } catch (error) {
+                        record(error);
+                    }
+                    this.active.delete(control.taskId);
+                    try {
+                        await this.releaseLease(control.taskId);
+                    } catch (error) {
+                        record(error);
+                    }
+                }
+                this.taskQueues.clear();
+                await Promise.allSettled([...this.chains.values()]);
+            } finally {
+                for (const stream of [...this.eventStreams]) {
+                    try {
+                        stream.close();
+                    } catch (error) {
+                        record(error);
+                    }
+                }
+                this.eventStreams.clear();
+                this.listeners.clear();
+                this.restoredApprovals = [];
+                closeHost();
+                try {
+                    if (this.ownsTaskStore) this.taskStore?.close();
+                } catch (error) {
+                    record(error);
+                }
+                this.opened = false;
             }
-            this.opened = false;
+        } finally {
+            this.disposing = false;
         }
     }
 
@@ -810,11 +830,11 @@ export class AgentRuntime {
             current.pendingApproval = null;
 
             if (current.inFlight === null) {
-                await this.finalizeCancelled(current);
+                const acknowledged = await this.finalizeCancelled(current);
                 return {
                     taskId: input.taskId,
                     runId: input.runId,
-                    ack: Promise.resolve(true),
+                    ack: Promise.resolve(acknowledged),
                 };
             }
 
@@ -1368,14 +1388,7 @@ export class AgentRuntime {
             try {
                 await this.settleControlWithoutEvent(control, false);
             } catch (settleError) {
-                this.persistenceError = new AgentClientError(
-                    errorCode(settleError),
-                    errorMessage(settleError),
-                    false,
-                    settleError instanceof AgentStoreError
-                        ? settleError.storage
-                        : null,
-                );
+                this.recordPersistenceError(settleError);
             } finally {
                 // Idempotent: a failed settle must still release any stop
                 // receipt or queued turn that would otherwise wait forever.
@@ -2318,24 +2331,45 @@ export class AgentRuntime {
     private async finalizeCancelled(
         current: RunControl,
         toolCallId?: string,
-    ): Promise<void> {
-        if (current.terminal) return;
-        await this.failUndeliveredMessages(current, 'cancelled');
-        if (current.stopTimer !== null) {
-            this.timers.clearTimeout(current.stopTimer);
-            current.stopTimer = null;
+    ): Promise<boolean> {
+        if (current.terminal) return true;
+        try {
+            await this.failUndeliveredMessages(current, 'cancelled');
+            if (current.stopTimer !== null) {
+                this.timers.clearTimeout(current.stopTimer);
+                current.stopTimer = null;
+            }
+            await this.append(current, 'run.cancelled', {
+                safe_boundary: true,
+                finished_at_ms: this.now(),
+                ...(toolCallId === undefined
+                    ? {}
+                    : { stopped_at_tool_id: toolCallId }),
+            });
+            await this.afterTerminal(current, {
+                startQueued: false,
+                stopAcknowledged: true,
+            });
+            return true;
+        } catch (error) {
+            this.recordPersistenceError(error);
+            try {
+                await this.settleControlWithoutEvent(current, false);
+            } catch (settleError) {
+                this.recordPersistenceError(settleError);
+            } finally {
+                // The failed append advanced the private sequence counter;
+                // this control is discarded so no later append can reuse it.
+                // A durable run.status=cancelling row is retained honestly:
+                // no synthetic terminal is written, and a reload keeps the run
+                // blocked until a verified recovery rather than claiming a
+                // completion that never committed.
+                current.stopDeferred?.resolve(false);
+                current.stopDeferred = null;
+                this.taskQueues.delete(current.taskId);
+            }
+            return false;
         }
-        await this.append(current, 'run.cancelled', {
-            safe_boundary: true,
-            finished_at_ms: this.now(),
-            ...(toolCallId === undefined
-                ? {}
-                : { stopped_at_tool_id: toolCallId }),
-        });
-        await this.afterTerminal(current, {
-            startQueued: false,
-            stopAcknowledged: true,
-        });
     }
 
     private async finalizeFailed(
@@ -2467,30 +2501,35 @@ export class AgentRuntime {
         stopAcknowledged: boolean,
     ): Promise<void> {
         if (current.terminal) return;
+        const record = (error: unknown): void =>
+            this.recordPersistenceError(error);
+        try {
+            await this.failAcceptedMessages(current, record, 'cancelled');
+        } catch (error) {
+            record(error);
+        }
         current.terminal = true;
         current.cancelRequested = true;
-        this.clearTimers(current);
-        current.pendingApproval?.resolve('cancelled');
-        current.pendingApproval = null;
-        const iterator = current.modelIterator;
-        current.modelIterator = null;
         try {
-            await iterator?.return?.();
-        } catch (error) {
-            if (this.persistenceError === null) {
-                this.persistenceError = new AgentClientError(
-                    errorCode(error),
-                    errorMessage(error),
-                );
+            this.clearTimersSafely(current, record);
+            current.pendingApproval?.resolve('cancelled');
+            current.pendingApproval = null;
+            const iterator = current.modelIterator;
+            current.modelIterator = null;
+            try {
+                await iterator?.return?.();
+            } catch (error) {
+                record(error);
             }
+        } finally {
+            if (this.active.get(current.taskId) === current) {
+                this.active.delete(current.taskId);
+            }
+            current.stopDeferred?.resolve(stopAcknowledged);
+            current.stopDeferred = null;
+            this.taskQueues.delete(current.taskId);
+            await this.releaseLease(current.taskId);
         }
-        if (this.active.get(current.taskId) === current) {
-            this.active.delete(current.taskId);
-        }
-        current.stopDeferred?.resolve(stopAcknowledged);
-        current.stopDeferred = null;
-        this.taskQueues.delete(current.taskId);
-        await this.releaseLease(current.taskId);
     }
 
     private async afterTerminal(
@@ -2539,6 +2578,44 @@ export class AgentRuntime {
                 errorCode(error),
                 errorMessage(error),
             );
+        }
+    }
+
+    private async failAcceptedMessages(
+        current: RunControl,
+        record: (error: unknown) => void,
+        reason: 'disposed' | 'cancelled' = 'disposed',
+    ): Promise<void> {
+        if (current.terminal) return;
+        const pending = current.pendingBoundary.splice(0);
+        for (const message of pending) {
+            try {
+                this.timers.clearTimeout(message.timer);
+            } catch (error) {
+                record(error);
+            }
+            try {
+                await this.appendUndeliveredMessage(
+                    current,
+                    message.messageId,
+                    reason,
+                );
+            } catch (error) {
+                record(error);
+            }
+        }
+        const queued = this.taskQueues.get(current.taskId) ?? [];
+        this.taskQueues.delete(current.taskId);
+        for (const message of queued) {
+            try {
+                await this.appendUndeliveredMessage(
+                    current,
+                    message.messageId,
+                    reason,
+                );
+            } catch (error) {
+                record(error);
+            }
         }
     }
 

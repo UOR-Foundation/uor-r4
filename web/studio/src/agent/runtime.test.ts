@@ -1953,6 +1953,62 @@ describe('AgentRuntime fix round 1', () => {
         }
     });
 
+    test('no_inflight_cancelled_append_failure_settles_false_stop_and_releases_lease', async () => {
+        const { runtime, store, taskStore, model } = makeRuntime();
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(runtime, model);
+            const originalAppend = taskStore.appendEvent.bind(taskStore);
+            let failCancelled = true;
+            taskStore.appendEvent = async (input) => {
+                if (failCancelled && input.event.type === 'run.cancelled') {
+                    failCancelled = false;
+                    return {
+                        status: 'rejected' as const,
+                        code: 'limit_exceeded' as const,
+                        message: 'injected no-in-flight cancellation failure',
+                        event_id: input.event.event_id,
+                        digest: null,
+                        storage: 'indexeddb' as const,
+                    };
+                }
+                return originalAppend(input);
+            };
+            const before = runView(store, task.taskId, run.runId);
+            const receipt = await runtime.stop({
+                taskId: task.taskId,
+                runId: run.runId,
+            });
+            expect(receipt.acknowledged).toBe(false);
+            expect(runtime.lastPersistenceError?.code).toBe('limit_exceeded');
+            expect(taskStore.releases).toHaveLength(1);
+            expect(taskStore.leaseFor(task.taskId)).toBeNull();
+            expect(
+                (runtime as unknown as { active: Map<string, unknown> }).active
+                    .has(task.taskId),
+            ).toBe(false);
+            expect(
+                (runtime as unknown as { taskQueues: Map<string, unknown> })
+                    .taskQueues.has(task.taskId),
+            ).toBe(false);
+            const after = runView(store, task.taskId, run.runId);
+            expect(after.lastSequence).toBe(before.lastSequence + 1);
+            expect(eventTypes(after).at(-1)).toBe('run.status');
+            expect(eventTypes(after)).not.toContain('run.cancelled');
+            stream.push({ type: 'text-delta', text: 'advanced sequence must not append' });
+            await flush(100);
+            expect(runView(store, task.taskId, run.runId).lastSequence).toBe(
+                after.lastSequence,
+            );
+            await expect(
+                runtime.stop({ taskId: task.taskId, runId: run.runId }),
+            ).rejects.toMatchObject({ code: 'out_of_order' });
+        } finally {
+            model.streams.forEach((item) => item.end());
+            await runtime.dispose();
+        }
+    });
+
     test('boundary_fallback_write_failure_settles_pending_and_timer', async () => {
         const { runtime, store, taskStore, model, clock } = makeRuntime();
         await runtime.open();

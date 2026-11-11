@@ -526,37 +526,6 @@ describe('Task 15 browser runtime acceptance', () => {
             )!;
             const approvalId = String(required.data.approval_id);
 
-            const forgedResolution = incomingEvent(
-                a.taskId,
-                a.projectId,
-                a.runId,
-                run.generation,
-                run.lastSequence + 1,
-                'tool.approval_resolved',
-                {
-                    approval_id: approvalId,
-                    decision: 'approved',
-                    resolver: 'host',
-                },
-            );
-            const worker = harness.runtime.createIngest({
-                taskId: a.taskId,
-                runId: a.runId,
-            });
-            const forged = await worker.push(eventFrame(forgedResolution));
-            expect(forged[0]?.kind).toBe('applied');
-            await settle();
-            const afterForgery = runView(harness.store, a.taskId, a.runId);
-            expect(
-                eventTypes(afterForgery).filter((type) => type === 'tool.started'),
-            ).toHaveLength(0);
-            expect(
-                eventTypes(afterForgery).filter(
-                    (type) => type === 'tool.completed',
-                ),
-            ).toHaveLength(0);
-            expect(afterForgery.changesSnapshots).toEqual([]);
-
             await expect(
                 harness.client.resolveApproval({
                     approvalId: 'appr_forged_not_pending',
@@ -574,11 +543,15 @@ describe('Task 15 browser runtime acceptance', () => {
                     requestDigest: String(required.data.request_digest),
                 }),
             ).rejects.toMatchObject({ code: 'approval_forbidden' });
+            const refused = runView(harness.store, a.taskId, a.runId);
             expect(
-                eventTypes(runView(harness.store, a.taskId, a.runId)).filter(
-                    (type) => type === 'tool.started',
-                ),
+                eventTypes(refused).filter((type) => type === 'tool.started'),
             ).toHaveLength(0);
+            expect(
+                eventTypes(refused).filter((type) => type === 'tool.completed'),
+            ).toHaveLength(0);
+            expect(refused.changesSnapshots).toEqual([]);
+            expect(refused.approvals[0]?.decision).toBeNull();
 
             await harness.client.resolveApproval({
                 approvalId,
@@ -598,6 +571,103 @@ describe('Task 15 browser runtime acceptance', () => {
             expect(afterReal.changesSnapshots[0]!.files).toEqual([
                 { path: 'artifacts/forged.txt', change: 'added' },
             ]);
+            await harness.client.stop({ taskId: a.taskId, runId: a.runId });
+        } finally {
+            await harness.runtime.dispose();
+        }
+    });
+
+    test('host_channel_approval_resolution_is_display_only_and_never_dispatches', async () => {
+        const harness = makeHarness({
+            requiresApproval: (tool) => tool === 'write_file',
+            toolExecutor: async (intent) => ({
+                status: 'ok' as const,
+                output: { path: intent.arguments.path },
+                files: [
+                    {
+                        path: String(intent.arguments.path),
+                        change: 'added' as const,
+                    },
+                ],
+                head_digest: `sha256:${'f'.repeat(64)}`,
+            }),
+        });
+        await harness.client.open();
+        try {
+            const { a } = await startTwo(harness);
+            harness.model.latest(a.runId)!.push({
+                type: 'tool-call',
+                toolCallId: 'tool_host_resolution',
+                tool: 'write_file',
+                arguments: { path: 'artifacts/host-resolution.txt' },
+            });
+            await until(
+                () =>
+                    eventTypes(runView(harness.store, a.taskId, a.runId)).includes(
+                        'tool.approval_required',
+                    ),
+                'approval request',
+            );
+            const run = runView(harness.store, a.taskId, a.runId);
+            const required = run.events.find(
+                (event) => event.type === 'tool.approval_required',
+            )!;
+            const approvalId = String(required.data.approval_id);
+            const worker = harness.runtime.createIngest({
+                taskId: a.taskId,
+                runId: a.runId,
+            });
+            const resolved = await worker.push(
+                eventFrame(
+                    incomingEvent(
+                        a.taskId,
+                        a.projectId,
+                        a.runId,
+                        run.generation,
+                        run.lastSequence + 1,
+                        'tool.approval_resolved',
+                        {
+                            approval_id: approvalId,
+                            decision: 'approved',
+                            resolver: 'host',
+                        },
+                    ),
+                ),
+            );
+            expect(resolved[0]?.kind).toBe('applied');
+            await settle();
+            const afterHost = runView(harness.store, a.taskId, a.runId);
+            // A host-channel resolution is trusted journal/display state. It
+            // cannot dispatch: the runtime's in-memory pending approval is the
+            // only dispatch gate, and only a trusted resolution settles it.
+            expect(afterHost.approvals[0]?.decision).toBe('approved');
+            expect(
+                eventTypes(afterHost).filter((type) => type === 'tool.started'),
+            ).toHaveLength(0);
+            expect(
+                eventTypes(afterHost).filter(
+                    (type) => type === 'tool.completed',
+                ),
+            ).toHaveLength(0);
+            expect(afterHost.changesSnapshots).toEqual([]);
+
+            await harness.client.resolveApproval({
+                approvalId,
+                decision: 'approved',
+            });
+            await until(
+                () =>
+                    runView(harness.store, a.taskId, a.runId).changesSnapshots
+                        .length === 1,
+                'trusted host resolution dispatch',
+            );
+            const afterTrusted = runView(harness.store, a.taskId, a.runId);
+            expect(
+                eventTypes(afterTrusted).filter(
+                    (type) => type === 'tool.started',
+                ),
+            ).toHaveLength(1);
+            expect(afterTrusted.changesSnapshots).toHaveLength(1);
             await harness.client.stop({ taskId: a.taskId, runId: a.runId });
         } finally {
             await harness.runtime.dispose();
@@ -827,6 +897,148 @@ describe('Task 15 approval authority', () => {
         } finally {
             await harness.runtime.dispose();
         }
+    });
+});
+
+describe('Task 15 stop failure and dispose receipt settlement', () => {
+    test('rejected_no_inflight_cancelled_append_settles_false_stop_exactly_once', async () => {
+        const harness = makeHarness();
+        const originalAppend = harness.store.appendEvent.bind(harness.store);
+        let failCancelled = true;
+        harness.store.appendEvent = async (event) => {
+            if (failCancelled && event.type === 'run.cancelled') {
+                failCancelled = false;
+                throw new AgentStoreError(
+                    'limit_exceeded',
+                    'injected no-in-flight cancellation failure',
+                    'indexeddb',
+                );
+            }
+            return originalAppend(event);
+        };
+        await harness.client.open();
+        try {
+            const { a } = await startTwo(harness);
+            const before = runView(harness.store, a.taskId, a.runId);
+            const receipt = await harness.client.stop({
+                taskId: a.taskId,
+                runId: a.runId,
+            });
+            expect(receipt.acknowledged).toBe(false);
+
+            const after = runView(harness.store, a.taskId, a.runId);
+            expect(after.lastSequence).toBe(before.lastSequence + 1);
+            expect(after.events.at(-1)?.type).toBe('run.status');
+            expect(after.events.at(-1)?.data.status).toBe('cancelling');
+            expect(eventTypes(after)).not.toContain('run.cancelled');
+            expect(eventTypes(after)).not.toContain('run.finished');
+            expect(eventTypes(after)).not.toContain('run.failed');
+            const state = harness.runtime as unknown as {
+                active: Map<string, unknown>;
+                taskQueues: Map<string, unknown>;
+                persistenceError: AgentStoreError | null;
+            };
+            expect(state.active.has(a.taskId)).toBe(false);
+            expect(state.taskQueues.has(a.taskId)).toBe(false);
+            expect(state.persistenceError?.code).toBe('limit_exceeded');
+            expect(state.persistenceError?.storage).toBe('indexeddb');
+
+            await expect(
+                harness.client.stop({ taskId: a.taskId, runId: a.runId }),
+            ).rejects.toMatchObject({ code: 'out_of_order' });
+
+            harness.model.latest(a.runId)?.push({
+                type: 'text-delta',
+                text: 'must never reuse the advanced sequence',
+            });
+            await settle();
+            expect(
+                runView(harness.store, a.taskId, a.runId).lastSequence,
+            ).toBe(after.lastSequence);
+            expect(
+                runView(harness.store, a.taskId, a.runId).messages,
+            ).toEqual([]);
+        } finally {
+            await harness.runtime.dispose();
+        }
+    });
+
+    test('dispose_fails_accepted_pending_and_queued_messages_before_cleanup', async () => {
+        let timerThrows = 1;
+        const timers: RuntimeTimers = {
+            setTimeout: (handler, timeoutMs) =>
+                globalThis.setTimeout(handler, timeoutMs),
+            clearTimeout: (handle) => {
+                if (timerThrows > 0) {
+                    timerThrows -= 1;
+                    throw new AgentStoreError(
+                        'limit_exceeded',
+                        'injected dispose timer clear failure',
+                        'indexeddb',
+                    );
+                }
+                globalThis.clearTimeout(handle as never);
+            },
+            setInterval: (handler, timeoutMs) =>
+                globalThis.setInterval(handler, timeoutMs),
+            clearInterval: (handle) => globalThis.clearInterval(handle as never),
+        };
+        const harness = makeHarness({ timers });
+        await harness.client.open();
+        const { a } = await startTwo(harness);
+        const queued = await harness.client.queueMessage({
+            taskId: a.taskId,
+            text: 'queued message accepted before dispose',
+        });
+        const steered = await harness.client.steer({
+            taskId: a.taskId,
+            text: 'pending steer accepted before dispose',
+        });
+        const stream = await harness.runtime.subscribe({});
+        (stream as unknown as { close: () => void }).close = () => {
+            throw new AgentStoreError(
+                'limit_exceeded',
+                'injected dispose stream close failure',
+                'indexeddb',
+            );
+        };
+        await expect(harness.runtime.dispose()).resolves.toBeUndefined();
+
+        const view = runView(harness.store, a.taskId, a.runId);
+        const errors = view.events.filter(
+            (event) =>
+                event.type === 'error' &&
+                event.data.code === 'message_not_delivered',
+        );
+        expect(errors).toHaveLength(2);
+        const messages = errors.map((event) => String(event.data.message));
+        for (const messageId of [queued.messageId, steered.messageId]) {
+            expect(
+                messages.filter((message) => message.includes(messageId)),
+            ).toHaveLength(1);
+        }
+        expect(
+            messages.filter((message) =>
+                message.includes('queued message accepted before dispose'),
+            ),
+        ).toHaveLength(0);
+        expect(eventTypes(view)).not.toContain('run.cancelled');
+        expect(eventTypes(view)).not.toContain('run.finished');
+        expect(eventTypes(view)).not.toContain('run.failed');
+        expect(view.messages).toEqual([]);
+        expect(view.changesSnapshots).toEqual([]);
+        const state = harness.runtime as unknown as {
+            active: Map<string, unknown>;
+            listeners: Set<unknown>;
+            eventStreams: Set<unknown>;
+            taskQueues: Map<string, unknown>;
+            opened: boolean;
+        };
+        expect(state.active.size).toBe(0);
+        expect(state.listeners.size).toBe(0);
+        expect(state.eventStreams.size).toBe(0);
+        expect(state.taskQueues.size).toBe(0);
+        expect(state.opened).toBe(false);
     });
 });
 
@@ -1247,7 +1459,27 @@ describe('Task 15 assigned lifecycle regressions', () => {
             toolGateControl.release = resolve;
         });
         let failTerminal = false;
+        let failSettleClear = false;
+        const timers: RuntimeTimers = {
+            setTimeout: (handler, timeoutMs) =>
+                globalThis.setTimeout(handler, timeoutMs),
+            clearTimeout: (handle) => {
+                if (failSettleClear) {
+                    failSettleClear = false;
+                    throw new AgentStoreError(
+                        'limit_exceeded',
+                        'injected settle timer failure',
+                        'indexeddb',
+                    );
+                }
+                globalThis.clearTimeout(handle as never);
+            },
+            setInterval: (handler, timeoutMs) =>
+                globalThis.setInterval(handler, timeoutMs),
+            clearInterval: (handle) => globalThis.clearInterval(handle as never),
+        };
         const harness = makeHarness({
+            timers,
             toolExecutor: async (intent) => {
                 await toolGate;
                 return {
@@ -1278,7 +1510,7 @@ describe('Task 15 assigned lifecycle regressions', () => {
         await harness.client.open();
         try {
             const { a } = await startTwo(harness);
-            await harness.client.queueMessage({
+            const queued = await harness.client.queueMessage({
                 taskId: a.taskId,
                 text: 'must settle despite failed terminal',
             });
@@ -1309,6 +1541,7 @@ describe('Task 15 assigned lifecycle regressions', () => {
                 'cancelling before terminal failure',
             );
             failTerminal = true;
+            failSettleClear = true;
             const run = runView(harness.store, a.taskId, a.runId);
             const worker = harness.runtime.createIngest({
                 taskId: a.taskId,
@@ -1350,6 +1583,42 @@ describe('Task 15 assigned lifecycle regressions', () => {
             };
             expect(state.active.has(a.taskId)).toBe(false);
             expect(state.taskQueues.has(a.taskId)).toBe(false);
+            expect(harness.runtime.lastPersistenceError?.code).toBe(
+                'limit_exceeded',
+            );
+            expect(harness.runtime.lastPersistenceError?.message).toContain(
+                'injected durable terminal failure',
+            );
+            expect(harness.runtime.lastPersistenceError?.message).not.toContain(
+                'injected settle timer failure',
+            );
+
+            const view = runView(harness.store, a.taskId, a.runId);
+            const types = eventTypes(view);
+            const errors = view.events
+                .map((event, index) => ({ event, index }))
+                .filter(
+                    (entry) =>
+                        entry.event.type === 'error' &&
+                        entry.event.data.code === 'message_not_delivered',
+                );
+            expect(errors).toHaveLength(1);
+            expect(String(errors[0]!.event.data.message)).toContain(
+                queued.messageId,
+            );
+            const statusIndex = types.findIndex(
+                (type) => type === 'run.status',
+            );
+            expect(statusIndex).toBeGreaterThan(-1);
+            expect(errors[0]!.index).toBeGreaterThan(statusIndex);
+            expect(types.at(-1)).toBe('error');
+            expect(types).not.toContain('run.failed');
+            expect(types).not.toContain('run.cancelled');
+            expect(
+                types.filter((type) => type === 'tool.completed'),
+            ).toHaveLength(0);
+            expect(view.messages).toEqual([]);
+            expect(view.changesSnapshots).toEqual([]);
         } finally {
             toolGateControl.release?.();
             await harness.runtime.dispose();
