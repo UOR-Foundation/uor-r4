@@ -66,13 +66,15 @@ and an absent internally generated 128-bit prefix is claimed by an exclusive
 create/read-back
 per-run object before model work. Preflight reports are byte-pinned as well as
 structurally checked. Healthy ceiling crossings are explicitly extended and
-persisted instead of terminating a training run; stalled process groups are
-TERMed, retried, then KILLed with an unsealed pod preserved.
+persisted only while the marker is RUNNING, the job is present, GPU compute is
+active, and progress is fresh; stalled process groups are TERMed, retried, then
+KILLed with an unsealed pod preserved.
 P2 now counts exactly the 882 scored non-copy rows, with the 32 unscored
 general rows excluded. Job and scoring failures write row 0 explicitly.
-Pre-watcher and watcher failure paths persist budget and pending-stop records
-before release or keep, and the command graph includes the smoke path, exact
-wrappers and matching timeouts.
+Pre-watcher and watcher failure paths acquire the shared budget lock and persist
+budget and pending-stop records atomically before release or keep. An
+unverified pod is never marked KEEP. The command graph includes the smoke path,
+exact wrappers and matching timeouts.
 
 ## Measurements
 
@@ -93,6 +95,10 @@ the count table produced zero on every scored metric.
 - Decision program: parses the four pinned preflight reports and emits schema
   `/3` row 4 as expected for the unchanged base.
 - Shell syntax and ShellCheck: pass.
+- Mocked launcher/watch safety: 7 passed, covering an early identity failure,
+  untouched unknown and mismatched pods, durable records before owned-pod
+  teardown, lock-serialized sealed-failure publication, healthy `gpu=1`
+  extension, and stale `gpu=0` stop instead of extension.
 - Exact-head transcripts are retained under
   `local/deepseek/scenario-gpu-smoke-2026-11-11/checks/`.
 - Clippy with `-D warnings`: stops on pre-existing warnings in

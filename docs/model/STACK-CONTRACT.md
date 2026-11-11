@@ -433,8 +433,8 @@ Schema: `uor-r4.lut-stack/6`
 
 One fresh-start 1,024-step training of the current FBS/Hamming geometric path on the aligned scenario corpus, exported as a bound uor-r4.lut-stack/10 artifact and scored against the same-evaluator previous-token count table.
 
-- Source: `conformance/stack/fbs-deepseek-scenario-smoke.toml` (BLAKE3 `3bef4d5edb277c44a024761942fc30add3221b0449137d8050973742f8407a92`)
-- Semantic hash: `1b0b7f909da3dddeb7d5f1ec231889a0ef60eb105f7cea9e002c70edf8c6d63a`
+- Source: `conformance/stack/fbs-deepseek-scenario-smoke.toml` (BLAKE3 `093a572aaaad78889d8d3ae95bd56f50ca009498546dd91f87672347758f0cd8`)
+- Semantic hash: `40518eae6d71d1482b238f3dd650e4858ef4f1434e485943ae360eb7821bb421`
 - Lane: `fbs`
 - State: `experimental`
 - Revision: 1
@@ -544,9 +544,9 @@ Schema: `uor-r4.lut-stack/10`
   - env --; inputs --; outputs `target/release/train-in-space`<br>`target/release/fbs-snapshot`; timeout 1800s
 - **build-export (`verify`)**: `cargo build --release --locked -p uor-r4-integer --bin fbs-export --features serving-wasm`
   - env --; inputs --; outputs `target/release/fbs-export`; timeout 900s
-- **train (`train`)**: `target/release/train-in-space --data-root DATA_ROOT --train-split TRAIN_SPLIT --train-sha256 TRAIN_SHA256 --train-mask-sha256 TRAIN_MASK_SHA256 --objective cell --retain-rates 1 --decay-mult 1 --lr 0.001 --lr-end 0 --train-as-served 1 --context 192 --width 256 --hamming-read 4 --batch 16 --turn-memory 8 --turn-memory-reply 1 --turn-memory-dropout 500 --samples 6 --reply-tokens 48 --steps 1024 --eval-every 256 --hamming-copy-latest 1 --turn-memory-leave-copied 1 --seed 273 --out TRAIN_OUT`
+- **train (`train`)**: `target/release/train-in-space --data-root DATA_ROOT --train-split TRAIN_SPLIT --train-sha256 TRAIN_SHA256 --train-mask-sha256 TRAIN_MASK_SHA256 --objective cell --retain-rates 1 --decay-mult 1 --lr 0.001 --lr-end 0 --train-as-served 1 --context 192 --width 256 --hamming-read 4 --hamming-copy-latest 1 --turn-memory 8 --turn-memory-reply 1 --turn-memory-dropout 500 --turn-memory-leave-copied 1 --batch 16 --seed 273 --out TRAIN_OUT --steps 1024 --eval-every 256 --samples 6 --reply-tokens 48`
   - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`train-scenarios`<br>`trainer-dev-tokens`<br>`trainer-dev-mask`<br>`tokenizer`; outputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`; timeout 10800s
-- **smoke-train (`train`)**: `target/release/train-in-space --data-root DATA_ROOT --train-split TRAIN_SPLIT --train-sha256 TRAIN_SHA256 --train-mask-sha256 TRAIN_MASK_SHA256 --objective cell --retain-rates 1 --decay-mult 1 --lr 0.001 --lr-end 0 --train-as-served 1 --context 192 --width 256 --hamming-read 4 --batch 16 --turn-memory 8 --turn-memory-reply 1 --turn-memory-dropout 500 --samples 8 --reply-tokens 48 --steps 64 --eval-every 64 --hamming-copy-latest 1 --turn-memory-leave-copied 1 --seed 273 --out SMOKE_OUT`
+- **smoke-train (`train`)**: `target/release/train-in-space --data-root DATA_ROOT --train-split TRAIN_SPLIT --train-sha256 TRAIN_SHA256 --train-mask-sha256 TRAIN_MASK_SHA256 --objective cell --retain-rates 1 --decay-mult 1 --lr 0.001 --lr-end 0 --train-as-served 1 --context 192 --width 256 --hamming-read 4 --hamming-copy-latest 1 --turn-memory 8 --turn-memory-reply 1 --turn-memory-dropout 500 --turn-memory-leave-copied 1 --batch 16 --seed 273 --out SMOKE_OUT --steps 64 --eval-every 64 --samples 8 --reply-tokens 48`
   - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`train-scenarios`<br>`trainer-dev-tokens`<br>`trainer-dev-mask`<br>`tokenizer`; outputs `SMOKE_CHECKPOINT`; timeout 1800s
 - **smoke-score (`score`)**: `target/release/train-in-space --data-root DATA_ROOT --train-split TRAIN_SPLIT --train-sha256 TRAIN_SHA256 --train-mask-sha256 TRAIN_MASK_SHA256 --score-rows SMOKE_CHECKPOINT --out SMOKE_SCORE_OUT --context 192 --samples 8 --reply-tokens 48 --retain-rates 1 --seed 273`
   - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`trainer-dev-tokens`<br>`trainer-dev-mask`<br>`tokenizer`<br>`SMOKE_CHECKPOINT`; outputs `SMOKE_SCORE_OUT`; timeout 1200s

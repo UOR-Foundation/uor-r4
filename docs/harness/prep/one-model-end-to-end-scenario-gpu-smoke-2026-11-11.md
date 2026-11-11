@@ -48,7 +48,7 @@ while retaining the wrong-memory and no-memory abstention controls?
   `0e3f66a1e27f1d67f36b3457b9d3ede832a4a8a6`; the contract's implementation
   source is `4add144ebdc9087e47fe3fa830fb21116278644e`, and the later contract
   bytes are bound by semantic hash
-  `1b0b7f909da3dddeb7d5f1ec231889a0ef60eb105f7cea9e002c70edf8c6d63a`.
+  `40518eae6d71d1482b238f3dd650e4858ef4f1434e485943ae360eb7821bb421`.
   Every later execution head
   must be a clean, pushed descendant whose `crates`, `conformance`, `scripts`,
   `xtask`, `Cargo.toml` and `Cargo.lock` trees are byte-identical to that pin.
@@ -293,7 +293,7 @@ zero.
   records stack contract
   `fbs-deepseek-scenario-smoke`, implementation source
   `4add144ebdc9087e47fe3fa830fb21116278644e`, and semantic hash
-  `1b0b7f909da3dddeb7d5f1ec231889a0ef60eb105f7cea9e002c70edf8c6d63a`.
+  `40518eae6d71d1482b238f3dd650e4858ef4f1434e485943ae360eb7821bb421`.
   The artifact, snapshot and checkpoint SHA-256s are recorded.
 - **I-c:** `config.json` names objective `cell`, width 256, four Hamming reads,
   context 192, batch 16, no micro-batch, 1,024 steps, seed 273,
