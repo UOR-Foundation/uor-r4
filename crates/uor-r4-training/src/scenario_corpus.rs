@@ -411,6 +411,14 @@ fn write_split(
             .filter_map(|(&id, &mask)| (mask == 1).then_some(id))
             .collect::<Vec<_>>();
         let decoded = context.tokenizer.decode(&masked_ids);
+        for turn in row.turns.iter().filter(|turn| turn.role == "assistant") {
+            if !decoded.contains(&turn.content) {
+                return Err(format!(
+                    "{} does not fully mask assistant reply {:?}",
+                    row.scenario_id, turn.content
+                ));
+            }
+        }
         if let Some(value) = &row.value {
             if !decoded.contains(value) {
                 return Err(format!(
@@ -755,6 +763,24 @@ fn validate_rows(rows: &[ScenarioRow]) -> Result<(), String> {
                 "{} does not end in the expected assistant EOS",
                 row.scenario_id
             ));
+        }
+        let has_value = matches!(
+            row.archetype,
+            ScenarioArchetype::Memorize
+                | ScenarioArchetype::Paraphrase
+                | ScenarioArchetype::Selection
+                | ScenarioArchetype::Update
+                | ScenarioArchetype::Copy
+                | ScenarioArchetype::StaleMemoryControl
+        );
+        if row.value.is_some() != has_value {
+            return Err(format!(
+                "{} has the wrong expected-value shape for {:?}",
+                row.scenario_id, row.archetype
+            ));
+        }
+        if row.scored_question == matches!(row.archetype, ScenarioArchetype::General) {
+            return Err(format!("{} has the wrong scoreability", row.scenario_id));
         }
         if row.scored_question
             && !row
