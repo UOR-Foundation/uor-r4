@@ -539,6 +539,7 @@ Schema: `uor-r4.lut-stack/10`
 - **preflight (`verify`)**: `bash conformance/stack/preflight-check.sh BASE_SHA256 preflight-development PREFLIGHT_DEVELOPMENT_SHA256 preflight-fresh PREFLIGHT_FRESH_SHA256`
   - env --; inputs `preflight-check.sh`<br>`scenario-preflight-gate.jq`<br>`preflight-development`<br>`preflight-fresh`; outputs --; timeout 300s
 - **gpu-tests (`verify`)**: `cargo test --release --locked -p uor-r4-float-train --features cuda --lib -- hamming`
+  - env --; inputs --; outputs --; timeout 1200s
 - **build-float (`verify`)**: `cargo build --release --locked -p uor-r4-float-train --features cuda --bin train-in-space --bin fbs-snapshot`
   - env --; inputs --; outputs `target/release/train-in-space`<br>`target/release/fbs-snapshot`; timeout 1800s
 - **build-export (`verify`)**: `cargo build --release --locked -p uor-r4-integer --bin fbs-export --features serving-wasm`
