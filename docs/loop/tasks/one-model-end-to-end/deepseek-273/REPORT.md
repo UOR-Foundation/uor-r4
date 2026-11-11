@@ -3,7 +3,7 @@
 Lab: deepseek. Item:
 [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md)
 (#3407). Order: [ORDER.md](./ORDER.md). Base code: `7a450a88f`; launch code:
-`0e3f66a1e27f1d67f36b3457b9d3ede832a4a8a6`; contract implementation source:
+`f44afe7a973039fd4b28d69b6050a65ca6680d4d`; contract implementation source:
 `4add144ebdc9087e47fe3fa830fb21116278644e`. All invoked-script hashes and
 the exact reviewed execution-head procedure are in
 [`launch-pins.env`](./launch-pins.env).

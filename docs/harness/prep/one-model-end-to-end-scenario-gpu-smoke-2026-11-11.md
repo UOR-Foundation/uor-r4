@@ -45,7 +45,7 @@ while retaining the wrong-memory and no-memory abstention controls?
   --turn-memory-dropout 500 --turn-memory-leave-copied 1 --batch 16
   --steps 1024 --eval-every 256 --samples 6 --reply-tokens 48`.
 - **Frozen identity:** the code/config pin is
-  `0e3f66a1e27f1d67f36b3457b9d3ede832a4a8a6`; the contract's implementation
+  `f44afe7a973039fd4b28d69b6050a65ca6680d4d`; the contract's implementation
   source is `4add144ebdc9087e47fe3fa830fb21116278644e`, and the later contract
   bytes are bound by semantic hash
   `40518eae6d71d1482b238f3dd650e4858ef4f1434e485943ae360eb7821bb421`.
