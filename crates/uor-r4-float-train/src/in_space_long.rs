@@ -2229,8 +2229,8 @@ fn step_gradient(
             let loss = match &placing {
                 Some((reads, teach, table)) => {
                     let plain = assemble(&windows[lo..hi]).0;
-                    let labels = teach.kit.labels(&window_starts(&windows[lo..hi]), context);
-                    match reads.place_step(&plain, context, table, &labels)? {
+                    let starts = window_starts(&windows[lo..hi]);
+                    match reads.place_step(&plain, context, table, &teach.kit, &starts)? {
                         Some(distance) if teach.pull > 0.0 => {
                             let weight = teach.pull * (hi - lo) as f64 / windows.len() as f64;
                             loss.add(&distance.affine(weight, 0.0)?)?
@@ -12954,10 +12954,6 @@ pub struct RecallReading {
     /// claude-335: the question carry's gain `c` by token group, on a carried read.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hamming_carry_gain: Option<HoldGainReading>,
-    /// claude-351: the place read's gains and, since the last reading, its votes and mean pull
-    /// (`PlaceRead::reading`), on a read with it.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hamming_place: Option<crate::flock_read_hamming::PlaceReading>,
     /// claude-334: `|w_y|`, each depth's type weight row's mean absolute value, with the ask
     /// heads on.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -13919,10 +13915,6 @@ pub fn run_recall(
             },
             hamming_carry_gain: match crate::flock_read_hamming::hamming_reads() {
                 Some(reads) => reads.carry_gain()?.map(|c| hold_gain_reading(&c)).transpose()?,
-                None => None,
-            },
-            hamming_place: match crate::flock_read_hamming::hamming_reads() {
-                Some(reads) => reads.place().map(|place| place.reading()).transpose()?,
                 None => None,
             },
             hamming_type_weight_mean_abs: match crate::flock_read_hamming::hamming_reads() {
@@ -15170,9 +15162,29 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             if let Some(tally) = pull_tally.as_mut() {
                 append_line(&out.join("pull.jsonl"), &serde_json::to_string(&tally.line(step + 1))?)?;
             }
+            // claude-351: the place read's reading for this checkpoint, on a run with it.
+            if let Some(line) = place_line(step + 1)? {
+                append_line(&out.join("place.jsonl"), &serde_json::to_string(&line)?)?;
+            }
         }
     }
     Ok(())
+}
+
+/// claude-351: a checkpoint's `place.jsonl` line on a language run with the place read
+/// (`run_long` under `--hamming-place`): the step, and the place read's gains and, since the
+/// line before, its votes and mean pull (`PlaceRead::reading`, which starts the next tally).
+/// None on a run without the place read, which writes no such file.
+fn place_line(step: usize) -> Result<Option<serde_json::Value>> {
+    let Some(reads) = crate::flock_read_hamming::hamming_reads() else {
+        return Ok(None);
+    };
+    let Some(place) = reads.place() else {
+        return Ok(None);
+    };
+    let mut line = serde_json::to_value(place.reading()?)?;
+    line["step"] = step.into();
+    Ok(Some(line))
 }
 
 #[cfg(test)]

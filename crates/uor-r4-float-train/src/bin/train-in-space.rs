@@ -93,7 +93,9 @@
 //! reply row the token at the place as the copy mix's source. KIT is the file
 //! `--turn-census ... --places-out KIT` writes from the corpus the run trains on: the labels,
 //! marks and stop tokens. `--hamming-place-pull λ` adds λ times the place pull to the loss
-//! (`HammingReads::place_step`).
+//! (`HammingReads::place_step`). A run with the place read appends one line a checkpoint to
+//! `place.jsonl` in its output folder: the step, how many tokens arm and open, and the votes and
+//! mean pull since the line before. `--places-out` refuses a path that exists.
 //! `--score-rows` additionally accepts `[--batched-decode 0|1]`.
 //!
 //! `--score-rows` decodes equal-length prompts together on the full-scope nearest arms, except
@@ -1719,7 +1721,14 @@ fn turn_census_run(data_root: &Path, folders: &[PathBuf; 4], places_out: Option<
         .map_err(|what| invalid(&what))?;
         let bytes = serde_json::to_vec(&kit)
             .map_err(|e| invalid(&format!("the place kit does not serialize: {e}")))?;
-        std::fs::write(path, &bytes)?;
+        // A new file only: the path is never one of the run's inputs, or an earlier kit.
+        use std::io::Write as _;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .map_err(|e| invalid(&format!("--places-out {}: {e}", path.display())))?;
+        file.write_all(&bytes)?;
         println!(
             "place-kit places={} stop={} tokens_sha256={} sha256={} file={}",
             kit.places.len(),

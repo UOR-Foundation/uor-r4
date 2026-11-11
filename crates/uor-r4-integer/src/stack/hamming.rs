@@ -1082,8 +1082,12 @@ impl ServedHamming {
     /// served order, from `codes` over a window of at most `context` steps. Refused: a depth no
     /// read runs at (0, past the layer count, or a second read at a depth), a head the read does
     /// not serve, a step past the context, a key at step 0 (it names no candidate), and a code
-    /// forced twice.
+    /// forced twice. An artifact with a place read (claude-351) refuses every forced code: at an
+    /// open row the readout takes the place, and a forced copy code there would change nothing.
     pub(crate) fn forcing(&self, codes: &[ForcedCode], context: usize) -> Result<Vec<ReadForce>, StackError> {
+        if self.place.is_some() && !codes.is_empty() {
+            return Err(StackError::Shape("forced codes are not served with a place read"));
+        }
         let mut reads: Vec<ReadForce> = self
             .reads
             .iter()

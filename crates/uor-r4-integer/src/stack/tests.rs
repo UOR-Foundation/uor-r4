@@ -8287,6 +8287,20 @@ fn hamming_place_read_round_trips() {
     assert!(super::read_hamming_uorlut01(&bare).is_err(), "a place record needs its class table");
     let outside = with_header(&placed, |h| h["hamming"]["place"]["bos"] = 512.into());
     assert!(super::read_hamming_uorlut01(&outside).is_err(), "a mark is a vocabulary id");
+    // Marks the turn reader cannot tell apart are refused when read and when added: no
+    // separator, one marker for two roles, one token for the start and the end mark.
+    let refused = |why: &str, change: &dyn Fn(&mut super::PlaceMarks)| {
+        let mut marks = place.marks.clone();
+        change(&mut marks);
+        let written = with_header(&placed, |h| h["hamming"]["place"] = serde_json::to_value(&marks).unwrap());
+        let err = super::read_hamming_uorlut01(&written).unwrap_err().to_string();
+        assert!(err.contains(why), "{why}: {err}");
+        let image = super::PlaceImage { marks, class: place.class.clone() };
+        assert!(super::add_hamming_place_uorlut01(&asked, &image).is_err(), "{why}: refused when added");
+    };
+    refused("a separator", &|m| m.sep.clear());
+    refused("ends with another", &|m| m.assistant = m.user.clone());
+    refused("one token", &|m| m.eos = m.bos);
     // The export's road: the image as the snapshot JSON carries it under its key gives the same
     // artifact, byte for byte; a field the exporter does not know, a class table at another
     // length and a class bit outside the three are each refused.
@@ -8370,6 +8384,15 @@ fn the_place_read_offers_the_tokens_point_through_the_copy_mix() {
     let (image, table, vocab, width) = (&served.image, &served.table, served.vocab, served.width);
     let hamming = ServedHamming::new(image, table, vocab, width, 3, 40).expect("the reads");
     assert!(hamming.has_place() && !hamming.has_type_heads());
+    // A forced code is refused by name, since an open row's readout takes the place and would
+    // pass over it; no forced code is no refusal.
+    use crate::fbs_snapshot::{CodeRole, ForcedCode};
+    assert!(hamming.forcing(&[], 40).is_ok(), "no forced code");
+    let code = ForcedCode { step: 1, depth: 1, head: 0, role: CodeRole::Query, code: 1 };
+    let Err(err) = hamming.forcing(&[code], 40) else {
+        panic!("a forced code is refused with a place read");
+    };
+    assert!(err.to_string().contains("place read"), "{err}");
     let weight = &image.reads[1].weight[..width];
     let mut rng = Lcg(351);
     let n: Vec<i64> = (0..width).map(|_| (rng.next() % (1 << 40)) as i64 - (1 << 39)).collect();

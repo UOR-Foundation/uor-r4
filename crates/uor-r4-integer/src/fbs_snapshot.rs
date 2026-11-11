@@ -2729,6 +2729,33 @@ pub struct PlaceMarks {
     pub assistant: Vec<u32>,
 }
 
+impl PlaceMarks {
+    /// Refuse marks the turn reader cannot tell apart, over a vocabulary of `vocab` entries: an
+    /// id outside it; an empty separator, user marker or assistant marker; one token for the
+    /// start and the end mark; or a role marker that ends with another, so that one run of
+    /// tokens would name two roles. The system marker may be empty: such a stream has no system
+    /// turns.
+    pub fn check(&self, vocab: usize) -> Result<(), &'static str> {
+        let lists = [&self.sep, &self.system, &self.user, &self.assistant];
+        let mut ids = [self.bos, self.eos].into_iter().chain(lists.iter().flat_map(|l| l.iter().copied()));
+        if ids.any(|id| id as usize >= vocab) {
+            return Err("a place read's mark is outside the vocabulary");
+        }
+        if self.sep.is_empty() || self.user.is_empty() || self.assistant.is_empty() {
+            return Err("a place read needs a separator, a user marker and an assistant marker");
+        }
+        if self.bos == self.eos {
+            return Err("a place read's start mark and end mark are one token");
+        }
+        let roles = [&self.system, &self.user, &self.assistant];
+        let nested = |(i, a): (usize, &&Vec<u32>)| roles.iter().enumerate().any(|(j, b)| i != j && !b.is_empty() && a.ends_with(b));
+        if roles.iter().enumerate().any(nested) {
+            return Err("one of a place read's role markers ends with another");
+        }
+        Ok(())
+    }
+}
+
 /// A read stops at this vocabulary entry: it starts a new word or is punctuation (claude-351).
 pub const PLACE_STOP: i16 = 1;
 /// A question row with this vocabulary entry arms the register with its find.
@@ -2746,9 +2773,10 @@ pub struct PlaceImage {
 }
 
 impl PlaceImage {
-    /// The tables over `vocab` entries, refusing a class table at another length or with a bit
-    /// outside the three.
+    /// The tables over `vocab` entries, refusing marks [`PlaceMarks::check`] refuses, a class
+    /// table at another length, or a class bit outside the three.
     pub fn checked(marks: PlaceMarks, class: Vec<i16>, vocab: usize) -> Result<Self, String> {
+        marks.check(vocab)?;
         if class.len() != vocab {
             return Err(format!("the place read's class table has {} entries for a vocabulary of {vocab}", class.len()));
         }
@@ -2850,8 +2878,9 @@ pub type PlaceAsked = (Range<usize>, Vec<(usize, usize)>);
 ///
 /// - **Hold.** The register is a position, with no reach. A user turn's start clears it.
 /// - **Arm.** A row of a user turn's content records the place its question finds among the
-///   finished user turns. When the reply starts, the last such row whose token has [`PLACE_ARM`]
-///   sets the register to its find.
+///   finished user turns; a row that finds nothing records nothing. When the first reply after
+///   that turn starts, the last recorded row whose token has [`PLACE_ARM`] sets the register to
+///   its find. A second model turn with no user turn between sets nothing.
 /// - **Open.** A reply row, from the role marker's last token to the row before the end mark, is
 ///   open when the register is set and either its token has [`PLACE_OPEN`] or the step opened it.
 ///   An open row is offered the token at the place.
@@ -2870,6 +2899,9 @@ pub struct PlaceState {
     offer: Option<usize>,
     /// Whether the reply being read has reached its end mark.
     over: bool,
+    /// Whether a reply has started since the last user turn did. A reply answers the latest user
+    /// turn once: a second model turn with no user turn between asks nothing.
+    answered: bool,
 }
 
 impl PlaceState {
@@ -2912,16 +2944,20 @@ impl PlaceState {
         if token == image.marks.bos {
             self.finds.clear();
             self.place = None;
+            self.answered = false;
         }
         match self.turns.push(tokens, &image.marks) {
             Some(PlaceRole::User) => {
                 self.finds.clear();
                 self.place = None;
+                self.answered = false;
             }
             Some(PlaceRole::Assistant) => {
                 self.over = false;
                 self.place = None;
-                if let Some((content, prior)) = self.turns.users.split_last() {
+                let asked = self.turns.users.split_last().filter(|_| !self.answered);
+                self.answered = true;
+                if let Some((content, prior)) = asked {
                     let found: Vec<(usize, usize)> = self.finds.drain(..).filter(|(at, _)| content.contains(at)).collect();
                     let armed = found.iter().rev().find(|&&(at, _)| image.has(tokens[at], PLACE_ARM));
                     self.place = armed.and_then(|&(_, pos)| prior.iter().find(|turn| turn.contains(&pos)).map(|turn| (pos, turn.end)));
@@ -3118,6 +3154,62 @@ mod place_tests {
         // A find outside every finished user turn sets nothing.
         let rows = rows(&TALK, 15, 10);
         assert!(rows.iter().all(|row| row.held.is_none()));
+    }
+
+    #[test]
+    fn a_step_onto_the_end_of_the_places_turn_stops_the_read() {
+        // The user's turn ends at the value, with no "." after it: "name is V1 V2 </s>".
+        let tokens = [BOS, USER, 9, IS, 11, 12, EOS, SEP, MODEL, 16, EOS, SEP, USER, 14, ASK, SEP, MODEL, IS, 11, 12, 16];
+        let read = rows(&tokens, 14, 4);
+        assert_eq!(read[16].asked, Some((13..15, vec![(14, 4)])));
+        assert_eq!((read[17].offer, read[18].offer, read[18].stepped), (Some(4), Some(5), true));
+        // The value's last token would step onto the turn's end mark: the read ends instead.
+        assert_eq!((read[19].held, read[19].offer, read[19].stepped), (None, None, false));
+        assert_eq!(read[20], PlaceRow::default());
+    }
+
+    #[test]
+    fn a_reply_answers_the_latest_user_turn_once() {
+        // A second model turn with no user turn between asks nothing and holds nothing.
+        let mut tokens = TALK.to_vec();
+        tokens.extend([EOS, SEP, MODEL, IS, 11]);
+        let twice = rows(&tokens, 15, 4);
+        assert_eq!(twice[17].asked, Some((14..16, vec![(15, 4)])));
+        assert!(twice[22..].iter().all(|row| *row == PlaceRow::default()), "{:?}", &twice[22..]);
+        // A system turn between the question and its reply changes nothing: the reply asks.
+        let mut tokens = TALK[..16].to_vec();
+        tokens.extend([SEP, 3, 9, SEP, MODEL, IS, 11]);
+        let lined = rows(&tokens, 15, 4);
+        assert_eq!(lined[20].asked, Some((14..16, vec![(15, 4)])));
+        assert_eq!((lined[20].held, lined[21].offer, lined[22].offer), (Some(4), Some(4), Some(5)));
+    }
+
+    #[test]
+    fn marks_the_turn_reader_cannot_tell_apart_are_refused() {
+        let good = image().marks;
+        assert_eq!(good.check(20), Ok(()));
+        assert!(good.check(5).is_err(), "the assistant marker is outside a vocabulary of 5");
+        let with = |change: &dyn Fn(&mut PlaceMarks)| {
+            let mut marks = good.clone();
+            change(&mut marks);
+            marks.check(20)
+        };
+        assert!(with(&|m| m.sep.clear()).is_err());
+        assert!(with(&|m| m.user.clear()).is_err());
+        assert!(with(&|m| m.assistant.clear()).is_err());
+        assert!(with(&|m| m.eos = m.bos).is_err());
+        // One marker for two roles, and a marker that ends with another.
+        assert!(with(&|m| m.assistant = m.user.clone()).is_err());
+        assert!(with(&|m| m.assistant = vec![7, USER]).is_err());
+        assert!(with(&|m| m.system = vec![7, MODEL]).is_err());
+        // Markers that share only their last token are told apart, and the system marker may
+        // be empty.
+        assert_eq!(with(&|m| (m.user, m.assistant) = (vec![7, 8], vec![6, 8])), Ok(()));
+        assert_eq!(with(&|m| m.system.clear()), Ok(()));
+        // The image refuses what the marks refuse.
+        let mut marks = good.clone();
+        marks.sep.clear();
+        assert!(PlaceImage::checked(marks, vec![0; 20], 20).is_err());
     }
 
     #[test]

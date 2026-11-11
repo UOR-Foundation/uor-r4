@@ -1125,9 +1125,9 @@ pub fn place_census(
             .filter(|&t| test(&(codec.decode)(&[t])))
             .collect()
     };
-    let punct = class(&|s| !s.chars().any(char::is_alphanumeric));
+    let punct = class(&no_letter_or_digit);
     let space = class(&|s| !s.is_empty() && s.chars().all(char::is_whitespace));
-    let new_word = class(&|s| s.starts_with(char::is_whitespace));
+    let new_word = class(&starts_a_word);
     let text = |range: &Range<usize>| (codec.decode)(&x[range.clone()]).replace('\n', " ");
 
     // A: the instrument.
@@ -1638,12 +1638,24 @@ pub fn place_census(
     Ok(out)
 }
 
+/// The place read's two stop classes (B1), by a token's text: no letter or digit, and the start
+/// of a new word. The place census's classes and the kit's stop list both read them here, so the
+/// register the census ran and the one a trainer runs stop at the same tokens.
+fn no_letter_or_digit(text: &str) -> bool {
+    !text.chars().any(char::is_alphanumeric)
+}
+
+fn starts_a_word(text: &str) -> bool {
+    text.starts_with(char::is_whitespace)
+}
+
 /// The labels a trainer of the place read learns from (claude-351), read from a split written
 /// without memory lines and its twin written `recall=oracle`: every recall reply with a place,
 /// as `[reply start, place, value start, value length]` in the split's positions, in ascending
 /// reply start; the marks; and the tokens a read stops at (B1) over all `vocab` tokens, those
 /// whose text has no letter or digit or starts a new word, as the census classes them.
-/// `tokens_sha256` names the split.
+/// `tokens_sha256` names the split: the hash of its `tokens.u16` file, header included, which is
+/// the hash a training run checks its corpus by, so it is the caller's to read from that file.
 pub fn place_kit(
     split: (&[u32], &[u8]),
     twin: (&[u32], &[u8]),
@@ -1667,7 +1679,7 @@ pub fn place_kit(
     let stop = (0..vocab as u32)
         .filter(|&t| {
             let text = (codec.decode)(&[t]);
-            !text.chars().any(char::is_alphanumeric) || text.starts_with(char::is_whitespace)
+            no_letter_or_digit(&text) || starts_a_word(&text)
         })
         .collect();
     let kit = crate::flock_read_hamming::PlaceKit {
@@ -2236,6 +2248,18 @@ mod tests {
         let word = |i: u32| WORDS[plain[i as usize] as usize];
         assert_eq!((word(reply), word(s), word(p), len), ("it's", "maya", "maya", 1));
         assert_eq!((kit.stop.clone(), kit.tokens_sha256.as_str()), (ids("\n : ."), "the split's hash"));
+        // A token whose text starts a new word stops a read too: with "who" written " who", the
+        // same twins give the same place and one more stop token.
+        let who = ids("who");
+        let spaced = |tokens: &[u32]| if tokens == who { " who".to_owned() } else { decode(tokens) };
+        let spaced = Codec {
+            decode: &spaced,
+            encode: &encode,
+        };
+        let sha = "the split's hash".to_owned();
+        let other = place_kit((&plain, &plain_mask), (&lined, &lined_mask), &marks(), &spaced, WORDS.len(), sha)
+            .expect("a kit");
+        assert_eq!((other.stop, other.places), (ids("\n : who ."), kit.places.clone()));
         let labels = kit.labels(&[Some(0)], plain.len());
         let want = crate::flock_read_hamming::PlaceLabel::At {
             place: s as usize,
@@ -2438,6 +2462,55 @@ mod tests {
         assert_eq!(program.len(), 2, "{out:#?}");
         for line in program {
             assert!(line.ends_with("equal=true"), "{line}");
+        }
+        // The same four replies through the program, by hand. The register is at the true place
+        // on the first three and at "ok" on the last. "it's" opens right on those three, early
+        // on the doubled one and wrong on the last. Each of the three reads its one-token value,
+        // and the "." after "maya" in the user's turn stops it.
+        for needle in [
+            "place-program D rule=D3 true_place=3 wrong_place=1 general_set=0 abstain_set=0",
+            "place-program E arm=D3 right=3 of=3 wrong_recall=2 wrong_general=0 wrong_abstain=0 value_start_is_the_first_open=2 moved=0",
+            "place-program read whole=3 short=0 long=0 of=3",
+        ] {
+            assert!(out.iter().any(|line| line.contains(needle)), "missing {needle} in {out:#?}");
+        }
+    }
+
+    #[test]
+    fn the_place_program_steps_through_a_two_token_value_and_stops_after_it() {
+        // The value is "maya ok". The read opens at "it's" and offers "maya"; the step carries
+        // it on to "ok"; the "." after "ok" in the user's turn stops it. A program whose step
+        // does nothing reads this value short, and one that does not stop reads it long.
+        let turns = [
+            "User|my friend is maya ok .",
+            "Assistant|ok .",
+            "User|who is my friend",
+            "Assistant|it's maya ok .",
+        ];
+        let [(plain, plain_mask), (lined, lined_mask)] = twins(&turns, "System|Memory : maya ok .");
+        let decode = |ids: &[u32]| words(ids).replace(" :", ":").replace(" .", ".");
+        let encode = |text: &str| ids(text);
+        let codec = Codec {
+            decode: &decode,
+            encode: &encode,
+        };
+        let corpora = Corpora {
+            train: (&plain, &plain_mask),
+            train_lined: (&lined, &lined_mask),
+            panel: (&plain, &plain_mask),
+            lined: (&lined, &lined_mask),
+        };
+        let lists = Stops {
+            tops: &[0],
+            registered: 0,
+        };
+        let out = place_census(&corpora, &marks(), &codec, &lists, 4).expect("a census");
+        for needle in [
+            "place-program D rule=D3 true_place=1 wrong_place=0 general_set=0 abstain_set=0",
+            "place-program E arm=D3 right=1 of=1 wrong_recall=0 wrong_general=0 wrong_abstain=0 value_start_is_the_first_open=1 moved=0",
+            "place-program read whole=1 short=0 long=0 of=1",
+        ] {
+            assert!(out.iter().any(|line| line.contains(needle)), "missing {needle} in {out:#?}");
         }
     }
 

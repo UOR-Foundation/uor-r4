@@ -1135,7 +1135,9 @@ impl HammingReads {
 
     /// The sheet's pull-distance reading (claude-330): [`Self::ask_pull`]'s mean distance at each
     /// depth on its own, as plain numbers, over the same `(row, target)`s. `None` when no row has
-    /// a copy.
+    /// a copy. Under the place read the found-copy pull passes the readout read over, so the list
+    /// is one entry short and an index is no longer a depth; the recall run, this reading's one
+    /// caller, refuses the place read.
     pub fn ask_pull_depths(
         &self,
         ids: &[u32],
@@ -1404,19 +1406,28 @@ impl HammingReads {
             let rows = self.carry_rows() as u32;
             tensors.insert("carry_rows".to_owned(), Tensor::new(&[rows], device)?);
         }
-        candle_core::safetensors::save(&tensors, directory.join(FILE))?;
         // claude-351: only a read with the place read writes its host state, so every other
-        // checkpoint is as before.
+        // checkpoint is as before. It is written before the reads' file: a save cut short between
+        // the two leaves a place file with no reads beside it, which `load` refuses, and never
+        // reads that have silently lost their place read.
         if let Some(place) = self.place() {
             std::fs::write(directory.join(PLACE_FILE), serde_json::to_vec(&place.saved()?)?)?;
         }
+        candle_core::safetensors::save(&tensors, directory.join(FILE))?;
         Ok(())
     }
 
-    /// The reads saved in `directory`, or none when the checkpoint has none.
+    /// The reads saved in `directory`, or none when the checkpoint has none. A place read's
+    /// state with no reads beside it is a save cut short, and is refused.
     pub fn load(directory: &Path, device: &Device) -> Result<Option<Self>> {
         let path = directory.join(FILE);
         if !path.exists() {
+            if directory.join(PLACE_FILE).exists() {
+                return Err(invalid(format!(
+                    "{} holds a place read's state and no reads: the save was cut short",
+                    directory.display()
+                )));
+            }
             return Ok(None);
         }
         let tensors = candle_core::safetensors::load(path, device)?;
@@ -2589,12 +2600,23 @@ fn place_vote(counts: &mut [i16], token: u32, up: bool) {
 
 /// What a pass teaches (claude-351), from `rows` ([`place_pass`]) and the batch's `labels`.
 ///
-/// The arm count of a question row's token goes up when the row's find is the labelled place,
-/// and down when it is another place or the reply has no label. The open count of a reply row's
-/// token goes up at the value-start row when the register is at the labelled place, and down at
-/// an earlier row of that reply, or at any row of a reply whose register is set anywhere else.
-/// A row the step opened is left out, as is every row after the value-start row. A reply whose
-/// place the window does not hold votes on nothing.
+/// **The arm count** of a question row's token goes up when the row's find is the labelled
+/// place, and down when it is another place or the reply has no label. A row that found nothing
+/// is not among the reply's finds and votes on nothing.
+///
+/// **The open count** of a reply row's token, at a row where the register is set:
+/// - with the register at the labelled place, the value-start row votes up, each row before it
+///   votes down, and the rows after it do not vote;
+/// - with the register anywhere else, at another place or in a reply with no label, every row
+///   of the reply votes down;
+/// - a row the step opened does not vote.
+///
+/// **Nothing votes** in a reply whose place the window does not hold ([`PlaceLabel::Outside`]),
+/// or in a window the kit could not place in the corpus (`placed[b]` false): its replies have
+/// labels the trainer cannot see, and "no label" there would be a guess.
+///
+/// A label's `value_row` may lie past the window's end. It is only compared with a row, never
+/// used as an index.
 ///
 /// Returns the pull's pairs, flat rows `(t, s)`: every row `t` of a labelled question, from the
 /// window's second, with the labelled place `s`; and the votes cast, arm then open, each up then
@@ -2604,6 +2626,7 @@ fn place_learn(
     ids: &[u32],
     time: usize,
     labels: &PlaceLabels,
+    placed: &[bool],
     counts: &mut PlaceCounts,
 ) -> (Vec<(u32, u32)>, [[u64; 2]; 2]) {
     // The votes cast, arm then open, each up then down.
@@ -2614,6 +2637,9 @@ fn place_learn(
     };
     let mut pairs = Vec::new();
     for (b, window) in rows.chunks(time).enumerate() {
+        if !placed.get(b).copied().unwrap_or(false) {
+            continue;
+        }
         let base = b * time;
         // The reply the rows are in: its label, and whether its value-start row has passed.
         let mut reply: Option<(Option<PlaceLabel>, bool)> = None;
@@ -2865,17 +2891,22 @@ impl HammingReads {
         self.reads.get(1).and_then(|r| r.place.as_ref())
     }
 
-    /// One training step of the place read (claude-351) on `ids`' windows of `time`, with the
-    /// batch's `labels`: the register program runs over every window on the ask heads' own
-    /// codes, the two gains take their votes, and the place pull is returned, the mean over
-    /// every row of every labelled question of the nearer head's distance to the key of the
-    /// labelled place, for the caller to scale. `None` when no question in the batch is labelled.
+    /// One training step of the place read (claude-351) on `ids`' windows of `time`, labelled
+    /// from `kit` by each window's corpus start in `starts`: the register program runs over
+    /// every window on the ask heads' own codes, the two gains take their votes, and the place
+    /// pull is returned, the mean over every row of every labelled question of the nearer head's
+    /// distance to the key of the labelled place, for the caller to scale. `None` when no
+    /// question in the batch is labelled. A window with no start teaches nothing.
+    ///
+    /// The votes are cast here, at this forward. A training step split into several forwards
+    /// therefore runs its later forwards on the counts its earlier ones moved.
     pub fn place_step(
         &self,
         ids: &[u32],
         time: usize,
         table: &Tensor,
-        labels: &PlaceLabels,
+        kit: &PlaceKit,
+        starts: &[Option<usize>],
     ) -> Result<Option<Tensor>> {
         let read = self
             .reads
@@ -2885,12 +2916,14 @@ impl HammingReads {
             .place
             .as_ref()
             .ok_or_else(|| invalid("the place step needs the place read; turn it on with --hamming-place"))?;
-        if time == 0 || !ids.len().is_multiple_of(time) {
-            return Err(invalid("the place step needs whole windows"));
+        if time == 0 || !ids.len().is_multiple_of(time) || starts.len() != ids.len() / time {
+            return Err(invalid("the place step needs whole windows, and a corpus start or none for each"));
         }
+        let labels = kit.labels(starts, time);
+        let placed: Vec<bool> = starts.iter().map(Option::is_some).collect();
         let (query, key) = read.place_codes(ids, time, table)?;
         let rows = read.place_rows(place, &query, &key, ids, time)?;
-        let (pairs, votes) = place_learn(&rows, ids, time, labels, &mut *place.counts()?);
+        let (pairs, votes) = place_learn(&rows, ids, time, &labels, &placed, &mut *place.counts()?);
         if pairs.is_empty() {
             place.tallied(votes, None)?;
             return Ok(None);
@@ -6202,10 +6235,16 @@ mod place_tests {
 
     /// One pass and its votes, with an exact margin: the rows' offers and the pull's pairs.
     fn step(place: &PlaceRead, labels: &PlaceLabels) -> (Vec<Option<usize>>, Vec<(u32, u32)>) {
+        step_on(place, labels, true)
+    }
+
+    /// [`step`], on a window the kit placed in the corpus or could not.
+    fn step_on(place: &PlaceRead, labels: &PlaceLabels, placed: bool) -> (Vec<Option<usize>>, Vec<(u32, u32)>) {
         let (q, k) = codes(&TALK);
         let image = place.image().expect("an image");
         let rows = place_pass(&image, place_first(16), &[1 << 16], &TALK, TALK.len(), &q, &k);
-        let (pairs, votes) = place_learn(&rows, &TALK, TALK.len(), labels, &mut place.counts().expect("counts"));
+        let counts = &mut place.counts().expect("counts");
+        let (pairs, votes) = place_learn(&rows, &TALK, TALK.len(), labels, &[placed], counts);
         place.tallied(votes, None).expect("a tally");
         (rows.into_iter().map(|r| r.offer).collect(), pairs)
     }
@@ -6269,6 +6308,82 @@ mod place_tests {
         for token in [MODEL, ITS, MAYA, DOT] {
             assert_eq!(gains.open[token as usize], -1, "token {token}");
         }
+    }
+
+    #[test]
+    fn with_the_register_set_no_label_votes_the_reply_down_and_outside_or_unplaced_votes_on_nothing() {
+        let armed = || {
+            let place = place();
+            place.counts().expect("counts").arm[ASK as usize] = 1;
+            place
+        };
+        let untouched = |place: &PlaceRead| {
+            let gains = place.gains().expect("gains");
+            assert_eq!((gains.arm[ASK as usize], gains.open), (1, vec![0; VOCAB]));
+            let reading = place.reading().expect("a reading");
+            assert_eq!((reading.arm_votes, reading.open_votes), ([0, 0], [0, 0]));
+        };
+        // No label, in a window the kit placed: the armed find was a wrong vote, and every row
+        // of the reply votes its token's open count down, for the register is set.
+        let place = armed();
+        assert_eq!(step(&place, &PlaceLabels::new()).1, Vec::new());
+        let gains = place.gains().expect("gains");
+        assert_eq!(gains.arm[ASK as usize], 0);
+        for token in [MODEL, ITS, MAYA, DOT] {
+            assert_eq!(gains.open[token as usize], -1, "token {token}");
+        }
+        // Outside: the window does not hold the place. Nothing votes, though the register is set.
+        let place = armed();
+        let outside = PlaceLabels::from([(16, PlaceLabel::Outside)]);
+        assert_eq!(step(&place, &outside).1, Vec::new());
+        untouched(&place);
+        // A window the kit could not place in the corpus: its replies' labels are unknown, so
+        // nothing votes and nothing is pulled, with or without a label at its rows.
+        for labels in [PlaceLabels::new(), kit().labels(&[Some(0)], TALK.len())] {
+            let place = armed();
+            assert_eq!(step_on(&place, &labels, false).1, Vec::new());
+            untouched(&place);
+        }
+    }
+
+    #[test]
+    fn a_place_file_with_no_reads_beside_it_is_refused() {
+        let dir = std::env::temp_dir().join(format!("uor-place-lone-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("a directory");
+        // No file at all: a checkpoint without reads.
+        assert!(HammingReads::load(&dir, &Device::Cpu).expect("no reads").is_none());
+        // The place file alone: a save cut short between its two files.
+        let place = place();
+        std::fs::write(dir.join(PLACE_FILE), serde_json::to_vec(&place.saved().expect("state")).expect("json"))
+            .expect("the place file");
+        let refused = HammingReads::load(&dir, &Device::Cpu).map(|reads| reads.is_some());
+        std::fs::remove_file(dir.join(PLACE_FILE)).expect("the place file removed");
+        std::fs::remove_dir(&dir).expect("the directory removed");
+        let message = refused.expect_err("a lone place file is refused").to_string();
+        assert!(message.contains("cut short"), "{message}");
+    }
+
+    #[test]
+    fn a_second_window_is_read_and_taught_at_its_own_rows() {
+        // Two windows: one with no conversation, then the talk. The kit places the talk's
+        // window at the corpus start and the other where it has no reply.
+        let time = TALK.len();
+        let mut ids = vec![OK; time];
+        ids[0] = BOS;
+        ids.extend(TALK);
+        let (place, (q, k)) = (place(), codes(&ids));
+        let image = place.image().expect("an image");
+        let rows = place_pass(&image, place_first(16), &[1 << 16], &ids, time, &q, &k);
+        assert!(rows[..time].iter().all(|row| *row == PlaceRow::default()));
+        // The question's find is in the second window's own positions.
+        assert_eq!(rows[time + 16].asked, Some((13..15, vec![(14, 5)])));
+        let labels = kit().labels(&[Some(100), Some(0)], time);
+        assert_eq!(labels, PlaceLabels::from([(time + 16, PlaceLabel::At { place: 5, value_row: 17 })]));
+        let counts = &mut place.counts().expect("counts");
+        let (pairs, votes) = place_learn(&rows, &ids, time, &labels, &[true, true], counts);
+        // The pull's pairs are flat rows, and the one vote is the second window's right find.
+        assert_eq!(pairs, vec![(33, 25), (34, 25)]);
+        assert_eq!((votes, counts.arm[ASK as usize]), ([[1, 0], [0, 0]], 1));
     }
 
     #[test]
@@ -6469,8 +6584,8 @@ mod place_tests {
         let table = Var::from_tensor(&walsh_table(&device)).unwrap();
         let read = &reads.reads[1];
         let ask = read.ask.as_ref().expect("ask heads");
-        let labels = kit().labels(&[Some(0)], TALK.len());
-        let step = || reads.place_step(&TALK, TALK.len(), table.as_tensor(), &labels).unwrap().expect("a pull");
+        let kit = kit();
+        let step = || reads.place_step(&TALK, TALK.len(), table.as_tensor(), &kit, &[Some(0)]).unwrap().expect("a pull");
         let scalar = |t: &Tensor| t.to_scalar::<f32>().unwrap();
         let pull = step();
         assert!((scalar(&pull) - 0.5).abs() < 1e-6, "{}", scalar(&pull));

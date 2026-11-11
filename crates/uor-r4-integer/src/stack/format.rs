@@ -375,15 +375,7 @@ impl StackHamming {
                     "a Hamming place read needs heads of whole 8-coordinate blocks, so each half is whole lanes",
                 ));
             }
-            let vocab = shape.vocab as u64;
-            let ids = [marks.bos, marks.eos].into_iter();
-            let lists = [&marks.sep, &marks.system, &marks.user, &marks.assistant];
-            let inside = ids.chain(lists.iter().flat_map(|l| l.iter().copied())).all(|id| u64::from(id) < vocab);
-            if !inside || marks.user.is_empty() || marks.assistant.is_empty() {
-                return Err(StackError::Shape(
-                    "a Hamming place read's marks are vocabulary ids, with a user and an assistant marker",
-                ));
-            }
+            marks.check(shape.vocab).map_err(StackError::Shape)?;
         }
         let exps = (self.rotation_exp, self.margin_exp, self.weight_exp);
         if exps != (HAMMING_ROTATION_EXP, HAMMING_MARGIN_EXP, HAMMING_WEIGHT_EXP) {
