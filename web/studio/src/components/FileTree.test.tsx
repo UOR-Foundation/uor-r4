@@ -185,6 +185,53 @@ describe('FileTree', () => {
         expect(files.api.openFile).toHaveBeenCalledWith('src/main.ts');
     });
 
+    it('host_tree_open_refuses_an_unknown_path_instead_of_reporting_success', async () => {
+        const transport = new RecordingHostTransport({
+            grant_id: 'gr_abcd1234',
+            path: '',
+            entries: [{ path: 'src/main.ts', kind: 'file', size_bytes: 12 }],
+            truncated: false,
+            symlinks_skipped: 0,
+            read_errors: 0,
+        });
+        const client = new AgentClient({ hostClient: new HostClient({ transport }) });
+        const files = workspace();
+        files.api.openFile = vi.fn(async () => undefined);
+        const { onError, onSuccess } = mount(files.api, client);
+
+        await vi.waitFor(() => expect(treeButtons().map((button) => button.textContent)).toEqual(['main.ts']));
+        act(() => { treeButtons()[0]!.click(); });
+        await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(
+            'src/main.ts is not available in this editor build.',
+            'workspace:open:src/main.ts',
+        ));
+        expect(onSuccess).not.toHaveBeenCalledWith('workspace:open:src/main.ts');
+    });
+
+    it('host_tree_open_refuses_when_another_file_stays_active', async () => {
+        const transport = new RecordingHostTransport({
+            grant_id: 'gr_abcd1234',
+            path: '',
+            entries: [{ path: 'src/main.ts', kind: 'file', size_bytes: 12 }],
+            truncated: false,
+            symlinks_skipped: 0,
+            read_errors: 0,
+        });
+        const client = new AgentClient({ hostClient: new HostClient({ transport }) });
+        const files = workspace();
+        files.api.openFile = vi.fn(async () => undefined);
+        files.api.activeFile = vi.fn(() => ({ path: 'readme.md', name: 'readme.md', content: 'old', mode: 'local' }));
+        const { onError, onSuccess } = mount(files.api, client);
+
+        await vi.waitFor(() => expect(treeButtons().map((button) => button.textContent)).toEqual(['main.ts']));
+        act(() => { treeButtons()[0]!.click(); });
+        await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(
+            'src/main.ts is not available in this editor build.',
+            'workspace:open:src/main.ts',
+        ));
+        expect(onSuccess).not.toHaveBeenCalledWith('workspace:open:src/main.ts');
+    });
+
     it('static_mode_lists_registered_uploads_and_never_calls_the_host', async () => {
         const staticTransport = new StaticHostTransport();
         const client = new AgentClient({ hostClient: new HostClient({ transport: staticTransport }) });
@@ -247,7 +294,7 @@ describe('FileTree', () => {
             render(
                 <FileTree
                     nodes={nodes(600, (index) => `a/${index}.md`)}
-                    meta={{ truncated: false, symlinksSkipped: 0, readErrors: 0 }}
+                    meta={{ truncated: false, truncatedReported: false, symlinksSkipped: 0, readErrors: 0 }}
                     activePath={null}
                     phase="ready"
                     error={null}
@@ -264,6 +311,7 @@ describe('FileTree', () => {
         });
         expect(host.querySelectorAll('button.tree-file')).toHaveLength(MAX_TREE_SEARCH_RESULTS);
         expect(host.querySelector('[role="status"]')?.textContent).toContain(`first ${MAX_TREE_SEARCH_RESULTS} matches`);
+        expect(host.querySelector('[role="status"]')?.textContent).toContain('Refine the search to narrow the results.');
 
         act(() => {
             search.value = 'zzz';
@@ -275,7 +323,7 @@ describe('FileTree', () => {
             render(
                 <FileTree
                     nodes={nodes(MAX_TREE_SEARCH_SCAN + 5, (index) => `a/${index}.md`)}
-                    meta={{ truncated: true, symlinksSkipped: 0, readErrors: 0 }}
+                    meta={{ truncated: true, truncatedReported: false, symlinksSkipped: 0, readErrors: 0 }}
                     activePath={null}
                     phase="ready"
                     error={null}
@@ -285,5 +333,24 @@ describe('FileTree', () => {
             );
         });
         expect(host.querySelector('[role="status"]')?.textContent).toContain(`No matches in the first ${MAX_TREE_SEARCH_SCAN} loaded files.`);
+        expect(host.querySelector('[role="status"]')?.textContent).toContain(`The search scans at most ${MAX_TREE_SEARCH_SCAN} entries.`);
+    });
+
+    it('an_unlabelled_full_listing_is_reported_as_maybe_capped', () => {
+        act(() => {
+            render(
+                <FileTree
+                    nodes={nodes(512, (index) => `a/${index}.md`)}
+                    meta={{ truncated: true, truncatedReported: false, symlinksSkipped: 0, readErrors: 0 }}
+                    activePath={null}
+                    phase="ready"
+                    error={null}
+                    onOpen={() => undefined}
+                />,
+                host,
+            );
+        });
+        expect(host.textContent).toContain('The companion returned exactly 512 entries without a truncation flag; the listing may be capped.');
+        expect(host.textContent).not.toContain('The file list is incomplete:');
     });
 });

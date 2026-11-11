@@ -193,7 +193,10 @@ export interface TreeEntry {
 
 export interface TreePage {
     entries: TreeEntry[];
+    /** The listing may be incomplete: reported by the host or inferred at the client cap. */
     truncated: boolean;
+    /** The host explicitly reported truncation rather than the client inferring it. */
+    truncatedReported: boolean;
     symlinksSkipped: number;
     readErrors: number;
 }
@@ -706,6 +709,7 @@ export class AgentClient {
             return {
                 entries: this.localTree(input.path),
                 truncated: false,
+                truncatedReported: false,
                 symlinksSkipped: 0,
                 readErrors: 0,
             };
@@ -1122,14 +1126,11 @@ function artifactRange(
     return { start: input.start, end: input.end };
 }
 
-function hostTreeEntries(result: HostToolResult): TreeEntry[] {
-    if (!isPlainObject(result.output) || !Array.isArray(result.output.entries)) {
-        return invalidHostData('host file tree result has no entries array');
-    }
-    if (result.output.entries.length > MAX_HOST_TREE_ENTRIES) {
+function hostTreeEntries(values: unknown[]): TreeEntry[] {
+    if (values.length > MAX_HOST_TREE_ENTRIES) {
         return invalidHostData('host file tree result exceeds the client cap');
     }
-    return result.output.entries.map((value) => {
+    return values.map((value) => {
         if (
             !isPlainObject(value) ||
             typeof value.path !== 'string' ||
@@ -1156,20 +1157,18 @@ function hostTreeEntries(result: HostToolResult): TreeEntry[] {
 }
 
 function hostTreePage(result: HostToolResult): TreePage {
-    const entries = hostTreeEntries(result);
-    if (!isPlainObject(result.output)) {
-        return invalidHostData('host file tree result has no page object');
+    const output = result.output;
+    if (!isPlainObject(output) || !Array.isArray(output.entries)) {
+        return invalidHostData('host file tree result has no entries array');
     }
+    const entries = hostTreeEntries(output.entries);
+    const reported = hostTreeFlag(output.truncated);
     return {
         entries,
-        truncated:
-            hostTreeFlag(result.output.truncated) ??
-            entries.length >= MAX_HOST_TREE_ENTRIES,
-        symlinksSkipped: hostTreeCount(
-            result.output.symlinks_skipped,
-            'symlinks_skipped',
-        ),
-        readErrors: hostTreeCount(result.output.read_errors, 'read_errors'),
+        truncated: reported ?? entries.length >= MAX_HOST_TREE_ENTRIES,
+        truncatedReported: reported === true,
+        symlinksSkipped: hostTreeCount(output.symlinks_skipped, 'symlinks_skipped'),
+        readErrors: hostTreeCount(output.read_errors, 'read_errors'),
     };
 }
 

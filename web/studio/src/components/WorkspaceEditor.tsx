@@ -26,7 +26,7 @@ interface WorkspaceEditorProps {
 }
 
 const defaultSettings: StudioSettings = { theme: 'dark', reduceMotion: false, fontSize: 13, tabSize: 4, wordWrap: false };
-const emptyMeta: FileTreeMeta = { truncated: false, symlinksSkipped: 0, readErrors: 0 };
+const emptyMeta: FileTreeMeta = { truncated: false, truncatedReported: false, symlinksSkipped: 0, readErrors: 0 };
 
 interface TreeState {
     phase: 'loading' | 'ready' | 'error';
@@ -77,7 +77,7 @@ export function WorkspaceEditor({ store, files, operations, onError, onSuccess, 
             setTree({
                 phase: 'ready',
                 nodes: fileNodes(page.entries),
-                meta: { truncated: page.truncated, symlinksSkipped: page.symlinksSkipped, readErrors: page.readErrors },
+                meta: { truncated: page.truncated, truncatedReported: page.truncatedReported, symlinksSkipped: page.symlinksSkipped, readErrors: page.readErrors },
                 error: null,
             });
         } catch (error) {
@@ -126,12 +126,11 @@ export function WorkspaceEditor({ store, files, operations, onError, onSuccess, 
         };
     }, [agentClient]);
 
-    function perform(action: () => Promise<unknown>, operation: string, after?: () => void) {
+    function perform(action: () => Promise<unknown>, operation: string) {
         void operations.run(operation, action(), (completed) => {
             sync(files.treeSummary());
             refresh();
             succeed(completed);
-            after?.();
         }, report);
     }
 
@@ -178,7 +177,23 @@ export function WorkspaceEditor({ store, files, operations, onError, onSuccess, 
             onError(fileTooLargeMessage(node.name, node.sizeBytes), `file:open:${path}`);
             return;
         }
-        perform(() => files.openFile(path), `workspace:open:${path}`, () => { void rememberUploaded(path); });
+        void operations.run(
+            `workspace:open:${path}`,
+            (async () => {
+                await files.openFile(path);
+                const opened = files.activeFile();
+                if (opened === null || opened.path !== path) {
+                    throw new Error(`${path} is not available in this editor build.`);
+                }
+            })(),
+            (completed) => {
+                sync(files.treeSummary());
+                refresh();
+                succeed(completed);
+                void rememberUploaded(path);
+            },
+            report,
+        );
     }
 
     const summary = files.treeSummary();

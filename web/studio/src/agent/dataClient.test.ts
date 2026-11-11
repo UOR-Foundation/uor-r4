@@ -230,6 +230,7 @@ describe('AgentClient companion data routing', () => {
         await expect(client.treePage({ source: 'host', path: 'src' })).resolves.toEqual({
             entries: [{ path: 'src/a.ts', kind: 'file', sizeBytes: 5 }],
             truncated: true,
+            truncatedReported: true,
             symlinksSkipped: 2,
             readErrors: 1,
         });
@@ -249,6 +250,7 @@ describe('AgentClient companion data routing', () => {
         const page = await client.treePage({ source: 'host' });
         expect(page.entries).toHaveLength(MAX_HOST_TREE_ENTRIES);
         expect(page.truncated).toBe(true);
+        expect(page.truncatedReported).toBe(false);
         expect(page.symlinksSkipped).toBe(0);
         expect(page.readErrors).toBe(0);
     });

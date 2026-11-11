@@ -8,6 +8,7 @@ export const MAX_TREE_SEARCH_SCAN = 2000;
 
 export interface FileTreeMeta {
     truncated: boolean;
+    truncatedReported: boolean;
     symlinksSkipped: number;
     readErrors: number;
 }
@@ -93,10 +94,10 @@ export function FileTree({ nodes, meta, activePath, phase, error, onOpen, search
     const status = search
         ? search.matches.length === 0
             ? search.truncated
-                ? `No matches in the first ${search.scanned} loaded files. Narrow the search to search all.`
+                ? `No matches in the first ${search.scanned} loaded files. The search scans at most ${MAX_TREE_SEARCH_SCAN} entries.`
                 : `No loaded files match "${query.trim()}".`
             : search.truncated
-                ? `Showing the first ${search.matches.length} matches. Narrow the search to see more.`
+                ? `Showing the first ${search.matches.length} matches. Refine the search to narrow the results.`
                 : `${search.matches.length} of ${nodes.length} loaded files match "${query.trim()}".`
         : phase === 'loading'
             ? 'Loading files…'
@@ -148,7 +149,9 @@ export function FileTree({ nodes, meta, activePath, phase, error, onOpen, search
             <p id={statusId} role="status">{status}</p>
             {error !== null && <p class="workbench-alert" role="alert">{error}</p>}
             {meta.truncated && (
-                <p class="tree-notice">The file list is incomplete: the companion returned the first {nodes.length} entries.</p>
+                meta.truncatedReported
+                    ? <p class="tree-notice">The file list is incomplete: the companion returned the first {nodes.length} entries.</p>
+                    : <p class="tree-notice">The companion returned exactly {nodes.length} entries without a truncation flag; the listing may be capped.</p>
             )}
             {meta.symlinksSkipped > 0 && (
                 <p class="tree-notice">

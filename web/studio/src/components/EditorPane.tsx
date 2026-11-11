@@ -1,3 +1,4 @@
+import { useMemo } from 'preact/hooks';
 import type { FilePhase } from '../state/lifecycle.js';
 import type { StudioFile, StudioSettings } from '../adapters/workflow.js';
 import { MAX_DOCUMENT_BYTES } from './ComposerAttachments.js';
@@ -19,7 +20,7 @@ export interface EditorPaneProps {
 
 export function EditorPane({ active, phase, settings, onContentChange }: EditorPaneProps) {
     const content = active?.content ?? '';
-    const bytes = textByteLength(content);
+    const bytes = useMemo(() => textByteLength(content), [content]);
     const refused = active !== null && bytes > MAX_DOCUMENT_BYTES;
     const lines = Math.max(1, content.split('\n').length);
 
