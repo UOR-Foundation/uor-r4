@@ -388,6 +388,34 @@ describe('ArtifactClient authority and bridge propagation', () => {
         });
     });
 
+    test('bridge_preserves_whole_read_reference', async () => {
+        const bytes = new TextEncoder().encode('hello');
+        const digest = await sha256Bytes(bytes);
+        const { result } = await bridgeArtifactRead({
+            artifactId: FULL64,
+            path: 'whole.txt',
+            mediaType: 'text/plain',
+            sizeBytes: bytes.byteLength,
+            digest,
+            bytes,
+        });
+        const output = result.output as Record<string, unknown>;
+
+        expect(output).toMatchObject({
+            artifact_id: FULL64,
+            artifact_size_bytes: bytes.byteLength,
+            whole_digest: digest,
+            size_bytes: bytes.byteLength,
+        });
+        expect(output).not.toHaveProperty('range');
+        expect(result.artifact).toMatchObject({
+            artifact_id: FULL64,
+            digest,
+            media_type: 'text/plain',
+            size_bytes: bytes.byteLength,
+        });
+    });
+
     test('artifact_read_prefers_browser_bytes_before_host', async () => {
         const transport = new ArtifactHostTransport({});
         const client = new AgentClient({
