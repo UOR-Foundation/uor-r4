@@ -901,6 +901,26 @@ describe('AgentClient companion data routing', () => {
         ).rejects.toMatchObject({ code: 'invalid_event' });
     });
 
+    test('host_full_artifact_missing_whole_digest_is_refused', async () => {
+        const bytes = new TextEncoder().encode('four');
+        const digest = await sha256Bytes(bytes);
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {
+                path: 'host.txt',
+                media_type: 'text/plain',
+                size_bytes: bytes.byteLength,
+                artifact_size_bytes: bytes.byteLength,
+                digest,
+                range: { start: 0, end: bytes.byteLength },
+                bytes_base64: base64(bytes),
+            }),
+        );
+        const client = clientWith(transport);
+        await expect(
+            client.readArtifact({ artifactId: FULL64_A }),
+        ).rejects.toMatchObject({ code: 'invalid_event' });
+    });
+
     test('read_artifact_corrupt_durable_record_is_refused_without_host', async () => {
         const hostBytes = new TextEncoder().encode('host artifact');
         const transport = new RecordingHostTransport(async (intent) =>

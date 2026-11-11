@@ -13,6 +13,11 @@ const FULL64_CORRUPT_METADATA = `art_${'c3'.repeat(32)}`;
 const FULL64_CORRUPT_BLOB_TYPE = `art_${'c4'.repeat(32)}`;
 const FULL64_CORRUPT_OVERSIZE = `art_${'c5'.repeat(32)}`;
 const FULL64_NORMALIZED = `art_${'f6'.repeat(32)}`;
+const FULL64_PARAMS_PARTIAL = `art_${'f7'.repeat(32)}`;
+const FULL64_PARAMS_REORDERED = `art_${'f8'.repeat(32)}`;
+const FULL64_PARAMS_CONFLICT = `art_${'f9'.repeat(32)}`;
+const FULL64_PARAMS_BLOB_ONLY = `art_${'fa'.repeat(32)}`;
+const FULL64_PARAMS_QUOTED = `art_${'fb'.repeat(32)}`;
 
 interface StudioTestCall {
     method: string;
@@ -838,6 +843,115 @@ test.describe('browser agent task store', () => {
             digest: seeded.digest,
         });
         expect(result.bytes).toEqual(seeded.bytes);
+    });
+
+    test('durable_artifact_media_parameters_are_parsed', async ({ page }) => {
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        const declared = 'text/plain; charset=utf-8; format=flowed';
+        const partial = await seedArtifact(
+            page,
+            FULL64_PARAMS_PARTIAL,
+            'partial parameters',
+            declared,
+            { blobTypeOverride: 'text/plain; charset=utf-8' },
+        );
+        const reordered = await seedArtifact(
+            page,
+            FULL64_PARAMS_REORDERED,
+            'reordered parameters',
+            declared,
+            { blobTypeOverride: 'text/plain; format=flowed; charset=utf-8' },
+        );
+        const quoted = await seedArtifact(
+            page,
+            FULL64_PARAMS_QUOTED,
+            'quoted parameters',
+            'text/plain; charset="UTF-8"',
+            { blobTypeOverride: 'text/plain; charset=utf-8' },
+        );
+        await seedArtifact(
+            page,
+            FULL64_PARAMS_CONFLICT,
+            'conflicting parameters',
+            'text/plain; charset=utf-8',
+            { blobTypeOverride: 'text/plain; charset=ascii' },
+        );
+        await seedArtifact(
+            page,
+            FULL64_PARAMS_BLOB_ONLY,
+            'blob only parameter',
+            'text/plain',
+            { blobTypeOverride: 'text/plain; charset=utf-8' },
+        );
+
+        const result = await page.evaluate(
+            async ({ ids }) => {
+                const api = (
+                    window as unknown as {
+                        __studioTest?: {
+                            clientForTest?: () => {
+                                readArtifact(input: {
+                                    artifactId: string;
+                                }): Promise<{
+                                    mediaType: string;
+                                    bytes: Uint8Array;
+                                }>;
+                            } | null;
+                        };
+                    }
+                ).__studioTest;
+                const client = api?.clientForTest?.();
+                if (!client) throw new Error('studio test client is missing');
+                const read = async (
+                    artifactId: string,
+                ): Promise<{
+                    code: string | null;
+                    mediaType?: string;
+                    bytes?: number[];
+                }> => {
+                    try {
+                        const content = await client.readArtifact({ artifactId });
+                        return {
+                            code: null,
+                            mediaType: content.mediaType,
+                            bytes: [...content.bytes],
+                        };
+                    } catch (error) {
+                        return {
+                            code: (error as { code?: string }).code ?? null,
+                        };
+                    }
+                };
+                return {
+                    partial: await read(ids.partial),
+                    reordered: await read(ids.reordered),
+                    quoted: await read(ids.quoted),
+                    conflict: await read(ids.conflict),
+                    blobOnly: await read(ids.blobOnly),
+                };
+            },
+            {
+                ids: {
+                    partial: FULL64_PARAMS_PARTIAL,
+                    reordered: FULL64_PARAMS_REORDERED,
+                    quoted: FULL64_PARAMS_QUOTED,
+                    conflict: FULL64_PARAMS_CONFLICT,
+                    blobOnly: FULL64_PARAMS_BLOB_ONLY,
+                },
+            },
+        );
+
+        expect(result.partial.code).toBeNull();
+        expect(result.partial.mediaType).toBe(declared);
+        expect(result.partial.bytes).toEqual(partial.bytes);
+        expect(result.reordered.code).toBeNull();
+        expect(result.reordered.mediaType).toBe(declared);
+        expect(result.reordered.bytes).toEqual(reordered.bytes);
+        expect(result.quoted.code).toBeNull();
+        expect(result.quoted.mediaType).toBe('text/plain; charset="UTF-8"');
+        expect(result.quoted.bytes).toEqual(quoted.bytes);
+        expect(result.conflict.code).toBe('snapshot_corrupt');
+        expect(result.blobOnly.code).toBe('snapshot_corrupt');
     });
 
     test('full64_host_id_without_durable_record_emits_artifact_read_intent', async ({ page }) => {

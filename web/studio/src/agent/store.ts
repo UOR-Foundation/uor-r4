@@ -61,6 +61,8 @@ const RUN_STATES: ReadonlySet<string> = new Set(AGENT_RUN_STATES);
 const IMPORT_FENCE_KEY = '__import__';
 const IMPORT_HEARTBEAT_MS = Math.max(1, Math.floor(LEASE_STALE_MS / 3));
 const MAX_DURABLE_ARTIFACT_BYTES = 8 * 1024 * 1024;
+const MAX_MEDIA_TYPE_LENGTH = 1024;
+const MAX_MEDIA_PARAMETERS = 16;
 const MAX_DURABLE_ARTIFACT_RETURN_BYTES = 1024 * 1024;
 
 interface StoreFaults {
@@ -623,13 +625,73 @@ function mediaTypeEssence(value: string): string {
     return value.split(';', 1)[0]!.trim().toLowerCase();
 }
 
-function mediaTypeParameters(value: string): string {
-    return value
-        .split(';')
-        .slice(1)
-        .map((part) => part.trim().toLowerCase())
-        .filter((part) => part.length > 0)
-        .join(';');
+function parseMediaTypeParameters(value: string): Map<string, string> {
+    if (value.length > MAX_MEDIA_TYPE_LENGTH) {
+        corrupt('artifact record media type is unbounded');
+    }
+    const parts: string[] = [];
+    let current = '';
+    let quoted = false;
+    let escaped = false;
+    for (const char of value) {
+        if (escaped) {
+            current += char;
+            escaped = false;
+            continue;
+        }
+        if (quoted && char === '\\') {
+            escaped = true;
+            current += char;
+            continue;
+        }
+        if (char === '"') {
+            quoted = !quoted;
+            current += char;
+            continue;
+        }
+        if (char === ';' && !quoted) {
+            parts.push(current);
+            current = '';
+            continue;
+        }
+        current += char;
+    }
+    if (quoted || escaped) {
+        corrupt('artifact record media type has an unterminated quote');
+    }
+    parts.push(current);
+    const parameters = new Map<string, string>();
+    for (const part of parts.slice(1)) {
+        const trimmed = part.trim();
+        if (trimmed.length === 0) continue;
+        if (parameters.size >= MAX_MEDIA_PARAMETERS) {
+            corrupt('artifact record has too many media parameters');
+        }
+        const equals = trimmed.indexOf('=');
+        if (equals <= 0) {
+            corrupt('artifact record media parameter is malformed');
+        }
+        const name = trimmed.slice(0, equals).trim().toLowerCase();
+        if (name.length === 0) {
+            corrupt('artifact record media parameter name is invalid');
+        }
+        let rawValue = trimmed.slice(equals + 1).trim();
+        if (rawValue.startsWith('"')) {
+            if (!rawValue.endsWith('"') || rawValue.length < 2) {
+                corrupt('artifact record media parameter quote is invalid');
+            }
+            rawValue = rawValue.slice(1, -1).replace(/\\(.)/g, '$1');
+        } else if (rawValue.includes('"')) {
+            corrupt('artifact record media parameter quote is invalid');
+        }
+        const normalized = rawValue.toLowerCase();
+        const existing = parameters.get(name);
+        if (existing !== undefined && existing !== normalized) {
+            corrupt('artifact record has conflicting media parameters');
+        }
+        parameters.set(name, normalized);
+    }
+    return parameters;
 }
 
 function requireStoredArtifact(
@@ -666,9 +728,9 @@ function requireStoredArtifact(
     if (!(value.blob instanceof Blob)) {
         corrupt('artifact record has no durable bytes');
     }
-    // Compare the MIME essence case-insensitively. A Blob commonly drops
-    // parameters that the declared media_type still carries; parameters that
-    // are present on both must agree, so conflicting declarations still fail.
+    // Compare the MIME essence case-insensitively. Parameters are parsed by
+    // name and value: declared-only parameters and reordering are legal,
+    // while blob-only names or conflicting values are refused.
     if (value.blob.type !== '') {
         if (
             mediaTypeEssence(value.blob.type) !==
@@ -676,12 +738,16 @@ function requireStoredArtifact(
         ) {
             corrupt('artifact record blob type does not match its media_type');
         }
-        const blobParameters = mediaTypeParameters(value.blob.type);
-        if (
-            blobParameters.length > 0 &&
-            blobParameters !== mediaTypeParameters(value.media_type)
-        ) {
-            corrupt('artifact record blob parameters do not match its media_type');
+        const blobParameters = parseMediaTypeParameters(value.blob.type);
+        const declaredParameters = parseMediaTypeParameters(value.media_type);
+        for (const [name, blobValue] of blobParameters) {
+            const declaredValue = declaredParameters.get(name);
+            if (declaredValue === undefined) {
+                corrupt('artifact record has a blob-only media parameter');
+            }
+            if (declaredValue !== blobValue) {
+                corrupt('artifact record media parameter conflicts');
+            }
         }
     }
     if (value.blob.size !== value.size_bytes) {
