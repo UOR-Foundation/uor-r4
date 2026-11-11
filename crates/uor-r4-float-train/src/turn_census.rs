@@ -791,6 +791,11 @@ mod tests {
             assert!(documents(&tokens, &mask, &marks()).is_err(), "token {at}");
             mask[at] = 0;
         }
+        // The reply's end mark belongs to the reply: a mask of 0 there is refused.
+        let end_mark = docs[0][1].content.end;
+        assert_eq!(tokens[end_mark], marks().eos);
+        mask[end_mark] = 0;
+        assert!(documents(&tokens, &mask, &marks()).is_err());
     }
 
     #[test]

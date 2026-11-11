@@ -11,7 +11,7 @@ Stage 1 of the plan for one arm (turn admission): counts on the laptop that deci
 | 3. Equal bags on over 0.02 | 0 of 488 | no |
 | 4. Copy inside the right turn under 0.60 for every reply form | replies that repeat the statement's wording at the value: 135 of 241, 0.560; replies that do not: 0 of 247 | **yes** |
 
-**Row 4 decides: the arm is not built as written.** Picking the turn is not the missing step. Copying the value out of the right turn with arm r's copy read is. The repeating form misses the line by 10 replies; the other half of the replies cannot be copied by this read at all.
+**Row 4 decides: the arm is not built as written.** Picking the turn is not the only missing step: the copy fails even with the right turn admitted. The repeating form misses the line by 10 replies; the other half of the replies cannot be copied by this read at all. Cut finer, by the token before the value, three small groups of repeating replies pass (13, 8 and 1 replies; section 2).
 
 ## What did not work, first
 
@@ -88,10 +88,10 @@ The ORDER names two forms, "It's VALUE." and a reply that repeats the statement'
 **5. Holes and reach.** Of 488: an earlier user turn that holds the labelled turn's subject words and not this value on 2 (later than the label on 1); a turn with the same tokens in another order on 0. Earlier user turns a reply has, TRAIN (215,017 replies): none 60,000; one 51,799; two 40,318; three 28,789; four 12,150; five 6,972; six 6,968; seven or more 8,021; most 8. From the labelled turn's first content token (its "User:" mark not counted) to the reply's end fits in 192 tokens on 395 of 490 (0.806) and in 256 on 490.
 
 **What the numbers say, and what they do not.**
-- Which turn. With nothing learned, the question's words pick the right turn on 0.80 to 0.87. That is the figure that matters at serving time. The 0.996 is from the reply's own words, which a served model does not have before it answers; it says only that the training label is sound when there is one.
-- Which clause. The question's words pick the value's clause on 0.48 to 0.55. With no token stopped, the clause shares no token with the question on 229 of 562, and shares one without being the pick on 22. Shared words cannot find the 229 ("Where did I grow up?" against "I am from Jaistchukfield."); the counts do not say what can.
+- Which turn. With nothing learned, the question's words pick the right turn on 0.80 to 0.87 (stop lists 0 to 64; 0.450 at 256). That is the figure that matters at serving time. The 0.996 is from the reply's own words, which a served model does not have before it answers; it says only that the training label is sound when there is one.
+- Which clause. The question's words pick the value's clause on 0.48 to 0.55 (stop lists 0 to 64; 0.260 at 256). With no token stopped, the clause shares no token with the question on 229 of 562, and shares one without being the pick on 22. Shared words cannot find the 229 ("Where did I grow up?" against "I am from Jaistchukfield."); the counts do not say what can.
 - The value itself is one unbroken run of tokens in its turn, every time. A read that starts at its first token and takes the tokens that follow passes through the whole value. Where such a read stops was not counted; in a list the next tokens are ", zundtetdroul is 32".
-- **A proposal, not a result:** pick the value's place, not its turn, with the question, and read the value from the pick onward, first token included. It answers both reasons above: arm r's read re-finds each token by the reply's previous token, which fails in a list and fails when the reply is worded its own way. Nothing counted here picks a place inside a turn on more than 0.55.
+- **A proposal, not a result:** pick the value's place, not its turn, with the question, and read the value from the pick onward, first token included. It is aimed at both reasons above: arm r's read re-finds each token by the reply's previous token, which fails in a list and fails when the reply is worded its own way. Nothing counted here picks a place inside a turn on more than 0.55.
 
 ## Checks run at the head
 
@@ -106,7 +106,7 @@ The ORDER names two forms, "It's VALUE." and a reply that repeats the statement'
 
 ## Skills used
 
-None beyond the project loop. The fresh-context reviewers were subagents of this session: one read the plan before the counts; two read the census and this page at `3109b61080e7a6f31b9a2a9f1f6ed71d2d283e01` (one NOT FIT on the instrument's guards, one FIT with findings on this page; all taken here). The review of the final head is on the PR.
+None beyond the project loop. The fresh-context reviewers were subagents of this session: one read the plan before the counts; two read the census and this page at `3109b61080e7a6f31b9a2a9f1f6ed71d2d283e01` (one NOT FIT on the instrument's guards, one FIT with findings on this page; all taken here); one read the fixes at `ab60b78da1802ccb4bed15946ce9954ffc927b62` (FIT, with four wording points on this page and one test assertion, all taken in the last commit). The review record is on the PR.
 
 ## Still open
 
@@ -118,4 +118,4 @@ None beyond the project loop. The fresh-context reviewers were subagents of this
 
 ## Plain summary
 
-The plan was to let the model pick the earlier turn that holds the answer and copy from it. The counts say picking the turn is the easy part and the copy is what fails: half the replies are worded differently from what the user said, and many of the rest have the answer in a list. The copy read gets the value on about a quarter of the replies. The value is always one run of tokens, so the proposed fix is to point at where it starts and read on. That is a changed design; it is not counted and not started.
+The plan was to let the model pick the earlier turn that holds the answer and copy from it. With nothing learned, the question's own words find the right turn four times in five. The copy fails even when the right turn is handed to it: half the replies are worded differently from what the user said, and many of the rest have the answer in a list. The copy read gets the value on about a quarter of the replies. The value is always one run of tokens, so the proposed fix is to point at where it starts and read on. That is a changed design; it is not counted and not started.
