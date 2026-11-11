@@ -29,6 +29,12 @@ the scored V3 bake-off rules as ordinary tests.
 - `src/reply_control_controller.rs` selects current greedy/cycle.
 - This ORDER and REPORT record the packaging repair.
 
+## Measurements
+
+- Fresh-main failure: four of eight V1 control-era rules ran and failed.
+- Repaired crate: 23 tests passed, 0 failed; V3 runs eight of eight.
+- Bake-off record: unchanged and GREEN.
+
 ## Checks run at the head
 
 - `cargo test --offline --features integer-reader`: 23 passed, 0 failed
