@@ -174,6 +174,7 @@ export type TreeSource = 'local' | 'host';
 export interface TreeInput {
     source?: TreeSource;
     path?: string;
+    grantId?: string;
     taskId?: string;
     runId?: string;
     generation?: number;
@@ -189,6 +190,7 @@ export interface ChangesSnapshotInput {
     taskId: string;
     runId?: string;
     scope: 'last_turn' | 'branch';
+    grantId?: string;
 }
 
 export interface ChangesSnapshot {
@@ -680,8 +682,12 @@ export class AgentClient {
         }
         const result = await this.hostClient.execute({
             tool: 'file.tree',
-            arguments:
-                input.path === undefined ? {} : { path: input.path },
+            arguments: {
+                ...(input.path === undefined ? {} : { path: input.path }),
+                ...(input.grantId === undefined
+                    ? {}
+                    : { grant_id: input.grantId }),
+            },
             ...(input.taskId === undefined ? {} : { taskId: input.taskId }),
             ...(input.runId === undefined ? {} : { runId: input.runId }),
             ...(input.generation === undefined
@@ -713,7 +719,12 @@ export class AgentClient {
         }
         const result = await this.hostClient.execute({
             tool: 'git.changes',
-            arguments: { scope: 'branch' },
+            arguments: {
+                scope: 'branch',
+                ...(input.grantId === undefined
+                    ? {}
+                    : { grant_id: input.grantId }),
+            },
             taskId: input.taskId,
             ...(input.runId === undefined ? {} : { runId: input.runId }),
         });
@@ -1070,6 +1081,20 @@ async function hostArtifactContent(
         return invalidHostData('host artifact result has no output');
     }
     const output = result.output;
+    for (const key of [
+        'url',
+        'artifact_url',
+        'download_url',
+        'link',
+        'token',
+        'expires_at',
+    ]) {
+        if (key in output) {
+            return invalidHostData(
+                'host artifact result must not carry a URL, token or expiring link',
+            );
+        }
+    }
     if (
         typeof output.path !== 'string' ||
         output.path.length === 0 ||
@@ -1098,6 +1123,28 @@ async function hostArtifactContent(
     }
     if ((await sha256Bytes(bytes)) !== output.digest) {
         return invalidHostData('host artifact digest does not match its bytes');
+    }
+    if (output.range !== undefined) {
+        const range = output.range;
+        if (
+            !isPlainObject(range) ||
+            typeof range.start !== 'number' ||
+            !Number.isSafeInteger(range.start) ||
+            range.start < 0 ||
+            typeof range.end !== 'number' ||
+            !Number.isSafeInteger(range.end) ||
+            range.end < range.start ||
+            range.end - range.start !== bytes.byteLength
+        ) {
+            return invalidHostData('host artifact range is malformed');
+        }
+        if (
+            typeof output.artifact_size_bytes !== 'number' ||
+            !Number.isSafeInteger(output.artifact_size_bytes) ||
+            output.artifact_size_bytes < range.end
+        ) {
+            return invalidHostData('host artifact total size is malformed');
+        }
     }
     return {
         path: output.path,

@@ -12,6 +12,7 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
+pub mod agent_data;
 pub mod mcp;
 pub(crate) mod process_control;
 pub mod sidecar;
@@ -270,6 +271,15 @@ pub enum DesktopClientError {
         bytes: u64,
         max_bytes: u64,
     },
+    ArtifactNotFound(String),
+    ArtifactDigestMismatch {
+        expected: String,
+        actual: String,
+    },
+    ArtifactSizeMismatch {
+        expected: u64,
+        actual: u64,
+    },
     TerminalDisabledByDefault,
     TerminalConsentRequired,
     TerminalMetacharacterRefused(String),
@@ -381,6 +391,7 @@ pub struct DesktopBackend {
     object_store: Store,
     memory_store: DurableObjectMemoryStore,
     durable_store_dir: Option<PathBuf>,
+    agent_artifacts: BTreeMap<String, crate::agent_data::AgentArtifactRecord>,
 }
 
 impl DesktopBackend {
@@ -406,6 +417,7 @@ impl DesktopBackend {
             object_store: Store::new(Limits::default()),
             memory_store: DurableObjectMemoryStore::new(),
             durable_store_dir: None,
+            agent_artifacts: BTreeMap::new(),
         }
     }
 
@@ -3394,6 +3406,63 @@ pub mod tauri_gui {
     }
 
     #[tauri::command(async)]
+    pub fn agent_list_directory(
+        state: tauri::State<'_, TauriDesktopState>,
+        grant_id: String,
+        path: Option<String>,
+    ) -> Result<Value, String> {
+        state.with_backend(|backend| {
+            let page = backend
+                .agent_list_directory(&grant_id, path.as_deref().unwrap_or(""))
+                .map_err(|error| error.to_string())?;
+            serde_json::to_value(page).map_err(|error| error.to_string())
+        })
+    }
+
+    #[tauri::command(async)]
+    pub fn agent_git_diff(
+        state: tauri::State<'_, TauriDesktopState>,
+        grant_id: String,
+        branch_scope: String,
+    ) -> Result<Value, String> {
+        state.with_backend(|backend| {
+            let snapshot = backend
+                .agent_git_diff(&grant_id, &branch_scope)
+                .map_err(|error| error.to_string())?;
+            serde_json::to_value(snapshot).map_err(|error| error.to_string())
+        })
+    }
+
+    #[tauri::command(async)]
+    pub fn agent_read_artifact(
+        state: tauri::State<'_, TauriDesktopState>,
+        artifact_id: String,
+        start: Option<u64>,
+        end: Option<u64>,
+        expected_digest: Option<String>,
+        expected_size_bytes: Option<u64>,
+    ) -> Result<Value, String> {
+        let range = match (start, end) {
+            (None, None) => None,
+            (Some(start), Some(end)) => Some(crate::agent_data::AgentArtifactRange { start, end }),
+            _ => {
+                return Err("artifact range requires both start and end".to_string());
+            }
+        };
+        state.with_backend(|backend| {
+            let bytes = backend
+                .agent_read_artifact(
+                    &artifact_id,
+                    range,
+                    expected_digest.as_deref(),
+                    expected_size_bytes,
+                )
+                .map_err(|error| error.to_string())?;
+            serde_json::to_value(bytes).map_err(|error| error.to_string())
+        })
+    }
+
+    #[tauri::command(async)]
     pub async fn native_choose_project_folder(
         app: tauri::AppHandle,
         state: tauri::State<'_, TauriDesktopState>,
@@ -3645,7 +3714,7 @@ pub mod tauri_gui {
     }
 
     /// Construct the configured [`tauri::Builder`] with managed [`TauriDesktopState`] and all
-    /// 30 native/host `#[tauri::command]` handlers registered.
+    /// 33 native/host `#[tauri::command]` handlers registered.
     pub fn build_tauri_app_builder(state: TauriDesktopState) -> tauri::Builder<tauri::Wry> {
         tauri::Builder::default()
             .plugin(tauri_plugin_dialog::init())
@@ -3696,6 +3765,9 @@ pub mod tauri_gui {
                 native_list_directory,
                 native_git_status,
                 native_git_diff,
+                agent_list_directory,
+                agent_git_diff,
+                agent_read_artifact,
                 native_choose_project_folder,
                 native_choose_model_folder,
                 native_enable_terminal,
