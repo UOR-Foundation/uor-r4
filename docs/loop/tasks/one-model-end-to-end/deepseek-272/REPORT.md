@@ -56,6 +56,10 @@ its internal panel failed admission.
   checkpoint and artifact reloaded, and the independent CPU/serving audit
   matched 16,384 Q12 query coordinates, 64 token decisions and 512 kept cells
   with zero mismatches.
+- The synthetic end-to-end test uses the standard GPT-2 byte alphabet and a
+  `/10` artifact carrying the matching tokenizer hash, so it exercises the
+  separator encoding and the new binding check rather than a permissive
+  legacy fixture.
 
 ## What changed
 

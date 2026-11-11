@@ -558,9 +558,12 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use uor_r4_integer::stack::export_fbs_trunk_uorlut01;
     use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
     use uor_r4_integer::stack::StackStop;
+    use uor_r4_integer::stack::{
+        export_fbs_trunk_uorlut01_with_provenance, FbsExportProvenance, FbsExportSnaps,
+        StackContractProvenance,
+    };
 
     fn case(value: Option<&str>, distractor: Option<&str>, scored: bool) -> ScenarioCase {
         ScenarioCase {
@@ -589,10 +592,20 @@ mod tests {
             vocab.insert((*surface).to_owned(), serde_json::Value::from(id));
         }
         for byte in 0u32..256 {
-            let character = if (0x20..=0x7e).contains(&byte) {
+            let character = if (0x21..=0x7e).contains(&byte)
+                || (0xa1..=0xac).contains(&byte)
+                || (0xae..=0xff).contains(&byte)
+            {
                 char::from_u32(byte).expect("ASCII byte is a character")
             } else {
-                char::from_u32(0x1000 + byte).expect("test byte code point is valid")
+                let skipped = (0u32..byte)
+                    .filter(|value| {
+                        !((0x21..=0x7e).contains(value)
+                            || (0xa1..=0xac).contains(value)
+                            || (0xae..=0xff).contains(value))
+                    })
+                    .count() as u32;
+                char::from_u32(0x100 + skipped).expect("test byte code point is valid")
             };
             vocab.insert(character.to_string(), serde_json::Value::from(byte + 3));
         }
@@ -721,6 +734,7 @@ mod tests {
     #[test]
     fn grade_scenarios_generates_a_non_vacuous_reply_through_stack_chat() {
         let (root, tokenizer_path) = scenario_root();
+        let tokenizer_sha256 = sha256(&fs::read(&tokenizer_path).unwrap());
         let snapshot = synthetic_fbs_trunk_with(
             272,
             FbsSynth {
@@ -736,7 +750,21 @@ mod tests {
                 decay_step: 0.0625,
             },
         );
-        let artifact = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+        let artifact = export_fbs_trunk_uorlut01_with_provenance(
+            &snapshot,
+            FbsExportSnaps::SNAPPED,
+            None,
+            0,
+            Some(&FbsExportProvenance {
+                stack_contract: StackContractProvenance {
+                    source: "scenario-grade-test".to_owned(),
+                    sha256: "0".repeat(64),
+                    semantic_blake3: "0".repeat(64),
+                },
+                tokenizer_sha256,
+            }),
+        )
+        .unwrap();
         let report = grade_scenarios(
             &artifact,
             &root,
