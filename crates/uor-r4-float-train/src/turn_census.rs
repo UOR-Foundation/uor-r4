@@ -737,17 +737,20 @@ fn same_run(
     })
 }
 
-/// The replies of a corpus that have an earlier user turn, and one sentence for each recall
-/// reply that has no place. A recall reply's place is read from its memory line: the value's
-/// first whole-word run in the reply, and the latest equal run in the latest earlier user turn
-/// that states the value.
+/// A recall reply with no place: its cause, and the line that lists it.
+pub type Miss = (&'static str, String);
+
+/// The replies the place census counts (every recall reply and abstention, and the general
+/// replies with an earlier user turn), and each recall reply that has no place. A recall reply's
+/// place is read from its memory line: the value's first whole-word run in the reply, and the
+/// latest equal run in the latest earlier user turn that states the value.
 pub fn cases(
     x: &[u32],
     docs: &[Vec<Turn>],
     lined: &[u32],
     lines: &[Vec<Option<Range<usize>>>],
     codec: &Codec<'_>,
-) -> Result<(Vec<Case>, Vec<String>)> {
+) -> Result<(Vec<Case>, Vec<Miss>)> {
     let text = |range: &Range<usize>| (codec.decode)(&x[range.clone()]).replace('\n', " ");
     let (mut out, mut misses) = (Vec::new(), Vec::new());
     for (doc, doc_lines) in docs.iter().zip(lines) {
@@ -758,7 +761,9 @@ pub fn cases(
             let Some((asked, prior)) = user_turns_before(doc, reply) else {
                 continue;
             };
-            if prior.is_empty() {
+            // Only a general reply is left out for having no earlier user turn: a recall reply
+            // to a conversation's first question stays, as a miss.
+            if prior.is_empty() && doc_lines[reply].is_none() {
                 continue;
             }
             let value = match doc_lines[reply].as_ref() {
@@ -794,10 +799,11 @@ pub fn cases(
                             (_, None) => "no earlier user turn states the value",
                             _ => "the value is written in other tokens in its turn",
                         };
-                        misses.push(format!(
+                        let line = format!(
                             "place-census miss | {cause} | value={value} | reply={}",
                             text(&doc[reply].content)
-                        ));
+                        );
+                        misses.push((cause, line));
                     }
                     (Kind::Recall, place)
                 }
@@ -930,6 +936,22 @@ pub fn finds(
             if let Some(pos) = pos {
                 out.push(Find { t, head, pos, fits });
             }
+        }
+    }
+    out
+}
+
+/// One find a question row, as the ORDER words it: with two ask heads, the later of the heads'
+/// positions, and every position that fits either head.
+pub fn rows(found: &[Find]) -> Vec<Find> {
+    let mut out: Vec<Find> = Vec::new();
+    for f in found {
+        match out.last_mut() {
+            Some(row) if row.t == f.t => {
+                row.pos = row.pos.max(f.pos);
+                row.fits += f.fits;
+            }
+            _ => out.push(Find { head: 0, ..*f }),
         }
     }
     out
@@ -1122,7 +1144,38 @@ pub fn place_census(
         of_kind(&train_cases, Kind::General),
         of_kind(&train_cases, Kind::Abstain)
     )];
-    out.extend(misses.into_iter().take(show));
+    // The Instrument row: every miss is listed with its cause, and counted by cause.
+    let mut causes: Vec<(&str, usize)> = Vec::new();
+    for &(cause, _) in &misses {
+        match causes.iter_mut().find(|seat| seat.0 == cause) {
+            Some(seat) => seat.1 += 1,
+            None => causes.push((cause, 1)),
+        }
+    }
+    causes.sort();
+    for (cause, count) in causes {
+        out.push(format!(
+            "place-census A-miss cause={cause:?} replies={count} of={n}"
+        ));
+    }
+    out.extend(misses.into_iter().map(|(_, line)| line));
+    let instrument = if placed == n {
+        "every recall reply has a place".to_owned()
+    } else {
+        format!(
+            "{} of {n} have no place: each is listed with its cause, and an instrument fault is repaired before anything else is read",
+            n - placed
+        )
+    };
+    out.push(format!("place-census decide instrument: {instrument}"));
+    // A decision printed after a stopping clause is a reading, not a route.
+    let unrouted = |stopped: bool| {
+        if stopped {
+            " (counted after a stopping clause: not routed)"
+        } else {
+            ""
+        }
+    };
 
     // B: the step and the stop.
     let turn_end = |case: &Case, s: usize| {
@@ -1185,25 +1238,36 @@ pub fn place_census(
         .iter()
         .map(|&(_, fx, fit_cases)| targets(fx, fit_cases))
         .collect();
-    let reaches = |case: &Case, form: Form, user_only: bool, asks: &HashMap<u32, Vec<u32>>| {
+    // A reply passes when some row's find is the true place. A row has one find (`rows`); with
+    // two heads the count that takes either head's own find is printed beside it.
+    let reaches = |case: &Case, form: Form, user_only: bool, k: usize, by_row: bool| {
         case.place.is_some_and(|place| {
-            finds(x, case, form, user_only, asks)
-                .iter()
-                .any(|f| f.pos == place.s)
+            let found = finds(x, case, form, user_only, &asks[k]);
+            let found = if by_row { rows(&found) } else { found };
+            found.iter().any(|f| f.pos == place.s)
         })
     };
     let mut read = Vec::new();
     for form in FORMS {
         for (k, &(name, ..)) in fits.iter().enumerate() {
-            let count = |user_only: bool| {
+            let count = |user_only: bool, by_row: bool| {
                 recall
                     .iter()
-                    .filter(|c| reaches(c, form, user_only, &asks[k]))
+                    .filter(|c| reaches(c, form, user_only, k, by_row))
                     .count()
             };
-            let (every, users) = (count(false), count(true));
+            let (every, users) = (count(false, true), count(true, true));
+            let beside = if form.heads > 1 {
+                format!(
+                    " either_head_every_position={} either_head_user_turns_only={}",
+                    count(false, false),
+                    count(true, false)
+                )
+            } else {
+                String::new()
+            };
             out.push(format!(
-                "place-census C form={} fit={name} of={n} every_position={every} user_turns_only={users}",
+                "place-census C form={} fit={name} of={n} every_position={every} user_turns_only={users}{beside}",
                 form.name
             ));
             if k == 0 {
@@ -1242,7 +1306,7 @@ pub fn place_census(
         let Some(place) = case.place else {
             continue;
         };
-        let found = finds(x, case, form, user_only, &asks[0]);
+        let found = rows(&finds(x, case, form, user_only, &asks[0]));
         if let Some(f) = found.iter().find(|f| f.pos == place.s) {
             *asked_for.entry((x[f.t], x[place.s - 1])).or_default() += 1;
             continue;
@@ -1292,7 +1356,7 @@ pub fn place_census(
     let found_in = |cx: &[u32], cases: &[Case], k: usize| -> Vec<Vec<Find>> {
         cases
             .iter()
-            .map(|c| finds(cx, c, form, user_only, &asks[k]))
+            .map(|c| rows(&finds(cx, c, form, user_only, &asks[k])))
             .collect()
     };
     let mut armed = Vec::new();
@@ -1364,11 +1428,16 @@ pub fn place_census(
             }
         },
     };
-    out.push(format!("place-census decide arm: {label}: {arm}"));
+    let find_stops = find == "not built as written";
+    out.push(format!(
+        "place-census decide arm: {label}: {arm}{}",
+        unrouted(find_stops)
+    ));
+    let arm_stops = find_stops || arm == "a plan change";
     let mut arming: Vec<String> = armed[0]
         .0
         .iter()
-        .map(|&(token, head)| format!("{:?}/{head}", (codec.decode)(&[token])))
+        .map(|&(token, _)| format!("{:?}", (codec.decode)(&[token])))
         .collect();
     arming.sort();
     out.push(format!(
@@ -1391,24 +1460,29 @@ pub fn place_census(
                 let rows = open_rows(case, reg).into_iter();
                 rows.map(move |(t, right)| (fx[t], right))
             }));
-            let (mut right, mut right_of) = (0usize, 0usize);
+            // `first`: recall replies where the value-start row is opened and no row before it is.
+            let (mut right, mut right_of, mut first) = (0usize, 0usize, 0usize);
             let (mut wrong, mut rows) = ([0usize; 3], [0usize; 3]);
             for (case, reg) in panel_cases.iter().zip(regs(x, panel_found)) {
                 let kind = case.kind as usize;
                 rows[kind] += case.reply.len() + 1;
                 right_of += usize::from(reg.is_some() && reg == case.place.map(|place| place.s));
+                let (mut early, mut opened) = (false, false);
                 for (t, is_right) in open_rows(case, reg) {
                     if opens.contains(&x[t]) {
                         if is_right {
                             right += 1;
+                            opened = true;
                         } else {
                             wrong[kind] += 1;
+                            early = true;
                         }
                     }
                 }
+                first += usize::from(opened && !early);
             }
             out.push(format!(
-                "place-census E fit={name} arm={arm_name} right={right} of={right_of} wrong_recall={} of_rows={} wrong_general={} of_rows={} wrong_abstain={} of_rows={}",
+                "place-census E fit={name} arm={arm_name} right={right} of={right_of} wrong_recall={} of_rows={} wrong_general={} of_rows={} wrong_abstain={} of_rows={} value_start_is_the_first_open={first} of={n}",
                 wrong[0], rows[0], wrong[1], rows[1], wrong[2], rows[2]
             ));
             if k == 0 && arm == rule {
@@ -1419,7 +1493,10 @@ pub fn place_census(
                 } else {
                     "a plan change"
                 };
-                out.push(format!("place-census decide open: arm={label}: {open}"));
+                out.push(format!(
+                    "place-census decide open: arm={label}: {open}{}",
+                    unrouted(arm_stops)
+                ));
                 let mut opening: Vec<String> =
                     opens.iter().map(|&t| (codec.decode)(&[t])).collect();
                 opening.sort();
@@ -1492,11 +1569,12 @@ pub fn place_census(
     };
     out.push(format!("place-census decide label: {label}"));
 
-    // G: the window, as the tokens from the place to the value-start row, both counted.
+    // G: the window, as the tokens from the value-start row back to the place. The shares are of
+    // the replies that have a place.
     let reach = |cases: &[Case]| {
         let mut within = [0usize; 4];
         for place in cases.iter().filter_map(|c| c.place) {
-            let bucket = match place.p - place.s {
+            let bucket = match place.p - 1 - place.s {
                 0..=192 => 0,
                 193..=256 => 1,
                 257..=512 => 2,
@@ -1858,6 +1936,12 @@ mod tests {
             has("A recall=1 read_on_reads_the_value=1 general=0 abstain=0"),
             "{out:#?}"
         );
+        assert!(
+            has("decide instrument: every recall reply has a place"),
+            "{out:#?}"
+        );
+        // "it's" opens the value-start row and the role marker's ":" before it stays shut.
+        assert!(has("value_start_is_the_first_open=1 of=1"), "{out:#?}");
         // "maya" is one token, and "." follows it in its turn.
         assert!(has("B of=1 one_token=1 B1_exact=1"), "{out:#?}");
         assert!(has("decide stop: no step and no stop"), "{out:#?}");
@@ -1989,5 +2073,71 @@ mod tests {
         assert_eq!(label_of("Assistant|my friend is ok ."), (0, 5));
         // "my friend" is in both statements: the later one is the label.
         assert_eq!(label_of("Assistant|my friend ."), (0, 2));
+    }
+
+    #[test]
+    fn a_space_token_before_the_run_in_both_joins_the_label() {
+        // "is" stands in for the tokenizer's lone space token: it is on the stop list, so a run
+        // cannot start at it, and it joins a run it stands before in the turn and in the reply.
+        let label_of = |last: &str| {
+            let turns = [
+                "User|my friend is maya .",
+                "Assistant|ok .",
+                "User|who is my friend",
+                last,
+            ];
+            let (plain, mask) = corpus(&turns);
+            let docs = documents(&plain, &mask, &marks()).expect("corpus");
+            let doc = &docs[0];
+            let case = Case {
+                kind: Kind::Recall,
+                lo: doc[0].content.start,
+                users: vec![doc[0].content.clone()],
+                asked: doc[2].content.clone(),
+                reply: doc[3].content.clone(),
+                place: None,
+            };
+            let stop: HashSet<u32> = ids(". is").into_iter().collect();
+            let space: HashSet<u32> = ids("is").into_iter().collect();
+            let label = run_label(&plain, &case, &stop, &space).expect("a label");
+            let run = words(&plain[label.s..label.s + label.len]);
+            (run, label.p - doc[3].content.start)
+        };
+        assert_eq!(
+            label_of("Assistant|it's is maya ."),
+            ("is maya .".to_owned(), 1)
+        );
+        // "it's" stands before the run in the reply: nothing joins.
+        assert_eq!(label_of("Assistant|it's maya ."), ("maya .".to_owned(), 1));
+    }
+
+    #[test]
+    fn two_heads_on_one_row_give_one_find_at_the_later_position() {
+        let find = |t, head, pos, fits| Find { t, head, pos, fits };
+        let found = [find(5, 0, 40, 1), find(5, 1, 12, 2), find(6, 1, 7, 1)];
+        assert_eq!(rows(&found), [find(5, 0, 40, 3), find(6, 0, 7, 1)]);
+        // The register takes the row's one find, whichever head held it.
+        let last = register(&[], &rows(&found[..2]), Arm::Last, &HashSet::new());
+        assert_eq!(last, Some(40));
+    }
+
+    #[test]
+    fn a_recall_reply_to_the_first_question_is_kept_as_a_miss() {
+        let turns = ["User|who is my friend", "Assistant|it's maya ."];
+        let [(plain, plain_mask), (lined, lined_mask)] = twins(&turns, "System|Memory : maya .");
+        let decode = |ids: &[u32]| words(ids).replace(" :", ":").replace(" .", ".");
+        let encode = |text: &str| ids(text);
+        let codec = Codec {
+            decode: &decode,
+            encode: &encode,
+        };
+        let docs = documents(&plain, &plain_mask, &marks()).expect("corpus");
+        let lined_docs = documents(&lined, &lined_mask, &marks()).expect("corpus");
+        let lines = pair_lines(&plain, &docs, &lined, &lined_docs).expect("twins");
+        let (replies, misses) = cases(&plain, &docs, &lined, &lines, &codec).expect("cases");
+        assert_eq!(replies.len(), 1);
+        assert_eq!((replies[0].kind, replies[0].place), (Kind::Recall, None));
+        assert_eq!(misses.len(), 1);
+        assert_eq!(misses[0].0, "no earlier user turn states the value");
     }
 }

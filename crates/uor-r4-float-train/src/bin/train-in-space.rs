@@ -1667,7 +1667,7 @@ fn turn_census_run(data_root: &Path, folders: &[PathBuf; 4]) -> Result<()> {
         registered: 1,
     };
     let lines =
-        place_census(&corpora, &marks, &codec, &stops, 12).map_err(|what| invalid(&what))?;
+        place_census(&corpora, &marks, &codec, &stops, 200).map_err(|what| invalid(&what))?;
     for line in lines {
         println!("{line}");
     }
