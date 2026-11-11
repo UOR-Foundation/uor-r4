@@ -758,6 +758,12 @@ export class AgentClient {
                     'artifact range is outside the local artifact',
                 );
             }
+            if (range.end - range.start > MAX_HOST_ARTIFACT_RETURN_BYTES) {
+                throw new AgentClientError(
+                    'limit_exceeded',
+                    'local artifact range exceeds the client return cap',
+                );
+            }
             const bytes = local.bytes.slice(range.start, range.end);
             return {
                 path: local.path,
@@ -1265,6 +1271,17 @@ async function hostArtifactContent(
             return invalidHostData('host artifact whole digest is malformed');
         }
         wholeDigest = output.whole_digest;
+    }
+    if (
+        rangeValue !== undefined &&
+        artifactSizeBytes !== undefined &&
+        rangeValue.start === 0 &&
+        rangeValue.end === artifactSizeBytes &&
+        (wholeDigest === undefined || wholeDigest !== output.digest)
+    ) {
+        return invalidHostData(
+            'host full artifact whole digest does not match its bytes',
+        );
     }
     return {
         path: output.path,

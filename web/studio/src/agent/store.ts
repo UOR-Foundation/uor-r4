@@ -619,6 +619,19 @@ function requireStoredChange(value: unknown): asserts value is ChangeRecord {
     }
 }
 
+function mediaTypeEssence(value: string): string {
+    return value.split(';', 1)[0]!.trim().toLowerCase();
+}
+
+function mediaTypeParameters(value: string): string {
+    return value
+        .split(';')
+        .slice(1)
+        .map((part) => part.trim().toLowerCase())
+        .filter((part) => part.length > 0)
+        .join(';');
+}
+
 function requireStoredArtifact(
     value: unknown,
     key: string,
@@ -653,8 +666,23 @@ function requireStoredArtifact(
     if (!(value.blob instanceof Blob)) {
         corrupt('artifact record has no durable bytes');
     }
-    if (value.blob.type !== '' && value.blob.type !== value.media_type) {
-        corrupt('artifact record blob type does not match its media_type');
+    // Compare the MIME essence case-insensitively. A Blob commonly drops
+    // parameters that the declared media_type still carries; parameters that
+    // are present on both must agree, so conflicting declarations still fail.
+    if (value.blob.type !== '') {
+        if (
+            mediaTypeEssence(value.blob.type) !==
+            mediaTypeEssence(value.media_type)
+        ) {
+            corrupt('artifact record blob type does not match its media_type');
+        }
+        const blobParameters = mediaTypeParameters(value.blob.type);
+        if (
+            blobParameters.length > 0 &&
+            blobParameters !== mediaTypeParameters(value.media_type)
+        ) {
+            corrupt('artifact record blob parameters do not match its media_type');
+        }
     }
     if (value.blob.size !== value.size_bytes) {
         corrupt('artifact record size does not match its bytes');
@@ -1443,27 +1471,40 @@ export class AgentTaskStore {
             }
         }
         const length = end - start;
-        let bytes: Uint8Array;
+        let wholeBytes: Uint8Array;
         try {
-            const bounded = record.blob.slice(start, end);
-            bytes = new Uint8Array(await bounded.arrayBuffer());
+            const bounded = record.blob.slice(0, total);
+            wholeBytes = new Uint8Array(await bounded.arrayBuffer());
         } catch {
             corrupt('artifact record bytes are unavailable');
         }
+        if (wholeBytes.byteLength !== total) {
+            corrupt('artifact record size does not match its bytes');
+        }
+        // Verify the declared whole digest before returning any slice. A
+        // corrupt whole record must fail for whole and subrange reads alike.
+        const wholeDigest = await sha256Bytes(wholeBytes);
+        if (wholeDigest !== record.digest) {
+            corrupt('artifact record digest does not match its bytes');
+        }
+        const bytes =
+            start === 0 && end === total
+                ? wholeBytes
+                : wholeBytes.slice(start, end);
         if (bytes.byteLength !== length) {
             corrupt('artifact record size does not match its bytes');
         }
-        const digest = await sha256Bytes(bytes);
-        if (start === 0 && end === total && digest !== record.digest) {
-            corrupt('artifact record digest does not match its bytes');
-        }
+        const digest =
+            start === 0 && end === total
+                ? wholeDigest
+                : await sha256Bytes(bytes);
         return {
             artifact_id: record.artifact_id,
             media_type: record.media_type,
             size_bytes: length,
             artifact_size_bytes: total,
             digest,
-            whole_digest: record.digest,
+            whole_digest: wholeDigest,
             range: { start, end },
             bytes,
         };

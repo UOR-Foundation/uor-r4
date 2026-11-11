@@ -12,6 +12,7 @@ const FULL64_CORRUPT_SIZE = `art_${'c2'.repeat(32)}`;
 const FULL64_CORRUPT_METADATA = `art_${'c3'.repeat(32)}`;
 const FULL64_CORRUPT_BLOB_TYPE = `art_${'c4'.repeat(32)}`;
 const FULL64_CORRUPT_OVERSIZE = `art_${'c5'.repeat(32)}`;
+const FULL64_NORMALIZED = `art_${'f6'.repeat(32)}`;
 
 interface StudioTestCall {
     method: string;
@@ -736,6 +737,8 @@ test.describe('browser agent task store', () => {
                             clientForTest?: () => {
                                 readArtifact(input: {
                                     artifactId: string;
+                                    start?: number;
+                                    end?: number;
                                 }): Promise<unknown>;
                             } | null;
                         };
@@ -752,6 +755,17 @@ test.describe('browser agent task store', () => {
                         result[label] =
                             (error as { code?: string }).code ?? null;
                     }
+                }
+                try {
+                    await client.readArtifact({
+                        artifactId: ids.digest,
+                        start: 0,
+                        end: 5,
+                    });
+                    result.digestRange = null;
+                } catch (error) {
+                    result.digestRange =
+                        (error as { code?: string }).code ?? null;
                 }
                 return result;
             },
@@ -772,7 +786,58 @@ test.describe('browser agent task store', () => {
             metadata: 'snapshot_corrupt',
             blobType: 'snapshot_corrupt',
             oversize: 'snapshot_corrupt',
+            digestRange: 'snapshot_corrupt',
         });
+    });
+
+    test('durable_artifact_media_type_normalization_is_accepted', async ({ page }) => {
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        const seeded = await seedArtifact(
+            page,
+            FULL64_NORMALIZED,
+            'normalized media type',
+            'Text/Plain; Charset=UTF-8',
+            { blobTypeOverride: 'text/plain' },
+        );
+        const result = await page.evaluate(
+            async ({ artifactId }) => {
+                const api = (
+                    window as unknown as {
+                        __studioTest?: {
+                            clientForTest?: () => {
+                                readArtifact(input: {
+                                    artifactId: string;
+                                }): Promise<{
+                                    path: string;
+                                    mediaType: string;
+                                    sizeBytes: number;
+                                    digest: string;
+                                    bytes: Uint8Array;
+                                }>;
+                            } | null;
+                        };
+                    }
+                ).__studioTest;
+                const client = api?.clientForTest?.();
+                if (!client) throw new Error('studio test client is missing');
+                const content = await client.readArtifact({ artifactId });
+                return {
+                    path: content.path,
+                    mediaType: content.mediaType,
+                    sizeBytes: content.sizeBytes,
+                    digest: content.digest,
+                    bytes: [...content.bytes],
+                };
+            },
+            { artifactId: seeded.artifactId },
+        );
+        expect(result).toMatchObject({
+            path: seeded.artifactId,
+            mediaType: 'Text/Plain; Charset=UTF-8',
+            sizeBytes: seeded.bytes.length,
+            digest: seeded.digest,
+        });
+        expect(result.bytes).toEqual(seeded.bytes);
     });
 
     test('full64_host_id_without_durable_record_emits_artifact_read_intent', async ({ page }) => {

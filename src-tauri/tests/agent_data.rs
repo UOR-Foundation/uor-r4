@@ -593,9 +593,13 @@ fn agent_data_outputs_have_no_urls_or_tokens() {
 fn agent_grant_path_rejects_malformed_lowercase_hex() {
     let root = unique_temp_dir("grant-hex");
     let (backend, grant_id) = backend_with_grant(&root);
-    let uppercase = format!("gr_{}", grant_id["gr_".len()..].to_ascii_uppercase());
+    let uppercase = "gr_ABCDEF0123456789";
+    assert_ne!(
+        uppercase, grant_id,
+        "the literal malformed id must not alias the generated lowercase grant"
+    );
     let uppercase_error = backend
-        .agent_grant_path(&uppercase)
+        .agent_grant_path(uppercase)
         .expect_err("uppercase grant hex must be malformed");
     assert!(
         format!("{uppercase_error:?}").contains("malformed"),

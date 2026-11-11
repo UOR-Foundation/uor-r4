@@ -809,6 +809,98 @@ describe('AgentClient companion data routing', () => {
         ).rejects.toMatchObject({ code: 'invalid_event' });
     });
 
+    test('read_artifact_local_range_succeeds_with_metadata', async () => {
+        const client = new AgentClient();
+        const bytes = new TextEncoder().encode('local range artifact');
+        const digest = await sha256Bytes(bytes);
+        client.registerLocalFile({
+            path: 'local.txt',
+            mediaType: 'text/plain',
+            bytes,
+            digest,
+        });
+
+        const content = await client.readArtifact({
+            path: 'local.txt',
+            start: 6,
+            end: 11,
+        });
+        expect(content).toMatchObject({
+            path: 'local.txt',
+            mediaType: 'text/plain',
+            sizeBytes: 5,
+            artifactSizeBytes: bytes.byteLength,
+            wholeDigest: digest,
+            range: { start: 6, end: 11 },
+        });
+        expect(new TextDecoder().decode(content.bytes)).toBe('range');
+        expect(content.digest).toBe(await sha256Bytes(bytes.slice(6, 11)));
+    });
+
+    test('read_artifact_local_range_over_one_mib_is_refused', async () => {
+        const client = new AgentClient();
+        const bytes = new Uint8Array(MAX_HOST_ARTIFACT_RETURN_BYTES + 1);
+        const digest = await sha256Bytes(bytes);
+        client.registerLocalFile({
+            path: 'big.bin',
+            mediaType: 'application/octet-stream',
+            bytes,
+            digest,
+        });
+        await expect(
+            client.readArtifact({
+                path: 'big.bin',
+                start: 0,
+                end: bytes.byteLength,
+            }),
+        ).rejects.toMatchObject({ code: 'limit_exceeded' });
+    });
+
+    test('read_artifact_corrupt_range_is_not_hidden_by_host', async () => {
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {
+                path: 'host.txt',
+                media_type: 'text/plain',
+                size_bytes: 1,
+                digest: `sha256:${'0'.repeat(64)}`,
+                bytes_base64: 'AA==',
+            }),
+        );
+        const { client, reads } = clientWithDurableArtifact(async () => {
+            throw new AgentStoreError(
+                'snapshot_corrupt',
+                'artifact digest does not match its bytes',
+            );
+        }, transport);
+
+        await expect(
+            client.readArtifact({ artifactId: FULL64_A, start: 0, end: 1 }),
+        ).rejects.toMatchObject({ code: 'snapshot_corrupt' });
+        expect(reads).toEqual([FULL64_A]);
+        expect(transport.intents).toHaveLength(0);
+    });
+
+    test('host_full_artifact_whole_digest_mismatch_is_refused', async () => {
+        const bytes = new TextEncoder().encode('four');
+        const digest = await sha256Bytes(bytes);
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {
+                path: 'host.txt',
+                media_type: 'text/plain',
+                size_bytes: bytes.byteLength,
+                artifact_size_bytes: bytes.byteLength,
+                digest,
+                whole_digest: `sha256:${'0'.repeat(64)}`,
+                range: { start: 0, end: bytes.byteLength },
+                bytes_base64: base64(bytes),
+            }),
+        );
+        const client = clientWith(transport);
+        await expect(
+            client.readArtifact({ artifactId: FULL64_A }),
+        ).rejects.toMatchObject({ code: 'invalid_event' });
+    });
+
     test('read_artifact_corrupt_durable_record_is_refused_without_host', async () => {
         const hostBytes = new TextEncoder().encode('host artifact');
         const transport = new RecordingHostTransport(async (intent) =>
