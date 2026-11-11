@@ -705,7 +705,8 @@ pub enum Kind {
     Abstain,
 }
 
-/// One reply that has a user turn before the one it answers.
+/// One reply the place census counts. A general reply has a user turn before the one it answers;
+/// a recall reply or an abstention is kept without one.
 #[derive(Clone, Debug)]
 pub struct Case {
     pub kind: Kind,
@@ -1570,7 +1571,9 @@ pub fn place_census(
     out.push(format!("place-census decide label: {label}"));
 
     // G: the window, as the tokens from the value-start row back to the place. The shares are of
-    // the replies that have a place.
+    // the replies that have a place. The distance is in rows, `p - 1 - s`: a register that
+    // reaches W rows back from the value-start row holds the place when the distance is at most
+    // W, and stage 2's window is counted the same way.
     let reach = |cases: &[Case]| {
         let mut within = [0usize; 4];
         for place in cases.iter().filter_map(|c| c.place) {
@@ -2119,6 +2122,65 @@ mod tests {
         // The register takes the row's one find, whichever head held it.
         let last = register(&[], &rows(&found[..2]), Arm::Last, &HashSet::new());
         assert_eq!(last, Some(40));
+    }
+
+    #[test]
+    fn the_census_counts_one_find_a_row_and_a_first_open_only_with_no_row_open_before_it() {
+        // Four recall replies to the one-token question "who". Over them its targets are "my"
+        // (twice; the lower id, so the first head's) and "is" (twice; the second head's).
+        let reply = "Assistant|it's maya .";
+        let mine = ["User|my maya .", "Assistant|ok .", "User|who", reply];
+        // The first "it's" of this reply opens before the value-start row does.
+        let twice = [mine[0], mine[1], mine[2], "Assistant|it's it's maya ."];
+        // Only the second head finds the place.
+        let is = ["User|friend is maya .", mine[1], mine[2], reply];
+        // The second head finds the place and the first a later position, the one after "my".
+        let both = ["User|friend is maya . my ok .", mine[1], mine[2], reply];
+        let mut joined = [(Vec::new(), Vec::new()), (Vec::new(), Vec::new())];
+        for turns in [mine, twice, is, both] {
+            let pair = twins(&turns, "System|Memory : maya .");
+            for (whole, (tokens, mask)) in joined.iter_mut().zip(pair) {
+                whole.0.extend(tokens);
+                whole.1.extend(mask);
+            }
+        }
+        let [(plain, plain_mask), (lined, lined_mask)] = joined;
+        let decode = |ids: &[u32]| words(ids).replace(" :", ":").replace(" .", ".");
+        let encode = |text: &str| ids(text);
+        let codec = Codec {
+            decode: &decode,
+            encode: &encode,
+        };
+        let corpora = Corpora {
+            train: (&plain, &plain_mask),
+            train_lined: (&lined, &lined_mask),
+            panel: (&plain, &plain_mask),
+            lined: (&lined, &lined_mask),
+        };
+        let lists = Stops {
+            tops: &[0],
+            registered: 0,
+        };
+        let out = place_census(&corpora, &marks(), &codec, &lists, 4).expect("a census");
+        let expected = [
+            "A recall=4 read_on_reads_the_value=4 general=0 abstain=0",
+            // One head asks for "my": the two "my maya" replies.
+            "C form=C2 fit=train of=4 every_position=2 user_turns_only=2",
+            // Two heads add the "is maya" reply. The last reply's row has one find, the later
+            // position, so it is reached only when either head's own find counts.
+            "C form=C2w fit=train of=4 every_position=3 user_turns_only=3 either_head_every_position=4 either_head_user_turns_only=4",
+            "decide find: form=C2w user_turns_only=false reaches=3 of=4: built, with a share it cannot reach",
+            // The register takes the row's one find: a wrong place on the last reply.
+            "D fit=train rule=D1 reached=3 true_place=3 wrong_place=1",
+            // "it's" opens: right on three replies, early on the doubled one, wrong on the last.
+            "E fit=train arm=D1 right=3 of=3 wrong_recall=2",
+            "value_start_is_the_first_open=2 of=4",
+        ];
+        let missing: Vec<&str> = expected
+            .into_iter()
+            .filter(|needle| !out.iter().any(|line| line.contains(needle)))
+            .collect();
+        assert!(missing.is_empty(), "missing {missing:#?} in {out:#?}");
     }
 
     #[test]
