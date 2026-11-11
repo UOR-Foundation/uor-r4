@@ -2649,6 +2649,74 @@
           },
           {
             "args": [
+              "test",
+              "--release",
+              "--locked",
+              "-p",
+              "uor-r4-float-train",
+              "--features",
+              "cuda",
+              "--lib",
+              "--",
+              "hamming"
+            ],
+            "env": [],
+            "id": "gpu-tests",
+            "inputs": [],
+            "outputs": [],
+            "program": "cargo",
+            "role": "verify",
+            "timeout_seconds": 1200
+          },
+          {
+            "args": [
+              "build",
+              "--release",
+              "--locked",
+              "-p",
+              "uor-r4-float-train",
+              "--features",
+              "cuda",
+              "--bin",
+              "train-in-space",
+              "--bin",
+              "fbs-snapshot"
+            ],
+            "env": [],
+            "id": "build-float",
+            "inputs": [],
+            "outputs": [
+              "target/release/train-in-space",
+              "target/release/fbs-snapshot"
+            ],
+            "program": "cargo",
+            "role": "verify",
+            "timeout_seconds": 1800
+          },
+          {
+            "args": [
+              "build",
+              "--release",
+              "--locked",
+              "-p",
+              "uor-r4-integer",
+              "--bin",
+              "fbs-export",
+              "--features",
+              "serving-wasm"
+            ],
+            "env": [],
+            "id": "build-export",
+            "inputs": [],
+            "outputs": [
+              "target/release/fbs-export"
+            ],
+            "program": "cargo",
+            "role": "verify",
+            "timeout_seconds": 900
+          },
+          {
+            "args": [
               "--data-root",
               "DATA_ROOT",
               "--train-split",
@@ -3239,7 +3307,7 @@
             "result": "pass",
             "scope": "source identity",
             "sha256": null,
-            "statement": "The runnable implementation, including the table-baseline scorer, is the code at 894869f; later contract and documentation bytes are bound by this contract's semantic hash."
+            "statement": "The runnable implementation, including the table-baseline scorer and exclusive store claim, is the code at 4add144e; later contract and documentation bytes are bound by this contract's semantic hash."
           },
           {
             "id": "aligned-corpus",
@@ -3836,15 +3904,15 @@
           }
         ],
         "revision": 1,
-        "source_pin": "894869f262973d64c6d44661fa71afaa7ebe9241",
+        "source_pin": "4add144ebdc9087e47fe3fa830fb21116278644e",
         "spec": "uor-r4.stack-contract/2",
         "state": "experimental",
         "summary": "One fresh-start 1,024-step training of the current FBS/Hamming geometric path on the aligned scenario corpus, exported as a bound uor-r4.lut-stack/10 artifact and scored against the same-evaluator previous-token count table.",
         "title": "FBS aligned-scenario 1,024-step GPU smoke"
       },
-      "semantic_blake3": "54ea91987cd014198c4670f7387287638bc8419d14cd27a6b1d0745c2ed5f85b",
+      "semantic_blake3": "1b0b7f909da3dddeb7d5f1ec231889a0ef60eb105f7cea9e002c70edf8c6d63a",
       "source": "conformance/stack/fbs-deepseek-scenario-smoke.toml",
-      "source_blake3": "583f72e8e8095e00e2cb2ce140a7e395a3e2d548d25affbd1b097e5eed891c72"
+      "source_blake3": "3bef4d5edb277c44a024761942fc30add3221b0449137d8050973742f8407a92"
     }
   ],
   "schema": "uor-r4.stack-contract.generated/2",

@@ -5,7 +5,7 @@ lane = "fbs"
 state = "experimental"
 revision = 1
 decision = "docs/harness/prep/one-model-end-to-end-scenario-gpu-smoke-2026-11-11.md"
-source_pin = "894869f262973d64c6d44661fa71afaa7ebe9241"
+source_pin = "4add144ebdc9087e47fe3fa830fb21116278644e"
 summary = "One fresh-start 1,024-step training of the current FBS/Hamming geometric path on the aligned scenario corpus, exported as a bound uor-r4.lut-stack/10 artifact and scored against the same-evaluator previous-token count table."
 
 [model]
@@ -157,7 +157,7 @@ locator = "docs/loop/tasks/one-model-end-to-end/deepseek-273/ORDER.md"
 result = "pass"
 scope = "source identity"
 mechanisms = ["tokenizer", "fbs-trunk", "hamming-copy-read", "turn-memory", "whole-table-readout", "integer-export", "short-cycle-stop"]
-statement = "The runnable implementation, including the table-baseline scorer, is the code at 894869f; later contract and documentation bytes are bound by this contract's semantic hash."
+statement = "The runnable implementation, including the table-baseline scorer and exclusive store claim, is the code at 4add144e; later contract and documentation bytes are bound by this contract's semantic hash."
 
 [[evidence]]
 id = "aligned-corpus"
@@ -342,6 +342,36 @@ env = []
 inputs = ["preflight-check.sh", "scenario-preflight-gate.jq", "preflight-development", "preflight-fresh"]
 outputs = []
 timeout_seconds = 300
+
+[[commands]]
+id = "gpu-tests"
+role = "verify"
+program = "cargo"
+args = ["test", "--release", "--locked", "-p", "uor-r4-float-train", "--features", "cuda", "--lib", "--", "hamming"]
+env = []
+inputs = []
+outputs = []
+timeout_seconds = 1200
+
+[[commands]]
+id = "build-float"
+role = "verify"
+program = "cargo"
+args = ["build", "--release", "--locked", "-p", "uor-r4-float-train", "--features", "cuda", "--bin", "train-in-space", "--bin", "fbs-snapshot"]
+env = []
+inputs = []
+outputs = ["target/release/train-in-space", "target/release/fbs-snapshot"]
+timeout_seconds = 1800
+
+[[commands]]
+id = "build-export"
+role = "verify"
+program = "cargo"
+args = ["build", "--release", "--locked", "-p", "uor-r4-integer", "--bin", "fbs-export", "--features", "serving-wasm"]
+env = []
+inputs = []
+outputs = ["target/release/fbs-export"]
+timeout_seconds = 900
 
 [[commands]]
 id = "train"

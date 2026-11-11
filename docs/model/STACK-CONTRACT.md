@@ -433,12 +433,12 @@ Schema: `uor-r4.lut-stack/6`
 
 One fresh-start 1,024-step training of the current FBS/Hamming geometric path on the aligned scenario corpus, exported as a bound uor-r4.lut-stack/10 artifact and scored against the same-evaluator previous-token count table.
 
-- Source: `conformance/stack/fbs-deepseek-scenario-smoke.toml` (BLAKE3 `583f72e8e8095e00e2cb2ce140a7e395a3e2d548d25affbd1b097e5eed891c72`)
-- Semantic hash: `54ea91987cd014198c4670f7387287638bc8419d14cd27a6b1d0745c2ed5f85b`
+- Source: `conformance/stack/fbs-deepseek-scenario-smoke.toml` (BLAKE3 `3bef4d5edb277c44a024761942fc30add3221b0449137d8050973742f8407a92`)
+- Semantic hash: `1b0b7f909da3dddeb7d5f1ec231889a0ef60eb105f7cea9e002c70edf8c6d63a`
 - Lane: `fbs`
 - State: `experimental`
 - Revision: 1
-- Source pin: `894869f262973d64c6d44661fa71afaa7ebe9241`
+- Source pin: `4add144ebdc9087e47fe3fa830fb21116278644e`
 - Decision: docs/harness/prep/one-model-end-to-end-scenario-gpu-smoke-2026-11-11.md
 
 ### Model
@@ -508,7 +508,7 @@ Schema: `uor-r4.lut-stack/10`
 
 | ID | Kind | Result | Scope | Locator | SHA-256 | Mechanisms | Statement |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `source-pin` | `authority` | `pass` | source identity | `docs/loop/tasks/one-model-end-to-end/deepseek-273/ORDER.md` | -- | `tokenizer`<br>`fbs-trunk`<br>`hamming-copy-read`<br>`turn-memory`<br>`whole-table-readout`<br>`integer-export`<br>`short-cycle-stop` | The runnable implementation, including the table-baseline scorer, is the code at 894869f; later contract and documentation bytes are bound by this contract's semantic hash. |
+| `source-pin` | `authority` | `pass` | source identity | `docs/loop/tasks/one-model-end-to-end/deepseek-273/ORDER.md` | -- | `tokenizer`<br>`fbs-trunk`<br>`hamming-copy-read`<br>`turn-memory`<br>`whole-table-readout`<br>`integer-export`<br>`short-cycle-stop` | The runnable implementation, including the table-baseline scorer and exclusive store claim, is the code at 4add144e; later contract and documentation bytes are bound by this contract's semantic hash. |
 | `aligned-corpus` | `report` | `pass` | aligned scenario corpus construction | `docs/loop/tasks/one-model-end-to-end/deepseek-268/REPORT.md` | -- | `tokenizer`<br>`fbs-trunk`<br>`whole-table-readout` | The scenario corpus receipt binds 20,000 TRAIN rows and disjoint development and Fresh panels by content hashes. |
 | `scenario-baseline` | `report` | `pass` | arm-r and count-table behavior on the aligned panels | `docs/loop/tasks/one-model-end-to-end/deepseek-272/REPORT.md` | -- | `hamming-copy-read`<br>`turn-memory`<br>`whole-table-readout`<br>`integer-export` | Arm r copied 10 of 110 development and 11 of 110 Fresh copy prompts; the previous-token table answered no grounded archetype. |
 | `run-pending` | `report` | `not-run` | planned 1,024-step aligned-corpus smoke | `docs/loop/tasks/one-model-end-to-end/deepseek-273/REPORT.md` | -- | `fbs-trunk`<br>`hamming-copy-read`<br>`turn-memory`<br>`whole-table-readout`<br>`integer-export`<br>`short-cycle-stop` | No later checkpoint, artifact or held-out result exists when this contract is registered. |
@@ -538,6 +538,11 @@ Schema: `uor-r4.lut-stack/10`
 
 - **preflight (`verify`)**: `bash conformance/stack/preflight-check.sh BASE_SHA256 preflight-development PREFLIGHT_DEVELOPMENT_SHA256 preflight-fresh PREFLIGHT_FRESH_SHA256`
   - env --; inputs `preflight-check.sh`<br>`scenario-preflight-gate.jq`<br>`preflight-development`<br>`preflight-fresh`; outputs --; timeout 300s
+- **gpu-tests (`verify`)**: `cargo test --release --locked -p uor-r4-float-train --features cuda --lib -- hamming`
+- **build-float (`verify`)**: `cargo build --release --locked -p uor-r4-float-train --features cuda --bin train-in-space --bin fbs-snapshot`
+  - env --; inputs --; outputs `target/release/train-in-space`<br>`target/release/fbs-snapshot`; timeout 1800s
+- **build-export (`verify`)**: `cargo build --release --locked -p uor-r4-integer --bin fbs-export --features serving-wasm`
+  - env --; inputs --; outputs `target/release/fbs-export`; timeout 900s
 - **train (`train`)**: `target/release/train-in-space --data-root DATA_ROOT --train-split TRAIN_SPLIT --train-sha256 TRAIN_SHA256 --train-mask-sha256 TRAIN_MASK_SHA256 --objective cell --retain-rates 1 --decay-mult 1 --lr 0.001 --lr-end 0 --train-as-served 1 --context 192 --width 256 --hamming-read 4 --batch 16 --turn-memory 8 --turn-memory-reply 1 --turn-memory-dropout 500 --samples 6 --reply-tokens 48 --steps 1024 --eval-every 256 --hamming-copy-latest 1 --turn-memory-leave-copied 1 --seed 273 --out TRAIN_OUT`
   - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`train-scenarios`<br>`trainer-dev-tokens`<br>`trainer-dev-mask`<br>`tokenizer`; outputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`; timeout 10800s
 - **smoke-train (`train`)**: `target/release/train-in-space --data-root DATA_ROOT --train-split TRAIN_SPLIT --train-sha256 TRAIN_SHA256 --train-mask-sha256 TRAIN_MASK_SHA256 --objective cell --retain-rates 1 --decay-mult 1 --lr 0.001 --lr-end 0 --train-as-served 1 --context 192 --width 256 --hamming-read 4 --batch 16 --turn-memory 8 --turn-memory-reply 1 --turn-memory-dropout 500 --samples 8 --reply-tokens 48 --steps 64 --eval-every 64 --hamming-copy-latest 1 --turn-memory-leave-copied 1 --seed 273 --out SMOKE_OUT`
