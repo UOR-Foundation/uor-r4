@@ -25,9 +25,9 @@ replay id for id.
   edits were reapplied. `rustfmt --check` remains non-clean over the entire
   integer source tree because of pre-existing formatting drift; the changed
   instrument file is clean, and `git diff --check` passes.
-- **No real sealed artifact was rerun in this unit.** The synthetic `/7`
-  artifact proves the path and equality guard. A panel report still needs a
-  pinned real artifact and sample set.
+- **The full real panel is capped at eight reply tokens here.** The real pass
+  proves observation and token identity on 1,141 prompts; it is not a new
+  complete-reply quality score.
 
 ## What worked
 
@@ -88,6 +88,23 @@ The fixture includes copy, type and turn-memory tables. Its generated reply did
 not produce a permeable row, so the production path for `permeable` priority
 is covered by a unit case rather than this synthetic reply.
 
+Real sealed arm-r seed-2 artifact
+`a1d705586b35d7da282913b1e21b242a74c0661b32d73e2ec89f56310a8140e8`
+on `samples-p-greedy-memory.json`
+(`53d966dcfd63ff71e4b2d30f9af0fdbdc0607ca6c6d96c7d09aa4fb37e99a2e2`):
+
+- 1,141 prompts, 8,459 generated-token rows, 462 EOS stops;
+- **2,353 permeable**, **6,106 reflective**, **0 opaque** rows;
+- 2,353 turn-memory moves stored a token; all 8,459 rows had a memory move;
+- 41 rows entered a short cycle;
+- EOS was top-1 on 462 rows and top-8 on 566;
+- 0 point-key overrides and 0 zero nearest margins;
+- trace SHA-256:
+  `163fbbf00775b8a9e80656d09db8917208a280aab2edd7671852cea6593e41fb`;
+- traced and independent untraced reply files both hash to
+  `5a1844d10d12e6347be88993ca5b3f588d19d61dd722fbed1a8d8c28c11f1c16`
+  and compare byte-identically.
+
 ## Checks run at the head
 
 - Instrument tests with `integer-reader`: 7 passed, 0 failed.
@@ -95,6 +112,8 @@ is covered by a unit case rather than this synthetic reply.
   1 ignored.
 - The synthetic traced-versus-untraced reply is id-for-id and file-for-file
   identical.
+- The real arm-r traced/untraced reply files are byte-identical and share the
+  hash above.
 - Instrument Clippy with `-D warnings`: pass.
 - Integer Clippy exits 0 and reports 61 pre-existing warnings, none in the
   changed session/generation/mod lines.
@@ -110,11 +129,9 @@ field-format tests.
 
 ## Still open
 
-- Run the trace on the sealed arm-r or arm-rt artifact and its fixed panel.
-- Use the output only to choose a later bake-off controller; this REPORT makes
-  no claim that any margin, EOS rank or class predicts a complete reply.
-- Add a baked, pre-registered controller comparison only in the separate
-  follow-up unit.
+- Use the real trace only to choose a later bake-off controller; this REPORT
+  makes no claim that any margin, EOS rank or class predicts a complete reply.
+- Add the pre-registered controller comparison in the separate bake-off unit.
 
 ## Plain summary
 
