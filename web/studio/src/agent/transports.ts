@@ -174,6 +174,62 @@ export interface TauriHostBridge {
     closeChannel?(channel: TauriChannelHandle): void;
 }
 
+export interface TauriCoreLike {
+    invoke(command: string, payload?: Record<string, unknown>): Promise<unknown>;
+    Channel?: new () => TauriChannelHandle;
+}
+
+/**
+ * Real Tauri adapter for the injected host bridge.
+ *
+ * It exposes a Channel only when the runtime actually provides one; the
+ * offline invoke shim has no Channel, so the transport uses `agent_host_poll`.
+ * No component calls `window.__TAURI__.core.invoke` directly.
+ */
+export function createTauriHostBridge(
+    core?: TauriCoreLike | null,
+): TauriHostBridge | null {
+    const resolved =
+        core ??
+        (
+            globalThis as {
+                __TAURI__?: { core?: TauriCoreLike };
+            }
+        ).__TAURI__?.core ??
+        null;
+    if (resolved === null || typeof resolved.invoke !== 'function') {
+        return null;
+    }
+    const Channel = resolved.Channel;
+    return {
+        hasChannel: typeof Channel === 'function',
+        invoke: (command, payload) => resolved.invoke(command, payload),
+        channel(onMessage): TauriChannelHandle {
+            if (typeof Channel !== 'function') {
+                throw new AgentClientError(
+                    'host_unavailable',
+                    'the Tauri runtime has no Channel transport',
+                );
+            }
+            const channel = new Channel();
+            channel.onmessage = onMessage;
+            return channel;
+        },
+        closeChannel(channel): void {
+            try {
+                channel.close?.();
+            } catch {
+                // Closing a channel is best effort.
+            }
+        },
+    };
+}
+
+export interface TauriHostGrant {
+    grant_id: string;
+    path: string;
+}
+
 export interface TauriHostTransportOptions {
     bridge?: TauriHostBridge | null;
     cursor?: string | null;
@@ -236,7 +292,10 @@ export class TauriHostTransport implements HostTransport {
     private closed = false;
 
     constructor(options: TauriHostTransportOptions = {}) {
-        this.bridge = options.bridge ?? null;
+        this.bridge =
+            options.bridge === undefined
+                ? createTauriHostBridge()
+                : options.bridge;
         this.cursor = options.cursor ?? null;
         this.scheduler = options.scheduler ?? {
             setTimeout: (handler, timeoutMs) =>
@@ -290,11 +349,39 @@ export class TauriHostTransport implements HostTransport {
         return this.subscribePoll(bridge, listener, options);
     }
 
+    async hostGrants(): Promise<TauriHostGrant[]> {
+        const bridge = this.requireBridge();
+        const value = await bridge.invoke('agent_grants');
+        if (!Array.isArray(value)) {
+            throw new AgentClientError(
+                'invalid_event',
+                'agent_grants must return a grant array',
+            );
+        }
+        return value.map((item) => {
+            if (
+                !isPlainObject(item) ||
+                typeof item.grant_id !== 'string' ||
+                !/^gr_[0-9a-f]{16}$/.test(item.grant_id) ||
+                typeof item.path !== 'string' ||
+                item.path.length === 0
+            ) {
+                throw new AgentClientError(
+                    'invalid_event',
+                    'agent_grants returned a malformed grant record',
+                );
+            }
+            return { grant_id: item.grant_id, path: item.path };
+        });
+    }
+
     async approve(input: HostApprovalInput): Promise<ApprovalReceipt> {
         const bridge = this.requireBridge();
         const response = await bridge.invoke('agent_host_resolve_approval', {
-            approval_id: input.approvalId,
-            decision: input.decision,
+            input: {
+                approval_id: input.approvalId,
+                decision: input.decision,
+            },
         });
         if (!isPlainObject(response)) {
             throw new AgentClientError(

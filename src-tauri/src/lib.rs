@@ -13,6 +13,7 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 pub mod agent_data;
+pub mod agent_host;
 pub mod mcp;
 pub(crate) mod process_control;
 pub mod sidecar;
@@ -2539,6 +2540,66 @@ pub fn handle_rpc_line(backend: &mut DesktopBackend, line: &str) -> Value {
     }
 }
 
+/// Dispatch one `agent_host_*` command against the host authority.
+///
+/// The offline shim has no Tauri Channel, so `agent_subscribe` is refused and
+/// the page uses `agent_host_poll`; approval decisions are page decisions only
+/// and can never self-approve without a native host confirmation.
+pub fn dispatch_agent_host_rpc(
+    host: &mut agent_host::AgentHost,
+    cmd: &str,
+    args: &Value,
+) -> Result<Value, String> {
+    match cmd {
+        "agent_host_capabilities" => Ok(host.capabilities()),
+        "agent_host_invoke" => {
+            let intent = args
+                .get("intent")
+                .cloned()
+                .ok_or_else(|| "invalid_arguments: missing intent".to_string())?;
+            let result = host.invoke(&agent_host::UnavailableMcpDispatch, intent)?;
+            serde_json::to_value(result).map_err(|error| error.to_string())
+        }
+        "agent_host_poll" => {
+            let cursor = args.get("cursor").and_then(Value::as_str);
+            host.poll(cursor)
+        }
+        "agent_host_resolve_approval" => {
+            let input = args
+                .get("input")
+                .cloned()
+                .ok_or_else(|| "invalid_arguments: missing approval input".to_string())?;
+            host.resolve_approval(&input, false)
+        }
+        "agent_subscribe" => Err(
+            "host_unavailable: agent_subscribe requires the Tauri GUI channel; use agent_host_poll"
+                .to_string(),
+        ),
+        other => Err(format!("unknown agent host command: {other}")),
+    }
+}
+
+/// Parse and execute one JSON-RPC line with the host authority available.
+pub fn handle_rpc_line_with_host(host: &mut agent_host::AgentHost, line: &str) -> Value {
+    match serde_json::from_str::<Value>(line) {
+        Ok(req) => {
+            let id = req.get("id").cloned().unwrap_or(Value::Null);
+            let cmd = req.get("command").and_then(Value::as_str).unwrap_or("");
+            let payload = req.get("args").cloned().unwrap_or_else(|| json!({}));
+            let result = if cmd.starts_with("agent_host_") || cmd == "agent_subscribe" {
+                dispatch_agent_host_rpc(host, cmd, &payload)
+            } else {
+                dispatch_rpc_command(host.backend_mut(), cmd, &payload)
+            };
+            match result {
+                Ok(result) => json!({ "id": id, "ok": true, "result": result }),
+                Err(error) => json!({ "id": id, "ok": false, "error": error }),
+            }
+        }
+        Err(e) => json!({ "id": Value::Null, "ok": false, "error": e.to_string() }),
+    }
+}
+
 /// Run the end-to-end synthetic stand-in and durable memory self-test and return a JSON receipt.
 pub fn run_self_test_receipt() -> Result<Value, String> {
     let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
@@ -2608,8 +2669,7 @@ fn find_header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a st
 ///    start with `application/json` (blocks `no-cors` simple requests), and `X-UOR-Desktop-Token`
 ///    must match the per-launch `expected_token` (embedded in the served `index.html`).
 #[allow(clippy::too_many_arguments)]
-pub fn handle_studio_http_request(
-    backend: &mut DesktopBackend,
+fn handle_studio_http_request_inner(
     studio_root: &Path,
     bound_host: &str,
     expected_token: &str,
@@ -2617,6 +2677,7 @@ pub fn handle_studio_http_request(
     path: &str,
     headers: &[(String, String)],
     body: &[u8],
+    dispatch: &mut dyn FnMut(&str) -> Value,
 ) -> (u16, &'static str, Vec<u8>) {
     let Some(req_host) = find_header(headers, "host") else {
         return (
@@ -2657,7 +2718,7 @@ pub fn handle_studio_http_request(
         }
 
         let line = String::from_utf8_lossy(body);
-        let resp = handle_rpc_line(backend, &line);
+        let resp = dispatch(&line);
         let bytes = serde_json::to_vec(&resp).unwrap_or_default();
         return (200, "application/json; charset=utf-8", bytes);
     }
@@ -2729,6 +2790,54 @@ pub fn handle_studio_http_request(
     (200, content_type, bytes)
 }
 
+/// Serve one loopback Studio request against a bare desktop backend.
+#[allow(clippy::too_many_arguments)]
+pub fn handle_studio_http_request(
+    backend: &mut DesktopBackend,
+    studio_root: &Path,
+    bound_host: &str,
+    expected_token: &str,
+    method: &str,
+    path: &str,
+    headers: &[(String, String)],
+    body: &[u8],
+) -> (u16, &'static str, Vec<u8>) {
+    handle_studio_http_request_inner(
+        studio_root,
+        bound_host,
+        expected_token,
+        method,
+        path,
+        headers,
+        body,
+        &mut |line| handle_rpc_line(backend, line),
+    )
+}
+
+/// Serve one loopback Studio request with the approved host authority available.
+#[allow(clippy::too_many_arguments)]
+pub fn handle_studio_http_request_with_host(
+    host: &mut agent_host::AgentHost,
+    studio_root: &Path,
+    bound_host: &str,
+    expected_token: &str,
+    method: &str,
+    path: &str,
+    headers: &[(String, String)],
+    body: &[u8],
+) -> (u16, &'static str, Vec<u8>) {
+    handle_studio_http_request_inner(
+        studio_root,
+        bound_host,
+        expected_token,
+        method,
+        path,
+        headers,
+        body,
+        &mut |line| handle_rpc_line_with_host(host, line),
+    )
+}
+
 /// Native Tauri v2 WebView shell (`--features gui`) wiring `#[tauri::command]` handlers and
 /// `tauri::Builder` over [`DesktopBackend`].
 #[cfg(feature = "gui")]
@@ -2751,7 +2860,7 @@ pub mod tauri_gui {
 
     #[derive(Clone)]
     pub struct TauriDesktopState {
-        inner: Arc<Mutex<DesktopBackend>>,
+        inner: Arc<Mutex<super::agent_host::AgentHost>>,
         sidecar: Option<SidecarProcess>,
         mcp: McpManager,
     }
@@ -2759,7 +2868,7 @@ pub mod tauri_gui {
     impl TauriDesktopState {
         pub fn new(backend: DesktopBackend) -> Self {
             Self {
-                inner: Arc::new(Mutex::new(backend)),
+                inner: Arc::new(Mutex::new(super::agent_host::AgentHost::new(backend))),
                 sidecar: None,
                 mcp: McpManager::default(),
             }
@@ -2781,7 +2890,7 @@ pub mod tauri_gui {
             tokenizer: &Path,
         ) -> Result<Self, String> {
             Ok(Self {
-                inner: Arc::new(Mutex::new(backend)),
+                inner: Arc::new(Mutex::new(super::agent_host::AgentHost::new(backend))),
                 sidecar: Some(SidecarProcess::start(binary, stack, tokenizer)?),
                 mcp: McpManager::default(),
             })
@@ -2801,6 +2910,17 @@ pub mod tauri_gui {
                 .inner
                 .lock()
                 .map_err(|_| "DesktopBackend mutex poisoned".to_string())?;
+            f(guard.backend_mut())
+        }
+
+        pub fn with_host<T>(
+            &self,
+            f: impl FnOnce(&mut super::agent_host::AgentHost) -> Result<T, String>,
+        ) -> Result<T, String> {
+            let mut guard = self
+                .inner
+                .lock()
+                .map_err(|_| "AgentHost mutex poisoned".to_string())?;
             f(&mut guard)
         }
 
@@ -2932,8 +3052,14 @@ pub mod tauri_gui {
         }
 
         pub fn connect_mcp_remote(&self, url: &str, credential: &str) -> Result<String, String> {
-            self.mcp
-                .connect_remote(url, credential, super::mcp::McpLimits::default())
+            let session_id =
+                self.mcp
+                    .connect_remote(url, credential, super::mcp::McpLimits::default())?;
+            self.with_host(|host| {
+                host.register_confirmed_mcp_session(&session_id);
+                Ok(())
+            })?;
+            Ok(session_id)
         }
 
         pub fn connect_mcp_stdio(
@@ -2947,12 +3073,17 @@ pub mod tauri_gui {
                     .verify_granted_existing_path(cwd)
                     .map_err(|error| error.to_string())
             })?;
-            self.mcp.connect_stdio(
+            let session_id = self.mcp.connect_stdio(
                 executable,
                 args,
                 &canonical_cwd,
                 super::mcp::McpLimits::default(),
-            )
+            )?;
+            self.with_host(|host| {
+                host.register_confirmed_mcp_session(&session_id);
+                Ok(())
+            })?;
+            Ok(session_id)
         }
 
         pub fn list_mcp_tools(&self, session_id: &str) -> Result<Vec<Value>, String> {
@@ -2969,7 +3100,11 @@ pub mod tauri_gui {
         }
 
         pub fn disconnect_mcp(&self, session_id: &str) -> Result<(), String> {
-            self.mcp.disconnect(session_id)
+            self.mcp.disconnect(session_id)?;
+            self.with_host(|host| {
+                host.unregister_confirmed_mcp_session(session_id);
+                Ok(())
+            })
         }
     }
 
@@ -3069,6 +3204,42 @@ pub mod tauri_gui {
         args: Value,
     ) -> Result<Value, String> {
         state.with_backend(|b| dispatch_rpc_command(b, cmd, &args))
+    }
+
+    /// Host-authority helper shared by the Tauri command and host tests.
+    pub fn agent_host_capabilities_on(state: &TauriDesktopState) -> Result<Value, String> {
+        state.with_host(|host| Ok(host.capabilities()))
+    }
+
+    pub fn agent_host_invoke_on(state: &TauriDesktopState, intent: Value) -> Result<Value, String> {
+        let result = state.with_host(|host| host.invoke(&state.mcp, intent))?;
+        serde_json::to_value(result).map_err(|error| error.to_string())
+    }
+
+    pub fn agent_host_poll_on(
+        state: &TauriDesktopState,
+        cursor: Option<String>,
+    ) -> Result<Value, String> {
+        state.with_host(|host| host.poll(cursor.as_deref()))
+    }
+
+    pub fn agent_host_subscribe_on(
+        state: &TauriDesktopState,
+        channel: tauri::ipc::Channel<super::agent_host::HostToolResult>,
+    ) -> Result<Value, String> {
+        state.with_host(|host| {
+            host.subscribe(Box::new(move |result| {
+                let _ = channel.send(result.clone());
+            }))
+        })
+    }
+
+    pub fn agent_host_resolve_approval_on(
+        state: &TauriDesktopState,
+        input: &Value,
+        native_confirmed: bool,
+    ) -> Result<Value, String> {
+        state.with_host(|host| host.resolve_approval(input, native_confirmed))
     }
 
     #[tauri::command(async)]
@@ -3468,6 +3639,84 @@ pub mod tauri_gui {
     }
 
     #[tauri::command(async)]
+    pub fn agent_host_capabilities(
+        state: tauri::State<'_, TauriDesktopState>,
+    ) -> Result<Value, String> {
+        agent_host_capabilities_on(state.inner())
+    }
+
+    #[tauri::command(async)]
+    pub fn agent_host_invoke(
+        state: tauri::State<'_, TauriDesktopState>,
+        intent: Value,
+    ) -> Result<Value, String> {
+        agent_host_invoke_on(state.inner(), intent)
+    }
+
+    #[tauri::command(async)]
+    pub fn agent_host_poll(
+        state: tauri::State<'_, TauriDesktopState>,
+        cursor: Option<String>,
+    ) -> Result<Value, String> {
+        agent_host_poll_on(state.inner(), cursor)
+    }
+
+    #[tauri::command(async)]
+    pub fn agent_subscribe(
+        state: tauri::State<'_, TauriDesktopState>,
+        channel: tauri::ipc::Channel<super::agent_host::HostToolResult>,
+    ) -> Result<Value, String> {
+        agent_host_subscribe_on(state.inner(), channel)
+    }
+
+    #[tauri::command(async)]
+    pub async fn agent_host_resolve_approval(
+        app: tauri::AppHandle,
+        state: tauri::State<'_, TauriDesktopState>,
+        input: Value,
+    ) -> Result<Value, String> {
+        let object = input
+            .as_object()
+            .filter(|object| {
+                object.len() == 2
+                    && object.contains_key("approval_id")
+                    && object.contains_key("decision")
+            })
+            .ok_or_else(|| {
+                "approval_forbidden: approval input accepts only approval_id and decision"
+                    .to_string()
+            })?;
+        let approval_id = object["approval_id"]
+            .as_str()
+            .ok_or_else(|| "invalid_arguments: approval_id must be a host identity".to_string())?;
+        let decision = object["decision"]
+            .as_str()
+            .ok_or_else(|| "invalid_arguments: decision must be approved | denied".to_string())?;
+        let native_confirmed = if decision == "approved" {
+            let summary = state.with_host(|host| host.pending_approval_summary(approval_id))?;
+            confirmation_dialog(
+                &app,
+                format!(
+                    "Approve this host tool intent?\n\nTool:\n{}\n\nTask:\n{}\n\nRun:\n{}\n\nTool call:\n{}\n\nRequest digest:\n{}\n\nExpires at (ms):\n{}",
+                    summary.tool,
+                    summary.task_id,
+                    summary.run_id,
+                    summary.tool_call_id,
+                    summary.request_digest,
+                    summary.expires_at_ms,
+                ),
+            )?
+            .title("Approve tool intent")
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancel)
+            .blocking_show()
+        } else {
+            false
+        };
+        agent_host_resolve_approval_on(state.inner(), &input, native_confirmed)
+    }
+
+    #[tauri::command(async)]
     pub async fn native_choose_project_folder(
         app: tauri::AppHandle,
         state: tauri::State<'_, TauriDesktopState>,
@@ -3719,7 +3968,7 @@ pub mod tauri_gui {
     }
 
     /// Construct the configured [`tauri::Builder`] with managed [`TauriDesktopState`] and all
-    /// 34 native/host `#[tauri::command]` handlers registered.
+    /// 39 native/host `#[tauri::command]` handlers registered.
     pub fn build_tauri_app_builder(state: TauriDesktopState) -> tauri::Builder<tauri::Wry> {
         tauri::Builder::default()
             .plugin(tauri_plugin_dialog::init())
@@ -3774,6 +4023,11 @@ pub mod tauri_gui {
                 agent_list_directory,
                 agent_git_diff,
                 agent_read_artifact,
+                agent_host_capabilities,
+                agent_host_invoke,
+                agent_host_poll,
+                agent_subscribe,
+                agent_host_resolve_approval,
                 native_choose_project_folder,
                 native_choose_model_folder,
                 native_enable_terminal,

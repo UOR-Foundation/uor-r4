@@ -15,8 +15,8 @@ use std::net::TcpListener;
 use std::path::Path;
 
 use uor_r4_desktop_client::{
-    generate_launch_token, handle_rpc_line, handle_studio_http_request, run_self_test_receipt,
-    DesktopBackend, PinRegistry,
+    agent_host::AgentHost, generate_launch_token, handle_rpc_line_with_host,
+    handle_studio_http_request_with_host, run_self_test_receipt, DesktopBackend, PinRegistry,
 };
 
 fn apply_cli_grants(args: &[String], backend: &mut DesktopBackend) -> Result<(), String> {
@@ -101,8 +101,8 @@ fn run_serve_studio(addr: &str, studio_root: &Path, args: &[String]) -> Result<(
     let bound_host = local_addr.to_string();
     let launch_token = generate_launch_token();
     println!("UOR-R4 Desktop Studio loopback host listening on http://{bound_host}/");
-    let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
-    apply_cli_grants(args, &mut backend)?;
+    let mut host = AgentHost::new(DesktopBackend::new(PinRegistry::with_synthetic_standin()));
+    apply_cli_grants(args, host.backend_mut())?;
 
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
@@ -136,8 +136,8 @@ fn run_serve_studio(addr: &str, studio_root: &Path, args: &[String]) -> Result<(
             }
         }
         let body = &raw[header_end..];
-        let (status, content_type, resp_body) = handle_studio_http_request(
-            &mut backend,
+        let (status, content_type, resp_body) = handle_studio_http_request_with_host(
+            &mut host,
             studio_root,
             &bound_host,
             &launch_token,
@@ -210,12 +210,13 @@ fn main() {
 
     let stdin = io::stdin();
     let mut stdout = io::stdout();
+    let mut host = AgentHost::new(backend);
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };
         if line.trim().is_empty() {
             continue;
         }
-        let resp = handle_rpc_line(&mut backend, &line);
+        let resp = handle_rpc_line_with_host(&mut host, &line);
         let _ = writeln!(stdout, "{resp}");
         let _ = stdout.flush();
     }

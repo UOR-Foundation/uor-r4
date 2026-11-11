@@ -30,8 +30,10 @@ import {
     NullHostTransport,
     StaticHostTransport,
     TauriHostTransport,
+    createTauriHostBridge,
     type TauriHostBridge,
     type TauriChannelHandle,
+    type TauriCoreLike,
 } from './transports.js';
 import { AgentRuntime } from './runtime.js';
 import { ReplayModelPort } from './modelPort.js';
@@ -2533,5 +2535,172 @@ describe('HostClient fix-3 disposal and hardening', () => {
         first.close();
         second.close();
         client.close();
+    });
+});
+
+describe('Tauri host bridge adapter', () => {
+    test('tauri_bridge_uses_real_invoke_and_channel_only_when_exposed', async () => {
+        class FakeChannel implements TauriChannelHandle {
+            onmessage: (message: unknown) => void = () => undefined;
+        }
+        const calls: Array<{
+            command: string;
+            payload?: Record<string, unknown>;
+        }> = [];
+        const core: TauriCoreLike = {
+            async invoke(command, payload) {
+                calls.push({ command, payload });
+                return { tree: true };
+            },
+            Channel: FakeChannel as unknown as new () => TauriChannelHandle,
+        };
+
+        const bridge = createTauriHostBridge(core);
+        expect(bridge).not.toBeNull();
+        expect(bridge?.hasChannel).toBe(true);
+        await expect(
+            bridge?.invoke('agent_host_capabilities'),
+        ).resolves.toEqual({ tree: true });
+        expect(calls).toEqual([
+            { command: 'agent_host_capabilities', payload: undefined },
+        ]);
+
+        const handler = vi.fn();
+        const channel = bridge?.channel(handler);
+        expect(channel).toBeInstanceOf(FakeChannel);
+        expect(channel?.onmessage).toBe(handler);
+
+        expect(createTauriHostBridge(null)).toBeNull();
+        expect(
+            createTauriHostBridge({ invoke: async () => null }),
+        ).toMatchObject({ hasChannel: false });
+
+        const globalScope = globalThis as {
+            __TAURI__?: { core?: TauriCoreLike };
+        };
+        const original = globalScope.__TAURI__;
+        try {
+            delete globalScope.__TAURI__;
+            expect(createTauriHostBridge()).toBeNull();
+            globalScope.__TAURI__ = { core };
+            expect(createTauriHostBridge()).not.toBeNull();
+            expect(createTauriHostBridge()?.hasChannel).toBe(true);
+        } finally {
+            if (original === undefined) delete globalScope.__TAURI__;
+            else globalScope.__TAURI__ = original;
+        }
+    });
+
+    test('tauri_transport_reads_host_grants', async () => {
+        const commands: string[] = [];
+        const bridge: TauriHostBridge = {
+            hasChannel: false,
+            async invoke(command) {
+                commands.push(command);
+                if (command === 'agent_grants') {
+                    return [
+                        {
+                            grant_id: 'gr_9a3c5e7b1d2f4a60',
+                            path: '/tmp/studio-project',
+                        },
+                    ];
+                }
+                throw new Error(`unexpected Tauri command ${command}`);
+            },
+            channel(): TauriChannelHandle {
+                throw new Error('the offline shim has no Channel');
+            },
+        };
+        const transport = new TauriHostTransport({ bridge });
+        const grants = await transport.hostGrants();
+        expect(commands).toEqual(['agent_grants']);
+        expect(grants).toEqual([
+            {
+                grant_id: 'gr_9a3c5e7b1d2f4a60',
+                path: '/tmp/studio-project',
+            },
+        ]);
+
+        const broken = new TauriHostTransport({
+            bridge: {
+                hasChannel: false,
+                async invoke() {
+                    return [{ grant_id: 'gr_short', path: 7 }];
+                },
+                channel(): TauriChannelHandle {
+                    throw new Error('no channel');
+                },
+            },
+        });
+        await expect(broken.hostGrants()).rejects.toMatchObject({
+            code: 'invalid_event',
+        });
+    });
+
+    test('tauri_transport_resolves_approval_with_exact_input', async () => {
+        const payloads: Array<Record<string, unknown>> = [];
+        const bridge: TauriHostBridge = {
+            hasChannel: false,
+            async invoke(command, payload) {
+                if (command !== 'agent_host_resolve_approval') {
+                    throw new Error(`unexpected Tauri command ${command}`);
+                }
+                payloads.push(payload ?? {});
+                const input = (
+                    payload as {
+                        input: {
+                            approval_id: string;
+                            decision: 'approved' | 'denied';
+                        };
+                    }
+                ).input;
+                return {
+                    approval_id: input.approval_id,
+                    decision: input.decision,
+                };
+            },
+            channel(): TauriChannelHandle {
+                throw new Error('no channel');
+            },
+        };
+        const transport = new TauriHostTransport({ bridge });
+        await expect(
+            transport.approve({
+                approvalId: 'apr_5c2e8a1f9b7d3e40',
+                decision: 'approved',
+            }),
+        ).resolves.toEqual({
+            approvalId: 'apr_5c2e8a1f9b7d3e40',
+            decision: 'approved',
+        });
+        expect(payloads).toEqual([
+            {
+                input: {
+                    approval_id: 'apr_5c2e8a1f9b7d3e40',
+                    decision: 'approved',
+                },
+            },
+        ]);
+
+        const mismatched = new TauriHostTransport({
+            bridge: {
+                hasChannel: false,
+                async invoke() {
+                    return {
+                        approval_id: 'apr_0000000000000000',
+                        decision: 'approved',
+                    };
+                },
+                channel(): TauriChannelHandle {
+                    throw new Error('no channel');
+                },
+            },
+        });
+        await expect(
+            mismatched.approve({
+                approvalId: 'apr_5c2e8a1f9b7d3e40',
+                decision: 'approved',
+            }),
+        ).rejects.toMatchObject({ code: 'approval_forbidden' });
     });
 });
