@@ -2384,9 +2384,9 @@ impl PlaceRead {
     /// Adds a training step's votes and, when it pulled, its mean pull to the tally.
     fn tallied(&self, votes: [[u64; 2]; 2], pull: Option<f64>) -> Result<()> {
         let mut tally = self.tally.lock().map_err(|_| invalid("the place read's tally is poisoned"))?;
-        for side in 0..2 {
-            tally.arm[side] += votes[0][side];
-            tally.open[side] += votes[1][side];
+        for (side, (arm, open)) in votes[0].iter().zip(&votes[1]).enumerate() {
+            tally.arm[side] += arm;
+            tally.open[side] += open;
         }
         if let Some(pull) = pull {
             tally.pull += pull;
@@ -6343,5 +6343,231 @@ mod place_tests {
         let short = PlaceCounts { arm: vec![0; 3], open: vec![0; VOCAB] };
         assert!(PlaceRead::new(marks(), vec![false; VOCAB], short).is_err());
         assert!(stop_flags(&[VOCAB as u32], VOCAB).is_err());
+    }
+
+    /// A table of `VOCAB` points whose codes are known: in each half of each 64-coordinate head,
+    /// token `v` is row `v` of the 32 by 32 Walsh matrix, so two tokens differ in exactly 16 of
+    /// a half's 32 coordinates. A candidate right on one token of the question and wrong on the
+    /// other is 16 bits away, twice the place read's margin of 8.
+    #[cfg(feature = "cuda")]
+    fn walsh_table(device: &Device) -> Tensor {
+        let data: Vec<f32> = (0..VOCAB * 256)
+            .map(|i| {
+                let (v, c) = (i / 256, i % 32);
+                if (v & c).count_ones().is_multiple_of(2) { 1.0 } else { -1.0 }
+            })
+            .collect();
+        Tensor::from_vec(data, (VOCAB, 256), device).unwrap()
+    }
+
+    /// Reads of four heads over 256 coordinates with the ask heads and the place read on, every
+    /// rotation the identity, so a token's key code is its table row's signs.
+    #[cfg(feature = "cuda")]
+    fn place_reads(device: &Device) -> HammingReads {
+        let reads = HammingReads::new(4, 256, device)
+            .unwrap()
+            .with_ask(VOCAB)
+            .unwrap()
+            .with_place(marks(), &[DOT])
+            .unwrap();
+        let identity = Tensor::from_vec([1.0f32, 0.0, 0.0, 0.0].repeat(64), (64, 4), device).unwrap();
+        for read in &reads.reads {
+            read.key_rotation.set(&identity).unwrap();
+            read.query_rotation.set(&identity).unwrap();
+        }
+        reads
+    }
+
+    /// The readout read's weight rows: `copy` on the copy row and 0 on the type row.
+    #[cfg(feature = "cuda")]
+    fn copy_weight(copy: f32, device: &Device) -> Tensor {
+        let rows: Vec<f32> = (0..512).map(|i| if i < 256 { copy } else { 0.0 }).collect();
+        Tensor::from_vec(rows, (2, 256), device).unwrap()
+    }
+
+    /// A residual of `TALK`'s rows with no zero and no token's point in it.
+    #[cfg(feature = "cuda")]
+    fn talk_residual(device: &Device) -> Tensor {
+        let data: Vec<f32> = (0..TALK.len() * 256).map(|i| 0.25 + (i % 7) as f32 * 0.03125).collect();
+        Tensor::from_vec(data, (1, TALK.len(), 256), device).unwrap()
+    }
+
+    #[cfg(feature = "cuda")]
+    fn flat_rows(t: &Tensor) -> Vec<Vec<f32>> {
+        t.reshape((TALK.len(), 256)).unwrap().to_vec2::<f32>().unwrap()
+    }
+
+    /// Sets `ASK`'s question row so that its question is "is", the token before the place.
+    #[cfg(feature = "cuda")]
+    fn teach_the_question(read: &HammingRead, table: &Tensor, device: &Device) {
+        let points = table.to_vec2::<f32>().unwrap();
+        let mut rows = vec![0.0f32; VOCAB * 256];
+        for c in 0..256 {
+            rows[ASK as usize * 256 + c] = points[IS as usize][c] - points[ASK as usize][c];
+        }
+        let ask = read.ask.as_ref().expect("ask heads");
+        ask.set(&Tensor::from_vec(rows, (VOCAB, 256), device).unwrap()).unwrap();
+    }
+
+    /// claude-351, G2b on the pod: the forward opens the row the register opens, onto the token
+    /// at the place. With the question taught and both gains on, the readout at the value-start
+    /// row is the point of "maya", the token at position 5, at a copy weight of 1; every other
+    /// row is the row of the same read with nothing armed; and the forward's rows are the ones
+    /// the training step's own codes give the program.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_forward_opens_the_registers_row_onto_the_token_at_the_place() {
+        let device = Device::new_cuda(0).unwrap();
+        let (reads, table) = (place_reads(&device), walsh_table(&device));
+        let read = &reads.reads[1];
+        let place = read.place.as_ref().expect("a place read");
+        read.weight.set(&copy_weight(1.0, &device)).unwrap();
+        teach_the_question(read, &table, &device);
+        let out = talk_residual(&device);
+        let shut = flat_rows(&read.apply_readout(&out, &TALK, &table).unwrap());
+        {
+            let mut counts = place.counts().unwrap();
+            counts.arm[ASK as usize] = 1;
+            counts.open[ITS as usize] = 1;
+        }
+        let open = flat_rows(&read.apply_readout(&out, &TALK, &table).unwrap());
+        let points = table.to_vec2::<f32>().unwrap();
+        for c in 0..256 {
+            assert!((open[17][c] - points[MAYA as usize][c]).abs() < 1e-5, "the open row, {c}");
+        }
+        for r in (0..TALK.len()).filter(|&r| r != 17) {
+            assert_eq!(open[r], shut[r], "row {r} is closed and reads as before");
+        }
+        assert_ne!(open[17], shut[17], "the open row moved");
+        // The training step's codes give the program the same rows.
+        let (query, key) = read.place_codes(&TALK, TALK.len(), &table).unwrap();
+        let rows = read.place_rows(place, &query, &key, &TALK, TALK.len()).unwrap();
+        let offers: Vec<Option<usize>> = rows.iter().map(|r| r.offer).collect();
+        let mut want = vec![None; TALK.len()];
+        want[17] = Some(5);
+        assert_eq!(offers, want);
+        // The ask heads write nothing under the place read: on the type row alone, with nothing
+        // armed, the readout is the residual.
+        place.counts().unwrap().arm[ASK as usize] = 0;
+        let type_only: Vec<f32> = (0..512).map(|i| if i < 256 { 0.0 } else { 1.0 }).collect();
+        read.weight.set(&Tensor::from_vec(type_only, (2, 256), &device).unwrap()).unwrap();
+        let typed = flat_rows(&read.apply_readout(&out, &TALK, &table).unwrap());
+        assert_eq!(typed, flat_rows(&out), "the ask heads write nothing");
+    }
+
+    /// claude-351, G3 on the pod: the place pull. From zero rows both question rows are half a
+    /// half away from "is" (the Walsh distance), so the pull is one half exactly; its gradient
+    /// reaches the two question tokens' rows of the readout read's question table and nothing
+    /// else; descent brings the pull to zero; and then the step's own find is the labelled
+    /// place, so the question token's arm count goes up. The sign code is straight-through, so
+    /// this is a descent check, not a finite difference.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_place_pull_trains_the_question_rows_onto_the_place_and_then_the_find_votes() {
+        let device = Device::new_cuda(0).unwrap();
+        let reads = place_reads(&device);
+        let table = Var::from_tensor(&walsh_table(&device)).unwrap();
+        let read = &reads.reads[1];
+        let ask = read.ask.as_ref().expect("ask heads");
+        let labels = kit().labels(&[Some(0)], TALK.len());
+        let step = || reads.place_step(&TALK, TALK.len(), table.as_tensor(), &labels).unwrap().expect("a pull");
+        let scalar = |t: &Tensor| t.to_scalar::<f32>().unwrap();
+        let pull = step();
+        assert!((scalar(&pull) - 0.5).abs() < 1e-6, "{}", scalar(&pull));
+        assert_eq!(reads.place().unwrap().gains().unwrap().arm, vec![0; VOCAB], "nothing is found yet");
+        let grads = pull.backward().unwrap();
+        let moved = grads.get(ask.as_tensor()).expect("the question rows learn").abs().unwrap().sum(1).unwrap();
+        let moved = moved.to_vec1::<f32>().unwrap();
+        for (token, &sum) in moved.iter().enumerate() {
+            let asks = token as u32 == NAME || token as u32 == ASK;
+            assert_eq!(sum > 0.0, asks, "token {token}");
+        }
+        let still = |t: &Tensor| {
+            grads.get(t).is_none_or(|g| g.abs().unwrap().sum_all().unwrap().to_scalar::<f32>().unwrap() == 0.0)
+        };
+        assert!(still(table.as_tensor()), "the table");
+        assert!(still(read.key_rotation.as_tensor()) && still(read.query_rotation.as_tensor()), "the rotations");
+        assert!(still(read.weight.as_tensor()) && still(read.margin.as_tensor()), "the weights and margins");
+        assert!(still(reads.reads[0].ask.as_ref().unwrap().as_tensor()), "the stream read's questions");
+        // Each step moves a pulled coordinate half a unit toward the key's sign.
+        for _ in 0..4 {
+            let pull = step();
+            let grads = pull.backward().unwrap();
+            let grad = grads.get(ask.as_tensor()).expect("the question rows learn");
+            ask.set(&ask.as_tensor().sub(&grad.affine(64.0, 0.0).unwrap()).unwrap()).unwrap();
+        }
+        // The pull is zero, and this step's find at "?" is the place: one vote up, and no other.
+        let before = reads.place().unwrap().gains().unwrap().arm;
+        assert_eq!(scalar(&step()), 0.0);
+        let after = reads.place().unwrap().gains().unwrap().arm;
+        for token in 0..VOCAB {
+            let up = i16::from(token as u32 == ASK);
+            assert_eq!(after[token] - before[token], up, "token {token}");
+        }
+    }
+
+    /// claude-351, G3 on the pod: the mix at an open row, `n + w (c − n)` with `c` the point of
+    /// the token at the place. Its gradient in the copy weight is `(c − n)` times the probe and
+    /// in the row `n` is `(1 − w)` times the probe, both against a finite difference; and no
+    /// gradient passes through the register into the question rows, the margins or the table.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_open_rows_mix_has_the_gradient_of_its_weight_and_its_row() {
+        let device = Device::new_cuda(0).unwrap();
+        let reads = place_reads(&device);
+        let table = Var::from_tensor(&walsh_table(&device)).unwrap();
+        let read = &reads.reads[1];
+        teach_the_question(read, table.as_tensor(), &device);
+        {
+            let mut counts = read.place.as_ref().unwrap().counts().unwrap();
+            counts.arm[ASK as usize] = 1;
+            counts.open[ITS as usize] = 1;
+        }
+        read.weight.set(&copy_weight(0.25, &device)).unwrap();
+        let out = Var::from_tensor(&talk_residual(&device)).unwrap();
+        let probe: Vec<f32> = (0..256).map(|c| 1.0 + (c % 5) as f32 * 0.25).collect();
+        let probe_row = Tensor::from_vec(probe.clone(), (1, 256), &device).unwrap();
+        // The loss reads the open row alone.
+        let loss = |out: &Tensor| -> f32 {
+            let rows = read.apply_readout(out, &TALK, table.as_tensor()).unwrap().reshape((TALK.len(), 256)).unwrap();
+            rows.narrow(0, 17, 1).unwrap().mul(&probe_row).unwrap().sum_all().unwrap().to_scalar::<f32>().unwrap()
+        };
+        let rows = read.apply_readout(out.as_tensor(), &TALK, table.as_tensor()).unwrap().reshape((TALK.len(), 256)).unwrap();
+        let grads = rows.narrow(0, 17, 1).unwrap().mul(&probe_row).unwrap().sum_all().unwrap().backward().unwrap();
+        let points = table.as_tensor().to_vec2::<f32>().unwrap();
+        let n = flat_rows(out.as_tensor());
+        let by_weight = grads.get(read.weight.as_tensor()).expect("the weight learns").to_vec2::<f32>().unwrap();
+        let by_row = grads.get(out.as_tensor()).expect("the row learns").reshape((TALK.len(), 256)).unwrap().to_vec2::<f32>().unwrap();
+        for c in 0..256 {
+            let want = (points[MAYA as usize][c] - n[17][c]) * probe[c];
+            assert!((by_weight[0][c] - want).abs() < 1e-4, "the copy weight, {c}");
+            assert_eq!(by_weight[1][c], 0.0, "the type weight, {c}");
+            assert!((by_row[17][c] - 0.75 * probe[c]).abs() < 1e-5, "the row, {c}");
+        }
+        let still = |t: &Tensor| {
+            grads.get(t).is_none_or(|g| g.abs().unwrap().sum_all().unwrap().to_scalar::<f32>().unwrap() == 0.0)
+        };
+        assert!(still(read.ask.as_ref().unwrap().as_tensor()), "the question rows");
+        assert!(still(read.margin.as_tensor()) && still(table.as_tensor()), "the margins and the table");
+        // A finite difference in one weight coordinate and in one coordinate of the row.
+        let h = 0.125f32;
+        let bumped = |c: usize, by: f32| {
+            let mut w = vec![0.0f32; 512];
+            w[..256].fill(0.25);
+            w[c] += by;
+            read.weight.set(&Tensor::from_vec(w, (2, 256), &device).unwrap()).unwrap();
+            loss(out.as_tensor())
+        };
+        let slope = (bumped(3, h) - bumped(3, -h)) / (2.0 * h);
+        assert!((slope - by_weight[0][3]).abs() < 1e-3, "{slope} against {}", by_weight[0][3]);
+        read.weight.set(&copy_weight(0.25, &device)).unwrap();
+        let shifted = |by: f32| {
+            let mut rows = n.clone();
+            rows[17][9] += by;
+            let flat: Vec<f32> = rows.into_iter().flatten().collect();
+            loss(&Tensor::from_vec(flat, (1, TALK.len(), 256), &device).unwrap())
+        };
+        let slope = (shifted(h) - shifted(-h)) / (2.0 * h);
+        assert!((slope - by_row[17][9]).abs() < 1e-3, "{slope} against {}", by_row[17][9]);
     }
 }

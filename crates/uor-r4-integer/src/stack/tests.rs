@@ -8287,6 +8287,22 @@ fn hamming_place_read_round_trips() {
     assert!(super::read_hamming_uorlut01(&bare).is_err(), "a place record needs its class table");
     let outside = with_header(&placed, |h| h["hamming"]["place"]["bos"] = 512.into());
     assert!(super::read_hamming_uorlut01(&outside).is_err(), "a mark is a vocabulary id");
+    // The export's road: the image as the snapshot JSON carries it under its key gives the same
+    // artifact, byte for byte; a field the exporter does not know, a class table at another
+    // length and a class bit outside the three are each refused.
+    let key = crate::fbs_snapshot::FBS_HAMMING_PLACE_KEY;
+    let snapshot = serde_json::to_vec(&serde_json::json!({ key: place })).unwrap();
+    let mut value: serde_json::Value = serde_json::from_slice(&snapshot).unwrap();
+    let carried: super::PlaceImage = serde_json::from_value(value[key].take()).expect("a place image");
+    assert_eq!(super::add_hamming_place_uorlut01(&asked, &carried).expect("the place read"), placed);
+    let mut unknown = serde_json::to_value(&place).unwrap();
+    unknown["gain"] = 1.into();
+    assert!(serde_json::from_value::<super::PlaceImage>(unknown).is_err(), "an unknown field is refused");
+    let short = super::PlaceImage { marks: place.marks.clone(), class: place.class[1..].to_vec() };
+    assert!(super::add_hamming_place_uorlut01(&asked, &short).is_err(), "one class a token");
+    let mut wide = place.clone();
+    wide.class[0] = 8;
+    assert!(super::add_hamming_place_uorlut01(&asked, &wide).is_err(), "a class is stop, arm and open");
 }
 
 /// claude-351: a session serves the place read. The register is armed at the reply's start by
@@ -8383,6 +8399,7 @@ fn the_place_read_offers_the_tokens_point_through_the_copy_mix() {
 /// claude-351: a place is inside a head's margin exactly where the served copy weight is above
 /// zero, the test `fbs_snapshot::place_pick` makes without the division.
 #[test]
+#[allow(clippy::single_range_in_vec_init)] // one user turn, as a slice of ranges
 fn the_place_picks_margin_is_the_copy_weights() {
     for margin in [0, 1, 65_535, 65_536, 65_537, 3 << 16, (9 << 16) + 77, i32::MAX] {
         for d in 0..=64u32 {

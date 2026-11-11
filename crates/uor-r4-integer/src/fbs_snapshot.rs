@@ -444,6 +444,11 @@ pub struct FbsHammingRead {
 /// refuses a snapshot with ask heads instead of serving the model without them.
 pub const FBS_HAMMING_ASK_KEY: &str = "hamming_ask";
 
+/// The snapshot JSON's key for the readout read's place read (claude-351), a [`PlaceImage`]:
+/// the marks and each token's class as the trainer's counts stand. Like the ask heads it rides
+/// beside the trunk snapshot, so an exporter that does not know the key refuses the snapshot.
+pub const FBS_HAMMING_PLACE_KEY: &str = "hamming_place";
+
 /// The exponent a Hamming ask table is stored at: Q12, the token table's own, so the asked
 /// point `table + a` is an exact sum.
 pub const HAMMING_ASK_EXP: i32 = -12;
@@ -3003,6 +3008,8 @@ pub fn place_pick(queries: &[u64], margins: &[i32], candidates: &[Range<usize>],
 
 #[cfg(test)]
 mod place_tests {
+    // A document's user turns are a slice of ranges, and here often a slice of one.
+    #![allow(clippy::single_range_in_vec_init)]
     use super::*;
 
     const BOS: u32 = 0;
