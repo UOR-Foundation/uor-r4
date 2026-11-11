@@ -63,6 +63,7 @@ const IMPORT_HEARTBEAT_MS = Math.max(1, Math.floor(LEASE_STALE_MS / 3));
 const MAX_DURABLE_ARTIFACT_BYTES = 8 * 1024 * 1024;
 const MAX_MEDIA_TYPE_LENGTH = 1024;
 const MAX_MEDIA_PARAMETERS = 16;
+const MEDIA_TOKEN_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const MAX_DURABLE_ARTIFACT_RETURN_BYTES = 1024 * 1024;
 
 interface StoreFaults {
@@ -625,6 +626,30 @@ function mediaTypeEssence(value: string): string {
     return value.split(';', 1)[0]!.trim().toLowerCase();
 }
 
+function parseQuotedMediaParameter(value: string): string {
+    let parsed = '';
+    for (let index = 1; index < value.length; index += 1) {
+        const char = value[index]!;
+        if (char === '"') {
+            if (index !== value.length - 1) {
+                corrupt('artifact record media parameter quote is invalid');
+            }
+            return parsed;
+        }
+        if (char === '\\') {
+            const escaped = value[index + 1];
+            if (escaped === undefined) {
+                corrupt('artifact record media parameter escape is invalid');
+            }
+            parsed += escaped;
+            index += 1;
+            continue;
+        }
+        parsed += char;
+    }
+    corrupt('artifact record media parameter quote is invalid');
+}
+
 function parseMediaTypeParameters(value: string): Map<string, string> {
     if (value.length > MAX_MEDIA_TYPE_LENGTH) {
         corrupt('artifact record media type is unbounded');
@@ -663,7 +688,9 @@ function parseMediaTypeParameters(value: string): Map<string, string> {
     const parameters = new Map<string, string>();
     for (const part of parts.slice(1)) {
         const trimmed = part.trim();
-        if (trimmed.length === 0) continue;
+        if (trimmed.length === 0) {
+            corrupt('artifact record media parameter is empty');
+        }
         if (parameters.size >= MAX_MEDIA_PARAMETERS) {
             corrupt('artifact record has too many media parameters');
         }
@@ -672,22 +699,21 @@ function parseMediaTypeParameters(value: string): Map<string, string> {
             corrupt('artifact record media parameter is malformed');
         }
         const name = trimmed.slice(0, equals).trim().toLowerCase();
-        if (name.length === 0) {
+        if (!MEDIA_TOKEN_PATTERN.test(name)) {
             corrupt('artifact record media parameter name is invalid');
         }
-        let rawValue = trimmed.slice(equals + 1).trim();
+        const rawValue = trimmed.slice(equals + 1).trim();
+        let normalized: string;
         if (rawValue.startsWith('"')) {
-            if (!rawValue.endsWith('"') || rawValue.length < 2) {
-                corrupt('artifact record media parameter quote is invalid');
+            normalized = parseQuotedMediaParameter(rawValue).toLowerCase();
+        } else {
+            if (!MEDIA_TOKEN_PATTERN.test(rawValue)) {
+                corrupt('artifact record media parameter value is invalid');
             }
-            rawValue = rawValue.slice(1, -1).replace(/\\(.)/g, '$1');
-        } else if (rawValue.includes('"')) {
-            corrupt('artifact record media parameter quote is invalid');
+            normalized = rawValue.toLowerCase();
         }
-        const normalized = rawValue.toLowerCase();
-        const existing = parameters.get(name);
-        if (existing !== undefined && existing !== normalized) {
-            corrupt('artifact record has conflicting media parameters');
+        if (parameters.has(name)) {
+            corrupt('artifact record has duplicate media parameters');
         }
         parameters.set(name, normalized);
     }
@@ -728,9 +754,11 @@ function requireStoredArtifact(
     if (!(value.blob instanceof Blob)) {
         corrupt('artifact record has no durable bytes');
     }
-    // Compare the MIME essence case-insensitively. Parameters are parsed by
-    // name and value: declared-only parameters and reordering are legal,
-    // while blob-only names or conflicting values are refused.
+    // Parse the declared media type unconditionally so malformed parameters
+    // are refused even when the Blob carries no type. Compare parameters only
+    // when the Blob type is present: declared-only parameters and reordering
+    // are legal, while blob-only names or conflicting values are refused.
+    const declaredParameters = parseMediaTypeParameters(value.media_type);
     if (value.blob.type !== '') {
         if (
             mediaTypeEssence(value.blob.type) !==
@@ -739,7 +767,6 @@ function requireStoredArtifact(
             corrupt('artifact record blob type does not match its media_type');
         }
         const blobParameters = parseMediaTypeParameters(value.blob.type);
-        const declaredParameters = parseMediaTypeParameters(value.media_type);
         for (const [name, blobValue] of blobParameters) {
             const declaredValue = declaredParameters.get(name);
             if (declaredValue === undefined) {

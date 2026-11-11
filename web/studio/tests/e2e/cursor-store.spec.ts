@@ -223,6 +223,55 @@ async function seedArtifact(
     );
 }
 
+const mediaArtifactId = (slot: number): string =>
+    `art_${slot.toString(16).padStart(2, '0').repeat(32)}`;
+
+interface ArtifactReadOutcome {
+    code: string | null;
+    mediaType?: string;
+    bytes?: number[];
+}
+
+async function readArtifactOutcomes(
+    page: Page,
+    ids: Record<string, string>,
+): Promise<Record<string, ArtifactReadOutcome>> {
+    return page.evaluate(async (artifactIds) => {
+        const api = (
+            window as unknown as {
+                __studioTest?: {
+                    clientForTest?: () => {
+                        readArtifact(input: {
+                            artifactId: string;
+                        }): Promise<{
+                            mediaType: string;
+                            bytes: Uint8Array;
+                        }>;
+                    } | null;
+                };
+            }
+        ).__studioTest;
+        const client = api?.clientForTest?.();
+        if (!client) throw new Error('studio test client is missing');
+        const outcomes: Record<string, ArtifactReadOutcome> = {};
+        for (const [label, artifactId] of Object.entries(artifactIds)) {
+            try {
+                const content = await client.readArtifact({ artifactId });
+                outcomes[label] = {
+                    code: null,
+                    mediaType: content.mediaType,
+                    bytes: [...content.bytes],
+                };
+            } catch (error) {
+                outcomes[label] = {
+                    code: (error as { code?: string }).code ?? null,
+                };
+            }
+        }
+        return outcomes;
+    }, ids);
+}
+
 type Mutation =
     | { op: 'corrupt_snapshot'; taskId: string; runId: string }
     | { op: 'truncate_event'; taskId: string; runId: string; generation: number; sequence: number }
@@ -952,6 +1001,150 @@ test.describe('browser agent task store', () => {
         expect(result.quoted.bytes).toEqual(quoted.bytes);
         expect(result.conflict.code).toBe('snapshot_corrupt');
         expect(result.blobOnly.code).toBe('snapshot_corrupt');
+    });
+
+    test('durable_artifact_empty_blob_type_still_validates_declared_media_type', async ({ page }) => {
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        const accepted = await seedArtifact(
+            page,
+            mediaArtifactId(1),
+            'declared only parameters',
+            'text/plain; charset=utf-8; format=flowed',
+            { blobTypeOverride: '' },
+        );
+        const malformed: Array<{ label: string; mediaType: string }> = [
+            { label: 'unterminated', mediaType: 'text/plain; charset="unterminated' },
+            { label: 'missingEquals', mediaType: 'text/plain; bad-param' },
+            { label: 'emptyName', mediaType: 'text/plain; =utf-8' },
+            { label: 'emptyPart', mediaType: 'text/plain;;charset=utf-8' },
+        ];
+        const ids: Record<string, string> = { accepted: accepted.artifactId };
+        for (const [index, entry] of malformed.entries()) {
+            const artifactId = mediaArtifactId(2 + index);
+            ids[entry.label] = artifactId;
+            await seedArtifact(page, artifactId, entry.label, entry.mediaType, {
+                blobTypeOverride: '',
+            });
+        }
+        const outcomes = await readArtifactOutcomes(page, ids);
+        const codes = Object.fromEntries(
+            Object.entries(outcomes).map(([label, outcome]) => [
+                label,
+                outcome.code,
+            ]),
+        );
+        expect(codes).toEqual({
+            accepted: null,
+            unterminated: 'snapshot_corrupt',
+            missingEquals: 'snapshot_corrupt',
+            emptyName: 'snapshot_corrupt',
+            emptyPart: 'snapshot_corrupt',
+        });
+        expect(outcomes.accepted!.mediaType).toBe(
+            'text/plain; charset=utf-8; format=flowed',
+        );
+        expect(outcomes.accepted!.bytes).toEqual(accepted.bytes);
+    });
+
+    test('durable_artifact_media_type_parameter_syntax_is_validated', async ({ page }) => {
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        const escapedMediaType = 'text/plain; note="a\\"b\\\\c"';
+        const escaped = await seedArtifact(
+            page,
+            mediaArtifactId(10),
+            'escaped quoted value',
+            escapedMediaType,
+            { blobTypeOverride: escapedMediaType },
+        );
+        const blobCases: Array<{
+            label: string;
+            declared: string;
+            blobType: string;
+        }> = [
+            {
+                label: 'tooLong',
+                declared: 'text/plain',
+                blobType: `text/plain; long=${'a'.repeat(1024)}`,
+            },
+            {
+                label: 'tooMany',
+                declared: 'text/plain',
+                blobType: `text/plain${Array.from(
+                    { length: 17 },
+                    (_, index) => `; p${index}=v${index}`,
+                ).join('')}`,
+            },
+            {
+                label: 'unterminated',
+                declared: 'text/plain',
+                blobType: 'text/plain; charset="utf-8',
+            },
+            {
+                label: 'quotedName',
+                declared: 'text/plain; ch"ars"et=utf-8',
+                blobType: 'text/plain; ch"ars"et=utf-8',
+            },
+            {
+                label: 'backslashName',
+                declared: 'text/plain; char\\set=utf-8',
+                blobType: 'text/plain; char\\set=utf-8',
+            },
+            {
+                label: 'unquotedBackslash',
+                declared: 'text/plain; charset=ut\\f-8',
+                blobType: 'text/plain; charset=ut\\f-8',
+            },
+            {
+                label: 'unquotedQuote',
+                declared: 'text/plain; charset=ut"f"8',
+                blobType: 'text/plain; charset=ut"f"8',
+            },
+            {
+                label: 'invalidQuotePlacement',
+                declared: 'text/plain; charset="ut"f""',
+                blobType: 'text/plain; charset="ut"f""',
+            },
+            {
+                label: 'duplicateSame',
+                declared: 'text/plain; charset=utf-8',
+                blobType: 'text/plain; charset=utf-8; charset=utf-8',
+            },
+            {
+                label: 'duplicateConflict',
+                declared: 'text/plain; charset=utf-8',
+                blobType: 'text/plain; charset=utf-8; charset=ascii',
+            },
+        ];
+        const ids: Record<string, string> = { escaped: escaped.artifactId };
+        for (const [index, entry] of blobCases.entries()) {
+            const artifactId = mediaArtifactId(11 + index);
+            ids[entry.label] = artifactId;
+            await seedArtifact(page, artifactId, entry.label, entry.declared, {
+                blobTypeOverride: entry.blobType,
+            });
+        }
+        const outcomes = await readArtifactOutcomes(page, ids);
+        const codes = Object.fromEntries(
+            Object.entries(outcomes).map(([label, outcome]) => [
+                label,
+                outcome.code,
+            ]),
+        );
+        expect(codes).toEqual({
+            escaped: null,
+            tooLong: 'snapshot_corrupt',
+            tooMany: 'snapshot_corrupt',
+            unterminated: 'snapshot_corrupt',
+            quotedName: 'snapshot_corrupt',
+            backslashName: 'snapshot_corrupt',
+            unquotedBackslash: 'snapshot_corrupt',
+            unquotedQuote: 'snapshot_corrupt',
+            invalidQuotePlacement: 'snapshot_corrupt',
+            duplicateSame: 'snapshot_corrupt',
+            duplicateConflict: 'snapshot_corrupt',
+        });
+        expect(outcomes.escaped!.mediaType).toBe(escapedMediaType);
+        expect(outcomes.escaped!.bytes).toEqual(escaped.bytes);
     });
 
     test('full64_host_id_without_durable_record_emits_artifact_read_intent', async ({ page }) => {
