@@ -43,7 +43,7 @@ import {
     type TreeEntry,
     type TreeInput,
 } from './client.js';
-import type { AgentTaskStore } from './store.js';
+import type { AgentTaskStore, DiffCommentRecord } from './store.js';
 import {
     AgentClientError,
     AgentStoreError,
@@ -399,6 +399,17 @@ class RuntimeEventStream implements AgentEventStream {
     [Symbol.asyncIterator](): AsyncIterator<AgentIncomingEvent> {
         return this;
     }
+}
+
+export interface AddDiffCommentInput {
+    taskId: string;
+    path: string;
+    line: number;
+    body: string;
+    headDigest: string;
+    scope: 'last_turn' | 'branch';
+    commentId?: string;
+    createdAtMs?: number;
 }
 
 export class AgentRuntime {
@@ -1497,6 +1508,39 @@ export class AgentRuntime {
             'host_unavailable',
             'the browser runtime has no branch diff',
         );
+    }
+
+    async addDiffComment(input: AddDiffCommentInput): Promise<DiffCommentRecord> {
+        this.assertOpen();
+        if (this.taskStore === null) {
+            throw new AgentClientError(
+                'runtime_unavailable',
+                'durable local comments require the browser task store',
+            );
+        }
+        return this.withTask(input.taskId, async () => {
+            this.requireTaskView(input.taskId);
+            return this.taskStore!.recordDiffComment({
+                task_id: input.taskId,
+                path: input.path,
+                line: input.line,
+                body: input.body,
+                head_digest: input.headDigest,
+                scope: input.scope,
+                ...(input.commentId === undefined
+                    ? {}
+                    : { comment_id: input.commentId }),
+                ...(input.createdAtMs === undefined
+                    ? {}
+                    : { created_at_ms: input.createdAtMs }),
+            });
+        });
+    }
+
+    async readDiffComments(taskId: string): Promise<DiffCommentRecord[]> {
+        this.assertOpen();
+        if (this.taskStore === null) return [];
+        return this.taskStore.readDiffComments(taskId);
     }
 
     async readArtifact(input: ReadArtifactInput): Promise<ArtifactContent> {

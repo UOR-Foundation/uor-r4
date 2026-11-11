@@ -17,8 +17,8 @@ import {
     isPlainObject,
     toClientError,
 } from './storeTypes.js';
-import type { AgentTaskStore } from './store.js';
-import type { AgentRuntime } from './runtime.js';
+import type { AgentTaskStore, DiffCommentRecord } from './store.js';
+import type { AddDiffCommentInput, AgentRuntime } from './runtime.js';
 import { HostClient, sha256Bytes, type HostToolResult } from './hostClient.js';
 import {
     AgentTransportHostTransport,
@@ -213,6 +213,8 @@ export interface ChangesSnapshot {
     files: Array<Record<string, unknown>>;
     headDigest: string;
     capturedAtMs: number;
+    /** True when the host bounded the branch result; never a complete claim. */
+    truncated?: boolean;
 }
 
 export interface ReadArtifactInput {
@@ -765,6 +767,38 @@ export class AgentClient {
         return hostChangesSnapshot(result);
     }
 
+    async addDiffComment(input: AddDiffCommentInput): Promise<DiffCommentRecord> {
+        const taskStore = this.requireReady();
+        if (this.runtime !== null) return this.runtime.addDiffComment(input);
+        if (taskStore !== null) {
+            return taskStore.recordDiffComment({
+                task_id: input.taskId,
+                path: input.path,
+                line: input.line,
+                body: input.body,
+                head_digest: input.headDigest,
+                scope: input.scope,
+                ...(input.commentId === undefined
+                    ? {}
+                    : { comment_id: input.commentId }),
+                ...(input.createdAtMs === undefined
+                    ? {}
+                    : { created_at_ms: input.createdAtMs }),
+            });
+        }
+        throw new AgentClientError(
+            'runtime_unavailable',
+            'durable local comments require the browser task store',
+        );
+    }
+
+    async readDiffComments(taskId: string): Promise<DiffCommentRecord[]> {
+        const taskStore = this.requireReady();
+        if (this.runtime !== null) return this.runtime.readDiffComments(taskId);
+        if (taskStore !== null) return taskStore.readDiffComments(taskId);
+        return [];
+    }
+
     async readArtifact(input: ReadArtifactInput): Promise<ArtifactContent> {
         const range = artifactRange(input);
         const local = this.localArtifact(input);
@@ -1215,6 +1249,12 @@ function hostChangesSnapshot(
     if (snapshot.files.length > MAX_HOST_DIFF_FILES) {
         return invalidHostData('host branch snapshot exceeds the client cap');
     }
+    if (
+        snapshot.truncated !== undefined &&
+        typeof snapshot.truncated !== 'boolean'
+    ) {
+        return invalidHostData('host branch truncated flag is malformed');
+    }
     const files = snapshot.files.map((value) => {
         if (
             !isPlainObject(value) ||
@@ -1230,6 +1270,7 @@ function hostChangesSnapshot(
         files,
         headDigest: snapshot.head_digest,
         capturedAtMs: snapshot.captured_at_ms,
+        ...(snapshot.truncated === true ? { truncated: true } : {}),
     };
 }
 

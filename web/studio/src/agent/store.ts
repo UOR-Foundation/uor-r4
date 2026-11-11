@@ -65,6 +65,31 @@ const MAX_MEDIA_TYPE_LENGTH = 1024;
 const MAX_MEDIA_PARAMETERS = 16;
 const MEDIA_TOKEN_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const MAX_DURABLE_ARTIFACT_RETURN_BYTES = 1024 * 1024;
+const MAX_DIFF_COMMENT_BODY = 8192;
+const MAX_DIFF_COMMENT_PATH = 1024;
+const MAX_DIFF_COMMENT_DIGEST = 256;
+
+export interface DiffCommentInput {
+    task_id: string;
+    path: string;
+    line: number;
+    body: string;
+    head_digest: string;
+    scope: 'last_turn' | 'branch';
+    comment_id?: string;
+    created_at_ms?: number;
+}
+
+export interface DiffCommentRecord {
+    task_id: string;
+    comment_id: string;
+    path: string;
+    line: number;
+    body: string;
+    head_digest: string;
+    scope: 'last_turn' | 'branch';
+    created_at_ms: number;
+}
 
 interface StoreFaults {
     abort_next_append: boolean;
@@ -1516,6 +1541,112 @@ export class AgentTaskStore {
             left.captured_at_ms === right.captured_at_ms
                 ? left.head_digest.localeCompare(right.head_digest)
                 : left.captured_at_ms - right.captured_at_ms,
+        );
+        return records;
+    }
+
+    /**
+     * Persist one local diff comment.
+     *
+     * Comments are keyed by the exact task/path/line/head tuple, so a comment
+     * on a moved or changed line is never silently attached to a new line.
+     * They are local browser records: no remote service or share path exists.
+     */
+    async recordDiffComment(input: DiffCommentInput): Promise<DiffCommentRecord> {
+        this.requireOpen();
+        if (this.importInProgress) {
+            throw new AgentStoreError(
+                'runtime_unavailable',
+                'an import is in progress; comment writes are unavailable',
+            );
+        }
+        if (!TASK_ID_PATTERN.test(input.task_id)) invalidArgument('task_id is invalid');
+        if (!isNonEmptyString(input.path) || input.path.length > MAX_DIFF_COMMENT_PATH) {
+            invalidArgument('comment path must be a bounded non-empty string');
+        }
+        if (!isNonNegativeInteger(input.line)) {
+            invalidArgument('comment line must be a non-negative safe integer');
+        }
+        if (typeof input.body !== 'string' || input.body.length > MAX_DIFF_COMMENT_BODY) {
+            invalidArgument('comment body must be a bounded string');
+        }
+        if (!isNonEmptyString(input.head_digest) || input.head_digest.length > MAX_DIFF_COMMENT_DIGEST) {
+            invalidArgument('comment head_digest must be a bounded non-empty string');
+        }
+        if (input.scope !== 'last_turn' && input.scope !== 'branch') {
+            invalidArgument('comment scope must be last_turn | branch');
+        }
+        if (
+            input.comment_id !== undefined &&
+            (!isNonEmptyString(input.comment_id) || input.comment_id.length > 128)
+        ) {
+            invalidArgument('comment_id must be a bounded non-empty string');
+        }
+        if (input.created_at_ms !== undefined && !isNonNegativeInteger(input.created_at_ms)) {
+            invalidArgument('created_at_ms must be a non-negative safe integer');
+        }
+        this.beginWrite();
+        try {
+            const record: DiffCommentRecord = {
+                task_id: input.task_id,
+                comment_id: input.comment_id ?? `cmt_${randomHex(16)}`,
+                path: input.path,
+                line: input.line,
+                body: input.body,
+                head_digest: input.head_digest,
+                scope: input.scope,
+                created_at_ms: input.created_at_ms ?? this.clock(),
+            };
+            const transaction = this.requireDb().transaction(['comments', 'leases'], 'readwrite');
+            try {
+                await this.checkImportFence(
+                    transaction.objectStore('leases'),
+                    this.clock(),
+                );
+                await requestResult(
+                    transaction.objectStore('comments').put(jsonClean(record), [
+                        record.task_id,
+                        record.path,
+                        record.line,
+                        record.head_digest,
+                    ]),
+                );
+                await transactionDone(transaction);
+            } catch (error) {
+                throw storageError(error);
+            }
+            return jsonClean(record);
+        } finally {
+            this.endWrite();
+        }
+    }
+
+    async readDiffComments(taskId: string): Promise<DiffCommentRecord[]> {
+        this.requireOpen();
+        if (!TASK_ID_PATTERN.test(taskId)) invalidArgument('task_id is invalid');
+        const records = (await this.readAll<DiffCommentRecord>('comments'))
+            .filter((record) => record.task_id === taskId)
+            .map((record) => {
+                if (
+                    !isNonEmptyString(record.comment_id) ||
+                    !isNonEmptyString(record.path) ||
+                    record.path.length > MAX_DIFF_COMMENT_PATH ||
+                    !isNonNegativeInteger(record.line) ||
+                    typeof record.body !== 'string' ||
+                    record.body.length > MAX_DIFF_COMMENT_BODY ||
+                    !isNonEmptyString(record.head_digest) ||
+                    record.head_digest.length > MAX_DIFF_COMMENT_DIGEST ||
+                    (record.scope !== 'last_turn' && record.scope !== 'branch') ||
+                    !isNonNegativeInteger(record.created_at_ms)
+                ) {
+                    corrupt('diff comment record is malformed');
+                }
+                return jsonClean(record);
+            });
+        records.sort((left, right) =>
+            left.path.localeCompare(right.path) ||
+            left.line - right.line ||
+            left.created_at_ms - right.created_at_ms,
         );
         return records;
     }

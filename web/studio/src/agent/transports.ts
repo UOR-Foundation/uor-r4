@@ -953,6 +953,9 @@ export class AgentTransportHostTransport implements HostTransport {
                               files: snapshot.files,
                               head_digest: snapshot.headDigest,
                               captured_at_ms: snapshot.capturedAtMs,
+                              ...(snapshot.truncated === true
+                                  ? { truncated: true }
+                                  : {}),
                           },
             });
         }
