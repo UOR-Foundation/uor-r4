@@ -2,7 +2,9 @@
 
 Lab: deepseek. Item:
 [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md)
-(#3407). Order: [ORDER.md](./ORDER.md). Base code: `7a450a88f`.
+(#3407). Order: [ORDER.md](./ORDER.md). Base code: `7a450a88f`; launch code:
+`f7f7ac97c67a784b7261abdbdb95cf0fa785f241`; job SHA-256:
+`0dbd7f05ba6c1214f6e3f8ff2e7dc1c2ded53966e5f577b98445d0d2aa5adfe4`.
 
 **Status:** pre-run. No GPU job has started.
 

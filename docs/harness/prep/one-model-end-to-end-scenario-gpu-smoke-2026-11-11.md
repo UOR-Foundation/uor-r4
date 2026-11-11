@@ -44,9 +44,16 @@ while retaining the wrong-memory and no-memory abstention controls?
   --hamming-copy-latest 1 --turn-memory 8 --turn-memory-reply 1
   --turn-memory-dropout 500 --turn-memory-leave-copied 1 --batch 16
   --steps 1024 --eval-every 256 --samples 6 --reply-tokens 48`.
-- **Source pin:** the pushed head of this ORDER's branch, whose full commit is
-  asserted by the pod job and written into the REPORT before launch. The job
-  script's SHA-256 is asserted separately.
+- **Frozen launch pins:** source commit
+  `f7f7ac97c67a784b7261abdbdb95cf0fa785f241`, `job.sh` SHA-256
+  `0dbd7f05ba6c1214f6e3f8ff2e7dc1c2ded53966e5f577b98445d0d2aa5adfe4`,
+  launcher SHA-256
+  `5161c08e09198b50349308152488f6edae8cb2aa8d31e64e86505f8e0bfbb32b`,
+  watcher SHA-256
+  `52d4cc30e40d539120f702fcf8c6d3f8f800eb8bea4ecbb2c9e3c9fcc2b41f26`,
+  and scorer-driver SHA-256
+  `d1ec3b7b0f676da422f6b5eb4871597634e4c25e49cd041fb66be2a3c865597d`.
+  The pod job asserts the source and job hashes independently.
 - **Base comparison:** arm-r artifact
   `a1d705586b35d7da282913b1e21b242a74c0661b32d73e2ec89f56310a8140e8`,
   schema `/10`, stack-contract semantic hash
