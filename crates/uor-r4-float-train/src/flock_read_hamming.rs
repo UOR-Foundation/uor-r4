@@ -2306,6 +2306,32 @@ pub struct PlaceRead {
     marks: PlaceMarks,
     stop: Vec<bool>,
     counts: std::sync::Arc<std::sync::Mutex<PlaceCounts>>,
+    tally: std::sync::Arc<std::sync::Mutex<PlaceTally>>,
+}
+
+/// The place read's votes and pull over the training steps since the last reading (claude-351):
+/// the arm and open votes, up then down, the sum of the steps' mean pulls and how many steps
+/// pulled. Never saved.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct PlaceTally {
+    arm: [u64; 2],
+    open: [u64; 2],
+    pull: f64,
+    pulls: u64,
+}
+
+/// A reading of the place read (claude-351) for a checkpoint's record: how many tokens arm and
+/// how many open as the counts stand, and, over the training steps since the last reading, the
+/// arm and the open votes, up then down, and the mean place pull (`bits / half`, so a half is
+/// chance and 0 a match), left out when no step pulled.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PlaceReading {
+    pub armed: usize,
+    pub opening: usize,
+    pub arm_votes: [u64; 2],
+    pub open_votes: [u64; 2],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pull_mean: Option<f64>,
 }
 
 /// What [`PlaceRead`] saves.
@@ -2327,7 +2353,12 @@ impl PlaceRead {
                 counts.open.len()
             )));
         }
-        let place = Self { marks, stop, counts: std::sync::Arc::new(std::sync::Mutex::new(counts)) };
+        let place = Self {
+            marks,
+            stop,
+            counts: std::sync::Arc::new(std::sync::Mutex::new(counts)),
+            tally: std::sync::Arc::default(),
+        };
         // The marks are checked as the artifact's are, before any row reads them.
         place.image()?;
         Ok(place)
@@ -2348,6 +2379,44 @@ impl PlaceRead {
             })
             .collect();
         PlaceImage::checked(self.marks.clone(), class, self.stop.len()).map_err(invalid)
+    }
+
+    /// Adds a training step's votes and, when it pulled, its mean pull to the tally.
+    fn tallied(&self, votes: [[u64; 2]; 2], pull: Option<f64>) -> Result<()> {
+        let mut tally = self.tally.lock().map_err(|_| invalid("the place read's tally is poisoned"))?;
+        for side in 0..2 {
+            tally.arm[side] += votes[0][side];
+            tally.open[side] += votes[1][side];
+        }
+        if let Some(pull) = pull {
+            tally.pull += pull;
+            tally.pulls += 1;
+        }
+        Ok(())
+    }
+
+    /// The reading for a checkpoint's record; the tally starts again from zero.
+    pub fn reading(&self) -> Result<PlaceReading> {
+        let (armed, opening) = {
+            let counts = self.counts()?;
+            let on = |c: &[i16]| c.iter().filter(|&&v| v > 0).count();
+            (on(&counts.arm), on(&counts.open))
+        };
+        let mut tally = self.tally.lock().map_err(|_| invalid("the place read's tally is poisoned"))?;
+        let taken = std::mem::take(&mut *tally);
+        Ok(PlaceReading {
+            armed,
+            opening,
+            arm_votes: taken.arm,
+            open_votes: taken.open,
+            pull_mean: (taken.pulls > 0).then(|| taken.pull / taken.pulls as f64),
+        })
+    }
+
+    /// Whether this read frames a conversation and stops as a kit with `marks` and `stop` does.
+    pub fn framed_as(&self, marks: &PlaceMarks, stop: &[u32]) -> bool {
+        let flags = stop_flags(stop, self.stop.len());
+        self.marks == *marks && flags.is_ok_and(|flags| flags == self.stop)
     }
 
     /// The two gains as they stand, for a sheet's reading.
@@ -2389,10 +2458,12 @@ pub type PlaceLabels = std::collections::HashMap<usize, PlaceLabel>;
 /// What the trainer of the place read needs beside its corpus (claude-351), written by
 /// `--turn-census` from that corpus and its oracle twin: the marks, the tokens a read stops at,
 /// and each labelled reply's `[reply start, place, value start, value length]` in corpus
-/// positions, in ascending reply start.
+/// positions, in ascending reply start. It names the corpus it was read from.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlaceKit {
+    /// The SHA-256 of the corpus's `tokens.u16`, so a run on another corpus refuses the kit.
+    pub tokens_sha256: String,
     pub marks: PlaceMarks,
     pub stop: Vec<u32>,
     pub places: Vec<[u32; 4]>,
@@ -2422,9 +2493,11 @@ impl PlaceKit {
     /// a candidate only from the window's third position on, so an earlier one is [`Outside`].
     ///
     /// [`Outside`]: PlaceLabel::Outside
-    pub fn labels(&self, starts: &[usize], time: usize) -> PlaceLabels {
+    pub fn labels(&self, starts: &[Option<usize>], time: usize) -> PlaceLabels {
         let mut out = PlaceLabels::new();
-        for (b, &start) in starts.iter().enumerate() {
+        for (b, start) in starts.iter().enumerate() {
+            // A window with no corpus start is labelled with nothing.
+            let Some(start) = *start else { continue };
             let from = self.places.partition_point(|p| (p[0] as usize) <= start);
             let inside = self.places[from..].iter().take_while(|p| (p[0] as usize) <= start + time);
             for &[reply, s, p, _] in inside {
@@ -2441,19 +2514,28 @@ impl PlaceKit {
     }
 }
 
+/// What a training step teaches the place read from (claude-351): the kit its windows are
+/// labelled from, and the weight of the place pull in the loss.
+#[derive(Clone)]
+pub struct PlaceTeach {
+    pub kit: std::sync::Arc<PlaceKit>,
+    pub pull: f64,
+}
+
 thread_local! {
-    /// claude-351: the kit the training step labels its windows from, when the place read trains.
-    static PLACE_KIT: RefCell<Option<std::sync::Arc<PlaceKit>>> = const { RefCell::new(None) };
+    /// claude-351: what the training step teaches the place read from, when it trains.
+    static PLACE_TEACH: RefCell<Option<PlaceTeach>> = const { RefCell::new(None) };
 }
 
-/// Make `kit` the labels the training step reads on this thread, or none.
-pub fn set_place_kit(kit: Option<PlaceKit>) {
-    PLACE_KIT.with(|cell| *cell.borrow_mut() = kit.map(std::sync::Arc::new));
+/// Make `kit` the labels the training step reads on this thread, with the pull's weight; or none.
+pub fn set_place_teach(teach: Option<(PlaceKit, f64)>) {
+    let teach = teach.map(|(kit, pull)| PlaceTeach { kit: std::sync::Arc::new(kit), pull });
+    PLACE_TEACH.with(|cell| *cell.borrow_mut() = teach);
 }
 
-/// The labels the training step reads on this thread, if set.
-pub fn place_kit() -> Option<std::sync::Arc<PlaceKit>> {
-    PLACE_KIT.with(|cell| cell.borrow().clone())
+/// What the training step teaches the place read from on this thread, if set.
+pub fn place_teach() -> Option<PlaceTeach> {
+    PLACE_TEACH.with(|cell| cell.borrow().clone())
 }
 
 /// A float margin in bits at Q16, as the export rounds it, so the trainer's find tests the
@@ -2515,14 +2597,21 @@ fn place_vote(counts: &mut [i16], token: u32, up: bool) {
 /// place the window does not hold votes on nothing.
 ///
 /// Returns the pull's pairs, flat rows `(t, s)`: every row `t` of a labelled question, from the
-/// window's second, with the labelled place `s`.
+/// window's second, with the labelled place `s`; and the votes cast, arm then open, each up then
+/// down.
 fn place_learn(
     rows: &[PlaceRow],
     ids: &[u32],
     time: usize,
     labels: &PlaceLabels,
     counts: &mut PlaceCounts,
-) -> Vec<(u32, u32)> {
+) -> (Vec<(u32, u32)>, [[u64; 2]; 2]) {
+    // The votes cast, arm then open, each up then down.
+    let mut votes = [[0u64; 2]; 2];
+    let mut vote = |counts: &mut [i16], gain: usize, token: u32, up: bool| {
+        place_vote(counts, token, up);
+        votes[gain][usize::from(!up)] += 1;
+    };
     let mut pairs = Vec::new();
     for (b, window) in rows.chunks(time).enumerate() {
         let base = b * time;
@@ -2536,14 +2625,14 @@ fn place_learn(
                     Some(PlaceLabel::Outside) => {}
                     Some(PlaceLabel::At { place, .. }) => {
                         for &(at, pos) in found {
-                            place_vote(&mut counts.arm, ids[base + at], pos == place);
+                            vote(&mut counts.arm, 0, ids[base + at], pos == place);
                         }
                         let asking = content.clone().filter(|&at| at >= 1);
                         pairs.extend(asking.map(|at| ((base + at) as u32, (base + place) as u32)));
                     }
                     None => {
                         for &(at, _) in found {
-                            place_vote(&mut counts.arm, ids[base + at], false);
+                            vote(&mut counts.arm, 0, ids[base + at], false);
                         }
                     }
                 }
@@ -2559,18 +2648,18 @@ fn place_learn(
                 Some(PlaceLabel::Outside) => {}
                 Some(PlaceLabel::At { place, value_row }) if held == place => {
                     if t == value_row {
-                        place_vote(&mut counts.open, token, true);
+                        vote(&mut counts.open, 1, token, true);
                     }
                     if t < value_row {
-                        place_vote(&mut counts.open, token, false);
+                        vote(&mut counts.open, 1, token, false);
                     }
                     *passed = t >= value_row;
                 }
-                _ => place_vote(&mut counts.open, token, false),
+                _ => vote(&mut counts.open, 1, token, false),
             }
         }
     }
-    pairs
+    (pairs, votes)
 }
 
 impl HammingRead {
@@ -2801,12 +2890,15 @@ impl HammingReads {
         }
         let (query, key) = read.place_codes(ids, time, table)?;
         let rows = read.place_rows(place, &query, &key, ids, time)?;
-        let pairs = place_learn(&rows, ids, time, labels, &mut *place.counts()?);
+        let (pairs, votes) = place_learn(&rows, ids, time, labels, &mut *place.counts()?);
         if pairs.is_empty() {
+            place.tallied(votes, None)?;
             return Ok(None);
         }
         let (sum, terms) = read.place_pull_bits(ids, table, &pairs)?;
-        Ok(Some(sum.affine(1.0 / terms as f64, 0.0)?))
+        let mean = sum.affine(1.0 / terms as f64, 0.0)?;
+        place.tallied(votes, Some(f64::from(mean.to_scalar::<f32>()?)))?;
+        Ok(Some(mean))
     }
 }
 
@@ -6113,17 +6205,18 @@ mod place_tests {
         let (q, k) = codes(&TALK);
         let image = place.image().expect("an image");
         let rows = place_pass(&image, place_first(16), &[1 << 16], &TALK, TALK.len(), &q, &k);
-        let pairs = place_learn(&rows, &TALK, TALK.len(), labels, &mut place.counts().expect("counts"));
+        let (pairs, votes) = place_learn(&rows, &TALK, TALK.len(), labels, &mut place.counts().expect("counts"));
+        place.tallied(votes, None).expect("a tally");
         (rows.into_iter().map(|r| r.offer).collect(), pairs)
     }
 
     fn kit() -> PlaceKit {
-        PlaceKit { marks: marks(), stop: vec![DOT], places: vec![[17, 5, 18, 1]] }
+        PlaceKit { tokens_sha256: String::new(), marks: marks(), stop: vec![DOT], places: vec![[17, 5, 18, 1]] }
     }
 
     #[test]
     fn the_gains_learn_the_arm_then_the_open_and_then_the_read_opens() {
-        let (place, labels) = (place(), kit().labels(&[0], TALK.len()));
+        let (place, labels) = (place(), kit().labels(&[Some(0)], TALK.len()));
         assert_eq!(labels.get(&16), Some(&PlaceLabel::At { place: 5, value_row: 17 }));
         let closed = vec![None; TALK.len()];
         // Nothing is armed: the find is right, so the question token's arm count goes up, and
@@ -6145,6 +6238,13 @@ mod place_tests {
         let gains = place.gains().expect("gains");
         assert_eq!((gains.arm[ASK as usize], gains.open[ITS as usize], gains.open[MODEL as usize]), (3, 2, -2));
         assert_eq!(gains.open[MAYA as usize], 0);
+        // The reading: one token arms and one opens; three right finds, and the open votes of
+        // the second and third passes, one up and one down each. Then the tally is empty.
+        let reading = place.reading().expect("a reading");
+        let want = PlaceReading { armed: 1, opening: 1, arm_votes: [3, 0], open_votes: [2, 2], pull_mean: None };
+        assert_eq!(reading, want);
+        let again = place.reading().expect("a reading");
+        assert_eq!((again.armed, again.arm_votes, again.open_votes), (1, [0, 0], [0, 0]));
     }
 
     #[test]
@@ -6188,15 +6288,18 @@ mod place_tests {
         kit.check().expect("a sound kit");
         // The window starts four tokens in: the place, corpus position 5, is its second
         // position, before any candidate, so the label is outside.
-        assert_eq!(kit.labels(&[4], 16), PlaceLabels::from([(12, PlaceLabel::Outside)]));
+        assert_eq!(kit.labels(&[Some(4)], 16), PlaceLabels::from([(12, PlaceLabel::Outside)]));
         // Two windows: the second, from corpus position 3, holds the place at its third position.
-        let two = kit.labels(&[0, 3], 20);
+        let two = kit.labels(&[Some(0), Some(3)], 20);
         assert_eq!(two.get(&16), Some(&PlaceLabel::At { place: 5, value_row: 17 }));
         assert_eq!(two.get(&(20 + 13)), Some(&PlaceLabel::At { place: 2, value_row: 14 }));
         assert_eq!(two.len(), 2);
         // A window that ends before the reply's first token has no row for it.
-        assert!(kit.labels(&[0], 16).is_empty());
-        assert!(kit.labels(&[17], 16).is_empty());
+        assert!(kit.labels(&[Some(0)], 16).is_empty());
+        assert!(kit.labels(&[Some(17)], 16).is_empty());
+        // A window with no corpus start has no label, and the next window keeps its own rows.
+        let second = kit.labels(&[None, Some(0)], 20);
+        assert_eq!(second, PlaceLabels::from([(20 + 16, PlaceLabel::At { place: 5, value_row: 17 })]));
         // Refused: labels out of order, and a place at or after its reply.
         let mut bad = kit.clone();
         bad.places.push([17, 5, 18, 1]);

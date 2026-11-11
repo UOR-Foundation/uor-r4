@@ -1638,6 +1638,55 @@ pub fn place_census(
     Ok(out)
 }
 
+/// The labels a trainer of the place read learns from (claude-351), read from a split written
+/// without memory lines and its twin written `recall=oracle`: every recall reply with a place,
+/// as `[reply start, place, value start, value length]` in the split's positions, in ascending
+/// reply start; the marks; and the tokens a read stops at (B1) over all `vocab` tokens, those
+/// whose text has no letter or digit or starts a new word, as the census classes them.
+/// `tokens_sha256` names the split.
+pub fn place_kit(
+    split: (&[u32], &[u8]),
+    twin: (&[u32], &[u8]),
+    marks: &Marks,
+    codec: &Codec<'_>,
+    vocab: usize,
+    tokens_sha256: String,
+) -> Result<crate::flock_read_hamming::PlaceKit> {
+    let docs = documents(split.0, split.1, marks)?;
+    let twin_docs = documents(twin.0, twin.1, marks)?;
+    let lines = pair_lines(split.0, &docs, twin.0, &twin_docs)?;
+    let (found, _) = cases(split.0, &docs, twin.0, &lines, codec)?;
+    let at = |i: usize| u32::try_from(i).map_err(|_| "a corpus position is past 32 bits".to_owned());
+    let mut places = Vec::new();
+    for case in found.iter().filter(|c| c.kind == Kind::Recall) {
+        if let Some(place) = case.place {
+            places.push([at(case.reply.start)?, at(place.s)?, at(place.p)?, at(place.len)?]);
+        }
+    }
+    places.sort_unstable();
+    let stop = (0..vocab as u32)
+        .filter(|&t| {
+            let text = (codec.decode)(&[t]);
+            !text.chars().any(char::is_alphanumeric) || text.starts_with(char::is_whitespace)
+        })
+        .collect();
+    let kit = crate::flock_read_hamming::PlaceKit {
+        tokens_sha256,
+        marks: PlaceMarks {
+            bos: marks.bos,
+            eos: marks.eos,
+            sep: marks.sep.clone(),
+            system: marks.system.clone(),
+            user: marks.user.clone(),
+            assistant: marks.assistant.clone(),
+        },
+        stop,
+        places,
+    };
+    kit.check().map_err(|e| e.to_string())?;
+    Ok(kit)
+}
+
 /// What the place census counted on the panel for D3 with the TRAIN fit, for [`place_program`]
 /// to stand its own counts beside: the D line's true place, wrong place, general and abstention
 /// sets, and the E line's right, of, wrong rows by kind (recall, general, abstention) and first
@@ -2175,6 +2224,24 @@ mod tests {
         assert!(has("decide label: labels from the tokens"), "{out:#?}");
         assert!(has("G split=panel within_192=1 to_256=0"), "{out:#?}");
         assert!(has("decide window: 192"), "{out:#?}");
+        // The trainer's kit from the same twins (claude-351): one labelled reply, whose place
+        // and value are both "maya"; the stop tokens are the ones with no letter or digit; and
+        // a window from the corpus's start is labelled at the row before the reply.
+        let sha = "the split's hash".to_owned();
+        let kit = place_kit((&plain, &plain_mask), (&lined, &lined_mask), &marks(), &codec, WORDS.len(), sha)
+            .expect("a kit");
+        let [[reply, s, p, len]] = kit.places[..] else {
+            panic!("{:?}", kit.places)
+        };
+        let word = |i: u32| WORDS[plain[i as usize] as usize];
+        assert_eq!((word(reply), word(s), word(p), len), ("it's", "maya", "maya", 1));
+        assert_eq!((kit.stop.clone(), kit.tokens_sha256.as_str()), (ids("\n : ."), "the split's hash"));
+        let labels = kit.labels(&[Some(0)], plain.len());
+        let want = crate::flock_read_hamming::PlaceLabel::At {
+            place: s as usize,
+            value_row: p as usize - 1,
+        };
+        assert_eq!((labels.get(&(reply as usize - 1)), labels.len()), (Some(&want), 1));
     }
 
     #[test]
