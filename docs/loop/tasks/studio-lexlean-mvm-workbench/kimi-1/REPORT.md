@@ -22,6 +22,16 @@ Lab: kimi. Item: [studio-lexlean-mvm-workbench](../../../../roadmap/items/studio
 - #3939 is OPEN with M7 Distribution, `area:serving`, `roadmap:item` and dependency #3917. #2035 contains `#3939 Import the LexLean MVM workbench…`.
 - `git diff --check`: clean. Local policy is rerun on the committed ORDER/REPORT head; full review/required checks/protected merge/fresh-main verification remain pending.
 
+## Measurements
+
+- Four files changed: generated README +6/−2, `issues.json` +1/−0, ORDER +24 and REPORT +32 before this correction. Size is reported, not capped.
+- Selective apply created one issue and changed one milestone checklist; no other issue writes occurred. A second selective dry-run is empty.
+- No model compute, paid resource, credential or production deployment was used. Shared-target reuse was abandoned after it proved stale; a worktree-local xtask target performed the official run.
+
+## Skills used
+
+- Isolated worktree, scope guard, working discipline and systematic debugging of the stale-target and report-schema failures. No production code or test-first exception was needed for this generated-output unit.
+
 ## Still open
 
 All MVM, workbench, virtual Git, GitHub and desktop implementation tasks remain pending under a later ORDER. Real R4 generation, useful-model evaluation, production deployment and full parity are NOT_RUN.
