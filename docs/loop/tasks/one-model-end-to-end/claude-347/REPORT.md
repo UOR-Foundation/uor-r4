@@ -8,12 +8,14 @@ Five laptop readings on the replicated arm r model, asked for by an outside revi
 |---|---|
 | 1. Float against integer, row by row | done, with one part not readable on this path (below) |
 | 2. Selection from the model's own state | not run yet |
-| 3. General turns in wording TRAIN does not hold | not run yet |
+| 3. General turns in wording TRAIN does not hold | done |
 | 4. What the model holds, in full | done |
 | 5. The BPB scorer's floor | done |
 
 ## What did not work, first
 
+- **Reading 3: neither arm answers a general question in wording TRAIN does not hold.** Each of the ten general questions was reworded and checked absent from TRAIN's token stream. Asked one at a time in a fresh conversation, arm r answers 0, 0 and 0 of 10 and arm rt 1, 0 and 1 of 10 (seeds 1, 2, 3); the one right reply is "No." to "Can a cat bark?". In TRAIN's wording the same programs answer 4, 4 and 5 (arm r) and 9, 10 and 9 (arm rt). The usual reply to a reworded question is the question said back.
+- **Reading 3: in the 18-turn script the reworded questions take recall down too.** With the four facts stated and the sieve writing the memory line, recall is 0 of 4 at every seed for arm r and 1 of 4 at every seed for arm rt, against 3, 4, 4 and 3, 3, 3 in the same script with TRAIN's wording. The second reworded question draws "2 plus 2 is 2 is 2 is", and arm r then gives that same reply to all twelve turns after it, recall questions included.
 - **Reading 1 could not compare the replies with the turn memory on.** `uor-chat --prompt-ids` steps raw token ids and never tells the session where the reply begins (`mark_reply_start`, `crates/uor-r4-integer/src/stack/session.rs`); only the text chat does. So on this path the integer artifact answers with its turn memory off. The first comparison, against the float replies scored with the memory on, showed 678, 691 and 644 of 1,141 rows equal, and that number is an instrument reading, not a model reading: against the float replies scored with the memory **off**, the same integer replies are equal on 981, 1,022 and 1,048 rows. The memory-on comparison needs a reader that marks the reply start on raw ids. It is not in this REPORT.
 - **With the memory off on both sides, 160, 119 and 93 of 1,141 rows still differ** between the float model and its integer export (seeds 1, 2, 3). Most of them are rows without a memory line: 146, 94 and 93.
 - **The samples do not name which rows are recall rows.** `reference_named` is 0 on every row. The split used here is read from the prompt itself: a row is a line row when its prompt holds the memory line's opening ids (`53,91,353`). 641 rows are line rows and 500 are not, at every seed.
@@ -66,6 +68,81 @@ The instrument reading, kept so it is not taken for a model reading: against the
 
 The chat program printed a median of 1,009, 1,015 and 1,010 generated tokens per second a row. These are short prompts (17 to 192 tokens), each in a fresh process; it is not a reading at context 8,256.
 
+### Reading 3: general turns in wording TRAIN does not hold
+
+**The check that the wording is new.** Each question was encoded as the chat program writes a turn (`User: <question>`, a newline, `Assistant:`) with the tokenizer's `token-counts` example, and the id run was searched for in TRAIN's 8,127,216 ids (`mwr-train/train/tokens.u16`, 60,000 conversations). The ten original questions are the positive control.
+
+| Original question | Times in TRAIN | Reworded | Times in TRAIN |
+|---|---|---|---|
+| What is the opposite of hot? | 31 | Hot has an opposite. What is it? | 0 |
+| What is 2 plus 3? | 9 | Add 2 and 3 for me. | 0 |
+| What color is a lemon? | 162 | A lemon is which color? | 0 |
+| Tell me a word that means the opposite of big. | 30 | Which word is the opposite of big? | 0 |
+| How many legs does a spider have? | 221 | A spider has how many legs? | 0 |
+| Give me the opposite of fast. | 46 | The opposite of fast is what? | 0 |
+| What is 4 plus 4? | 10 | How much is 4 plus 4? | 0 |
+| What color is milk? | 185 | Milk is what color? | 0 |
+| What is the opposite of hard? | 33 | Name the opposite of hard. | 0 |
+| Do cats bark? | 146 | Can a cat bark? | 0 |
+
+A reply counts as right when it holds the expected word (cold, 5, yellow, small, eight or 8, slow, eight or 8, white, soft, no; for recall Maya, Rex, Lisbon, 47). Arm r runs in `uor-chat-bd2532281`, arm rt in the chat program at its own pin, each on its own three artifacts.
+
+**One question a conversation** (`--say`, nothing before it):
+
+| | Arm r, seeds 1, 2, 3 | Arm rt, seeds 1, 2, 3 |
+|---|---|---|
+| TRAIN's wording, right of 10 | 4, 4, 5 | 9, 10, 9 |
+| New wording, right of 10 | 0, 0, 0 | 1, 0, 1 |
+
+**The 18-turn script** (`/memory auto`, four facts, then ten general and four recall questions mixed; `conv-4.txt` is the registered script, `conv-5.txt` the same with the ten general lines reworded):
+
+| | Arm r, seeds 1, 2, 3 | Arm rt, seeds 1, 2, 3 |
+|---|---|---|
+| TRAIN's wording: general of 10 | 3, 2, 2 | 9, 10, 9 |
+| TRAIN's wording: recall of 4 | 3, 4, 4 | 3, 3, 3 |
+| New wording: general of 10 | 0, 0, 0 | 1, 0, 0 |
+| New wording: recall of 4 | 0, 0, 0 | 1, 1, 1 |
+
+The TRAIN-wording rows repeat the earlier readings of arm rt (9, 10, 9 general; recall 3 of 4 with "47" said as "40"), so the scripts and programs are the ones used before.
+
+**Word for word, seed 2, one question a conversation, new wording:**
+
+| Asked | Arm r | Arm rt |
+|---|---|---|
+| Hot has an opposite. What is it? | Hot has an opposite. | Hot has an opposite. |
+| Add 2 and 3 for me. | 2 plus 2 is 2 is 2 is | 2 plus 2 is 2 is 2 is |
+| A lemon is which color? | A lemon is which color? A | A lemon is which color? |
+| Which word is the opposite of big? | Which word is the opposite of of big? | Which word is the opposite of big? |
+| A spider has how many legs? | A spider has how many legs? | A spider has how many legs? |
+| The opposite of fast is what? | The opposite of fast is what? | The opposite of fast is what? |
+| How much is 4 plus 4? | Noted. | I'm a helpful assistant: I'm a helpful assistant: (to the cap) |
+| Milk is what color? | Milk is what color? | Milk is what color? |
+| Name the opposite of hard. | Name the opposite of hard. | Name the opposite of hard. |
+| Can a cat bark? | Can a cat bark? | Can a cat bark? |
+
+**Word for word, seed 2, the 18-turn script with the new wording** (turns 5 to 18; the first four are the facts, acknowledged as before, with "My dog is called Rex." answered "Got it, you grew up in Lisbon" in both wordings):
+
+| Turn | Asked | Arm r | Arm rt |
+|---|---|---|---|
+| 5 | Hot has an opposite. What is it? | You haven't told me that yet. | Hot has an opposite. |
+| 6 | Add 2 and 3 for me. | 2 plus 2 is 2 is 2 is | 2 plus 2 is 2 is 2 is |
+| 7 | A lemon is which color? | 2 plus 2 is 2 is 2 is | 2 plus 2 is 2 is 2 is |
+| 8 | What is my friend's name? (line: It's Maya.) | 2 plus 2 is 2 is 2 is | 2 plus 2 is 2 is 2 is |
+| 9 | Which word is the opposite of big? | 2 plus 2 is 2 is 2 is | 2 plus 2 is 2 is 2 is |
+| 10 | A spider has how many legs? | 2 plus 2 is 2 is 2 is | 2 plus 2 is 2 is 2 is |
+| 11 | What is my dog called? (line: It's Rex.) | 2 plus 2 is 2 is 2 is | 2 plus 2 is 2 is 2 is |
+| 12 | The opposite of fast is what? | 2 plus 2 is 2 is 2 is | 2 plus 2 is 2 is 2 is |
+| 13 | How much is 4 plus 4? | 2 plus 2 is 2 is 2 is | 4 plus 4 is 4. |
+| 14 | Where did I grow up? | 2 plus 2 is 2 is 2 is | It's Lisbon. |
+| 15 | Milk is what color? | 2 plus 2 is 2 is 2 is | Milk is what color? |
+| 16 | Name the opposite of hard. | 2 plus 2 is 2 is 2 is | Name the opposite of hard. |
+| 17 | What is my lucky number? | 2 plus 2 is 2 is 2 is | It's 40. |
+| 18 | Can a cat bark? | 2 plus 2 is 2 is 2 is | Can a cat bark? |
+
+Seeds 1 and 3 read the same: arm r repeats "2 plus 2 is 2 is 2 is" from turn 6 to turn 18, and arm rt recovers at turn 13.
+
+**Instrument or model?** Model. The programs, artifacts, facts and recall questions are the ones behind the earlier readings, which this run repeats; only the ten general lines changed. Two things are read apart. A reworded question gets no answer even alone, so the general answers are a lookup of TRAIN's wording. And one repeating reply in the history is then copied forward over a correct memory line, which is the copy read taking the latest matching span from the model's own bad reply.
+
 ### Reading 4: what the model holds
 
 Identical at seeds 1, 2 and 3 of each arm.
@@ -117,11 +194,15 @@ Laptop files under `local/claude/claude-347/` (not committed; sums below are SHA
 
 Chat program `uor-chat-bd2532281`: `69bc535af70325fd8362818a1f07f549e91cdbcb28d0457a79aa56c1ab58344c`. Tokenizer: `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`. The artifact sums equal the ones in [claude-345's REPORT](../claude-345/REPORT.md). The float files are the pods' sealed scores, `score/r-line/` of each run.
 
+Reading 3: `r3/conv-4.txt` `33d19426dc0077e300af4a4e093747c484d27da45c4cf05a3da61f46ea8989e4`, `r3/conv-5.txt` `3e887941bd8f3853b76562de2cd48c6e7bd909efc9355c1c65d4d1f943a3431e`; outputs `r3/conv-<4|5>-<r|rt>-s<seed>.out` and `r3/say-<r|rt>-s<seed>.jsonl`. TRAIN is the store whose manifest is `3d87db7ec2313d7d684f557920edb4fa3c0b7b18a543782707d50a6e258b379d` (60,000 conversations, 8,127,216 tokens). The ids came from `cargo build --release -p uor-r4-tokenizer --example token-counts` at this branch.
+
 ## Still open
 
-- Readings 2 and 3.
+- Reading 2.
 - The memory-on comparison of reading 1: a reader that steps raw ids and marks the reply start.
 
 ## Plain summary
+
+The model answers a general question only in the wording it was trained on. Reworded, the ten questions get 0 right answers on arm r and 1, 0, 1 on arm rt, and the usual reply is the question said back. In a longer conversation one such question is enough to break the rest: the model repeats one bad reply, and recall of stated facts falls from 3 or 4 of 4 to 0 (arm r) and 1 (arm rt).
 
 The exported integer model says what the float model says on 86% to 92% of the panel's prompts when both run without the turn memory, and it keeps the float model's right answers (532, 503, 497 against 537, 503, 498). On the rows that carry a memory line it is identical on 627, 616 and 641 of 641. The comparison with the turn memory on could not be made on this path. By bytes the artifact is mostly stored replies: 85% for arm r, 96% for arm rt. The BPB scorer in the M4 sheet cannot report below 0.72 and stops being able to reach 0.90 once 1.9% of targets fall outside its top eight.
