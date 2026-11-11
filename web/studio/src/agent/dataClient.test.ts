@@ -160,6 +160,32 @@ function clientWithDurableArtifact(
     };
 }
 
+describe('AgentClient companion grants', () => {
+    test('exposes_validated_host_grants_without_a_second_authority', async () => {
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {}),
+        );
+        (
+            transport as unknown as { grants: () => Promise<unknown[]> }
+        ).grants = async () => [
+            { grantId: 'gr_9a3c5e7b1d2f4a60', path: '/tmp/studio-project' },
+            { grantId: 'gr_0b1d2f4a6c8e9a30', path: '/tmp/other-project' },
+        ];
+        const client = clientWith(transport);
+        await expect(client.grants()).resolves.toEqual([
+            { grantId: 'gr_9a3c5e7b1d2f4a60', path: '/tmp/studio-project' },
+            { grantId: 'gr_0b1d2f4a6c8e9a30', path: '/tmp/other-project' },
+        ]);
+    });
+
+    test('a_host_without_grants_reports_none_instead_of_inventing_paths', async () => {
+        const client = clientWith(
+            new RecordingHostTransport(async (intent) => resultFor(intent, {})),
+        );
+        await expect(client.grants()).resolves.toEqual([]);
+    });
+});
+
 describe('AgentClient companion data routing', () => {
     test('tree_uses_explicit_data_scope_and_grant_identity', async () => {
         const transport = new RecordingHostTransport(async (intent) =>

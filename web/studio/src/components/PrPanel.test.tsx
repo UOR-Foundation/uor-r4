@@ -139,3 +139,14 @@ describe('PrPanel', () => {
         expect(host.textContent).toContain('<script>alert(1)</script>');
     });
 });
+
+describe('PrPanel state truthfulness', () => {
+    test('unknown_pr_state_is_not_reported_as_merged', async () => {
+        await renderPr({
+            ...summary,
+            state: 'queued-for-review' as PrSummary['state'],
+        });
+        expect(host.textContent).toContain('State unavailable');
+        expect(host.textContent).not.toContain('Merged');
+    });
+});

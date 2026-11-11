@@ -945,7 +945,7 @@ describe('Task 15 stop failure and dispose receipt settlement', () => {
 
             await expect(
                 harness.client.stop({ taskId: a.taskId, runId: a.runId }),
-            ).rejects.toMatchObject({ code: 'out_of_order' });
+            ).rejects.toMatchObject({ code: 'runtime_unavailable' });
 
             harness.model.latest(a.runId)?.push({
                 type: 'text-delta',

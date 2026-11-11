@@ -138,3 +138,19 @@ describe('TaskTimeline', () => {
         expect(host.textContent).toContain('No runtime events for this task yet.');
     });
 });
+
+describe('restored approval availability', () => {
+    it('keeps_a_restored_approval_read_only_when_no_active_owner_can_resolve_it', () => {
+        renderTimeline([], [{
+            approval: approval(),
+            hostIdentity: { id: 'Local companion', canApprove: true },
+            resolvable: false,
+        }]);
+        const card = host.querySelector('[data-approval-id="apr_1111111111111111"]')!;
+        const approve = Array.from(card.querySelectorAll('button')).find((button) => button.textContent === 'Approve')!;
+        const deny = Array.from(card.querySelectorAll('button')).find((button) => button.textContent === 'Deny')!;
+        expect(approve.disabled).toBe(true);
+        expect(deny.disabled).toBe(true);
+        expect(card.textContent).toContain('no active run owner');
+    });
+});

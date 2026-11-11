@@ -65,11 +65,14 @@ function sourceLabel(source: PrSummarySource | undefined): string {
 }
 
 function stateLabel(state: PrSummaryState | undefined): string {
-    if (state === undefined) return 'State not supplied';
-    if (state === 'open') return 'Open';
-    if (state === 'draft') return 'Draft';
-    if (state === 'closed') return 'Closed';
-    return 'Merged';
+    switch (state) {
+        case undefined: return 'State not supplied';
+        case 'open': return 'Open';
+        case 'draft': return 'Draft';
+        case 'closed': return 'Closed';
+        case 'merged': return 'Merged';
+        default: return 'State unavailable (not reported as merged)';
+    }
 }
 
 export function PrPanel({ summary = null, unavailableReason = null }: PrPanelProps) {

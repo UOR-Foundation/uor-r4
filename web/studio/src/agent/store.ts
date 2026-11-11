@@ -2004,11 +2004,13 @@ export class AgentTaskStore {
         if (task === undefined) {
             throw new AgentStoreError('task_not_found', 'task is not present in AgentStore');
         }
+        let latestRunState: string | null = null;
         if (task.latestRunId !== null) {
             const read = await this.readRun(taskId, task.latestRunId);
             if (!read.ok) {
                 throw new AgentStoreError(read.code, read.message);
             }
+            latestRunState = read.run.state;
             const storedSnapshot = await this.readOne<SnapshotRecord>(
                 'snapshots',
                 [taskId, task.latestRunId],
@@ -2041,7 +2043,11 @@ export class AgentTaskStore {
             const activeOther =
                 existing !== undefined &&
                 existing.writer_id !== writerId &&
-                nowMs - existing.heartbeat_at_ms <= LEASE_STALE_MS;
+                nowMs - existing.heartbeat_at_ms <= LEASE_STALE_MS &&
+                // A lease cannot belong to a terminal run: the writer that
+                // owned it has nothing left to do. This is the reload/crash
+                // case where a page disappeared before releasing its lease.
+                !(latestRunState !== null && TERMINAL_RUN_STATES.has(latestRunState));
             if (activeOther) {
                 throw new AgentStoreError(
                     'stale_generation',

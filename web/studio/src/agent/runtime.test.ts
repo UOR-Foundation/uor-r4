@@ -1476,6 +1476,7 @@ describe('AgentRuntime approvals', () => {
                 'approval required',
             );
             const approval = runView(store, task.taskId, run.runId).approvals[0]!;
+            expect(runtime.approvalResolvable(approval.approvalId)).toBe(true);
             await expect(
                 runtime.resolveHostApproval({
                     approvalId: approval.approvalId,
@@ -1496,6 +1497,7 @@ describe('AgentRuntime approvals', () => {
                 approvalId: approval.approvalId,
                 decision: 'approved',
             });
+            expect(runtime.approvalResolvable(approval.approvalId)).toBe(false);
             await until(() => dispatched.length === 1, 'approved dispatch');
             await until(() => model.requests.length >= 2, 'post-approval turn');
             model.streams[1]!.end();
@@ -2020,7 +2022,10 @@ describe('AgentRuntime fix round 1', () => {
             );
             await expect(
                 runtime.stop({ taskId: task.taskId, runId: run.runId }),
-            ).rejects.toMatchObject({ code: 'out_of_order' });
+            ).resolves.toMatchObject({ acknowledged: true });
+            const settled = runView(store, task.taskId, run.runId);
+            expect(settled.state).toBe('cancelled');
+            expect(eventTypes(settled).at(-1)).toBe('run.cancelled');
         } finally {
             model.streams.forEach((item) => item.end());
             await runtime.dispose();
@@ -4593,5 +4598,220 @@ describe('AgentRuntime host approval handshake', () => {
             model.streams.forEach((stream) => stream.end());
             await runtime.dispose();
         }
+    });
+});
+
+describe('AgentRuntime restored and disposing reconciliation', () => {
+    function restoredRuntime(
+        store: AgentStore,
+        clock: TestClock,
+        taskStore: FakeTaskStore | null,
+    ): AgentRuntime {
+        return new AgentRuntime({
+            store,
+            taskStore: taskStore as unknown as AgentTaskStore,
+            now: clock.now,
+            timers: clock,
+            ids: deterministicIds(),
+            writerId: 'writer-runtime-test',
+            leaseHeartbeatMs: LEASE_HEARTBEAT_MS,
+        });
+    }
+
+    test('restored_stop_appends_safe_boundary_and_allows_a_new_run', async () => {
+        const store = createAgentStore();
+        await seedRunInStore(store);
+        await appendToStore(
+            store,
+            runtimeEvent({
+                taskId: INGEST_TASK_A,
+                runId: INGEST_RUN_A,
+                sequence: 2,
+                type: 'assistant.message',
+                data: {
+                    message_id: 'msg_restored_stop',
+                    text: 'restored output',
+                },
+            }),
+        );
+        const clock = new TestClock();
+        const taskStore = new FakeTaskStore(store, clock);
+        const runtime = restoredRuntime(store, clock, taskStore);
+        await runtime.open();
+        try {
+            await expect(
+                runtime.stop({
+                    taskId: INGEST_TASK_A,
+                    runId: INGEST_RUN_B,
+                }),
+            ).rejects.toMatchObject({ code: 'out_of_order' });
+            await expect(
+                runtime.stop({
+                    taskId: INGEST_TASK_A,
+                    runId: 'run_1111111111111111',
+                }),
+            ).rejects.toMatchObject({ code: 'out_of_order' });
+
+            const receipt = await runtime.stop({
+                taskId: INGEST_TASK_A,
+                runId: INGEST_RUN_A,
+            });
+            expect(receipt).toEqual({
+                taskId: INGEST_TASK_A,
+                runId: INGEST_RUN_A,
+                acknowledged: true,
+            });
+            const view = runView(store, INGEST_TASK_A, INGEST_RUN_A);
+            expect(view.state).toBe('cancelled');
+            expect(view.events.map((event) => event.type).slice(-2)).toEqual([
+                'run.status',
+                'run.cancelled',
+            ]);
+            expect(view.events.at(-2)?.data.status).toBe('cancelling');
+            expect(view.events.at(-1)?.data.safe_boundary).toBe(true);
+            expect(
+                view.events.filter((event) => event.type === 'run.cancelled'),
+            ).toHaveLength(1);
+            expect(taskStore.acquires.map((entry) => entry.taskId)).toContain(
+                INGEST_TASK_A,
+            );
+            expect(taskStore.releases.map((entry) => entry.taskId)).toContain(
+                INGEST_TASK_A,
+            );
+
+            await expect(
+                runtime.stop({
+                    taskId: INGEST_TASK_A,
+                    runId: INGEST_RUN_A,
+                }),
+            ).rejects.toMatchObject({ code: 'out_of_order' });
+
+            const next = await runtime.startRun({
+                taskId: INGEST_TASK_A,
+                prompt: 'after a restored stop',
+            });
+            expect(next.runId).not.toBe(INGEST_RUN_A);
+            await until(
+                () =>
+                    runView(store, INGEST_TASK_A, next.runId).state ===
+                    'finished',
+                'new run after restored stop',
+            );
+        } finally {
+            await runtime.dispose();
+        }
+    });
+
+    test('restored_stop_refuses_a_missing_durable_store', async () => {
+        const store = createAgentStore();
+        await seedRunInStore(store);
+        const clock = new TestClock();
+        const runtime = new AgentRuntime({
+            store,
+            taskStore: null,
+            now: clock.now,
+            timers: clock,
+            ids: deterministicIds(),
+        });
+        await runtime.open();
+        try {
+            await expect(
+                runtime.stop({
+                    taskId: INGEST_TASK_A,
+                    runId: INGEST_RUN_A,
+                }),
+            ).rejects.toMatchObject({ code: 'runtime_unavailable' });
+            expect(runView(store, INGEST_TASK_A, INGEST_RUN_A).state).toBe(
+                'running',
+            );
+        } finally {
+            await runtime.dispose();
+        }
+    });
+
+    test('restored_approval_is_not_resolvable_without_an_active_owner', async () => {
+        const store = createAgentStore();
+        await seedRunInStore(store);
+        await appendToStore(
+            store,
+            runtimeEvent({
+                taskId: INGEST_TASK_A,
+                runId: INGEST_RUN_A,
+                sequence: 2,
+                type: 'tool.requested',
+                data: {
+                    tool_call_id: 'tool_restored_owner',
+                    tool: 'write_file',
+                    arguments_digest: INGEST_DIGEST,
+                    arguments_preview: '{"path":"restored.txt"}',
+                },
+            }),
+        );
+        await appendToStore(
+            store,
+            runtimeEvent({
+                taskId: INGEST_TASK_A,
+                runId: INGEST_RUN_A,
+                sequence: 3,
+                type: 'tool.approval_required',
+                data: {
+                    approval_id: 'appr_restored_owner',
+                    tool_call_id: 'tool_restored_owner',
+                    tool: 'write_file',
+                    scope: 'tool:write_file',
+                    request_digest: INGEST_DIGEST,
+                    expires_at_ms: 1_900_000_000_000,
+                },
+            }),
+        );
+        const clock = new TestClock();
+        const runtime = restoredRuntime(store, clock, null);
+        await runtime.open();
+        try {
+            expect(runtime.approvalResolvable('appr_restored_owner')).toBe(
+                false,
+            );
+            expect(
+                await runtime.pendingApprovals(INGEST_TASK_A),
+            ).toHaveLength(1);
+        } finally {
+            await runtime.dispose();
+        }
+    });
+
+    test('dispose_blocks_new_work_while_disposing', async () => {
+        const { runtime, model } = makeRuntime();
+        await runtime.open();
+        const { stream } = await startOne(runtime, model);
+        const disposing = runtime.dispose();
+        await expect(
+            runtime.createTask({ title: 'during dispose' }),
+        ).rejects.toMatchObject({ code: 'runtime_unavailable' });
+        stream.end();
+        await disposing;
+    });
+
+    test('read_diff_comments_reports_unavailable_without_a_task_store', async () => {
+        const store = createAgentStore();
+        const clock = new TestClock();
+        const runtime = new AgentRuntime({
+            store,
+            taskStore: null,
+            now: clock.now,
+            timers: clock,
+            ids: deterministicIds(),
+        });
+        await runtime.open();
+        try {
+            await expect(
+                runtime.readDiffComments(INGEST_TASK_A),
+            ).rejects.toMatchObject({ code: 'runtime_unavailable' });
+        } finally {
+            await runtime.dispose();
+        }
+        const client = new AgentClient({ store });
+        await expect(
+            client.readDiffComments(INGEST_TASK_A),
+        ).rejects.toMatchObject({ code: 'runtime_unavailable' });
     });
 });

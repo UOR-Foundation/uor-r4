@@ -15,6 +15,8 @@ const TOOL_PATTERN = /^[a-z][a-z0-9_.-]*$/;
 const TASK_ID_PATTERN = /^tsk_[0-9a-f]{16}$/;
 const RUN_ID_PATTERN = /^run_[0-9a-f]{16}$/;
 const APPROVAL_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+const GRANT_ID_PATTERN = /^gr_[0-9a-f]{16}$/;
+const MAX_GRANT_PATH_CHARS = 4096;
 const MAX_PREVIEW_LENGTH = 512;
 const DATA_TASK_ID = 'tsk_0000000000000000';
 const DATA_RUN_ID = 'run_0000000000000000';
@@ -45,6 +47,14 @@ export interface HostArtifactRef {
     media_type: string;
     size_bytes: number;
 }
+
+/** A host-approved folder grant. The page never enumerates paths itself. */
+export interface HostGrant {
+    grantId: string;
+    path: string;
+}
+
+export const MAX_HOST_GRANTS = 64;
 
 export interface HostToolIntent {
     schema: typeof HOST_INTENT_SCHEMA;
@@ -145,6 +155,8 @@ export interface HostTransport {
         options?: HostSubscribeOptions,
     ): HostSubscription;
     approve(input: HostApprovalInput): Promise<ApprovalReceipt>;
+    /** Host-approved folders. A transport without this capability returns none. */
+    grants?(): Promise<HostGrant[]>;
 }
 
 export interface HostClientTimers {
@@ -648,6 +660,54 @@ export class HostClient {
             }
             throw error;
         }
+    }
+
+    /** True only when the transport can supply host-approved folder grants. */
+    supportsGrants(): boolean {
+        return typeof this.transport.grants === 'function';
+    }
+
+    async grants(): Promise<HostGrant[]> {
+        if (this.closed) {
+            throw new AgentClientError(
+                'transport_closed',
+                'host client is closed',
+            );
+        }
+        const readGrants = this.transport.grants;
+        if (readGrants === undefined) return [];        let value: unknown;
+        try {
+            value = await readGrants.call(this.transport);
+        } catch (error) {
+            throw toClientError(error);
+        }
+        if (!Array.isArray(value)) {
+            return invalidEvent('host grants must be an array');
+        }
+        if (value.length > MAX_HOST_GRANTS) {
+            return invalidEvent('host grants exceed the client cap');
+        }
+        const seen = new Set<string>();
+        const grants: HostGrant[] = [];
+        for (const item of value) {
+            if (
+                !isPlainObject(item) ||
+                typeof item.grantId !== 'string' ||
+                !GRANT_ID_PATTERN.test(item.grantId) ||
+                typeof item.path !== 'string' ||
+                item.path.length === 0 ||
+                item.path.length > MAX_GRANT_PATH_CHARS ||
+                /[\u0000-\u001f\u007f-\u009f]/.test(item.path)
+            ) {
+                return invalidEvent('host grant record is malformed');
+            }
+            if (seen.has(item.grantId)) {
+                return invalidEvent('host grants must not repeat a grant id');
+            }
+            seen.add(item.grantId);
+            grants.push({ grantId: item.grantId, path: item.path });
+        }
+        return grants;
     }
 
     async createIntent(input: HostToolRequest): Promise<HostToolIntent> {

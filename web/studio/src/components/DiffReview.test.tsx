@@ -639,3 +639,111 @@ describe('DiffReview control surface', () => {
         expect(Array.from(host.querySelectorAll('button')).map((button) => button.textContent).join(' ')).not.toMatch(/restore|checkpoint/i);
     });
 });
+
+describe('ChangesPanel host grant selection', () => {
+    const TASK = 'tsk_9a3c5e7b1d2f4a60';
+    const GRANT_A = 'gr_9a3c5e7b1d2f4a60';
+    const GRANT_B = 'gr_0b1d2f4a6c8e9a30';
+
+    function grantClient(
+        grants: Array<{ grantId: string; path: string }>,
+        calls: Array<{ taskId: string; scope: string; grantId?: string }>,
+    ): AgentClient {
+        return {
+            hostSupportsGrants: () => true,
+            grants: vi.fn(async () => grants),
+            changesSnapshot: vi.fn(async (input: { taskId: string; scope: 'last_turn' | 'branch'; grantId?: string }) => {
+                calls.push(input);
+                return snapshot({
+                    scope: input.scope,
+                    files: [{ path: 'src/branch.ts', status: 'modified', content: 'branch line' }],
+                    headDigest: `sha256:${'d'.repeat(64)}`,
+                });
+            }),
+            readDiffComments: vi.fn(async () => []),
+            addDiffComment: vi.fn(),
+            store: {
+                snapshot: () => ({ tasks: [], runs: [], selectedTaskId: null, selectedTask: null }),
+            },
+        } as unknown as AgentClient;
+    }
+
+    async function renderAndChooseBranch(client: AgentClient): Promise<void> {
+        const actions = createDesktopActions({ invoke: vi.fn(async () => { throw new Error('no host'); }) });
+        act(() => {
+            render(<ChangesPanel actions={actions} files={makeFiles()} copy={vi.fn()} agentClient={client} taskId={TASK} />, host);
+        });
+        await vi.waitFor(() => expect(host.querySelectorAll('button').length).toBeGreaterThan(0));
+        const branch = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Branch')!;
+        act(() => { branch.click(); });
+    }
+
+    test('single_grant_is_auto_selected_and_passed_to_branch_changes', async () => {
+        const calls: Array<{ taskId: string; scope: string; grantId?: string }> = [];
+        await renderAndChooseBranch(grantClient([{ grantId: GRANT_A, path: '/granted/project' }], calls));
+        await vi.waitFor(() => expect(calls.some((call) => call.scope === 'branch')).toBe(true));
+        expect(calls.find((call) => call.scope === 'branch')).toMatchObject({
+            taskId: TASK,
+            grantId: GRANT_A,
+        });
+        expect(host.textContent).toContain('/granted/project');
+        expect(host.querySelector('select[aria-label="Approved folder"]')).toBeNull();
+    });
+
+    test('multiple_grants_require_a_labelled_selection_before_branch_changes', async () => {
+        const calls: Array<{ taskId: string; scope: string; grantId?: string }> = [];
+        await renderAndChooseBranch(grantClient([
+            { grantId: GRANT_A, path: '/granted/project' },
+            { grantId: GRANT_B, path: '/other/project' },
+        ], calls));
+        await vi.waitFor(() =>
+            expect(host.querySelector('select[aria-label="Approved folder"]')).not.toBeNull(),
+        );
+        const select = host.querySelector<HTMLSelectElement>('select[aria-label="Approved folder"]')!;
+        expect(calls.some((call) => call.scope === 'branch')).toBe(false);
+        expect(select.options).toHaveLength(3);
+        expect(select.value).toBe('');
+        act(() => {
+            select.value = GRANT_B;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        await vi.waitFor(() => expect(calls.some((call) => call.scope === 'branch')).toBe(true));
+        expect(calls.find((call) => call.scope === 'branch')).toMatchObject({
+            taskId: TASK,
+            grantId: GRANT_B,
+        });
+    });
+
+    test('no_grants_reports_unavailable_instead_of_calling_without_a_grant', async () => {
+        const calls: Array<{ taskId: string; scope: string; grantId?: string }> = [];
+        await renderAndChooseBranch(grantClient([], calls));
+        await vi.waitFor(() => expect(host.textContent).toContain('reports no approved folders'));
+        expect(calls.some((call) => call.scope === 'branch')).toBe(false);
+    });
+
+    test('active_run_disables_the_comment_form_with_an_honest_reason', async () => {
+        const client = {
+            changesSnapshot: vi.fn(async () => snapshot()),
+            readDiffComments: vi.fn(async () => []),
+            addDiffComment: vi.fn(),
+            store: {
+                snapshot: () => ({
+                    tasks: [{
+                        taskId: TASK,
+                        latestRunId: 'run_0000000000000001',
+                        runs: [{ runId: 'run_0000000000000001', state: 'running' }],
+                    }],
+                    runs: [],
+                    selectedTaskId: TASK,
+                    selectedTask: null,
+                }),
+            },
+        } as unknown as AgentClient;
+        const actions = createDesktopActions({ invoke: vi.fn(async () => { throw new Error('no host'); }) });
+        act(() => {
+            render(<ChangesPanel actions={actions} files={makeFiles()} copy={vi.fn()} agentClient={client} taskId={TASK} />, host);
+        });
+        await vi.waitFor(() => expect(host.textContent).toContain('this run is still active'));
+        expect(host.querySelector('form')).toBeNull();
+    });
+});

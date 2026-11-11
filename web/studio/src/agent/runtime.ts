@@ -59,6 +59,7 @@ import {
     type AgentApplyResult,
     type AgentIncomingEvent,
     type AgentStore,
+    type RunView,
     type TaskView,
 } from '../state/agent.js';
 import {
@@ -816,10 +817,14 @@ export class AgentRuntime {
         const init = await this.withTask(input.taskId, async () => {
             const current = this.active.get(input.taskId);
             if (current === undefined || current.terminal) {
-                throw new AgentClientError(
-                    'out_of_order',
-                    'run is already terminal',
-                );
+                // A restored run has no live control. Settle it durably at the
+                // safe boundary instead of pretending a worker was cancelled.
+                await this.stopRestoredRun(input);
+                return {
+                    taskId: input.taskId,
+                    runId: input.runId,
+                    ack: Promise.resolve(true),
+                };
             }
             if (current.runId !== input.runId) {
                 throw new AgentClientError(
@@ -1201,6 +1206,31 @@ export class AgentRuntime {
             .map((approval) => ({ ...approval }));
     }
 
+    // True only while this runtime holds the live control for the approval's
+    // run and generation. A restored approval has no such owner.
+    approvalResolvable(approvalId: string): boolean {
+        const record = this.findApproval(approvalId);
+        if (record === null) return false;
+        const current = this.active.get(record.taskId);
+        if (current === undefined || current.terminal) return false;
+        if (
+            current.runId !== record.runId ||
+            current.generation !== record.generation
+        ) {
+            return false;
+        }
+        if (
+            current.pendingApproval === null ||
+            current.pendingApproval.record.approvalId !== approvalId
+        ) {
+            return false;
+        }
+        if (record.hostApproval && this.hostClientInstance === null) {
+            return false;
+        }
+        return true;
+    }
+
     private runtimeUnavailable(
         event: AgentIncomingEvent,
     ): AgentAppendResult | null {
@@ -1544,7 +1574,12 @@ export class AgentRuntime {
 
     async readDiffComments(taskId: string): Promise<DiffCommentRecord[]> {
         this.assertOpen();
-        if (this.taskStore === null) return [];
+        if (this.taskStore === null) {
+            throw new AgentClientError(
+                'runtime_unavailable',
+                'durable local comments require the browser task store',
+            );
+        }
         return this.taskStore.readDiffComments(taskId);
     }
 
@@ -2427,6 +2462,133 @@ export class AgentRuntime {
         });
     }
 
+    // A restored run has no live RunControl, so the safe boundary is the
+    // durable event chain itself: verify the current nonterminal run, take
+    // the task lease, append cancelling then terminal cancelled through the
+    // validated store sequence, and release the lease. No host worker is
+    // claimed to have been cancelled.
+    private async stopRestoredRun(input: StopInput): Promise<void> {
+        const task = this.store
+            .snapshot()
+            .tasks.find((candidate) => candidate.taskId === input.taskId);
+        if (task === undefined) {
+            throw new AgentClientError('task_not_found', 'task is missing');
+        }
+        if (task.unresolvedRunId !== null) {
+            throw new AgentClientError(
+                'out_of_order',
+                'the task latest run is still loading; wait for the replay before stopping it',
+            );
+        }
+        if (task.latestRunId === null || task.latestRunId !== input.runId) {
+            throw new AgentClientError(
+                'out_of_order',
+                'stop does not match the latest run',
+            );
+        }
+        const run = task.runs.find(
+            (candidate) => candidate.runId === input.runId,
+        );
+        if (run === undefined) {
+            throw new AgentClientError('run_not_found', 'run is missing');
+        }
+        if (run.needsResync || isTerminalState(run.state)) {
+            throw new AgentClientError(
+                'out_of_order',
+                'run is already terminal',
+            );
+        }
+        if (this.taskStore === null) {
+            throw new AgentClientError(
+                'runtime_unavailable',
+                'a restored run can only be stopped with the durable browser task store',
+            );
+        }
+        try {
+            const lease = await this.taskStore.acquireLease(
+                task.taskId,
+                this.writerId,
+                this.now(),
+            );
+            this.heldLeases.add(task.taskId);
+            if (lease.writer_id !== this.writerId) {
+                throw new AgentClientError(
+                    'stale_generation',
+                    'task lease is held by another writer',
+                );
+            }
+            const sequence = run.lastSequence + 1;
+            await this.appendRestored(task, run, sequence, 'run.status', {
+                status: 'cancelling',
+            });
+            await this.appendRestored(
+                task,
+                run,
+                sequence + 1,
+                'run.cancelled',
+                {
+                    safe_boundary: true,
+                    finished_at_ms: this.now(),
+                },
+            );
+            this.restoredApprovals = this.restoredApprovals.filter(
+                (approval) => approval.runId !== run.runId,
+            );
+        } catch (error) {
+            if (error instanceof AgentClientError) throw error;
+            throw new AgentClientError(
+                errorCode(error),
+                errorMessage(error),
+                false,
+                error instanceof AgentStoreError ? error.storage : null,
+            );
+        } finally {
+            await this.releaseLease(task.taskId);
+        }
+        if (task.hold !== null && task.hold.run_id === run.runId) {
+            await this.setTaskHold(task.taskId, null);
+        }
+    }
+
+    private async appendRestored(
+        task: TaskView,
+        run: RunView,
+        sequence: number,
+        type: string,
+        data: Record<string, unknown>,
+    ): Promise<void> {
+        const event = {
+            schema: AGENT_EVENT_SCHEMA,
+            event_id: `evt_${run.runId}_${run.generation}_${sequence
+                .toString()
+                .padStart(12, '0')}`,
+            project_id: task.projectId,
+            task_id: task.taskId,
+            run_id: run.runId,
+            generation: run.generation,
+            sequence,
+            recorded_at_ms: this.now(),
+            type,
+            data,
+        } as unknown as AgentIncomingEvent;
+        const result = await this.taskStore!.appendEvent({
+            event,
+            writer_id: this.writerId,
+            now_ms: this.now(),
+        });
+        if (result.status === 'rejected') {
+            throw new AgentClientError(
+                result.code ?? 'internal',
+                result.message ?? 'durable restored stop was rejected',
+                false,
+                result.storage ?? null,
+            );
+        }
+        if (result.status === 'applied') {
+            this.publish(event, result.digest ?? undefined);
+        }
+    }
+
     private async stopTimeout(taskId: string, runId: string): Promise<void> {
         await this.withTask(taskId, async () => {
             const current = this.active.get(taskId);
@@ -3185,6 +3347,12 @@ export class AgentRuntime {
     }
 
     private assertOpen(): void {
+        if (this.disposing) {
+            throw new AgentClientError(
+                'runtime_unavailable',
+                'the browser runtime is disposing',
+            );
+        }
         if (this.disposed) {
             throw new AgentClientError(
                 'runtime_unavailable',

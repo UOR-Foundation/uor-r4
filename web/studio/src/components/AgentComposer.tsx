@@ -40,6 +40,7 @@ interface AgentComposerProps {
     runtimeTaskCount?: number;
     showTaskDetail?: boolean;
     onTaskBack?(): void;
+    onNewRun?(): void;
     onOpenSurface?(surface: 'changes' | 'terminal'): void;
 }
 
@@ -58,7 +59,7 @@ function revokePreview(draft: AttachmentDraft): void {
     }
 }
 
-export function AgentComposer({ store, sessions, files, ui, generation, copy, download, draft: controlledDraft, pasted: controlledPasted, onDraftChange, onPastedChange, agentClient = null, agentTask = null, activeRun = null, unresolvedRun = false, runtimeTasksLoading = false, runtimeTasksReady = true, runtimeTaskCount, showTaskDetail = false, onTaskBack, onOpenSurface }: AgentComposerProps) {
+export function AgentComposer({ store, sessions, files, ui, generation, copy, download, draft: controlledDraft, pasted: controlledPasted, onDraftChange, onPastedChange, agentClient = null, agentTask = null, activeRun = null, unresolvedRun = false, runtimeTasksLoading = false, runtimeTasksReady = true, runtimeTaskCount, showTaskDetail = false, onTaskBack, onNewRun, onOpenSurface }: AgentComposerProps) {
     const state = useLifecycle(store);
     const [pastedState, setPastedState] = useState('');
     const pasted = controlledPasted ?? pastedState;
@@ -463,7 +464,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
     return (
         <section aria-label="Agent composer" class="agent-workspace">
             {showTaskDetail && agentTask && agentClient
-                ? <TaskDetail task={agentTask} client={agentClient} onBack={onTaskBack ?? (() => {})} onOpenSurface={onOpenSurface ?? (() => {})} />
+                ? <TaskDetail task={agentTask} client={agentClient} onBack={onTaskBack ?? (() => {})} onNewRun={onNewRun} onOpenSurface={onOpenSurface ?? (() => {})} />
                 : <>
                     <header class="agent-heading"><div><h1>Agent</h1><p>{selectionLabel}</p></div><span class="session-phase">Session: {state.session.phase}</span></header>
                     {state.session.error && <p role="alert" class="workbench-alert">{state.session.error}</p>}

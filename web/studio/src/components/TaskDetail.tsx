@@ -12,6 +12,7 @@ export interface TaskDetailProps {
     task: TaskView;
     client: AgentClient;
     onBack(): void;
+    onNewRun?(): void;
     onOpenSurface(surface: TaskSurface): void;
 }
 
@@ -148,11 +149,15 @@ function timelineEntries(run: RunView): TimelineEntry[] {
     return entries.sort((left, right) => left.sequence - right.sequence);
 }
 
-function approvalEntries(run: RunView, hostIdentity: ApprovalHost | null): TimelineApproval[] {
+function approvalEntries(run: RunView, hostIdentity: ApprovalHost | null, client: AgentClient): TimelineApproval[] {
     const terminal = isTerminalRunState(run.state);
     return run.approvals
         .filter((approval) => !terminal || approval.decision !== null)
-        .map((approval) => ({ approval, hostIdentity }));
+        .map((approval) => ({
+            approval,
+            hostIdentity,
+            resolvable: client.approvalResolvable(approval.approvalId),
+        }));
 }
 
 function planData(run: RunView | null): { title: string; steps: Array<{ step_id: string; label: string; state: string }> } | null {
@@ -169,7 +174,7 @@ function planData(run: RunView | null): { title: string; steps: Array<{ step_id:
     return { title: data.title, steps };
 }
 
-export function TaskDetail({ task, client, onBack, onOpenSurface }: TaskDetailProps) {
+export function TaskDetail({ task, client, onBack, onNewRun, onOpenSurface }: TaskDetailProps) {
     const run = latestRun(task);
     const headingRef = useRef<HTMLHeadingElement>(null);
     const [hostIdentity, setHostIdentity] = useState<ApprovalHost | null>(null);
@@ -196,7 +201,7 @@ export function TaskDetail({ task, client, onBack, onOpenSurface }: TaskDetailPr
     }, [run?.state]);
 
     const entries = useMemo(() => run === null ? [] : timelineEntries(run), [run]);
-    const approvals = useMemo(() => run === null ? [] : approvalEntries(run, hostIdentity), [run, hostIdentity]);
+    const approvals = useMemo(() => run === null ? [] : approvalEntries(run, hostIdentity, client), [run, hostIdentity, client]);
     const plan = useMemo(() => planData(run), [run]);
     const retryable = run !== null && (run.state === 'cancelled' || (run.state === 'failed' && run.error?.retryable === true));
     // Terminal events are authoritative; only a non-terminal cancelling
@@ -260,11 +265,12 @@ export function TaskDetail({ task, client, onBack, onOpenSurface }: TaskDetailPr
             <div class="task-detail-actions">
                 <button type="button" onClick={() => onOpenSurface('changes')}>Open changes</button>
                 <button type="button" onClick={() => onOpenSurface('terminal')}>Open terminal</button>
+                {run !== null && isTerminalRunState(run.state) && !task.archived && onNewRun !== undefined && <button type="button" class="task-new-run" onClick={onNewRun}>New run</button>}
             </div>
             {isSynthetic(run) && <p class="task-synthetic">Synthetic replay: deterministic fixture output, not an R4 model or a task brain.</p>}
         </header>
         <RunStatus state={status} detail={statusDetail} stopping={stopPending} stopDisabled={retrying} onStop={active ? stop : undefined} />
-        {task.hold !== null && <p class="task-service-state" data-static-background>Background and cross-device tasks require an optional service. Closing this tab stops local work.</p>}
+        {task.state === 'waiting_for_background' && task.hold !== null && <p class="task-service-state" data-static-background>Background and cross-device tasks require an optional service. Closing this tab stops local work.</p>}
         {plan !== null && <section class="task-plan" data-task-plan aria-label="Plan">
             <h2>{plan.title}</h2>
             <ol class="task-plan-steps">

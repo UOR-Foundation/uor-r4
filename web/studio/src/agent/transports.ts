@@ -18,6 +18,7 @@ import {
     type HostArtifactRef,
     type HostClientTimers,
     type HostDataRequest,
+    type HostGrant,
     type HostInvokeResponse,
     type HostStreamingKind,
     type HostSubscribeOptions,
@@ -382,6 +383,15 @@ export class TauriHostTransport implements HostTransport {
             }
             return { grant_id: item.grant_id, path: item.path };
         });
+    }
+
+    // The page-facing grant shape. Validation of the host record happens in
+    // hostGrants(), and HostClient re-validates the page-facing values.
+    async grants(): Promise<HostGrant[]> {
+        return (await this.hostGrants()).map((grant) => ({
+            grantId: grant.grant_id,
+            path: grant.path,
+        }));
     }
 
     async approve(input: HostApprovalInput): Promise<ApprovalReceipt> {

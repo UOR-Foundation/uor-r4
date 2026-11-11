@@ -358,14 +358,50 @@ fn constant_time_eq(left: &str, right: &str) -> bool {
     difference == 0
 }
 
-fn bounded_approval_text(text: &str) -> String {
-    if text.chars().count() <= MAX_APPROVAL_PREVIEW_CHARS {
-        return text.to_string();
+fn escape_approval_character(character: char) -> String {
+    match character {
+        '\n' => "\\n".to_string(),
+        '\r' => "\\r".to_string(),
+        '\t' => "\\t".to_string(),
+        control if control.is_control() => format!("\\u{{{:04x}}}", control as u32),
+        other => other.to_string(),
     }
-    let mut bounded: String = text
-        .chars()
-        .take(MAX_APPROVAL_PREVIEW_CHARS.saturating_sub(1))
-        .collect();
+}
+
+fn escaped_approval_len(text: &str) -> usize {
+    text.chars()
+        .map(|character| match character {
+            '\n' | '\r' | '\t' => 2,
+            control if control.is_control() => {
+                format!("\\u{{{:04x}}}", control as u32).chars().count()
+            }
+            _ => 1,
+        })
+        .sum()
+}
+
+// Approval arguments are host-supplied data, so every line separator, tab,
+// C0 and C1 control is rendered as visible text. A value cannot spoof a new
+// dialog field or a second line.
+fn bounded_approval_text(text: &str) -> String {
+    if escaped_approval_len(text) <= MAX_APPROVAL_PREVIEW_CHARS {
+        let mut escaped = String::with_capacity(text.len());
+        for character in text.chars() {
+            escaped.push_str(&escape_approval_character(character));
+        }
+        return escaped;
+    }
+    let mut bounded = String::new();
+    let mut count = 0usize;
+    for character in text.chars() {
+        let piece = escape_approval_character(character);
+        let length = piece.chars().count();
+        if count + length > MAX_APPROVAL_PREVIEW_CHARS.saturating_sub(1) {
+            break;
+        }
+        bounded.push_str(&piece);
+        count += length;
+    }
     bounded.push('…');
     bounded
 }
@@ -1660,5 +1696,33 @@ mod approval_preview_and_entropy_tests {
         }));
         assert!(preview.chars().count() <= MAX_APPROVAL_PREVIEW_CHARS);
         assert!(preview.contains("content: "));
+    }
+
+    #[test]
+    fn approval_preview_escapes_line_and_control_characters() {
+        let preview = approval_preview(&json!({
+            "command": "safe\r\npath: /etc/passwd\t\u{7}\u{85}\u{7f}",
+        }));
+        assert!(
+            preview.contains("command: safe\\r\\npath: /etc/passwd\\t\\u{0007}\\u{0085}\\u{007f}"),
+            "controls must be escaped as visible text: {preview:?}"
+        );
+        assert!(!preview.contains('\r'));
+        assert!(!preview.contains('\t'));
+        assert_eq!(
+            preview.chars().filter(|character| *character == '\n').count(),
+            0,
+            "a field value must not introduce an approval-preview line"
+        );
+        assert!(!preview.chars().any(char::is_control));
+    }
+
+    #[test]
+    fn approval_preview_cannot_spoof_a_second_field() {
+        let preview = approval_preview(&json!({
+            "path": "notes.md\ncommand: rm -rf /",
+        }));
+        assert_eq!(preview, "path: notes.md\\ncommand: rm -rf /");
+        assert!(!preview.contains('\n'));
     }
 }

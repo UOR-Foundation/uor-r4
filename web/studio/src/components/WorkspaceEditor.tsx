@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { AgentClient, TreeEntry } from '../agent/client.js';
+import type { AgentClient, HostGrant, TreeEntry } from '../agent/client.js';
 import { sha256Bytes } from '../agent/hostClient.js';
 import type { StudioSettings } from '../adapters/workflow.js';
 import { saveActiveFile, saveActiveFileCopy } from '../adapters/fileSave.js';
@@ -53,6 +53,9 @@ export function WorkspaceEditor({ store, files, operations, onError, onSuccess, 
     const localUploads = useRef(false);
     const [, setRevision] = useState(0);
     const [tree, setTree] = useState<TreeState>({ phase: 'loading', nodes: [], meta: emptyMeta, error: null });
+    const [grants, setGrants] = useState<HostGrant[]>([]);
+    const [grantId, setGrantId] = useState('');
+    const grantIdRef = useRef('');
     const refresh = () => setRevision((value) => value + 1);
     const report = (error: unknown, operation: string) => { if (mounted.current) onError(error instanceof Error ? error.message : String(error), operation); };
     const succeed = (operation: string) => { if (mounted.current) onSuccess(operation); };
@@ -61,7 +64,7 @@ export function WorkspaceEditor({ store, files, operations, onError, onSuccess, 
         syncWorkspaceSummary(store, summary);
     }
 
-    async function loadTree() {
+    async function loadTree(requestedGrantId?: string) {
         if (agentClient === null) {
             if (mounted.current) setTree({ phase: 'ready', nodes: [], meta: emptyMeta, error: null });
             return;
@@ -72,7 +75,60 @@ export function WorkspaceEditor({ store, files, operations, onError, onSuccess, 
         try {
             const capabilities = await agentClient.hostCapabilities();
             localUploads.current = !capabilities.tree;
-            const page = capabilities.tree ? await agentClient.treePage({ source: 'host' }) : await agentClient.treePage();
+            if (!capabilities.tree) {
+                if (mounted.current && treeVersion.current === version) {
+                    setGrants([]);
+                    setGrantId('');
+                    grantIdRef.current = '';
+                }
+                const page = await agentClient.treePage();
+                if (!mounted.current || treeVersion.current !== version) return;
+                setTree({
+                    phase: 'ready',
+                    nodes: fileNodes(page.entries),
+                    meta: { truncated: page.truncated, truncatedReported: page.truncatedReported, symlinksSkipped: page.symlinksSkipped, readErrors: page.readErrors },
+                    error: null,
+                });
+                return;
+            }
+            if (typeof agentClient.hostSupportsGrants !== 'function' || !agentClient.hostSupportsGrants()) {
+                const page = await agentClient.treePage({ source: 'host' });
+                if (!mounted.current || treeVersion.current !== version) return;
+                setTree({
+                    phase: 'ready',
+                    nodes: fileNodes(page.entries),
+                    meta: { truncated: page.truncated, truncatedReported: page.truncatedReported, symlinksSkipped: page.symlinksSkipped, readErrors: page.readErrors },
+                    error: null,
+                });
+                return;
+            }
+            const available = await agentClient.grants();
+            if (!mounted.current || treeVersion.current !== version) return;
+            setGrants(available);
+            if (available.length === 0) {
+                setGrantId('');
+                grantIdRef.current = '';
+                setTree({
+                    phase: 'error',
+                    nodes: [],
+                    meta: emptyMeta,
+                    error: 'File browsing requires an approved local folder grant. The local companion reports no approved folders.',
+                });
+                return;
+            }
+            const preferred = requestedGrantId ?? grantIdRef.current;
+            const selected = available.some((grant) => grant.grantId === preferred)
+                ? preferred
+                : available.length === 1
+                  ? available[0]!.grantId
+                  : '';
+            setGrantId(selected);
+            grantIdRef.current = selected;
+            if (selected === '') {
+                setTree({ phase: 'ready', nodes: [], meta: emptyMeta, error: null });
+                return;
+            }
+            const page = await agentClient.treePage({ source: 'host', grantId: selected });
             if (!mounted.current || treeVersion.current !== version) return;
             setTree({
                 phase: 'ready',
@@ -210,6 +266,25 @@ export function WorkspaceEditor({ store, files, operations, onError, onSuccess, 
             </div></header>
             <p class="editor-status">File: {state.file.phase}{state.file.path ? ` · ${state.file.path}` : ' · No file open'}</p>
             {state.file.error && <p role="alert" class="workbench-alert">{state.file.error}</p>}
+            {grants.length > 1 && <div class="workspace-grant">
+                <label for="workspace-grant-select">Approved folder</label>
+                <select
+                    id="workspace-grant-select"
+                    aria-label="Approved folder"
+                    value={grantId}
+                    onChange={(event) => {
+                        const value = event.currentTarget.value;
+                        setGrantId(value);
+                        grantIdRef.current = value;
+                        void loadTree(value);
+                    }}
+                >
+                    <option value="">Select an approved folder</option>
+                    {grants.map((grant) => <option key={grant.grantId} value={grant.grantId}>{grant.path}</option>)}
+                </select>
+                {grantId === '' && <p class="workspace-grant-prompt">Choose an approved folder before browsing host files.</p>}
+            </div>}
+            {grants.length === 1 && <p class="workspace-grant-single">Approved folder: {grants[0]!.path}</p>}
             <FileTree
                 nodes={tree.nodes}
                 meta={tree.meta}

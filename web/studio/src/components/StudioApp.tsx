@@ -209,6 +209,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         if (agentClient === null) return;
         void agentClient.archiveTask({ taskId, archived }).then(() => { setTaskList({ phase: 'ready', message: null }); setTaskRevision((value) => value + 1); }).catch(reportTaskFailure);
     };
+    const [creatingTask, setCreatingTask] = useState(false);
     const selectTask = (taskId: string) => {
         if (agentClient === null) return;
         agentClient.store.selectTask(taskId);
@@ -225,6 +226,24 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
         setDetailOpen(false);
         setFocusTaskId(null);
         setTaskRevision((value) => value + 1);
+    };
+    const createTask = () => {
+        if (agentClient === null || creatingTask) return;
+        setCreatingTask(true);
+        void agentClient.createTask({ title: 'New task' }).then((task) => {
+            selectTask(task.taskId);
+            setDetailOpen(false);
+            setTaskList({ phase: 'ready', message: null });
+            setTaskRevision((value) => value + 1);
+        }).catch(reportTaskFailure).finally(() => setCreatingTask(false));
+    };
+    const startNewRun = () => {
+        setActiveSection('agent');
+        setDetailOpen(false);
+        setTaskRevision((value) => value + 1);
+        window.setTimeout(() => {
+            document.querySelector<HTMLTextAreaElement>('#studio-typed-root textarea[aria-label="Prompt"]')?.focus();
+        }, 0);
     };
     const closeDetail = () => {
         const taskId = agentClient?.store.snapshot().selectedTaskId ?? null;
@@ -251,7 +270,7 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     ];
     const renderSection = (section: StudioSection, secondary = false) => {
         const idPrefix = secondary ? 'secondary-' : '';
-        if (section === 'agent') return <AgentComposer key={`${state.session.activeId || 'new'}:${state.session.revision}:${sessionRevision}`} store={store} sessions={sessions} files={files} ui={ui} generation={agent} draft={agentDraft} pasted={agentPasted} onDraftChange={setAgentDraft} onPastedChange={setAgentPasted} agentClient={agentClient} agentTask={selectedRuntime?.task ?? null} activeRun={selectedRuntime?.activeRun ?? null} unresolvedRun={selectedRuntime?.unresolvedRun ?? false} runtimeTasksLoading={taskList.phase === 'loading'} runtimeTasksReady={taskList.phase === 'ready'} runtimeTaskCount={tasks.length} showTaskDetail={detailOpen} onTaskBack={closeDetail} onOpenSurface={(surface) => setActiveSection(surface === 'changes' ? 'changes' : 'terminal')} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} download={download} />;
+        if (section === 'agent') return <AgentComposer key={`${state.session.activeId || 'new'}:${state.session.revision}:${sessionRevision}`} store={store} sessions={sessions} files={files} ui={ui} generation={agent} draft={agentDraft} pasted={agentPasted} onDraftChange={setAgentDraft} onPastedChange={setAgentPasted} agentClient={agentClient} agentTask={selectedRuntime?.task ?? null} activeRun={selectedRuntime?.activeRun ?? null} unresolvedRun={selectedRuntime?.unresolvedRun ?? false} runtimeTasksLoading={taskList.phase === 'loading'} runtimeTasksReady={taskList.phase === 'ready'} runtimeTaskCount={tasks.length} showTaskDetail={detailOpen} onTaskBack={closeDetail} onNewRun={startNewRun} onOpenSurface={(surface) => setActiveSection(surface === 'changes' ? 'changes' : 'terminal')} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} download={download} />;
         if (section === 'workspace') return <WorkspaceEditor store={store} files={files} operations={operations} onError={reportFile} onSuccess={succeed} settings={editorSettings} agentClient={agentClient} />;
         if (section === 'changes') return <ChangesPanel actions={desktopActions} files={files} idPrefix={idPrefix} agentClient={agentClient} taskId={selectedTaskId} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} />;
         if (section === 'pr') return <PrPanel summary={null} unavailableReason="No local or imported pull request summary is available in this session." />;
@@ -273,6 +292,8 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
             onSelect={selectTask}
             onPin={pinTask}
             onArchive={archiveTask}
+            onCreate={agentClient !== null && taskList.phase === 'ready' ? createTask : undefined}
+            createPending={creatingTask}
             selectedTaskId={selectedTaskId}
             runtimeUnavailable={taskList.phase === 'runtime_unavailable'}
             loading={taskList.phase === 'loading'}

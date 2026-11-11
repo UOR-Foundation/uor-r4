@@ -516,3 +516,101 @@ describe('TaskDetail', () => {
         expect(buttonNamed('Retry')).toBeNull();
     });
 });
+
+describe('TaskDetail restored and archived honesty', () => {
+    it('does_not_show_the_background_service_copy_for_an_archived_hold', async () => {
+        const value = fixture([queued(0), started(1)]);
+        const archived: TaskView = {
+            ...value.task,
+            archived: true,
+            state: 'archived',
+            hold: {
+                reason: 'waiting_for_background',
+                run_id: RUN_ID,
+                tool_call_id: 'tool_1',
+            },
+        };
+        await act(async () => {
+            render(<TaskDetail task={archived} client={value.client} onBack={vi.fn()} onOpenSurface={vi.fn()} />, host);
+            await Promise.resolve();
+        });
+        expect(host.querySelector('[data-static-background]')).toBeNull();
+    });
+
+    it('disables_a_restored_approval_when_the_page_has_no_active_owner', async () => {
+        const value = fixture([
+            queued(0),
+            started(1),
+            event(2, 'tool.requested', {
+                tool_call_id: 'tool_1',
+                tool: 'write_file',
+                arguments_digest: DIGEST,
+                arguments_preview: '{"path":"notes.md"}',
+            }),
+            event(3, 'tool.approval_required', {
+                approval_id: 'apr_1111111111111111',
+                tool_call_id: 'tool_1',
+                tool: 'write_file',
+                scope: 'tool:write_file',
+                request_digest: DIGEST,
+                expires_at_ms: 1_900_000_000_000,
+            }),
+        ]);
+        vi.spyOn(value.client, 'hostCapabilities').mockResolvedValue({
+            tree: false,
+            changes: false,
+            readArtifact: false,
+            terminal: false,
+            git: false,
+            mcp: false,
+            approvals: true,
+        });
+        await renderDetail(value);
+        expect(buttonNamed('Approve')?.disabled).toBe(true);
+        expect(buttonNamed('Deny')?.disabled).toBe(true);
+        expect(host.textContent).toContain('no active run owner');
+        expect(host.textContent).not.toContain('approval is not pending');
+    });
+});
+
+describe('TaskDetail new run path', () => {
+    it('offers_a_new_run_for_a_terminal_task_and_never_for_an_active_run', async () => {
+        const finished = fixture(detailEvents());
+        const onNewRun = vi.fn();
+        await act(async () => {
+            render(
+                <TaskDetail
+                    task={finished.task}
+                    client={finished.client}
+                    onBack={vi.fn()}
+                    onOpenSurface={vi.fn()}
+                    onNewRun={onNewRun}
+                />,
+                host,
+            );
+            await Promise.resolve();
+        });
+        const action = buttonNamed('New run');
+        expect(action).not.toBeNull();
+        expect(action!.disabled).toBe(false);
+        act(() => { action!.click(); });
+        expect(onNewRun).toHaveBeenCalledTimes(1);
+
+        render(null, host);
+        const running = fixture([queued(0), started(1)]);
+        await act(async () => {
+            render(
+                <TaskDetail
+                    task={running.task}
+                    client={running.client}
+                    onBack={vi.fn()}
+                    onOpenSurface={vi.fn()}
+                    onNewRun={onNewRun}
+                />,
+                host,
+            );
+            await Promise.resolve();
+        });
+        expect(buttonNamed('New run')).toBeNull();
+    });
+});

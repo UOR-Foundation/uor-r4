@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { DesktopActions } from '../adapters/desktopActions.js';
 import { desktopRepositoryPath } from '../adapters/desktopActions.js';
 import type { WorkspaceApi } from '../adapters/workflow.js';
-import { AgentClientError, type AgentClient, type ChangesSnapshot } from '../agent/client.js';
+import { AgentClientError, type AgentClient, type ChangesSnapshot, type HostGrant } from '../agent/client.js';
 import type { DiffCommentRecord } from '../agent/store.js';
 import { DiffReview, createUploadedSnapshot, snapshotFileLines, type DiffComment, type DiffCommentDraft, type DiffSource, type DiffScope } from './DiffReview.js';
+import { isActiveRun } from './SendModeControls.js';
 import { Icon } from './ui/Icon.js';
 
 interface DesktopPanelProps { actions: DesktopActions; files: WorkspaceApi; idPrefix?: string }
@@ -51,6 +52,13 @@ export function ChangesPanel({ actions, files, copy, idPrefix = '', agentClient 
     const [comments, setComments] = useState<DiffComment[]>([]);
     const [commentError, setCommentError] = useState<string | null>(null);
     const [commentRevision, setCommentRevision] = useState(0);
+    const [grants, setGrants] = useState<HostGrant[]>([]);
+    const [grantId, setGrantId] = useState('');
+    const [grantsLoaded, setGrantsLoaded] = useState(agentClient === null);
+    const [grantError, setGrantError] = useState<string | null>(null);
+    const grantCapability = agentClient !== null
+        && typeof agentClient.hostSupportsGrants === 'function'
+        && agentClient.hostSupportsGrants();
     const [loadedKey, setLoadedKey] = useState<string | null>(null);
     const [commentsKey, setCommentsKey] = useState<string | null>(null);
     const reviewOperation = useRef(0);
@@ -76,6 +84,35 @@ export function ChangesPanel({ actions, files, copy, idPrefix = '', agentClient 
     useEffect(() => { operation.current += 1; setRefreshing(false); setSummary(''); setDiff(''); setDisplayDiff(''); diffRef.current = ''; return () => { operation.current += 1; }; }, [revision]);
 
     useEffect(() => {
+        let active = true;
+        if (!grantCapability) {
+            setGrants([]);
+            setGrantId('');
+            setGrantsLoaded(agentClient === null);
+            setGrantError(null);
+            return () => { active = false; };
+        }
+        setGrantsLoaded(false);
+        void agentClient.grants().then(
+            (available) => {
+                if (!active) return;
+                setGrants(available);
+                setGrantId(available.length === 1 ? available[0]!.grantId : '');
+                setGrantsLoaded(true);
+                setGrantError(null);
+            },
+            (error: unknown) => {
+                if (!active) return;
+                setGrants([]);
+                setGrantId('');
+                setGrantsLoaded(true);
+                setGrantError(`Approved folders could not be loaded: ${error instanceof Error ? error.message : String(error)}`);
+            },
+        );
+        return () => { active = false; };
+    }, [agentClient]);
+
+    useEffect(() => {
         const request = ++reviewOperation.current;
         const currentKey = `${taskId ?? ''}:${scope}`;
         setSnapshot(null);
@@ -93,10 +130,32 @@ export function ChangesPanel({ actions, files, copy, idPrefix = '', agentClient 
             setReviewLoading(false);
             return () => { reviewOperation.current += 1; };
         }
+        const requiresGrant = scope === 'branch' && grantCapability;
+        if (requiresGrant && (!grantsLoaded || grantError !== null || grants.length === 0 || grantId === '')) {
+            if (!grantsLoaded) {
+                setReviewLoading(true);
+            } else {
+                setReviewLoading(false);
+                setSnapshot(null);
+                setSource(null);
+                setLoadedKey(null);
+                setReviewError(
+                    grantError ??
+                        (grants.length === 0
+                            ? 'Branch changes require an approved local folder grant. The local companion reports no approved folders.'
+                            : null),
+                );
+            }
+            return () => { reviewOperation.current += 1; };
+        }
         setReviewLoading(true);
         void (async () => {
             try {
-                const result = await agentClient.changesSnapshot({ taskId, scope });
+                const result = await agentClient.changesSnapshot({
+                    taskId,
+                    scope,
+                    ...(requiresGrant ? { grantId } : {}),
+                });
                 if (request !== reviewOperation.current) return;
                 setSnapshot(result);
                 setSource(scope === 'last_turn' ? 'browser' : 'host');
@@ -115,7 +174,7 @@ export function ChangesPanel({ actions, files, copy, idPrefix = '', agentClient 
             }
         })();
         return () => { reviewOperation.current += 1; };
-    }, [agentClient, taskId, scope, uploaded]);
+    }, [agentClient, taskId, scope, uploaded, grantsLoaded, grants, grantId, grantError, grantCapability]);
 
     useEffect(() => {
         let active = true;
@@ -218,6 +277,12 @@ export function ChangesPanel({ actions, files, copy, idPrefix = '', agentClient 
         setCommentRevision((value) => value + 1);
     }
 
+    const selectedTask = agentClient?.store?.snapshot().tasks.find((task) => task.taskId === taskId) ?? null;
+    const selectedRun = selectedTask?.latestRunId === null || selectedTask?.latestRunId === undefined
+        ? null
+        : selectedTask.runs.find((run) => run.runId === selectedTask.latestRunId) ?? null;
+    const runActive = isActiveRun(selectedRun);
+
     return <section aria-label="Changes" class="desktop-panel changes-panel"><header class="panel-heading"><div><h1>Changes</h1><p>Review the working tree before choosing what to ship.</p></div><span class="panel-icon"><Icon name="changes" /></span></header>
         <section class="changes-review" aria-label="Task changes review">
             <div class="diff-upload">
@@ -225,6 +290,20 @@ export function ChangesPanel({ actions, files, copy, idPrefix = '', agentClient 
                 <input id={id('diffUpload')} type="file" multiple accept=".diff,.patch,.txt,.md,text/plain" onChange={(event) => { void upload(event.currentTarget); }} />
                 {uploaded !== null && <button id={id('btnClearUpload')} type="button" onClick={() => { setLoadedKey(null); setSnapshot(null); setSource(null); setReviewLoading(true); setUploaded(null); }}>Remove uploaded diff</button>}
             </div>
+            {scope === 'branch' && uploaded === null && grants.length > 1 && <div class="diff-grant">
+                <label for={id('diffGrant')}>Approved folder</label>
+                <select
+                    id={id('diffGrant')}
+                    aria-label="Approved folder"
+                    value={grantId}
+                    onChange={(event) => { setGrantId(event.currentTarget.value); setLoadedKey(null); }}
+                >
+                    <option value="">Select an approved folder</option>
+                    {grants.map((grant) => <option key={grant.grantId} value={grant.grantId}>{grant.path}</option>)}
+                </select>
+                {grantId === '' && <p class="diff-grant-prompt">Choose an approved folder before loading branch changes.</p>}
+            </div>}
+            {scope === 'branch' && uploaded === null && grants.length === 1 && <p class="diff-grant-single">Approved folder: {grants[0]!.path}</p>}
             {commentError !== null && <p class="panel-summary" role="alert">{commentError}</p>}
             <DiffReview
                 taskId={taskId}
@@ -241,7 +320,9 @@ export function ChangesPanel({ actions, files, copy, idPrefix = '', agentClient 
                         ? 'Select a browser task to add a local comment.'
                         : !reviewReady || reviewLoading
                           ? 'Loading this change source; wait for the new snapshot before commenting.'
-                          : null
+                          : runActive
+                            ? 'Local comments can be added after the current run finishes; this run is still active.'
+                            : null
                 }
                 idPrefix={id('diffReview-')}
             />

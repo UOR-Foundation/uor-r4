@@ -530,3 +530,28 @@ describe('TaskRail empty and failure states', () => {
         expect(host.querySelector('nav[aria-label="Tasks and local sessions"]')?.textContent).not.toMatch(/\b[1-9]\d* tasks?\b/);
     });
 });
+
+describe('TaskRail task creation', () => {
+    it('offers_a_native_new_task_action_and_labels_synthetic_replay_output', () => {
+        const onCreate = vi.fn();
+        renderRail({ onCreate });
+        const action = host.querySelector<HTMLButtonElement>('[data-action="new-task"]');
+        expect(action).not.toBeNull();
+        expect(action!.type).toBe('button');
+        expect(action!.textContent).toBe('New task');
+        expect(host.querySelector('nav[aria-label="Tasks and local sessions"]')?.textContent).toContain(
+            'deterministic synthetic replay',
+        );
+        act(() => { action!.click(); });
+        expect(onCreate).toHaveBeenCalledTimes(1);
+    });
+
+    it('disables_creation_while_the_owner_is_creating_or_unavailable', () => {
+        renderRail({ onCreate: vi.fn(), createPending: true });
+        expect(host.querySelector<HTMLButtonElement>('[data-action="new-task"]')!.disabled).toBe(true);
+
+        render(null, host);
+        renderRail({ runtimeUnavailable: true });
+        expect(host.querySelector('[data-action="new-task"]')).toBeNull();
+    });
+});

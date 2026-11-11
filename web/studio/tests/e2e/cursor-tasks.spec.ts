@@ -428,3 +428,76 @@ test.describe('Task 14 browser task detail, timeline, approvals and errors', () 
         expect(after.runId).toBe(seeded.runId);
     });
 });
+
+test.describe('Final fix: restored run and approval reconciliation', () => {
+    test('restored_run_stop_is_a_durable_safe_boundary_and_allows_a_new_run', async ({ page }) => {
+        await openStudio(page);
+        await call<Outcome>(page, 'open');
+        const seeded = await call<{ taskId: string; runId: string }>(page, 'createTaskAndEvents', {
+            mode: 'message',
+            title: 'Restored stop task',
+        });
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        await selectTask(page, seeded.taskId);
+        await expect(detail(page).locator('.run-status-label')).toHaveText('Running');
+
+        const stop = detail(page).locator('.run-status').getByRole('button', { name: 'Stop', exact: true });
+        await expect(stop).toBeEnabled();
+        await stop.click();
+        await expect(detail(page).locator('.run-status-label')).toHaveText('Cancelled');
+        await expect(detail(page).locator('.run-status')).not.toContainText('already terminal');
+        await expect(detail(page).locator('.run-status').getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
+        const stopped = (await call<Outcome>(page, 'taskSnapshotForTest', seeded.taskId))
+            .record as LiveRunSnapshot;
+        expect(stopped.runId).toBe(seeded.runId);
+        expect(stopped.runState).toBe('cancelled');
+
+        const newRun = detail(page).getByRole('button', { name: 'New run', exact: true });
+        await expect(newRun).toBeVisible();
+        await newRun.click();
+        await expect(detail(page).locator('[data-task-detail-header]')).toHaveCount(0);
+        const prompt = page.locator('#studio-typed-root textarea[aria-label="Prompt"]');
+        await prompt.fill('second run after a restored stop');
+        await prompt.press('Enter');
+        await expect(page.locator(`#studio-typed-root [data-task-id="${seeded.taskId}"] .task-state`)).toHaveText('Running');
+        const next = (await call<Outcome>(page, 'taskSnapshotForTest', seeded.taskId))
+            .record as LiveRunSnapshot;
+        expect(next.runId).not.toBe(seeded.runId);
+        expect(next.runState).toBe('running');
+        const stopNext = page.locator('#studio-typed-root .composer-run-modes').getByRole('button', { name: 'Stop run', exact: true });
+        await expect(stopNext).toBeEnabled();
+        await stopNext.click();
+        await expect(page.locator(`#studio-typed-root [data-task-id="${seeded.taskId}"] .task-state`)).toHaveText('Cancelled');
+    });
+
+    test('restored_approval_reports_no_active_resolver_after_reload', async ({ page }) => {
+        await openStudio(page);
+        await call<Outcome>(page, 'open');
+        const seeded = await call<Outcome>(page, 'seedPendingApprovalForTest');
+        expect(seeded.ok, JSON.stringify(seeded)).toBe(true);
+        const taskId = (seeded.record as { taskId: string }).taskId;
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        await selectTask(page, taskId);
+        const card = detail(page).locator('[data-approval-id="appr_reload_approval"]');
+        await expect(card.getByRole('button', { name: 'Approve', exact: true })).toBeDisabled();
+        await expect(card.getByRole('button', { name: 'Deny', exact: true })).toBeDisabled();
+
+        const pending = await call<Outcome>(page, 'pendingApprovalsForTest', taskId);
+        expect(pending.ok, JSON.stringify(pending)).toBe(true);
+        const record = pending.record as {
+            pending: unknown[];
+            resolvable: boolean[];
+        };
+        expect(record.pending).toHaveLength(1);
+        expect(record.resolvable).toEqual([false]);
+
+        const refused = await call<Outcome>(page, 'resolveRestoredApprovalForTest', 'appr_reload_approval');
+        expect(refused.ok).toBe(false);
+        expect(refused.code).toBe('approval_forbidden');
+        // The static host has no approval authority, so the existing static
+        // guidance stays; the runtime surface proves no active owner exists.
+        await expect(card).toContainText('This action needs host approval. Approve it in the local companion.');
+    });
+});

@@ -454,13 +454,35 @@ fn task_summary_derives_state_from_active_run() {
     assert_eq!(summary.state(), TaskState::WaitingForApproval);
 
     summary.active_run = Some(ActiveRun {
+        run_id: run_id.clone(),
+        state: RunState::Finished,
+    });
+    assert_eq!(summary.state().as_str(), "finished");
+
+    for (state, label) in [
+        (RunState::Failed, "failed"),
+        (RunState::Cancelled, "cancelled"),
+        (RunState::Expired, "expired"),
+    ] {
+        summary.active_run = Some(ActiveRun {
+            run_id: run_id.clone(),
+            state,
+        });
+        assert_eq!(
+            summary.state().as_str(),
+            label,
+            "a terminal run must not project as idle"
+        );
+    }
+
+    summary.hold = true;
+    summary.active_run = Some(ActiveRun {
         run_id,
         state: RunState::Finished,
     });
-    assert_eq!(summary.state(), TaskState::Idle);
+    assert_eq!(summary.state(), TaskState::WaitingForBackground);
 
     summary.active_run = None;
-    summary.hold = true;
     assert_eq!(summary.state(), TaskState::WaitingForBackground);
 
     summary.hold = false;

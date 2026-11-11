@@ -2651,6 +2651,72 @@ describe('Tauri host bridge adapter', () => {
         });
     });
 
+    test('tauri_transport_exposes_validated_grants_through_host_client', async () => {
+        const bridge: TauriHostBridge = {
+            hasChannel: false,
+            async invoke(command) {
+                if (command !== 'agent_grants') {
+                    throw new Error(`unexpected Tauri command ${command}`);
+                }
+                return [
+                    {
+                        grant_id: 'gr_9a3c5e7b1d2f4a60',
+                        path: '/tmp/studio-project',
+                    },
+                    {
+                        grant_id: 'gr_0b1d2f4a6c8e9a30',
+                        path: '/tmp/other-project',
+                    },
+                ];
+            },
+            channel(): TauriChannelHandle {
+                throw new Error('no channel');
+            },
+        };
+        const transport = new TauriHostTransport({ bridge });
+        const expected = [
+            { grantId: 'gr_9a3c5e7b1d2f4a60', path: '/tmp/studio-project' },
+            { grantId: 'gr_0b1d2f4a6c8e9a30', path: '/tmp/other-project' },
+        ];
+        await expect(transport.grants()).resolves.toEqual(expected);
+        const client = new HostClient({ transport });
+        await expect(client.grants()).resolves.toEqual(expected);
+        await expect(
+            new HostClient({ transport: new StaticHostTransport() }).grants(),
+        ).resolves.toEqual([]);
+
+        const duplicate = {
+            kind: 'bridge',
+            capabilities: async () => ({
+                kind: 'bridge',
+                hostAvailable: true,
+                streaming: 'none',
+                ...ALL_CAPS,
+            }),
+            invoke: async () => null,
+            subscribe: () => ({ close() {}, cursor: () => null }),
+            approve: async (input: {
+                approvalId: string;
+                decision: 'approved' | 'denied';
+            }) => ({ approvalId: input.approvalId, decision: input.decision }),
+            grants: async () => [
+                { grantId: 'gr_9a3c5e7b1d2f4a60', path: '/tmp/a' },
+                { grantId: 'gr_9a3c5e7b1d2f4a60', path: '/tmp/b' },
+            ],
+        } as unknown as HostTransport;
+        await expect(
+            new HostClient({ transport: duplicate }).grants(),
+        ).rejects.toMatchObject({ code: 'invalid_event' });
+
+        const malformed = {
+            ...duplicate,
+            grants: async () => [{ grantId: 'gr_short', path: '/tmp/a' }],
+        } as unknown as HostTransport;
+        await expect(
+            new HostClient({ transport: malformed }).grants(),
+        ).rejects.toMatchObject({ code: 'invalid_event' });
+    });
+
     test('tauri_transport_resolves_approval_with_exact_input', async () => {
         const payloads: Array<Record<string, unknown>> = [];
         const bridge: TauriHostBridge = {

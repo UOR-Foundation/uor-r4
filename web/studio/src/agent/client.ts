@@ -18,8 +18,8 @@ import {
     toClientError,
 } from './storeTypes.js';
 import type { AgentTaskStore, DiffCommentRecord } from './store.js';
-import type { AddDiffCommentInput, AgentRuntime } from './runtime.js';
-import { HostClient, sha256Bytes, type HostToolResult } from './hostClient.js';
+import type { AddDiffCommentInput, AgentRuntime, RestoredApproval } from './runtime.js';
+import { HostClient, sha256Bytes, type HostGrant, type HostToolResult } from './hostClient.js';
 import {
     AgentTransportHostTransport,
     NullHostTransport,
@@ -27,6 +27,7 @@ import {
 
 export { AgentClientError } from './storeTypes.js';
 export type { AgentIncomingEvent } from '../state/agent.js';
+export type { HostGrant } from './hostClient.js';
 
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const ARTIFACT_ID_PATTERN = /^art_[0-9a-f]{64}$/;
@@ -802,7 +803,10 @@ export class AgentClient {
         const taskStore = this.requireReady();
         if (this.runtime !== null) return this.runtime.readDiffComments(taskId);
         if (taskStore !== null) return taskStore.readDiffComments(taskId);
-        return [];
+        throw new AgentClientError(
+            'runtime_unavailable',
+            'durable local comments require the browser task store',
+        );
     }
 
     async readArtifact(input: ReadArtifactInput): Promise<ArtifactContent> {
@@ -914,6 +918,27 @@ export class AgentClient {
         }
         this.requireTransport();
         return this.hostClient.capabilities();
+    }
+
+    /** Host-approved folders through the existing host client. */
+    async grants(): Promise<HostGrant[]> {
+        return this.hostClient.grants();
+    }
+
+    /** Whether the host transport can supply approved-folder grants at all. */
+    hostSupportsGrants(): boolean {
+        return this.hostClient.supportsGrants();
+    }
+
+    /** Pending approvals replayed from the verified log, not a new authority. */
+    async pendingApprovals(taskId?: string): Promise<RestoredApproval[]> {
+        if (this.runtime === null) return [];
+        return this.runtime.pendingApprovals(taskId);
+    }
+
+    /** True only while a live active control can resolve this approval. */
+    approvalResolvable(approvalId: string): boolean {
+        return this.runtime?.approvalResolvable(approvalId) ?? false;
     }
 
     async dispose(): Promise<void> {

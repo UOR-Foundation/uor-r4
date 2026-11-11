@@ -1171,3 +1171,45 @@ describe('StudioApp runtime task detail', () => {
         await vi.waitFor(() => expect(document.activeElement).toBe(group.querySelector('summary')));
     });
 });
+
+describe('StudioApp runtime task creation', () => {
+    it('creates_and_selects_a_first_task_through_the_existing_agent_owner', async () => {
+        const transport = new FixtureTransport();
+        const client = new AgentClient({ transport });
+        const store = new LifecycleStore();
+        act(() => {
+            render(
+                <StudioApp
+                    store={store}
+                    adapter={makeModelAdapter()}
+                    sources={makeSources()}
+                    files={makeFiles()}
+                    sessions={makeSessions()}
+                    ui={makeUi()}
+                    download={vi.fn()}
+                    agentClient={client}
+                />,
+                host,
+            );
+        });
+        await vi.waitFor(() => expect(host.querySelector('[data-action="new-task"]')).not.toBeNull());
+        const action = host.querySelector<HTMLButtonElement>('[data-action="new-task"]')!;
+        await act(async () => {
+            action.click();
+            await Promise.resolve();
+        });
+        expect(transport.calls.filter((call) => call.method === 'createTask')).toHaveLength(1);
+        expect(transport.calls.find((call) => call.method === 'createTask')?.payload).toMatchObject({
+            title: 'New task',
+        });
+        await vi.waitFor(() =>
+            expect(client.store.snapshot().selectedTask?.title).toBe('New task'),
+        );
+        expect(host.querySelector('#studio-typed-root [data-task-detail-header]')).toBeNull();
+        expect(host.querySelector('textarea[aria-label="Prompt"]')).not.toBeNull();
+        await vi.waitFor(() =>
+            expect(host.querySelector<HTMLButtonElement>('.send-button')?.disabled).toBe(true),
+        );
+        expect(host.textContent).not.toContain('Select a task before sending');
+    });
+});

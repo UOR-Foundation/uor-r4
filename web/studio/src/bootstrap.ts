@@ -85,7 +85,9 @@ export function createStudioHostClient(
 // instead of constructing a second store or writer.
 export function createStudioAgentOwner(options: StudioAgentOwnerOptions = {}): StudioAgentOwner {
     const store = createAgentStore();
-    const modelPort = options.modelPort ?? new ReplayModelPort();
+    // A deterministic synthetic replay stream with visible pacing so a local
+    // run can be stopped honestly before it finishes. Still not an R4 model.
+    const modelPort = options.modelPort ?? new ReplayModelPort({ paceMs: 500 });
     const host =
         options.hostClient !== undefined
             ? options.hostClient === null

@@ -8,6 +8,7 @@ export interface ApprovalHost {
 export interface ApprovalCardProps {
     approval: AgentApprovalView;
     hostIdentity: ApprovalHost | null;
+    resolvable?: boolean;
     onResolve(approvalId: string, decision: 'approved' | 'denied'): void;
 }
 
@@ -27,9 +28,11 @@ function decisionLabel(decision: AgentApprovalView['decision']): string | null {
 // The page is never the approval authority. The only evidence that can enable
 // a decision is a host capability handshake carried by hostIdentity; without
 // it the controls stay disabled and the exact companion guidance is shown.
-export function ApprovalCard({ approval, hostIdentity, onResolve }: ApprovalCardProps) {
+export function ApprovalCard({ approval, hostIdentity, resolvable = true, onResolve }: ApprovalCardProps) {
     const resolved = decisionLabel(approval.decision);
-    const canResolve = resolved === null && hostIdentity?.canApprove === true;
+    const hostCanApprove = hostIdentity?.canApprove === true;
+    const canResolve = resolved === null && hostCanApprove && resolvable;
+    const ownerless = resolved === null && hostCanApprove && !resolvable;
     const expiry = expiryISO(approval.expiresAtMs);
     return <article class="approval-card" data-approval-id={approval.approvalId} aria-label="Approval required">
         <header class="approval-heading"><h2>Approval required</h2><span class="approval-state">{resolved === null ? 'Pending host decision' : resolved}</span></header>
@@ -39,7 +42,7 @@ export function ApprovalCard({ approval, hostIdentity, onResolve }: ApprovalCard
             <div><dt>Expiry</dt><dd>{expiry === null ? <span data-approval-expiry="unrecorded">Not recorded</span> : <time dateTime={expiry}>{expiry}</time>}</dd></div>
         </dl>
         <p class="approval-host">Host: {hostIdentity === null ? 'not connected' : hostIdentity.id}</p>
-        {!canResolve && resolved === null && <p class="approval-guidance">This action needs host approval. Approve it in the local companion.</p>}
+        {!canResolve && resolved === null && <p class="approval-guidance">{ownerless ? 'This approval has no active run owner in this page, so it cannot be approved or denied here. Start a new run for a new approval.' : 'This action needs host approval. Approve it in the local companion.'}</p>}
         {resolved === null && <div class="approval-actions">
             <button type="button" disabled={!canResolve} onClick={() => onResolve(approval.approvalId, 'approved')}>Approve</button>
             <button type="button" disabled={!canResolve} onClick={() => onResolve(approval.approvalId, 'denied')}>Deny</button>

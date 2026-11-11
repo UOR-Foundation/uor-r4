@@ -7,6 +7,7 @@ export type { TimelineEntry } from './TimelineEvent.js';
 export interface TimelineApproval {
     approval: AgentApprovalView;
     hostIdentity: ApprovalHost | null;
+    resolvable?: boolean;
 }
 
 export interface TaskTimelineProps {
@@ -31,9 +32,9 @@ export function TaskTimeline({ events, approvals, onResolve }: TaskTimelineProps
     return <div class="task-timeline">
         {ordered.map((entry) => entry.kind === 'tool'
             ? <TimelineEvent key={entry.id} event={entry}>
-                {(approvalsByTool.get(entry.toolCall.toolCallId) ?? []).map((approval) => <ApprovalCard key={approval.approval.approvalId} approval={approval.approval} hostIdentity={approval.hostIdentity} onResolve={onResolve} />)}
+                {(approvalsByTool.get(entry.toolCall.toolCallId) ?? []).map((approval) => <ApprovalCard key={approval.approval.approvalId} approval={approval.approval} hostIdentity={approval.hostIdentity} resolvable={approval.resolvable} onResolve={onResolve} />)}
             </TimelineEvent>
             : <TimelineEvent key={entry.id} event={entry} />)}
-        {unmatched.map((entry) => <ApprovalCard key={entry.approval.approvalId} approval={entry.approval} hostIdentity={entry.hostIdentity} onResolve={onResolve} />)}
+        {unmatched.map((entry) => <ApprovalCard key={entry.approval.approvalId} approval={entry.approval} hostIdentity={entry.hostIdentity} resolvable={entry.resolvable} onResolve={onResolve} />)}
     </div>;
 }

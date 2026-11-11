@@ -137,6 +137,10 @@ pub enum TaskState {
     WaitingForApproval,
     WaitingForBackground,
     Cancelling,
+    Finished,
+    Failed,
+    Cancelled,
+    Expired,
     Idle,
 }
 
@@ -149,6 +153,10 @@ impl TaskState {
             TaskState::WaitingForApproval => "waiting_for_approval",
             TaskState::WaitingForBackground => "waiting_for_background",
             TaskState::Cancelling => "cancelling",
+            TaskState::Finished => "finished",
+            TaskState::Failed => "failed",
+            TaskState::Cancelled => "cancelled",
+            TaskState::Expired => "expired",
             TaskState::Idle => "idle",
         }
     }
@@ -195,7 +203,13 @@ impl TaskSummary {
                     if self.hold {
                         TaskState::WaitingForBackground
                     } else {
-                        TaskState::Idle
+                        match active.state {
+                            RunState::Finished => TaskState::Finished,
+                            RunState::Failed => TaskState::Failed,
+                            RunState::Cancelled => TaskState::Cancelled,
+                            RunState::Expired => TaskState::Expired,
+                            _ => TaskState::Idle,
+                        }
                     }
                 }
             };

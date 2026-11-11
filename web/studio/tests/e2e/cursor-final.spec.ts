@@ -899,3 +899,175 @@ test('matrix_planned_evidence_names_reconciled', async () => {
         }
     }
 });
+
+test.describe('Default build independent acceptance', () => {
+    test('default_build_protected_shell_and_1024_boundary', async ({ page }) => {
+        expect(
+            existsSync(join(DEFAULT_BUILD_DIR, 'index.html')),
+            `default build archive missing at ${DEFAULT_BUILD_DIR}`,
+        ).toBe(true);
+        const server = await serveDirectory(DEFAULT_BUILD_DIR);
+        try {
+            for (const width of [1440, 1024, 390]) {
+                await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+                await page.goto(`${server.url}/?typed=1`);
+                const root = page.locator('#studio-typed-root');
+                await expect(root).toHaveAttribute('data-active', 'true');
+                expect(await page.evaluate(() => typeof (window as unknown as { __studioTest?: unknown }).__studioTest)).toBe('undefined');
+                await expect(root.locator('.task-workspace')).toBeVisible();
+                for (const selector of PROTECTED_SELECTORS) {
+                    await expect(root.locator(selector).first(), `${width}: ${selector}`).toHaveCount(1);
+                }
+                const rail = root.locator('[data-region="task-rail"]');
+                if (width === 390) {
+                    await expect(rail).toBeHidden();
+                    await root.locator('[data-action="toggle-projects"]').click();
+                }
+                await expect(rail).toBeVisible();
+                await expect(root.locator('[data-action="new-task"]')).toBeVisible();
+                await expect(root.locator('nav[aria-label="Studio"]').getByRole('button')).toHaveCount(6);
+                await expect(page.locator('a.skip-link')).toHaveCount(1);
+                await expect(page.locator('a.skip-link')).toHaveAttribute('href', '#harness-main');
+            }
+
+            await page.setViewportSize({ width: 1024, height: 900 });
+            await page.goto(`${server.url}/?typed=1`);
+            const root = page.locator('#studio-typed-root');
+            const rail = root.locator('[data-region="task-rail"]');
+            const toggle = root.locator('[data-action="toggle-projects"]');
+            await expect(rail).toBeVisible();
+            await expect(rail).toHaveCSS('position', 'static');
+            await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+            await page.setViewportSize({ width: 1023, height: 900 });
+            await page.goto(`${server.url}/?typed=1`);
+            await expect(rail).toBeHidden();
+            await expect(rail).toHaveCSS('position', 'fixed');
+            await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+            await toggle.click();
+            await expect(rail).toBeVisible();
+            await page.setViewportSize({ width: 1024, height: 900 });
+            await page.waitForTimeout(300);
+            await expect(rail).toBeVisible();
+        } finally {
+            await server.close();
+        }
+    });
+
+    test('default_build_create_run_stop_reload_new_run_without_studio_test', async ({ page }) => {
+        expect(existsSync(join(DEFAULT_BUILD_DIR, 'index.html'))).toBe(true);
+        const server = await serveDirectory(DEFAULT_BUILD_DIR);
+        try {
+            await page.setViewportSize({ width: 1440, height: 900 });
+            await page.goto(`${server.url}/?typed=1`);
+            const root = page.locator('#studio-typed-root');
+            await expect(root).toHaveAttribute('data-active', 'true');
+            expect(await page.evaluate(() => typeof (window as unknown as { __studioTest?: unknown }).__studioTest)).toBe('undefined');
+
+            await root.locator('[data-action="new-task"]').click();
+            const row = root.locator('[data-task-id]').filter({ hasText: 'New task' }).first();
+            await expect(row).toBeVisible();
+            const prompt = root.locator('textarea[aria-label="Prompt"]');
+            await expect(prompt).toBeVisible();
+            await prompt.fill('first default-build prompt');
+            await prompt.press('Enter');
+
+            const stopRun = root.locator('.composer-run-modes').getByRole('button', { name: 'Stop run', exact: true });
+            await expect(stopRun).toBeEnabled();
+            await expect(row.locator('.task-state')).toHaveText('Running');
+            await stopRun.click();
+            await expect(row.locator('.task-state')).toHaveText('Cancelled');
+
+            await page.reload();
+            await expect(root).toHaveAttribute('data-active', 'true');
+            const restored = root.locator('[data-task-id]').filter({ hasText: 'New task' }).first();
+            await expect(restored.locator('.task-state')).toHaveText('Cancelled');
+            await restored.locator('.task-select').click();
+            await expect(root.locator('[data-task-detail-header]')).toBeVisible();
+            await expect(root.locator('.task-detail-status')).toHaveText('Status: Cancelled');
+            await root.getByRole('button', { name: 'New run', exact: true }).click();
+            await expect(root.locator('[data-task-detail-header]')).toHaveCount(0);
+            await expect(prompt).toBeFocused();
+            await page.evaluate(() => {
+                const target = window as unknown as {
+                    __studioToastCalls: string[];
+                    __studioUi: { toast(text: string, tone?: string): void };
+                };
+                target.__studioToastCalls = [];
+                const original = target.__studioUi.toast;
+                target.__studioUi.toast = (text: string, tone?: string) => {
+                    target.__studioToastCalls.push(String(text));
+                    original.call(target.__studioUi, text, tone);
+                };
+            });
+            await prompt.fill('second default-build prompt');
+            await prompt.press('Enter');
+            await page.waitForTimeout(500);
+            expect(await page.evaluate(() => (window as unknown as { __studioToastCalls: string[] }).__studioToastCalls)).toEqual([]);
+            await expect(restored.locator('.task-state')).toHaveText(/Running|Finished/);
+            await restored.locator('.task-select').click();
+            await expect(root.locator('.task-detail-status')).toHaveText('Status: Finished', { timeout: 10_000 });
+            await expect(root.locator('[data-timeline-kind="assistant"]')).toContainText(
+                'Synthetic replay acknowledges: second default-build prompt',
+            );
+            await expect(root.locator('.task-synthetic')).toContainText('not an R4 model');
+        } finally {
+            await server.close();
+        }
+    });
+
+    test('runtime_composer_ime_cjk_and_disabled_enter_on_the_default_build', async ({ page }) => {
+        expect(existsSync(join(DEFAULT_BUILD_DIR, 'index.html'))).toBe(true);
+        const server = await serveDirectory(DEFAULT_BUILD_DIR);
+        try {
+            await page.setViewportSize({ width: 1440, height: 900 });
+            await page.goto(`${server.url}/?typed=1`);
+            const root = page.locator('#studio-typed-root');
+            await expect(root).toHaveAttribute('data-active', 'true');
+            await root.locator('[data-action="new-task"]').click();
+            const row = root.locator('[data-task-id]').filter({ hasText: 'New task' }).first();
+            await expect(row).toBeVisible();
+            const prompt = root.locator('textarea[aria-label="Prompt"]');
+            const cdp = await page.context().newCDPSession(page);
+
+            await prompt.fill('existing ');
+            await prompt.focus();
+            await prompt.evaluate((element) => element.setSelectionRange(9, 9));
+            await cdp.send('Input.imeSetComposition', { text: 'にほん', selectionStart: 3, selectionEnd: 3 });
+            await expect(prompt).toHaveValue('existing にほん');
+            await cdp.send('Input.dispatchKeyEvent', {
+                type: 'keyDown',
+                key: 'Enter',
+                code: 'Enter',
+                windowsVirtualKeyCode: 13,
+                nativeVirtualKeyCode: 13,
+            });
+            await cdp.send('Input.dispatchKeyEvent', {
+                type: 'keyUp',
+                key: 'Enter',
+                code: 'Enter',
+                windowsVirtualKeyCode: 13,
+                nativeVirtualKeyCode: 13,
+            });
+            await expect(row.locator('.task-state')).toHaveText('Idle');
+            await cdp.send('Input.insertText', { text: '日本' });
+            await expect(prompt).toHaveValue('existing 日本');
+
+            await prompt.press('Enter');
+            await expect(row.locator('.task-state')).toHaveText(/Running|Finished/);
+            await expect(root.locator('.send-button')).toBeDisabled();
+            await prompt.fill('disabled during the active run');
+            await prompt.press('Enter');
+            await expect(prompt).toHaveValue('disabled during the active run');
+            await expect(row.locator('.task-state')).toHaveText(/Running|Finished/);
+
+            await expect(row.locator('.task-state')).toHaveText('Finished', { timeout: 10_000 });
+            await row.locator('.task-select').click();
+            await expect(root.locator('[data-timeline-kind="assistant"]')).toContainText(
+                'Synthetic replay acknowledges: existing 日本',
+            );
+            await expect(root.locator('.task-synthetic')).toContainText('not an R4 model');
+        } finally {
+            await server.close();
+        }
+    });
+});

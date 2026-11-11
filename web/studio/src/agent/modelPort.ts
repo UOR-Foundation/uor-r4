@@ -59,6 +59,8 @@ export interface ReplayModelPortOptions {
         modelCalls: number;
     };
     script?: readonly ReplayModelTurn[];
+    /** Deterministic pacing between default replay events; 0 keeps tests immediate. */
+    paceMs?: number;
 }
 
 // Labelled synthetic port. It deterministically produces text, tool, usage,
@@ -77,6 +79,7 @@ export class ReplayModelPort implements ModelPort {
         modelCalls: number;
     } | null;
     private readonly turns: readonly ReplayModelTurn[] | null;
+    private readonly paceMs: number;
     private readonly turnIndexByRun = new Map<string, number>();
 
     constructor(options: ReplayModelPortOptions = {}) {
@@ -88,6 +91,7 @@ export class ReplayModelPort implements ModelPort {
                 : options.script.length === 0
                   ? [[]]
                   : options.script;
+        this.paceMs = Math.max(0, options.paceMs ?? 0);
     }
 
     get scriptPositionCount(): number {
@@ -104,6 +108,7 @@ export class ReplayModelPort implements ModelPort {
             return;
         }
         const text = `${this.chunks.join('')}${request.prompt}`;
+        await this.pause();
         yield { type: 'text-delta', text };
         const usage =
             this.usage === null
@@ -113,8 +118,17 @@ export class ReplayModelPort implements ModelPort {
                       modelCalls: 1,
                   }
                 : this.usage;
+        await this.pause();
         yield { type: 'usage', ...usage };
+        await this.pause();
         yield { type: 'finished', reason: 'stop' };
+    }
+
+    private pause(): Promise<void> {
+        if (this.paceMs === 0) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+            globalThis.setTimeout(resolve, this.paceMs);
+        });
     }
 
     // Completed script positions are evicted oldest-first once the map exceeds

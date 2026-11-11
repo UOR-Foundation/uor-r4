@@ -13,6 +13,8 @@ export interface TaskRailProps {
     onPin(taskId: string, pinned: boolean): void;
     onArchive(taskId: string, archived: boolean): void;
     selectedTaskId: string | null;
+    onCreate?(): void;
+    createPending?: boolean;
     nowMs?: number;
     runtimeUnavailable?: boolean;
     loading?: boolean;
@@ -83,6 +85,8 @@ export function TaskRail({
     onPin,
     onArchive,
     selectedTaskId,
+    onCreate,
+    createPending = false,
     nowMs = Date.now(),
     runtimeUnavailable = false,
     loading = false,
@@ -108,6 +112,10 @@ export function TaskRail({
     return <nav aria-label="Tasks and local sessions" class="task-rail">
         <header class="task-rail-header">
             <h2 class="sidebar-label">Tasks</h2>
+            {onCreate !== undefined && !runtimeUnavailable && error === null && <div class="task-create">
+                <button type="button" class="task-new" data-action="new-task" disabled={createPending} onClick={onCreate}>{createPending ? 'Creating…' : 'New task'}</button>
+                <p class="task-create-hint">Runs use a deterministic synthetic replay fixture, not an R4 model.</p>
+            </div>}
             <p class="task-pin-scope">Pins stay on this device.</p>
         </header>
         <TaskSearch value={query} onInput={onQuery} resultCount={visible.length} totalCount={total} />

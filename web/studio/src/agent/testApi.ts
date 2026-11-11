@@ -2335,6 +2335,9 @@ async function pendingApprovalsForTest(taskId: string): Promise<Outcome> {
             ok: true,
             record: {
                 pending,
+                resolvable: pending.map((approval) =>
+                    runtime.approvalResolvable(approval.approvalId),
+                ),
                 view: liveTaskSnapshot(taskId).approvals,
             },
         };
