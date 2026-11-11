@@ -334,30 +334,20 @@ invariants = ["A repeated cycle of period one through four ends the reply after 
 non_claims = ["Cycle stopping does not recover content displaced by the cycle."]
 
 [[commands]]
-id = "preflight-development"
+id = "preflight"
 role = "verify"
-program = "jq"
-args = ["-e", "-f", "conformance/stack/scenario-preflight-gate.jq", "--arg", "split", "development", "--arg", "base_artifact_sha256", "BASE_SHA256", "--argjson", "corpus_context", "256", "--argjson", "copy_hits", "10", "preflight-development"]
+program = "conformance/stack/preflight-check.sh"
+args = ["BASE_SHA256", "preflight-development", "PREFLIGHT_DEVELOPMENT_SHA256", "preflight-fresh", "PREFLIGHT_FRESH_SHA256"]
 env = []
-inputs = ["scenario-preflight-gate.jq", "preflight-development"]
-outputs = []
-timeout_seconds = 300
-
-[[commands]]
-id = "preflight-fresh"
-role = "verify"
-program = "jq"
-args = ["-e", "-f", "conformance/stack/scenario-preflight-gate.jq", "--arg", "split", "fresh", "--arg", "base_artifact_sha256", "BASE_SHA256", "--argjson", "corpus_context", "256", "--argjson", "copy_hits", "11", "preflight-fresh"]
-env = []
-inputs = ["scenario-preflight-gate.jq", "preflight-fresh"]
+inputs = ["preflight-check.sh", "scenario-preflight-gate.jq", "preflight-development", "preflight-fresh"]
 outputs = []
 timeout_seconds = 300
 
 [[commands]]
 id = "train"
 role = "train"
-program = "cargo"
-args = ["run", "--release", "--locked", "-p", "uor-r4-float-train", "--bin", "train-in-space", "--", "--objective", "cell", "--retain-rates", "1", "--decay-mult", "1", "--lr", "0.001", "--lr-end", "0", "--train-as-served", "1", "--context", "192", "--width", "256", "--hamming-read", "4", "--batch", "16", "--turn-memory", "8", "--turn-memory-reply", "1", "--turn-memory-dropout", "500", "--samples", "6", "--reply-tokens", "48", "--steps", "1024", "--eval-every", "256", "--hamming-copy-latest", "1", "--turn-memory-leave-copied", "1", "--seed", "273"]
+program = "target/release/train-in-space"
+args = ["--data-root", "DATA_ROOT", "--train-split", "TRAIN_SPLIT", "--train-sha256", "TRAIN_SHA256", "--train-mask-sha256", "TRAIN_MASK_SHA256", "--objective", "cell", "--retain-rates", "1", "--decay-mult", "1", "--lr", "0.001", "--lr-end", "0", "--train-as-served", "1", "--context", "192", "--width", "256", "--hamming-read", "4", "--batch", "16", "--turn-memory", "8", "--turn-memory-reply", "1", "--turn-memory-dropout", "500", "--samples", "6", "--reply-tokens", "48", "--steps", "1024", "--eval-every", "256", "--hamming-copy-latest", "1", "--turn-memory-leave-copied", "1", "--seed", "273", "--out", "TRAIN_OUT"]
 env = []
 inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "train-scenarios", "trainer-dev-tokens", "trainer-dev-mask", "tokenizer"]
 outputs = ["model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors", "config.json"]
@@ -367,70 +357,70 @@ timeout_seconds = 7200
 id = "score-base-development"
 role = "score"
 program = "cpu-scenario-grade"
-args = ["BASE_ARTIFACT", "CORPUS_ROOT", "TOKENIZER", "--split", "development", "--max-cases", "1024", "--reply-tokens", "64", "--table-baseline", "1", "--out", "base-development.json"]
+args = ["BASE_ARTIFACT", "CORPUS_ROOT", "TOKENIZER", "--split", "development", "--max-cases", "1024", "--reply-tokens", "64", "--table-baseline", "1", "--out", "SCORE_DIR/base-development.json"]
 env = []
 inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "development-tokens", "development-mask", "development-manifest", "development-scenarios", "tokenizer", "base-artifact"]
-outputs = ["base-development.json"]
+outputs = ["SCORE_DIR/base-development.json"]
 timeout_seconds = 1800
 
 [[commands]]
 id = "score-model-development"
 role = "score"
 program = "cpu-scenario-grade"
-args = ["step-001024.uorlut", "CORPUS_ROOT", "TOKENIZER", "--split", "development", "--max-cases", "1024", "--reply-tokens", "64", "--table-baseline", "1", "--out", "model-development.json"]
+args = ["ARTIFACT_OUT", "CORPUS_ROOT", "TOKENIZER", "--split", "development", "--max-cases", "1024", "--reply-tokens", "64", "--table-baseline", "1", "--out", "SCORE_DIR/model-development.json"]
 env = []
 inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "development-tokens", "development-mask", "development-manifest", "development-scenarios", "tokenizer", "step-001024.uorlut"]
-outputs = ["model-development.json"]
+outputs = ["SCORE_DIR/model-development.json"]
 timeout_seconds = 1800
 
 [[commands]]
 id = "score-base-fresh"
 role = "score"
 program = "cpu-scenario-grade"
-args = ["BASE_ARTIFACT", "CORPUS_ROOT", "TOKENIZER", "--split", "fresh", "--max-cases", "1024", "--reply-tokens", "64", "--table-baseline", "1", "--out", "base-fresh.json"]
+args = ["BASE_ARTIFACT", "CORPUS_ROOT", "TOKENIZER", "--split", "fresh", "--max-cases", "1024", "--reply-tokens", "64", "--table-baseline", "1", "--out", "SCORE_DIR/base-fresh.json"]
 env = []
 inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "fresh-tokens", "fresh-mask", "fresh-manifest", "fresh-scenarios", "tokenizer", "base-artifact"]
-outputs = ["base-fresh.json"]
+outputs = ["SCORE_DIR/base-fresh.json"]
 timeout_seconds = 1800
 
 [[commands]]
 id = "score-model-fresh"
 role = "score"
 program = "cpu-scenario-grade"
-args = ["step-001024.uorlut", "CORPUS_ROOT", "TOKENIZER", "--split", "fresh", "--max-cases", "1024", "--reply-tokens", "64", "--table-baseline", "1", "--out", "model-fresh.json"]
+args = ["ARTIFACT_OUT", "CORPUS_ROOT", "TOKENIZER", "--split", "fresh", "--max-cases", "1024", "--reply-tokens", "64", "--table-baseline", "1", "--out", "SCORE_DIR/model-fresh.json"]
 env = []
 inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "fresh-tokens", "fresh-mask", "fresh-manifest", "fresh-scenarios", "tokenizer", "step-001024.uorlut"]
-outputs = ["model-fresh.json"]
+outputs = ["SCORE_DIR/model-fresh.json"]
 timeout_seconds = 1800
 
 [[commands]]
 id = "classify"
 role = "verify"
 program = "jq"
-args = ["-n", "-f", "conformance/stack/scenario-decision.jq", "--arg", "run_id", "RUN_ID", "--arg", "source_head", "REVIEWED_HEAD", "--arg", "code_pin", "CODE_PIN", "--arg", "implementation_source", "IMPLEMENTATION_SOURCE", "--arg", "job_sha256", "JOB_SHA256", "--arg", "launcher_sha256", "LAUNCHER_SHA256", "--arg", "watcher_sha256", "WATCHER_SHA256", "--arg", "scorer_sha256", "SCORER_SHA256", "--arg", "review_sha256", "REVIEW_SHA256", "--arg", "input_manifest_sha256", "INPUT_MANIFEST_SHA256", "--arg", "bundle_sha256", "BUNDLE_SHA256", "--arg", "base_artifact_sha256", "BASE_SHA256", "--arg", "scenario_receipt_sha256", "SCENARIO_RECEIPT_SHA256", "--arg", "preflight_development_sha256", "PREFLIGHT_DEVELOPMENT_SHA256", "--arg", "preflight_fresh_sha256", "PREFLIGHT_FRESH_SHA256", "--arg", "contract_semantic_blake3", "CONTRACT_SEMANTIC_BLAKE3", "--arg", "artifact_sha256", "MODEL_ARTIFACT_SHA256", "--slurpfile", "base-development", "base-development.json", "--slurpfile", "model-development", "model-development.json", "--slurpfile", "base-fresh", "base-fresh.json", "--slurpfile", "model-fresh", "model-fresh.json"]
+args = ["-n", "-f", "conformance/stack/scenario-decision.jq", "--arg", "run_id", "RUN_ID", "--arg", "source_head", "REVIEWED_HEAD", "--arg", "code_pin", "CODE_PIN", "--arg", "implementation_source", "IMPLEMENTATION_SOURCE", "--arg", "job_sha256", "JOB_SHA256", "--arg", "launcher_sha256", "LAUNCHER_SHA256", "--arg", "watcher_sha256", "WATCHER_SHA256", "--arg", "scorer_sha256", "SCORER_SHA256", "--arg", "review_sha256", "REVIEW_SHA256", "--arg", "input_manifest_sha256", "INPUT_MANIFEST_SHA256", "--arg", "bundle_sha256", "BUNDLE_SHA256", "--arg", "base_artifact_sha256", "BASE_SHA256", "--arg", "scenario_receipt_sha256", "SCENARIO_RECEIPT_SHA256", "--arg", "preflight_development_sha256", "PREFLIGHT_DEVELOPMENT_SHA256", "--arg", "preflight_fresh_sha256", "PREFLIGHT_FRESH_SHA256", "--arg", "contract_semantic_blake3", "CONTRACT_SEMANTIC_BLAKE3", "--arg", "artifact_sha256", "MODEL_ARTIFACT_SHA256", "--slurpfile", "base-development", "SCORE_DIR/base-development.json", "--slurpfile", "model-development", "SCORE_DIR/model-development.json", "--slurpfile", "base-fresh", "SCORE_DIR/base-fresh.json", "--slurpfile", "model-fresh", "SCORE_DIR/model-fresh.json"]
 env = []
-inputs = ["scenario-decision.jq", "scenario-receipt", "preflight-development", "preflight-fresh", "base-development.json", "model-development.json", "base-fresh.json", "model-fresh.json"]
-outputs = ["decision.json"]
+inputs = ["scenario-decision.jq", "scenario-receipt", "preflight-development", "preflight-fresh", "SCORE_DIR/base-development.json", "SCORE_DIR/model-development.json", "SCORE_DIR/base-fresh.json", "SCORE_DIR/model-fresh.json"]
+outputs = ["SCORE_DIR/decision.json"]
 timeout_seconds = 300
 
 [[commands]]
 id = "snapshot"
 role = "export"
-program = "fbs-snapshot"
-args = ["models/step-001024", "step-001024.snapshot.json"]
+program = "target/release/fbs-snapshot"
+args = ["CHECKPOINT_DIR", "SNAPSHOT_OUT"]
 env = []
 inputs = ["model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors", "config.json"]
-outputs = ["step-001024.snapshot.json"]
+outputs = ["SNAPSHOT_OUT"]
 timeout_seconds = 1800
 
 [[commands]]
 id = "export"
 role = "export"
-program = "fbs-export"
-args = ["--raw-gates", "--raw-transition", "--run-config", "config.json", "--stack-contract", "conformance/stack/fbs-deepseek-scenario-smoke.toml", "--stack-contract-semantic-blake3", "SEMANTIC_BLAKE3", "--tokenizer", "tokenizer.json", "SNAPSHOT_JSON", "step-001024.uorlut"]
+program = "target/release/fbs-export"
+args = ["--raw-gates", "--raw-transition", "--run-config", "config.json", "--stack-contract", "conformance/stack/fbs-deepseek-scenario-smoke.toml", "--stack-contract-semantic-blake3", "SEMANTIC_BLAKE3", "--tokenizer", "tokenizer.json", "SNAPSHOT_OUT", "ARTIFACT_OUT"]
 env = []
 inputs = ["model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors", "config.json", "tokenizer", "step-001024.snapshot.json", "fbs-deepseek-scenario-smoke.toml"]
-outputs = ["step-001024.uorlut"]
+outputs = ["ARTIFACT_OUT"]
 timeout_seconds = 1800
 
 [[commands]]
@@ -447,10 +437,10 @@ timeout_seconds = 300
 id = "audit"
 role = "verify"
 program = "cargo"
-args = ["xtask", "stack-audit", "--contract", "conformance/stack/fbs-deepseek-scenario-smoke.toml", "--artifact", "step-001024.uorlut", "--tokenizer", "tokenizer.json", "--config", "config.json", "--checkpoint", "models/step-001024", "--out", "stack-audit.json"]
+args = ["run", "--offline", "--release", "--locked", "-q", "-p", "xtask", "--", "stack-audit", "--contract", "conformance/stack/fbs-deepseek-scenario-smoke.toml", "--artifact", "ARTIFACT_OUT", "--tokenizer", "tokenizer.json", "--config", "config.json", "--checkpoint", "CHECKPOINT_DIR", "--out", "AUDIT_OUT"]
 env = []
 inputs = ["fbs-deepseek-scenario-smoke.toml", "step-001024.uorlut", "tokenizer", "config.json", "model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors"]
-outputs = ["stack-audit.json"]
+outputs = ["AUDIT_OUT"]
 timeout_seconds = 300
 
 [[readings]]

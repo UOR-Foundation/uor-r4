@@ -22,11 +22,15 @@
   | add
 ) == 0 and
 (
-  [.by_archetype | to_entries[]
-   | select(.key != "copy")
-   | .value.distractor_present]
-  | add
+  [.rows[]
+   | select(.scored_question and .archetype != "copy" and .distractor_present)]
+  | length
 ) == 0 and
+(
+  [.rows[]
+   | select(.scored_question and .archetype != "copy")]
+  | length
+) == 882 and
 (
   .table_baseline.by_archetype |
   [to_entries[].value |

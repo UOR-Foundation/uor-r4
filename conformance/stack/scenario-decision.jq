@@ -17,10 +17,15 @@ family($model_fresh; "update") as $update |
   $fresh.by_archetype["no-memory-control"].abstained
 ) as $abstained |
 (
-  [$fresh.by_archetype | to_entries[]
-   | select(.key != "copy")
-   | .value.distractor_present] | add
+  [$fresh.rows[]
+   | select(.scored_question and .archetype != "copy" and .distractor_present)]
+  | length
 ) as $distractors |
+(
+  [$fresh.rows[]
+   | select(.scored_question and .archetype != "copy")]
+  | length
+) as $distractor_denominator |
 family($model_fresh; "copy") as $copy |
 (
   [$fresh.table_baseline.by_archetype.memorize,
@@ -84,6 +89,7 @@ family($model_fresh; "copy") as $copy |
     update: $update
   },
   control_abstentions: $abstained,
+  distractor_denominator: $distractor_denominator,
   non_copy_distractors: $distractors,
   copy_asked_value: $copy,
   previous_token_grounded: $table_grounded,
