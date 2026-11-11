@@ -736,6 +736,32 @@ export class AgentClient {
         if (local !== null) {
             return local;
         }
+        if (input.artifactId !== undefined) {
+            try {
+                if (this.runtime !== null) {
+                    return await this.runtime.readArtifact(input);
+                }
+                if (this.taskStore !== null) {
+                    const durable = await this.taskStore.readArtifact(
+                        input.artifactId,
+                    );
+                    if (durable !== null) {
+                        return {
+                            path: durable.artifact_id,
+                            mediaType: durable.media_type,
+                            sizeBytes: durable.size_bytes,
+                            digest: durable.digest,
+                            bytes: durable.bytes,
+                        };
+                    }
+                }
+            } catch (error) {
+                const clientError = toClientError(error);
+                if (clientError.code !== 'host_unavailable') {
+                    throw clientError;
+                }
+            }
+        }
         const result = await this.hostClient.execute({
             tool: 'artifact.read',
             arguments: {

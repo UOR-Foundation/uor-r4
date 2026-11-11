@@ -49,6 +49,7 @@ import {
     AgentStoreError,
     isPlainObject,
     LEASE_STALE_MS,
+    toClientError,
 } from './storeTypes.js';
 import {
     createAgentStore,
@@ -1474,10 +1475,28 @@ export class AgentRuntime {
         );
     }
 
-    async readArtifact(_input: ReadArtifactInput): Promise<ArtifactContent> {
+    async readArtifact(input: ReadArtifactInput): Promise<ArtifactContent> {
+        if (input.artifactId !== undefined && this.taskStore !== null) {
+            try {
+                const record = await this.taskStore.readArtifact(
+                    input.artifactId,
+                );
+                if (record !== null) {
+                    return {
+                        path: record.artifact_id,
+                        mediaType: record.media_type,
+                        sizeBytes: record.size_bytes,
+                        digest: record.digest,
+                        bytes: record.bytes,
+                    };
+                }
+            } catch (error) {
+                throw toClientError(error);
+            }
+        }
         throw new AgentClientError(
             'host_unavailable',
-            'the browser runtime has no artifact store',
+            'no durable browser artifact is available',
         );
     }
 

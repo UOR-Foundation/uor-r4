@@ -112,6 +112,74 @@ async function readDb(page: Page): Promise<DbSnapshot> {
     }, DB_NAME);
 }
 
+interface SeededArtifact {
+    artifactId: string;
+    mediaType: string;
+    bytes: number[];
+    digest: string;
+}
+
+async function seedArtifact(
+    page: Page,
+    artifactId: string,
+    text: string,
+    mediaType = 'text/plain',
+    digestOverride?: string,
+): Promise<SeededArtifact> {
+    return page.evaluate(
+        async ({ dbName, artifactId, text, mediaType, digestOverride }) => {
+            const request = <T>(input: IDBRequest<T>): Promise<T> =>
+                new Promise<T>((resolve, reject) => {
+                    input.onsuccess = () => resolve(input.result);
+                    input.onerror = () => reject(input.error);
+                });
+            const done = (tx: IDBTransaction): Promise<void> =>
+                new Promise<void>((resolve, reject) => {
+                    tx.oncomplete = () => resolve();
+                    tx.onabort = () => reject(tx.error ?? new Error('transaction aborted'));
+                    tx.onerror = () => reject(tx.error ?? new Error('transaction failed'));
+                });
+            const db = await new Promise<IDBDatabase>((resolve, reject) => {
+                const open = indexedDB.open(dbName);
+                open.onsuccess = () => resolve(open.result);
+                open.onerror = () => reject(open.error);
+            });
+            try {
+                const bytes = new TextEncoder().encode(text);
+                const digestBytes = new Uint8Array(
+                    await crypto.subtle.digest('SHA-256', bytes),
+                );
+                let hex = '';
+                for (const byte of digestBytes) hex += byte.toString(16).padStart(2, '0');
+                const digest = digestOverride ?? `sha256:${hex}`;
+                const tx = db.transaction('artifacts', 'readwrite');
+                await request(
+                    tx.objectStore('artifacts').put(
+                        {
+                            artifact_id: artifactId,
+                            media_type: mediaType,
+                            size_bytes: bytes.byteLength,
+                            digest,
+                            blob: new Blob([bytes], { type: mediaType }),
+                        },
+                        artifactId,
+                    ),
+                );
+                await done(tx);
+                return {
+                    artifactId,
+                    mediaType,
+                    bytes: [...bytes],
+                    digest,
+                };
+            } finally {
+                db.close();
+            }
+        },
+        { dbName: DB_NAME, artifactId, text, mediaType, digestOverride },
+    );
+}
+
 type Mutation =
     | { op: 'corrupt_snapshot'; taskId: string; runId: string }
     | { op: 'truncate_event'; taskId: string; runId: string; generation: number; sequence: number }
@@ -410,6 +478,90 @@ test.describe('browser agent task store', () => {
             last_event_id: created.eventIds[2],
             last_sequence: 2,
             head_digest: created.digests[2],
+        });
+    });
+
+    test('durable_browser_artifact_is_read_without_host_and_returns_defensive_bytes', async ({ page }) => {
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        const seeded = await seedArtifact(
+            page,
+            'art_00000000000000a1',
+            'durable browser artifact',
+        );
+        await seedArtifact(
+            page,
+            'art_00000000000000a2',
+            'corrupt durable artifact',
+            'text/plain',
+            `sha256:${'0'.repeat(64)}`,
+        );
+
+        const result = await page.evaluate(
+            async ({ artifactId, missingId, corruptId }) => {
+                const api = (
+                    window as unknown as {
+                        __studioTest?: {
+                            clientForTest?: () => {
+                                readArtifact(input: {
+                                    artifactId: string;
+                                }): Promise<{
+                                    path: string;
+                                    mediaType: string;
+                                    sizeBytes: number;
+                                    digest: string;
+                                    bytes: Uint8Array;
+                                }>;
+                            } | null;
+                        };
+                    }
+                ).__studioTest;
+                const client = api?.clientForTest?.();
+                if (!client) throw new Error('studio test client is missing');
+                let missingCode: string | null = null;
+                try {
+                    await client.readArtifact({ artifactId: missingId });
+                } catch (error) {
+                    missingCode =
+                        (error as { code?: string }).code ?? null;
+                }
+                let corruptCode: string | null = null;
+                try {
+                    await client.readArtifact({ artifactId: corruptId });
+                } catch (error) {
+                    corruptCode =
+                        (error as { code?: string }).code ?? null;
+                }
+                const first = await client.readArtifact({ artifactId });
+                const firstBytes = [...first.bytes];
+                first.bytes[0] = (first.bytes[0] ?? 0) ^ 0xff;
+                const second = await client.readArtifact({ artifactId });
+                return {
+                    missingCode,
+                    corruptCode,
+                    firstBytes,
+                    secondBytes: [...second.bytes],
+                    path: first.path,
+                    mediaType: first.mediaType,
+                    sizeBytes: first.sizeBytes,
+                    digest: first.digest,
+                };
+            },
+            {
+                artifactId: seeded.artifactId,
+                missingId: 'art_00000000000000ff',
+                corruptId: 'art_00000000000000a2',
+            },
+        );
+
+        expect(result.missingCode).toBe('host_unavailable');
+        expect(result.corruptCode).toBe('snapshot_corrupt');
+        expect(result.firstBytes).toEqual(seeded.bytes);
+        expect(result.secondBytes).toEqual(seeded.bytes);
+        expect(result).toMatchObject({
+            path: seeded.artifactId,
+            mediaType: seeded.mediaType,
+            sizeBytes: seeded.bytes.length,
+            digest: seeded.digest,
         });
     });
 

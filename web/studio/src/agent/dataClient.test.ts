@@ -12,6 +12,8 @@ import {
     type HostTransport,
     type HostTransportCapabilities,
 } from './hostClient.js';
+import type { AgentTaskStore } from './store.js';
+import { AgentStoreError } from './storeTypes.js';
 
 const TASK_ID = 'tsk_0123456789abcdef';
 const RUN_ID = 'run_0123456789abcdef';
@@ -117,6 +119,34 @@ function expectNoUrlArguments(intent: HostToolIntent): void {
     ]) {
         expect(intent.arguments).not.toHaveProperty(key);
     }
+}
+
+interface DurableArtifactFixture {
+    artifact_id: string;
+    media_type: string;
+    size_bytes: number;
+    digest: string;
+    bytes: Uint8Array;
+}
+
+function clientWithDurableArtifact(
+    read: (artifactId: string) => Promise<DurableArtifactFixture | null>,
+    transport: RecordingHostTransport,
+): { client: AgentClient; reads: string[] } {
+    const reads: string[] = [];
+    const taskStore = {
+        readArtifact: async (artifactId: string) => {
+            reads.push(artifactId);
+            return read(artifactId);
+        },
+    } as unknown as AgentTaskStore;
+    return {
+        client: new AgentClient({
+            taskStore,
+            hostClient: new HostClient({ transport }),
+        }),
+        reads,
+    };
 }
 
 describe('AgentClient companion data routing', () => {
@@ -418,5 +448,104 @@ describe('AgentClient companion data routing', () => {
         ]);
         expect(JSON.stringify(intent)).not.toContain('granted');
         expect(JSON.stringify(intent)).not.toContain('approval_receipt');
+    });
+
+    test('read_artifact_prefers_durable_indexeddb_record', async () => {
+        const bytes = new TextEncoder().encode('durable browser bytes');
+        const digest = await sha256Bytes(bytes);
+        const durable: DurableArtifactFixture = {
+            artifact_id: 'art_00000000000000a1',
+            media_type: 'text/plain',
+            size_bytes: bytes.byteLength,
+            digest,
+            bytes,
+        };
+        const hostBytes = new TextEncoder().encode('host artifact');
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {
+                path: 'host.txt',
+                media_type: 'text/plain',
+                size_bytes: hostBytes.byteLength,
+                digest: await sha256Bytes(hostBytes),
+                bytes_base64: base64(hostBytes),
+            }),
+        );
+        const { client, reads } = clientWithDurableArtifact(
+            async (artifactId) =>
+                artifactId === durable.artifact_id ? durable : null,
+            transport,
+        );
+
+        const content = await client.readArtifact({
+            artifactId: durable.artifact_id,
+        });
+        expect(content).toMatchObject({
+            path: durable.artifact_id,
+            mediaType: 'text/plain',
+            sizeBytes: bytes.byteLength,
+            digest,
+        });
+        expect(new TextDecoder().decode(content.bytes)).toBe(
+            'durable browser bytes',
+        );
+        expect(reads).toEqual([durable.artifact_id]);
+        expect(transport.intents).toHaveLength(0);
+    });
+
+    test('read_artifact_missing_durable_record_falls_back_to_host', async () => {
+        const hostBytes = new TextEncoder().encode('host artifact');
+        const hostDigest = await sha256Bytes(hostBytes);
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {
+                path: 'host.txt',
+                media_type: 'text/plain',
+                size_bytes: hostBytes.byteLength,
+                digest: hostDigest,
+                bytes_base64: base64(hostBytes),
+            }),
+        );
+        const { client, reads } = clientWithDurableArtifact(
+            async () => null,
+            transport,
+        );
+
+        const content = await client.readArtifact({
+            artifactId: 'art_00000000000000a2',
+        });
+        expect(content.path).toBe('host.txt');
+        expect(reads).toEqual(['art_00000000000000a2']);
+        expect(transport.intents).toHaveLength(1);
+
+        // Path-only reads keep the existing local-then-host behavior and do
+        // not consult the durable artifact store.
+        const byPath = await client.readArtifact({ path: 'src/missing.txt' });
+        expect(byPath.path).toBe('host.txt');
+        expect(reads).toEqual(['art_00000000000000a2']);
+        expect(transport.intents).toHaveLength(2);
+    });
+
+    test('read_artifact_corrupt_durable_record_is_refused_without_host', async () => {
+        const hostBytes = new TextEncoder().encode('host artifact');
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {
+                path: 'host.txt',
+                media_type: 'text/plain',
+                size_bytes: hostBytes.byteLength,
+                digest: await sha256Bytes(hostBytes),
+                bytes_base64: base64(hostBytes),
+            }),
+        );
+        const { client, reads } = clientWithDurableArtifact(async () => {
+            throw new AgentStoreError(
+                'snapshot_corrupt',
+                'artifact digest does not match its bytes',
+            );
+        }, transport);
+
+        await expect(
+            client.readArtifact({ artifactId: 'art_00000000000000a3' }),
+        ).rejects.toMatchObject({ code: 'snapshot_corrupt' });
+        expect(reads).toEqual(['art_00000000000000a3']);
+        expect(transport.intents).toHaveLength(0);
     });
 });

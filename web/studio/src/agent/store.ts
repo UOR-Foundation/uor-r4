@@ -55,6 +55,7 @@ import {
 const PROJECT_ID_PATTERN = /^prj_[0-9a-f]{16}$/;
 const TASK_ID_PATTERN = /^tsk_[0-9a-f]{16}$/;
 const RUN_ID_PATTERN = /^run_[0-9a-f]{16}$/;
+const ARTIFACT_ID_PATTERN = /^art_[0-9a-f]{16}$/;
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const RUN_STATES: ReadonlySet<string> = new Set(AGENT_RUN_STATES);
 const IMPORT_FENCE_KEY = '__import__';
@@ -65,6 +66,28 @@ interface StoreFaults {
     abort_next_task_write: boolean;
     fail_import_publish: boolean;
     fail_import_cleanup: boolean;
+}
+
+/**
+ * Durable browser artifact record, keyed by `artifact_id` in the existing
+ * `artifacts` object store. The blob is optional in the declared schema; a
+ * record without bytes cannot serve a read and is refused as corrupt.
+ */
+export interface ArtifactRecord {
+    artifact_id: string;
+    media_type: string;
+    size_bytes: number;
+    digest: string;
+    blob?: Blob;
+}
+
+/** Validated durable artifact bytes returned by `AgentTaskStore.readArtifact`. */
+export interface DurableArtifact {
+    artifact_id: string;
+    media_type: string;
+    size_bytes: number;
+    digest: string;
+    bytes: Uint8Array;
 }
 
 export interface AgentTaskStoreTimers {
@@ -174,6 +197,22 @@ function randomHex(bytes: number): string {
     return [...values]
         .map((value) => value.toString(16).padStart(2, '0'))
         .join('');
+}
+
+async function sha256Bytes(bytes: Uint8Array): Promise<string> {
+    const subtle = globalThis.crypto?.subtle;
+    if (subtle === undefined) {
+        throw new AgentStoreError(
+            'runtime_unavailable',
+            'Web Crypto SHA-256 is not available',
+        );
+    }
+    const digest = new Uint8Array(
+        await subtle.digest('SHA-256', bytes as unknown as BufferSource),
+    );
+    let hex = '';
+    for (const byte of digest) hex += byte.toString(16).padStart(2, '0');
+    return `sha256:${hex}`;
 }
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
@@ -563,6 +602,42 @@ function requireStoredChange(value: unknown): asserts value is ChangeRecord {
     }
     if (!isNonNegativeInteger(value.captured_at_ms)) {
         corrupt('change record captured_at_ms is invalid');
+    }
+}
+
+function requireStoredArtifact(
+    value: unknown,
+    key: string,
+): asserts value is ArtifactRecord & { blob: Blob } {
+    if (!isObject(value)) corrupt('artifact record is not an object');
+    if (
+        typeof value.artifact_id !== 'string' ||
+        !ARTIFACT_ID_PATTERN.test(value.artifact_id)
+    ) {
+        corrupt('artifact record artifact_id is invalid');
+    }
+    if (value.artifact_id !== key) {
+        corrupt('artifact record identity does not match its key');
+    }
+    if (
+        !isNonEmptyString(value.media_type) ||
+        value.media_type.length > 128 ||
+        !value.media_type.includes('/') ||
+        /[\u0000-\u001f\u007f]/.test(value.media_type)
+    ) {
+        corrupt('artifact record media_type is invalid');
+    }
+    if (!isNonNegativeInteger(value.size_bytes)) {
+        corrupt('artifact record size_bytes is invalid');
+    }
+    if (typeof value.digest !== 'string' || !DIGEST_PATTERN.test(value.digest)) {
+        corrupt('artifact record digest is invalid');
+    }
+    if (!(value.blob instanceof Blob)) {
+        corrupt('artifact record has no durable bytes');
+    }
+    if (value.blob.size !== value.size_bytes) {
+        corrupt('artifact record size does not match its bytes');
     }
 }
 
@@ -1302,6 +1377,46 @@ export class AgentTaskStore {
                 : left.captured_at_ms - right.captured_at_ms,
         );
         return records;
+    }
+
+    /**
+     * Read one durable browser artifact by identity.
+     *
+     * Returns `null` only when no record exists. A present record is validated
+     * against the declared media type, size, digest and blob bytes; corrupt or
+     * metadata-only records throw `snapshot_corrupt` instead of being treated
+     * as missing. The returned bytes are a fresh copy.
+     */
+    async readArtifact(artifactId: string): Promise<DurableArtifact | null> {
+        this.requireOpen();
+        if (
+            typeof artifactId !== 'string' ||
+            !ARTIFACT_ID_PATTERN.test(artifactId)
+        ) {
+            invalidArgument('artifact_id is invalid');
+        }
+        const record = await this.readOne<ArtifactRecord>('artifacts', artifactId);
+        if (record === undefined) return null;
+        requireStoredArtifact(record, artifactId);
+        let bytes: Uint8Array;
+        try {
+            bytes = new Uint8Array(await record.blob.arrayBuffer());
+        } catch {
+            corrupt('artifact record bytes are unavailable');
+        }
+        if (bytes.byteLength !== record.size_bytes) {
+            corrupt('artifact record size does not match its bytes');
+        }
+        if ((await sha256Bytes(bytes)) !== record.digest) {
+            corrupt('artifact record digest does not match its bytes');
+        }
+        return {
+            artifact_id: record.artifact_id,
+            media_type: record.media_type,
+            size_bytes: record.size_bytes,
+            digest: record.digest,
+            bytes,
+        };
     }
 
     async acquireLease(
