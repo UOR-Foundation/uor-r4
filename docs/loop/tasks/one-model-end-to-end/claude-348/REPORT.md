@@ -72,7 +72,7 @@ Reading a prompt is 3.1 to 3.3 times as fast. The chat reads every prompt token 
 | 2 | 14,132 | 8,525,528,352 | 14,818,476,032 | 57.5% | 99.6% | 0 | 0 |
 | 3 | 15,700 | 8,158,705,232 | 16,462,643,200 | 49.5% | 99.4% | 0 | 0 |
 
-The last column is the served program's own choice, with the early stop in the library, against a scan of every value: equal at all 44,127 choosing steps.
+The two share columns are the receipt's per-mille figures, which round down (seed 1 is 64.98% and seed 3 is 49.56% to two places). The last column is the served program's own choice, with the early stop in the library, against a scan of every value: equal at all 44,127 choosing steps.
 
 ### 4. The early-stopping scan, timed
 
@@ -122,6 +122,7 @@ Programs (sha256). Built from the library at `07ae907c3d0a43b1e58e430c6aca9bf181
 - **Fresh-context review, two reviewers in this session at `07ae907c3d0a43b1e58e430c6aca9bf1816312c0`**, each given the spec and the diff, never the plan.
   - Serving step, chat and tests: APPROVE, no correctness defect. Its two missing tests are added. Its two notes are under Still open (a panic would leave the mark set) or harmless (the no-choice value equals what the scan returns for an empty table, which no parsed model has).
   - Instruments: CHANGES, one measurement item: the count described a scan the product does not run under the writer head. The count now refuses an artifact without the nearest head. Its suggestion to check the product's own choice is taken: 0 of 44,127 differ. Its question, whether skipping the content readout on read tokens can change a reply, is answered by the code: the readout keeps only scratch between calls, so its answer does not depend on earlier calls.
+- **Confirmation at `4734d050dd20dd72fec1d9703a61c9e1844f631d`.** A third fresh-context reviewer read the code added since the first review (two tests, the reader's count and step clock) against its spec, without building: no findings; each test fails if its rule is broken, and the count's scans are outside the clock. It ran out of room before the recount, so the recount is the author's, not a fresh-context one: every figure in Measurements was recomputed by command from the laptop files and matches (67 values, 30 file comparisons, 12 transcripts, 6 output checksums, 5 program checksums). It found one thing, the round-down note now under table 3.
 - **Ratchets:** `uor-harness ratchet d23`, `d25` and `d32` each answer OK with nothing added (d32: 31 sites in 1 file, the baseline).
 - **Format:** `rustfmt --check --edition 2021` on the reader is clean. `cargo fmt --check -p uor-r4-integer` flags no line of this unit.
 - **CI at `07ae907c3d0a43b1e58e430c6aca9bf1816312c0`:** every check that ran passed (`loop policy`, `loop gates / tests`, `docs archive and links`, `fmt / clippy / tests / no_std / κ`, `cargo audit`, `fuzz smoke`, `wasm-pack build`, `Gate C trend alarm`). CI at the head is read before the queue and stated in the review record.
@@ -129,7 +130,7 @@ Programs (sha256). Built from the library at `07ae907c3d0a43b1e58e430c6aca9bf181
 
 ## Skills used
 
-None beyond the project loop. The two fresh-context reviewers were subagents of this session.
+None beyond the project loop. The three fresh-context reviewers were subagents of this session.
 
 ## Still open
 
