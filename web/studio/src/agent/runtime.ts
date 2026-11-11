@@ -1476,17 +1476,31 @@ export class AgentRuntime {
     }
 
     async readArtifact(input: ReadArtifactInput): Promise<ArtifactContent> {
+        if ((input.start === undefined) !== (input.end === undefined)) {
+            throw new AgentClientError(
+                'invalid_arguments',
+                'artifact range requires both start and end',
+            );
+        }
         if (input.artifactId !== undefined && this.taskStore !== null) {
             try {
+                const range =
+                    input.start === undefined || input.end === undefined
+                        ? undefined
+                        : { start: input.start, end: input.end };
                 const record = await this.taskStore.readArtifact(
                     input.artifactId,
+                    range,
                 );
                 if (record !== null) {
                     return {
                         path: record.artifact_id,
                         mediaType: record.media_type,
                         sizeBytes: record.size_bytes,
+                        artifactSizeBytes: record.artifact_size_bytes,
                         digest: record.digest,
+                        wholeDigest: record.whole_digest,
+                        range: record.range,
                         bytes: record.bytes,
                     };
                 }

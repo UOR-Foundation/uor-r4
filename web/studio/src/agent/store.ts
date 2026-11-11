@@ -55,11 +55,13 @@ import {
 const PROJECT_ID_PATTERN = /^prj_[0-9a-f]{16}$/;
 const TASK_ID_PATTERN = /^tsk_[0-9a-f]{16}$/;
 const RUN_ID_PATTERN = /^run_[0-9a-f]{16}$/;
-const ARTIFACT_ID_PATTERN = /^art_[0-9a-f]{16}$/;
+const ARTIFACT_ID_PATTERN = /^art_[0-9a-f]{64}$/;
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const RUN_STATES: ReadonlySet<string> = new Set(AGENT_RUN_STATES);
 const IMPORT_FENCE_KEY = '__import__';
 const IMPORT_HEARTBEAT_MS = Math.max(1, Math.floor(LEASE_STALE_MS / 3));
+const MAX_DURABLE_ARTIFACT_BYTES = 8 * 1024 * 1024;
+const MAX_DURABLE_ARTIFACT_RETURN_BYTES = 1024 * 1024;
 
 interface StoreFaults {
     abort_next_append: boolean;
@@ -81,12 +83,24 @@ export interface ArtifactRecord {
     blob?: Blob;
 }
 
+/** Inclusive-start/exclusive-end durable artifact range. */
+export interface DurableArtifactRange {
+    start: number;
+    end: number;
+}
+
 /** Validated durable artifact bytes returned by `AgentTaskStore.readArtifact`. */
 export interface DurableArtifact {
     artifact_id: string;
     media_type: string;
+    /** Number of bytes returned, not necessarily the whole artifact size. */
     size_bytes: number;
+    artifact_size_bytes: number;
+    /** SHA-256 of the returned bytes. */
     digest: string;
+    /** SHA-256 of the whole artifact recorded at registration. */
+    whole_digest: string;
+    range: DurableArtifactRange;
     bytes: Uint8Array;
 }
 
@@ -630,11 +644,17 @@ function requireStoredArtifact(
     if (!isNonNegativeInteger(value.size_bytes)) {
         corrupt('artifact record size_bytes is invalid');
     }
+    if (value.size_bytes > MAX_DURABLE_ARTIFACT_BYTES) {
+        corrupt('artifact record exceeds the durable size limit');
+    }
     if (typeof value.digest !== 'string' || !DIGEST_PATTERN.test(value.digest)) {
         corrupt('artifact record digest is invalid');
     }
     if (!(value.blob instanceof Blob)) {
         corrupt('artifact record has no durable bytes');
+    }
+    if (value.blob.type !== '' && value.blob.type !== value.media_type) {
+        corrupt('artifact record blob type does not match its media_type');
     }
     if (value.blob.size !== value.size_bytes) {
         corrupt('artifact record size does not match its bytes');
@@ -1387,7 +1407,10 @@ export class AgentTaskStore {
      * metadata-only records throw `snapshot_corrupt` instead of being treated
      * as missing. The returned bytes are a fresh copy.
      */
-    async readArtifact(artifactId: string): Promise<DurableArtifact | null> {
+    async readArtifact(
+        artifactId: string,
+        range?: DurableArtifactRange,
+    ): Promise<DurableArtifact | null> {
         this.requireOpen();
         if (
             typeof artifactId !== 'string' ||
@@ -1398,23 +1421,50 @@ export class AgentTaskStore {
         const record = await this.readOne<ArtifactRecord>('artifacts', artifactId);
         if (record === undefined) return null;
         requireStoredArtifact(record, artifactId);
+        const total = record.size_bytes;
+        let start = 0;
+        let end = total;
+        if (range !== undefined) {
+            if (
+                !isNonNegativeInteger(range.start) ||
+                !isNonNegativeInteger(range.end) ||
+                range.start > range.end ||
+                range.end > total
+            ) {
+                invalidArgument('artifact range is outside the artifact');
+            }
+            start = range.start;
+            end = range.end;
+            if (end - start > MAX_DURABLE_ARTIFACT_RETURN_BYTES) {
+                throw new AgentStoreError(
+                    'limit_exceeded',
+                    'artifact range exceeds the durable return limit',
+                );
+            }
+        }
+        const length = end - start;
         let bytes: Uint8Array;
         try {
-            bytes = new Uint8Array(await record.blob.arrayBuffer());
+            const bounded = record.blob.slice(start, end);
+            bytes = new Uint8Array(await bounded.arrayBuffer());
         } catch {
             corrupt('artifact record bytes are unavailable');
         }
-        if (bytes.byteLength !== record.size_bytes) {
+        if (bytes.byteLength !== length) {
             corrupt('artifact record size does not match its bytes');
         }
-        if ((await sha256Bytes(bytes)) !== record.digest) {
+        const digest = await sha256Bytes(bytes);
+        if (start === 0 && end === total && digest !== record.digest) {
             corrupt('artifact record digest does not match its bytes');
         }
         return {
             artifact_id: record.artifact_id,
             media_type: record.media_type,
-            size_bytes: record.size_bytes,
-            digest: record.digest,
+            size_bytes: length,
+            artifact_size_bytes: total,
+            digest,
+            whole_digest: record.digest,
+            range: { start, end },
             bytes,
         };
     }

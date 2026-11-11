@@ -7,8 +7,9 @@ use std::process::Command;
 
 use sha2::{Digest, Sha256};
 use uor_r4_desktop_client::agent_data::{
-    AgentArtifactRange, AgentFileNode, AGENT_HEAD_DIGEST_DOMAIN, MAX_AGENT_ARTIFACT_BYTES,
-    MAX_AGENT_ARTIFACT_RANGE_BYTES, MAX_AGENT_DIFF_FILES, MAX_AGENT_TREE_ENTRIES,
+    agent_git_diff_output, agent_grants_value, AgentArtifactRange, AgentFileNode,
+    AGENT_HEAD_DIGEST_DOMAIN, MAX_AGENT_ARTIFACT_BYTES, MAX_AGENT_ARTIFACT_RANGE_BYTES,
+    MAX_AGENT_DIFF_FILES, MAX_AGENT_TREE_ENTRIES,
 };
 use uor_r4_desktop_client::{DesktopBackend, PinRegistry};
 
@@ -113,6 +114,10 @@ fn agent_list_directory_respects_grant() {
     assert!(
         format!("{absolute:?}").contains("PathTraversalRefused"),
         "unexpected absolute error: {absolute:?}"
+    );
+    assert!(
+        !format!("{absolute:?}").contains(&other.join("src").display().to_string()),
+        "outside canonical path must not be echoed to the page: {absolute:?}"
     );
 
     let unknown = backend
@@ -225,6 +230,7 @@ fn agent_list_directory_is_bounded() {
         .expect("list bounded root");
     assert_eq!(page.entries.len(), MAX_AGENT_TREE_ENTRIES);
     assert!(page.truncated);
+    assert_eq!(page.read_errors, 0);
     assert!(
         page.entries
             .windows(2)
@@ -393,7 +399,7 @@ fn agent_read_artifact_verifies_digest() {
     );
 
     let unknown = backend
-        .agent_read_artifact("art_0000000000000000", None, None, None)
+        .agent_read_artifact(&format!("art_{}", "0".repeat(64)), None, None, None)
         .expect_err("unknown artifact must be refused");
     assert!(
         format!("{unknown:?}").contains("ArtifactNotFound"),
@@ -581,4 +587,152 @@ fn agent_data_outputs_have_no_urls_or_tokens() {
     assert!(artifact_value.get("media_type").is_some());
 
     let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn agent_grant_path_rejects_malformed_lowercase_hex() {
+    let root = unique_temp_dir("grant-hex");
+    let (backend, grant_id) = backend_with_grant(&root);
+    let uppercase = format!("gr_{}", grant_id["gr_".len()..].to_ascii_uppercase());
+    let uppercase_error = backend
+        .agent_grant_path(&uppercase)
+        .expect_err("uppercase grant hex must be malformed");
+    assert!(
+        format!("{uppercase_error:?}").contains("malformed"),
+        "uppercase grant id must be refused as malformed: {uppercase_error:?}"
+    );
+    let short = "gr_000000000000000";
+    let short_error = backend
+        .agent_grant_path(short)
+        .expect_err("short grant id must be malformed");
+    assert!(
+        format!("{short_error:?}").contains("malformed"),
+        "short grant id must be refused as malformed: {short_error:?}"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn agent_grants_command_lists_canonical_ids_and_paths() {
+    let root = unique_temp_dir("grants-command");
+    let nested = root.join("workspace");
+    fs::create_dir_all(&nested).expect("create workspace");
+    let (backend, grant_id) = backend_with_grant(&nested);
+
+    let value = agent_grants_value(&backend).expect("serialize agent grants");
+    let grants = value.as_array().expect("grant list is an array");
+    assert_eq!(grants.len(), 1);
+    let grant = grants[0].as_object().expect("grant record is an object");
+    let listed_id = grant["grant_id"].as_str().expect("grant_id string");
+    assert_eq!(listed_id, grant_id);
+    assert_eq!(listed_id.len(), "gr_".len() + 16);
+    assert!(
+        listed_id["gr_".len()..]
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+        "grant id must be lowercase hex: {listed_id}"
+    );
+    let listed_path = grant["path"].as_str().expect("grant path string");
+    let canonical = fs::canonicalize(&nested).expect("canonical workspace");
+    assert_eq!(listed_path, canonical.to_string_lossy());
+    assert_eq!(
+        backend
+            .agent_grant_path(listed_id)
+            .expect("round-trip grant id"),
+        canonical
+    );
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn agent_git_diff_command_returns_snapshot_wrapper() {
+    let repo = unique_temp_dir("diff-wrapper");
+    init_repo(&repo);
+    fs::write(repo.join("base.txt"), "base\n").expect("write base");
+    commit_all(&repo, "base");
+    run_git(&repo, &["checkout", "-q", "-b", "feature"]);
+    fs::write(repo.join("feature.txt"), "feature\n").expect("write feature");
+    commit_all(&repo, "feature");
+
+    let (backend, grant_id) = backend_with_grant(&repo);
+    let value = agent_git_diff_output(&backend, &grant_id, "branch")
+        .expect("serialize branch snapshot wrapper");
+    let object = value.as_object().expect("command output is an object");
+    assert!(
+        object.get("snapshot").is_some(),
+        "agent_git_diff command must wrap the snapshot: {value}"
+    );
+    assert!(
+        !object.contains_key("scope") && !object.contains_key("files"),
+        "agent_git_diff must not also flatten the snapshot: {value}"
+    );
+    let snapshot = object["snapshot"]
+        .as_object()
+        .expect("snapshot wrapper value");
+    assert_eq!(snapshot["scope"], "branch");
+    assert_eq!(snapshot["files"][0]["path"], "feature.txt");
+    assert!(snapshot["head_digest"].as_str().is_some());
+    assert!(snapshot["captured_at_ms"].as_u64().is_some());
+
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn agent_git_diff_refuses_grant_inside_repository() {
+    let repo = unique_temp_dir("diff-subdir-grant");
+    init_repo(&repo);
+    fs::write(repo.join("base.txt"), "base\n").expect("write base");
+    commit_all(&repo, "base");
+    let subdir = repo.join("package");
+    fs::create_dir_all(&subdir).expect("create package directory");
+    let (backend, grant_id) = backend_with_grant(&subdir);
+
+    let error = backend
+        .agent_git_diff(&grant_id, "branch")
+        .expect_err("a grant rooted inside a repository cannot produce a branch diff");
+    assert!(
+        format!("{error:?}").contains("PathNotGranted"),
+        "unexpected subdirectory-grant error: {error:?}"
+    );
+
+    let _ = fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn agent_read_artifact_refuses_true_out_of_range() {
+    let root = unique_temp_dir("artifact-range-bounds");
+    fs::write(root.join("notes.txt"), "hello artifact").expect("write artifact");
+    let (mut backend, grant_id) = backend_with_grant(&root);
+    let info = backend
+        .agent_register_artifact(&grant_id, "notes.txt", "text/plain")
+        .expect("register artifact");
+
+    let past_end = backend
+        .agent_read_artifact(
+            &info.artifact_id,
+            Some(AgentArtifactRange { start: 0, end: 15 }),
+            None,
+            None,
+        )
+        .expect_err("end past the artifact size must be refused");
+    assert!(
+        format!("{past_end:?}").contains("InvalidInput"),
+        "unexpected past-end error: {past_end:?}"
+    );
+
+    let reversed = backend
+        .agent_read_artifact(
+            &info.artifact_id,
+            Some(AgentArtifactRange { start: 10, end: 5 }),
+            None,
+            None,
+        )
+        .expect_err("reversed range must be refused");
+    assert!(
+        format!("{reversed:?}").contains("InvalidInput"),
+        "unexpected reversed-range error: {reversed:?}"
+    );
+
+    let _ = fs::remove_dir_all(&root);
 }

@@ -1,4 +1,14 @@
 import { AgentClient, AgentClientError, type TaskSummary } from './client.js';
+import {
+    HOST_RESULT_SCHEMA,
+    HostClient,
+    sha256Bytes,
+    sha256Canonical,
+    type HostToolIntent,
+    type HostToolResult,
+    type HostTransport,
+    type HostTransportCapabilities,
+} from './hostClient.js';
 import { FixtureTransport } from './fixtureTransport.js';
 import { AgentTaskStore } from './store.js';
 import { AgentRuntime } from './runtime.js';
@@ -24,6 +34,74 @@ import {
 } from '../state/agent.js';
 
 const TERMINAL_STATES = new Set(['finished', 'failed', 'cancelled', 'expired']);
+
+function base64Bytes(bytes: Uint8Array): string {
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary);
+}
+
+class RecordingArtifactHostTransport implements HostTransport {
+    readonly kind = 'bridge' as const;
+    readonly supportsStream = false;
+    readonly intents: HostToolIntent[] = [];
+
+    async capabilities(): Promise<HostTransportCapabilities> {
+        return {
+            kind: 'bridge',
+            hostAvailable: true,
+            streaming: 'none',
+            tree: false,
+            changes: false,
+            readArtifact: true,
+            terminal: false,
+            git: false,
+            mcp: false,
+            approvals: false,
+        };
+    }
+
+    async invoke(intent: HostToolIntent): Promise<HostToolResult> {
+        this.intents.push(intent);
+        const bytes = new TextEncoder().encode('host artifact');
+        const digest = await sha256Bytes(bytes);
+        const output = {
+            path: 'host.txt',
+            media_type: 'text/plain',
+            size_bytes: bytes.byteLength,
+            artifact_size_bytes: bytes.byteLength,
+            digest,
+            whole_digest: digest,
+            range: { start: 0, end: bytes.byteLength },
+            bytes_base64: base64Bytes(bytes),
+        };
+        return {
+            schema: HOST_RESULT_SCHEMA,
+            intent_id: intent.intent_id,
+            task_id: intent.task_id,
+            run_id: intent.run_id,
+            generation: intent.generation,
+            tool_call_id: intent.tool_call_id,
+            request_scope: intent.request_scope ?? 'task',
+            status: 'ok',
+            output,
+            output_digest: await sha256Canonical(output),
+            output_preview: '',
+            occurred_at_ms: 1_800_000_000_000,
+        };
+    }
+
+    subscribe() {
+        return { close: () => undefined, cursor: () => null };
+    }
+
+    async approve(input: {
+        approvalId: string;
+        decision: 'approved' | 'denied';
+    }) {
+        return { approvalId: input.approvalId, decision: input.decision };
+    }
+}
 
 interface StoreFaults {
     abort_next_append: boolean;
@@ -171,6 +249,7 @@ export interface StudioAgentOwnerForTest {
 export interface StudioTestApi {
     reset(): Promise<void>;
     clientForTest(): AgentClient | null;
+    artifactFallbackProbeForTest(artifactId: string): Promise<Outcome>;
     open(): Promise<RestoreView>;
     reopen(): Promise<RestoreView>;
     memoryCursor(): CursorView | null;
@@ -2434,6 +2513,64 @@ export function installStudioTestApi(owner?: StudioAgentOwnerForTest): void {
     if (owner !== undefined) adoptStudioAgentOwner(owner);
     window.__studioTest = {
         clientForTest: () => state.client,
+        async artifactFallbackProbeForTest(artifactId: string): Promise<Outcome> {
+            try {
+                await ensureReady();
+                const store = state.store;
+                const taskStore = state.taskStore;
+                if (store === null || taskStore === null) {
+                    throw new Error('studio test store is not initialized');
+                }
+                const transport = new RecordingArtifactHostTransport();
+                const hostClient = new HostClient({ transport });
+                const runtime = new AgentRuntime({
+                    store,
+                    taskStore,
+                    hostClient,
+                    ownsTaskStore: false,
+                    now: () => state.nowMs,
+                    timers: {
+                        setInterval: testSetInterval,
+                        clearInterval: testClearInterval,
+                        setTimeout: (handler, timeout) =>
+                            globalThis.setTimeout(handler, timeout),
+                        clearTimeout: (handle) =>
+                            globalThis.clearTimeout(handle as never),
+                    },
+                    writerId: `artifact-probe-${randomHex(8)}`,
+                });
+                const client = new AgentClient({ runtime });
+                try {
+                    const content = await client.readArtifact({ artifactId });
+                    return {
+                        ok: true,
+                        record: {
+                            intents: transport.intents.map((intent) => ({
+                                tool: intent.tool,
+                                requestScope:
+                                    intent.request_scope ?? 'task',
+                                artifactId:
+                                    typeof intent.arguments.artifact_id ===
+                                    'string'
+                                        ? intent.arguments.artifact_id
+                                        : null,
+                            })),
+                            content: {
+                                bytes: [...content.bytes],
+                                digest: content.digest,
+                                sizeBytes: content.sizeBytes,
+                                path: content.path,
+                                mediaType: content.mediaType,
+                            },
+                        },
+                    };
+                } finally {
+                    await client.dispose();
+                }
+            } catch (error) {
+                return failure(error);
+            }
+        },
         async reset() {
             await disposeRuntimeForTest();
             await state.client?.dispose();

@@ -2,6 +2,16 @@ import { expect, test, type Page } from '@playwright/test';
 
 const TEST_URL = '/?typed=1&studioTest=1';
 const DB_NAME = 'uor-r4.studio.agent';
+const FULL64_A1 = `art_${'a1'.repeat(32)}`;
+const FULL64_B2 = `art_${'b2'.repeat(32)}`;
+const FULL64_MISSING = `art_${'f'.repeat(64)}`;
+const FULL64_RANGE = `art_${'d4'.repeat(32)}`;
+const FULL64_HOST = `art_${'e5'.repeat(32)}`;
+const FULL64_CORRUPT_DIGEST = `art_${'c1'.repeat(32)}`;
+const FULL64_CORRUPT_SIZE = `art_${'c2'.repeat(32)}`;
+const FULL64_CORRUPT_METADATA = `art_${'c3'.repeat(32)}`;
+const FULL64_CORRUPT_BLOB_TYPE = `art_${'c4'.repeat(32)}`;
+const FULL64_CORRUPT_OVERSIZE = `art_${'c5'.repeat(32)}`;
 
 interface StudioTestCall {
     method: string;
@@ -119,15 +129,31 @@ interface SeededArtifact {
     digest: string;
 }
 
+interface SeedArtifactOptions {
+    sizeOverride?: number;
+    digestOverride?: string;
+    blobOmit?: boolean;
+    blobTypeOverride?: string;
+}
+
 async function seedArtifact(
     page: Page,
     artifactId: string,
     text: string,
     mediaType = 'text/plain',
-    digestOverride?: string,
+    options: SeedArtifactOptions = {},
 ): Promise<SeededArtifact> {
     return page.evaluate(
-        async ({ dbName, artifactId, text, mediaType, digestOverride }) => {
+        async ({
+            dbName,
+            artifactId,
+            text,
+            mediaType,
+            sizeOverride,
+            digestOverride,
+            blobOmit,
+            blobTypeOverride,
+        }) => {
             const request = <T>(input: IDBRequest<T>): Promise<T> =>
                 new Promise<T>((resolve, reject) => {
                     input.onsuccess = () => resolve(input.result);
@@ -152,18 +178,20 @@ async function seedArtifact(
                 let hex = '';
                 for (const byte of digestBytes) hex += byte.toString(16).padStart(2, '0');
                 const digest = digestOverride ?? `sha256:${hex}`;
+                const record: Record<string, unknown> = {
+                    artifact_id: artifactId,
+                    media_type: mediaType,
+                    size_bytes: sizeOverride ?? bytes.byteLength,
+                    digest,
+                };
+                if (blobOmit !== true) {
+                    record.blob = new Blob([bytes], {
+                        type: blobTypeOverride ?? mediaType,
+                    });
+                }
                 const tx = db.transaction('artifacts', 'readwrite');
                 await request(
-                    tx.objectStore('artifacts').put(
-                        {
-                            artifact_id: artifactId,
-                            media_type: mediaType,
-                            size_bytes: bytes.byteLength,
-                            digest,
-                            blob: new Blob([bytes], { type: mediaType }),
-                        },
-                        artifactId,
-                    ),
+                    tx.objectStore('artifacts').put(record, artifactId),
                 );
                 await done(tx);
                 return {
@@ -176,7 +204,16 @@ async function seedArtifact(
                 db.close();
             }
         },
-        { dbName: DB_NAME, artifactId, text, mediaType, digestOverride },
+        {
+            dbName: DB_NAME,
+            artifactId,
+            text,
+            mediaType,
+            sizeOverride: options.sizeOverride,
+            digestOverride: options.digestOverride,
+            blobOmit: options.blobOmit,
+            blobTypeOverride: options.blobTypeOverride,
+        },
     );
 }
 
@@ -485,15 +522,15 @@ test.describe('browser agent task store', () => {
         expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
         const seeded = await seedArtifact(
             page,
-            'art_00000000000000a1',
+            FULL64_A1,
             'durable browser artifact',
         );
         await seedArtifact(
             page,
-            'art_00000000000000a2',
+            FULL64_B2,
             'corrupt durable artifact',
             'text/plain',
-            `sha256:${'0'.repeat(64)}`,
+            { digestOverride: `sha256:${'0'.repeat(64)}` },
         );
 
         const result = await page.evaluate(
@@ -548,8 +585,8 @@ test.describe('browser agent task store', () => {
             },
             {
                 artifactId: seeded.artifactId,
-                missingId: 'art_00000000000000ff',
-                corruptId: 'art_00000000000000a2',
+                missingId: FULL64_MISSING,
+                corruptId: FULL64_B2,
             },
         );
 
@@ -563,6 +600,212 @@ test.describe('browser agent task store', () => {
             sizeBytes: seeded.bytes.length,
             digest: seeded.digest,
         });
+    });
+
+    test('durable_artifact_ranges_preserve_returned_and_whole_metadata', async ({ page }) => {
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        const text = 'r'.repeat(1_572_864);
+        const seeded = await seedArtifact(page, FULL64_RANGE, text);
+        const result = await page.evaluate(
+            async ({ artifactId }) => {
+                const api = (
+                    window as unknown as {
+                        __studioTest?: {
+                            clientForTest?: () => {
+                                readArtifact(input: {
+                                    artifactId: string;
+                                    start?: number;
+                                    end?: number;
+                                }): Promise<{
+                                    path: string;
+                                    mediaType: string;
+                                    sizeBytes: number;
+                                    artifactSizeBytes?: number;
+                                    digest: string;
+                                    wholeDigest?: string;
+                                    range?: { start: number; end: number };
+                                    bytes: Uint8Array;
+                                }>;
+                            } | null;
+                        };
+                    }
+                ).__studioTest;
+                const client = api?.clientForTest?.();
+                if (!client) throw new Error('studio test client is missing');
+                const whole = await client.readArtifact({ artifactId });
+                const range = await client.readArtifact({
+                    artifactId,
+                    start: 0,
+                    end: 1024 * 1024,
+                });
+                const firstByte = range.bytes[0];
+                range.bytes[0] = (range.bytes[0] ?? 0) ^ 0xff;
+                const again = await client.readArtifact({
+                    artifactId,
+                    start: 0,
+                    end: 1024 * 1024,
+                });
+                let oversizedRangeCode: string | null = null;
+                try {
+                    await client.readArtifact({
+                        artifactId,
+                        start: 0,
+                        end: 1_572_864,
+                    });
+                } catch (error) {
+                    oversizedRangeCode =
+                        (error as { code?: string }).code ?? null;
+                }
+                let outOfRangeCode: string | null = null;
+                try {
+                    await client.readArtifact({
+                        artifactId,
+                        start: 1_500_000,
+                        end: 1_600_000,
+                    });
+                } catch (error) {
+                    outOfRangeCode =
+                        (error as { code?: string }).code ?? null;
+                }
+                return {
+                    oversizedRangeCode,
+                    outOfRangeCode,
+                    whole: {
+                        sizeBytes: whole.sizeBytes,
+                        artifactSizeBytes: whole.artifactSizeBytes,
+                        digest: whole.digest,
+                        wholeDigest: whole.wholeDigest,
+                        range: whole.range,
+                    },
+                    range: {
+                        sizeBytes: range.sizeBytes,
+                        artifactSizeBytes: range.artifactSizeBytes,
+                        digest: range.digest,
+                        wholeDigest: range.wholeDigest,
+                        range: range.range,
+                    },
+                    firstByte,
+                    secondFirstByte: again.bytes[0],
+                };
+            },
+            { artifactId: seeded.artifactId },
+        );
+
+        expect(result.whole.sizeBytes).toBe(seeded.bytes.length);
+        expect(result.whole.artifactSizeBytes).toBe(seeded.bytes.length);
+        expect(result.whole.digest).toBe(seeded.digest);
+        expect(result.whole.wholeDigest).toBe(seeded.digest);
+        expect(result.whole.range).toEqual({
+            start: 0,
+            end: seeded.bytes.length,
+        });
+        expect(result.range.sizeBytes).toBe(1024 * 1024);
+        expect(result.range.artifactSizeBytes).toBe(seeded.bytes.length);
+        expect(result.range.wholeDigest).toBe(seeded.digest);
+        expect(result.range.range).toEqual({ start: 0, end: 1024 * 1024 });
+        expect(result.range.digest).not.toBe(seeded.digest);
+        expect(result.firstByte).toBe(seeded.bytes[0]);
+        expect(result.secondFirstByte).toBe(seeded.bytes[0]);
+        expect(result.oversizedRangeCode).toBe('limit_exceeded');
+        expect(result.outOfRangeCode).toBe('invalid_arguments');
+    });
+
+    test('durable_artifact_validation_refuses_corrupt_records', async ({ page }) => {
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        await seedArtifact(page, FULL64_CORRUPT_DIGEST, 'wrong digest', 'text/plain', {
+            digestOverride: `sha256:${'0'.repeat(64)}`,
+        });
+        await seedArtifact(page, FULL64_CORRUPT_SIZE, 'size mismatch', 'text/plain', {
+            sizeOverride: 999,
+        });
+        await seedArtifact(page, FULL64_CORRUPT_METADATA, 'metadata only', 'text/plain', {
+            blobOmit: true,
+        });
+        await seedArtifact(page, FULL64_CORRUPT_BLOB_TYPE, 'blob type', 'text/plain', {
+            blobTypeOverride: 'application/json',
+        });
+        await seedArtifact(page, FULL64_CORRUPT_OVERSIZE, 'oversize', 'text/plain', {
+            sizeOverride: 8 * 1024 * 1024 + 1,
+        });
+
+        const codes = await page.evaluate(
+            async ({ ids }) => {
+                const api = (
+                    window as unknown as {
+                        __studioTest?: {
+                            clientForTest?: () => {
+                                readArtifact(input: {
+                                    artifactId: string;
+                                }): Promise<unknown>;
+                            } | null;
+                        };
+                    }
+                ).__studioTest;
+                const client = api?.clientForTest?.();
+                if (!client) throw new Error('studio test client is missing');
+                const result: Record<string, string | null> = {};
+                for (const [label, artifactId] of Object.entries(ids)) {
+                    try {
+                        await client.readArtifact({ artifactId });
+                        result[label] = null;
+                    } catch (error) {
+                        result[label] =
+                            (error as { code?: string }).code ?? null;
+                    }
+                }
+                return result;
+            },
+            {
+                ids: {
+                    digest: FULL64_CORRUPT_DIGEST,
+                    size: FULL64_CORRUPT_SIZE,
+                    metadata: FULL64_CORRUPT_METADATA,
+                    blobType: FULL64_CORRUPT_BLOB_TYPE,
+                    oversize: FULL64_CORRUPT_OVERSIZE,
+                },
+            },
+        );
+
+        expect(codes).toEqual({
+            digest: 'snapshot_corrupt',
+            size: 'snapshot_corrupt',
+            metadata: 'snapshot_corrupt',
+            blobType: 'snapshot_corrupt',
+            oversize: 'snapshot_corrupt',
+        });
+    });
+
+    test('full64_host_id_without_durable_record_emits_artifact_read_intent', async ({ page }) => {
+        expect((await call<RestoreView>(page, 'open')).phase).toBe('ready');
+        const probe = await call<{
+            ok: boolean;
+            code?: string;
+            record?: {
+                intents: Array<{
+                    tool: string;
+                    requestScope?: string;
+                    artifactId?: string;
+                }>;
+                content: {
+                    bytes: number[];
+                    digest: string;
+                    sizeBytes: number;
+                    path: string;
+                    mediaType: string;
+                };
+            };
+        }>(page, 'artifactFallbackProbeForTest', FULL64_HOST);
+        expect(probe.ok, JSON.stringify(probe)).toBe(true);
+        const record = probe.record!;
+        expect(record.intents).toHaveLength(1);
+        expect(record.intents[0]).toMatchObject({
+            tool: 'artifact.read',
+            requestScope: 'data',
+            artifactId: FULL64_HOST,
+        });
+        expect(new TextDecoder().decode(new Uint8Array(record.content.bytes))).toBe(
+            'host artifact',
+        );
     });
 
     test('indexeddb_corrupt_snapshot_is_refused', async ({ page }) => {

@@ -6,6 +6,7 @@
 //! browser verifies again. No API returns an artifact URL, token or expiring
 //! link, and no API owns task state.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -66,6 +67,7 @@ pub struct AgentDirectoryPage {
     pub entries: Vec<AgentFileNode>,
     pub truncated: bool,
     pub symlinks_skipped: usize,
+    pub read_errors: usize,
 }
 
 /// One changed file in the branch snapshot.
@@ -137,6 +139,33 @@ fn grant_id_for_path(canonical: &Path) -> String {
     let payload = format!("{GRANT_DOMAIN}{}", canonical.to_string_lossy());
     let digest = crate::sha256_bytes(payload.as_bytes());
     format!("{GRANT_PREFIX}{}", &digest[..16])
+}
+
+fn is_lower_hex_16(value: &str) -> bool {
+    value.len() == 16
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+/// Serialize the read-only grant list for the existing desktop backend.
+pub fn agent_grants_value(
+    backend: &DesktopBackend,
+) -> Result<serde_json::Value, DesktopClientError> {
+    serde_json::to_value(backend.agent_grants())
+        .map_err(|error| DesktopClientError::InvalidInput(error.to_string()))
+}
+
+/// Serialize the branch-only change snapshot in the shape the browser parser
+/// expects: `{ "snapshot": AgentChangeSnapshot }`.
+pub fn agent_git_diff_output(
+    backend: &DesktopBackend,
+    grant_id: &str,
+    branch_scope: &str,
+) -> Result<serde_json::Value, DesktopClientError> {
+    let snapshot = backend.agent_git_diff(grant_id, branch_scope)?;
+    serde_json::to_value(serde_json::json!({ "snapshot": snapshot }))
+        .map_err(|error| DesktopClientError::InvalidInput(error.to_string()))
 }
 
 fn validate_media_type(value: &str) -> Result<String, DesktopClientError> {
@@ -244,9 +273,9 @@ fn agent_repository_root(grant_root: &Path) -> Result<PathBuf, DesktopClientErro
         DesktopClientError::PathNotGranted("Git repository root is unavailable".to_string())
     })?;
     if !canonical.starts_with(grant_root) {
-        return Err(DesktopClientError::PathNotGranted(format!(
-            "Git repository discovery escapes the granted directory: {top}"
-        )));
+        return Err(DesktopClientError::PathNotGranted(
+            "Git repository discovery escapes the granted directory".to_string(),
+        ));
     }
     ensure_git_repository_root(&canonical)?;
     Ok(canonical)
@@ -357,7 +386,12 @@ impl DesktopBackend {
 
     /// Resolve an opaque grant identity to its canonical root.
     pub fn agent_grant_path(&self, grant_id: &str) -> Result<PathBuf, DesktopClientError> {
-        if grant_id.len() != GRANT_PREFIX.len() + 16 || !grant_id.starts_with(GRANT_PREFIX) {
+        let Some(hex) = grant_id.strip_prefix(GRANT_PREFIX) else {
+            return Err(DesktopClientError::PathNotGranted(
+                "grant identity is malformed".to_string(),
+            ));
+        };
+        if !is_lower_hex_16(hex) {
             return Err(DesktopClientError::PathNotGranted(
                 "grant identity is malformed".to_string(),
             ));
@@ -386,7 +420,7 @@ impl DesktopBackend {
                 .any(|component| !matches!(component, Component::Normal(_)))
         {
             return Err(DesktopClientError::PathTraversalRefused(
-                relative.to_string(),
+                "path is outside the granted folder".to_string(),
             ));
         }
         let joined = if relative.is_empty() {
@@ -402,10 +436,9 @@ impl DesktopBackend {
             )
         })?;
         if !canonical.starts_with(&root) {
-            return Err(DesktopClientError::PathNotGranted(format!(
-                "access outside granted folders is refused: {}",
-                canonical.display()
-            )));
+            return Err(DesktopClientError::PathNotGranted(
+                "access outside granted folders is refused".to_string(),
+            ));
         }
         reject_symlinks_between_root_and_target(&root, &joined)?;
         let normalized = canonical
@@ -435,19 +468,20 @@ impl DesktopBackend {
                 "directory listing target is not a directory".to_string(),
             ));
         }
-        let mut children = Vec::new();
-        for entry in fs::read_dir(&directory)
-            .map_err(|error| DesktopClientError::Io(error.to_string()))?
-            .flatten()
-        {
-            children.push(entry.path());
-        }
-        children.sort();
-
-        let mut entries = Vec::new();
+        let mut retained: BTreeMap<PathBuf, AgentFileNode> = BTreeMap::new();
         let mut truncated = false;
         let mut symlinks_skipped = 0usize;
-        for child in children {
+        let mut read_errors = 0usize;
+        for entry in
+            fs::read_dir(&directory).map_err(|error| DesktopClientError::Io(error.to_string()))?
+        {
+            let child = match entry {
+                Ok(entry) => entry.path(),
+                Err(_) => {
+                    read_errors += 1;
+                    continue;
+                }
+            };
             let Some(name) = child.file_name().and_then(|name| name.to_str()) else {
                 continue;
             };
@@ -455,8 +489,13 @@ impl DesktopBackend {
             {
                 continue;
             }
-            let Ok(metadata) = fs::symlink_metadata(&child) else {
-                continue;
+            let name = name.to_string();
+            let metadata = match fs::symlink_metadata(&child) {
+                Ok(metadata) => metadata,
+                Err(_) => {
+                    read_errors += 1;
+                    continue;
+                }
             };
             if metadata.file_type().is_symlink() {
                 symlinks_skipped += 1;
@@ -469,41 +508,52 @@ impl DesktopBackend {
             } else {
                 continue;
             };
-            if entries.len() >= MAX_AGENT_TREE_ENTRIES {
-                truncated = true;
-                break;
-            }
             let relative_path = match child.strip_prefix(&root) {
                 Ok(value) => value
                     .components()
                     .map(|component| component.as_os_str().to_string_lossy().into_owned())
                     .collect::<Vec<_>>()
                     .join("/"),
-                Err(_) => continue,
+                Err(_) => {
+                    read_errors += 1;
+                    continue;
+                }
             };
-            entries.push(AgentFileNode {
-                path: relative_path,
-                name: name.to_string(),
-                kind: kind.to_string(),
-                size_bytes: if metadata.is_file() {
-                    Some(metadata.len())
-                } else {
-                    None
+            retained.insert(
+                child,
+                AgentFileNode {
+                    path: relative_path,
+                    name,
+                    kind: kind.to_string(),
+                    size_bytes: if metadata.is_file() {
+                        Some(metadata.len())
+                    } else {
+                        None
+                    },
                 },
-            });
+            );
+            if retained.len() > MAX_AGENT_TREE_ENTRIES {
+                retained.pop_last();
+                truncated = true;
+            }
         }
+        let entries: Vec<AgentFileNode> = retained.into_values().collect();
         Ok(AgentDirectoryPage {
             grant_id: grant_id.to_string(),
             path: relative,
             entries,
             truncated,
             symlinks_skipped,
+            read_errors,
         })
     }
 
     /// Return a bounded branch-only change snapshot tied to the actual HEAD.
     ///
     /// `last_turn` changes are browser-owned and intentionally refused here.
+    /// The grant root must be the repository root or contain it; a grant
+    /// rooted inside a repository is refused because the Git top-level would
+    /// be outside the grant.
     pub fn agent_git_diff(
         &self,
         grant_id: &str,

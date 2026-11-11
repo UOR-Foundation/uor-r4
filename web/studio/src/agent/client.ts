@@ -30,6 +30,11 @@ export type { AgentIncomingEvent } from '../state/agent.js';
 
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 
+export const MAX_HOST_TREE_ENTRIES = 512;
+export const MAX_HOST_DIFF_FILES = 256;
+export const MAX_HOST_ARTIFACT_RETURN_BYTES = 1024 * 1024;
+export const MAX_HOST_ARTIFACT_BASE64_CHARS = 4 * Math.ceil(MAX_HOST_ARTIFACT_RETURN_BYTES / 3);
+
 export interface ListTasksInput {
     includeArchived?: boolean;
     query?: string;
@@ -204,13 +209,22 @@ export interface ReadArtifactInput {
     taskId?: string;
     artifactId?: string;
     path?: string;
+    start?: number;
+    end?: number;
 }
 
 export interface ArtifactContent {
     path: string;
     mediaType: string;
+    /** Number of bytes returned, not necessarily the whole artifact size. */
     sizeBytes: number;
+    /** Total artifact size when the source reported it. */
+    artifactSizeBytes?: number;
+    /** SHA-256 of the returned bytes. */
     digest: string;
+    /** SHA-256 of the whole artifact when the source reported it. */
+    wholeDigest?: string;
+    range?: { start: number; end: number };
     bytes: Uint8Array;
 }
 
@@ -732,9 +746,29 @@ export class AgentClient {
     }
 
     async readArtifact(input: ReadArtifactInput): Promise<ArtifactContent> {
+        const range = artifactRange(input);
         const local = this.localArtifact(input);
         if (local !== null) {
-            return local;
+            if (range === undefined) {
+                return local;
+            }
+            if (range.end > local.bytes.byteLength) {
+                throw new AgentClientError(
+                    'invalid_arguments',
+                    'artifact range is outside the local artifact',
+                );
+            }
+            const bytes = local.bytes.slice(range.start, range.end);
+            return {
+                path: local.path,
+                mediaType: local.mediaType,
+                sizeBytes: bytes.byteLength,
+                artifactSizeBytes: local.bytes.byteLength,
+                digest: await sha256Bytes(bytes),
+                wholeDigest: local.digest,
+                range,
+                bytes,
+            };
         }
         if (input.artifactId !== undefined) {
             try {
@@ -744,20 +778,27 @@ export class AgentClient {
                 if (this.taskStore !== null) {
                     const durable = await this.taskStore.readArtifact(
                         input.artifactId,
+                        range,
                     );
                     if (durable !== null) {
                         return {
                             path: durable.artifact_id,
                             mediaType: durable.media_type,
                             sizeBytes: durable.size_bytes,
+                            artifactSizeBytes: durable.artifact_size_bytes,
                             digest: durable.digest,
+                            wholeDigest: durable.whole_digest,
+                            range: durable.range,
                             bytes: durable.bytes,
                         };
                     }
                 }
             } catch (error) {
                 const clientError = toClientError(error);
-                if (clientError.code !== 'host_unavailable') {
+                if (
+                    clientError.code !== 'host_unavailable' &&
+                    clientError.code !== 'runtime_unavailable'
+                ) {
                     throw clientError;
                 }
             }
@@ -769,6 +810,9 @@ export class AgentClient {
                 ...(input.artifactId === undefined
                     ? {}
                     : { artifact_id: input.artifactId }),
+                ...(range === undefined
+                    ? {}
+                    : { start: range.start, end: range.end }),
             },
             ...(input.taskId === undefined ? {} : { taskId: input.taskId }),
         });
@@ -1032,9 +1076,36 @@ function invalidHostData(message: string): never {
     throw new AgentClientError('invalid_event', message);
 }
 
+function artifactRange(
+    input: ReadArtifactInput,
+): { start: number; end: number } | undefined {
+    if (input.start === undefined && input.end === undefined) return undefined;
+    if (input.start === undefined || input.end === undefined) {
+        throw new AgentClientError(
+            'invalid_arguments',
+            'artifact range requires both start and end',
+        );
+    }
+    if (
+        !Number.isSafeInteger(input.start) ||
+        !Number.isSafeInteger(input.end) ||
+        input.start < 0 ||
+        input.start > input.end
+    ) {
+        throw new AgentClientError(
+            'invalid_arguments',
+            'artifact range is invalid',
+        );
+    }
+    return { start: input.start, end: input.end };
+}
+
 function hostTreeEntries(result: HostToolResult): TreeEntry[] {
     if (!isPlainObject(result.output) || !Array.isArray(result.output.entries)) {
         return invalidHostData('host file tree result has no entries array');
+    }
+    if (result.output.entries.length > MAX_HOST_TREE_ENTRIES) {
+        return invalidHostData('host file tree result exceeds the client cap');
     }
     return result.output.entries.map((value) => {
         if (
@@ -1081,6 +1152,9 @@ function hostChangesSnapshot(
         snapshot.captured_at_ms < 0
     ) {
         return invalidHostData('host branch snapshot is malformed');
+    }
+    if (snapshot.files.length > MAX_HOST_DIFF_FILES) {
+        return invalidHostData('host branch snapshot exceeds the client cap');
     }
     const files = snapshot.files.map((value) => {
         if (
@@ -1134,6 +1208,12 @@ async function hostArtifactContent(
     ) {
         return invalidHostData('host artifact result is malformed');
     }
+    if ((output.size_bytes as number) > MAX_HOST_ARTIFACT_RETURN_BYTES) {
+        return invalidHostData('host artifact size exceeds the client cap');
+    }
+    if (output.bytes_base64.length > MAX_HOST_ARTIFACT_BASE64_CHARS) {
+        return invalidHostData('host artifact base64 exceeds the client cap');
+    }
     let bytes: Uint8Array;
     try {
         const binary = globalThis.atob(output.bytes_base64);
@@ -1150,6 +1230,8 @@ async function hostArtifactContent(
     if ((await sha256Bytes(bytes)) !== output.digest) {
         return invalidHostData('host artifact digest does not match its bytes');
     }
+    let rangeValue: { start: number; end: number } | undefined;
+    let artifactSizeBytes: number | undefined;
     if (output.range !== undefined) {
         const range = output.range;
         if (
@@ -1171,12 +1253,27 @@ async function hostArtifactContent(
         ) {
             return invalidHostData('host artifact total size is malformed');
         }
+        rangeValue = { start: range.start, end: range.end };
+        artifactSizeBytes = output.artifact_size_bytes;
+    }
+    let wholeDigest: string | undefined;
+    if (output.whole_digest !== undefined) {
+        if (
+            typeof output.whole_digest !== 'string' ||
+            !DIGEST_PATTERN.test(output.whole_digest)
+        ) {
+            return invalidHostData('host artifact whole digest is malformed');
+        }
+        wholeDigest = output.whole_digest;
     }
     return {
         path: output.path,
         mediaType: output.media_type,
         sizeBytes: bytes.byteLength,
         digest: output.digest,
+        ...(artifactSizeBytes === undefined ? {} : { artifactSizeBytes }),
+        ...(wholeDigest === undefined ? {} : { wholeDigest }),
+        ...(rangeValue === undefined ? {} : { range: rangeValue }),
         bytes,
     };
 }

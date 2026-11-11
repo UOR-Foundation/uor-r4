@@ -3420,16 +3420,21 @@ pub mod tauri_gui {
     }
 
     #[tauri::command(async)]
+    pub fn agent_grants(state: tauri::State<'_, TauriDesktopState>) -> Result<Value, String> {
+        state.with_backend(|backend| {
+            crate::agent_data::agent_grants_value(backend).map_err(|error| error.to_string())
+        })
+    }
+
+    #[tauri::command(async)]
     pub fn agent_git_diff(
         state: tauri::State<'_, TauriDesktopState>,
         grant_id: String,
         branch_scope: String,
     ) -> Result<Value, String> {
         state.with_backend(|backend| {
-            let snapshot = backend
-                .agent_git_diff(&grant_id, &branch_scope)
-                .map_err(|error| error.to_string())?;
-            serde_json::to_value(snapshot).map_err(|error| error.to_string())
+            crate::agent_data::agent_git_diff_output(backend, &grant_id, &branch_scope)
+                .map_err(|error| error.to_string())
         })
     }
 
@@ -3714,7 +3719,7 @@ pub mod tauri_gui {
     }
 
     /// Construct the configured [`tauri::Builder`] with managed [`TauriDesktopState`] and all
-    /// 33 native/host `#[tauri::command]` handlers registered.
+    /// 34 native/host `#[tauri::command]` handlers registered.
     pub fn build_tauri_app_builder(state: TauriDesktopState) -> tauri::Builder<tauri::Wry> {
         tauri::Builder::default()
             .plugin(tauri_plugin_dialog::init())
@@ -3765,6 +3770,7 @@ pub mod tauri_gui {
                 native_list_directory,
                 native_git_status,
                 native_git_diff,
+                agent_grants,
                 agent_list_directory,
                 agent_git_diff,
                 agent_read_artifact,

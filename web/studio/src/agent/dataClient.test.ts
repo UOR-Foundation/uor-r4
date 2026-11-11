@@ -16,6 +16,14 @@ import type { AgentTaskStore } from './store.js';
 import { AgentStoreError } from './storeTypes.js';
 
 const TASK_ID = 'tsk_0123456789abcdef';
+const FULL64_A = `art_${'a1'.repeat(32)}`;
+const FULL64_B = `art_${'b2'.repeat(32)}`;
+const FULL64_C = `art_${'c3'.repeat(32)}`;
+const FULL64_MISSING = `art_${'f'.repeat(64)}`;
+const MAX_HOST_TREE_ENTRIES = 512;
+const MAX_HOST_DIFF_FILES = 256;
+const MAX_HOST_ARTIFACT_RETURN_BYTES = 1024 * 1024;
+const MAX_HOST_ARTIFACT_BASE64_CHARS = 4 * Math.ceil(MAX_HOST_ARTIFACT_RETURN_BYTES / 3);
 const RUN_ID = 'run_0123456789abcdef';
 const ZERO_TASK_ID = 'tsk_0000000000000000';
 const ZERO_RUN_ID = 'run_0000000000000000';
@@ -127,6 +135,9 @@ interface DurableArtifactFixture {
     size_bytes: number;
     digest: string;
     bytes: Uint8Array;
+    artifact_size_bytes?: number;
+    whole_digest?: string;
+    range?: { start: number; end: number };
 }
 
 function clientWithDurableArtifact(
@@ -454,7 +465,7 @@ describe('AgentClient companion data routing', () => {
         const bytes = new TextEncoder().encode('durable browser bytes');
         const digest = await sha256Bytes(bytes);
         const durable: DurableArtifactFixture = {
-            artifact_id: 'art_00000000000000a1',
+            artifact_id: FULL64_A,
             media_type: 'text/plain',
             size_bytes: bytes.byteLength,
             digest,
@@ -510,18 +521,292 @@ describe('AgentClient companion data routing', () => {
         );
 
         const content = await client.readArtifact({
-            artifactId: 'art_00000000000000a2',
+            artifactId: FULL64_B,
         });
         expect(content.path).toBe('host.txt');
-        expect(reads).toEqual(['art_00000000000000a2']);
+        expect(reads).toEqual([FULL64_B]);
         expect(transport.intents).toHaveLength(1);
 
         // Path-only reads keep the existing local-then-host behavior and do
         // not consult the durable artifact store.
         const byPath = await client.readArtifact({ path: 'src/missing.txt' });
         expect(byPath.path).toBe('host.txt');
-        expect(reads).toEqual(['art_00000000000000a2']);
+        expect(reads).toEqual([FULL64_B]);
         expect(transport.intents).toHaveLength(2);
+    });
+
+    test('read_artifact_runtime_unavailable_falls_back_to_host', async () => {
+        const hostBytes = new TextEncoder().encode('host artifact');
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {
+                path: 'host.txt',
+                media_type: 'text/plain',
+                size_bytes: hostBytes.byteLength,
+                digest: await sha256Bytes(hostBytes),
+                bytes_base64: base64(hostBytes),
+            }),
+        );
+        const { client, reads } = clientWithDurableArtifact(async () => {
+            throw new AgentStoreError(
+                'runtime_unavailable',
+                'durable task store is closed',
+            );
+        }, transport);
+
+        const content = await client.readArtifact({ artifactId: FULL64_A });
+        expect(content.path).toBe('host.txt');
+        expect(reads).toEqual([FULL64_A]);
+        expect(transport.intents).toHaveLength(1);
+    });
+
+    test('read_artifact_invalid_arguments_does_not_fall_back', async () => {
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, { path: 'host.txt' }),
+        );
+        const { client, reads } = clientWithDurableArtifact(async () => {
+            throw new AgentStoreError(
+                'invalid_arguments',
+                'artifact_id is invalid',
+            );
+        }, transport);
+
+        await expect(
+            client.readArtifact({ artifactId: FULL64_B }),
+        ).rejects.toMatchObject({ code: 'invalid_arguments' });
+        expect(reads).toEqual([FULL64_B]);
+        expect(transport.intents).toHaveLength(0);
+    });
+
+    test('read_artifact_full64_missing_durable_record_falls_back_to_host', async () => {
+        const hostBytes = new TextEncoder().encode('host artifact');
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {
+                path: 'host.txt',
+                media_type: 'text/plain',
+                size_bytes: hostBytes.byteLength,
+                digest: await sha256Bytes(hostBytes),
+                bytes_base64: base64(hostBytes),
+            }),
+        );
+        const { client, reads } = clientWithDurableArtifact(
+            async () => null,
+            transport,
+        );
+
+        const content = await client.readArtifact({
+            artifactId: FULL64_MISSING,
+        });
+        expect(content.path).toBe('host.txt');
+        expect(reads).toEqual([FULL64_MISSING]);
+        expect(transport.intents).toHaveLength(1);
+        expect(transport.intents[0]!.arguments).toEqual({
+            artifact_id: FULL64_MISSING,
+        });
+    });
+
+    test('read_artifact_range_is_sent_to_host_and_metadata_preserved', async () => {
+        const rangeBytes = new TextEncoder().encode('range');
+        const wholeDigest = `sha256:${'d'.repeat(64)}`;
+        const rangeDigest = await sha256Bytes(rangeBytes);
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {
+                path: 'host.txt',
+                media_type: 'text/plain',
+                size_bytes: rangeBytes.byteLength,
+                artifact_size_bytes: 21,
+                digest: rangeDigest,
+                whole_digest: wholeDigest,
+                range: { start: 2, end: 7 },
+                bytes_base64: base64(rangeBytes),
+            }),
+        );
+        const client = clientWith(transport);
+
+        const content = await client.readArtifact({
+            artifactId: FULL64_A,
+            start: 2,
+            end: 7,
+        });
+        expect(transport.intents[0]!.arguments).toEqual({
+            artifact_id: FULL64_A,
+            start: 2,
+            end: 7,
+        });
+        expect(content).toMatchObject({
+            path: 'host.txt',
+            mediaType: 'text/plain',
+            sizeBytes: rangeBytes.byteLength,
+            artifactSizeBytes: 21,
+            digest: rangeDigest,
+            wholeDigest,
+            range: { start: 2, end: 7 },
+        });
+        expect(new TextDecoder().decode(content.bytes)).toBe('range');
+    });
+
+    test('read_artifact_malformed_range_is_refused_before_host', async () => {
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {
+                path: 'host.txt',
+                media_type: 'text/plain',
+                size_bytes: 0,
+                digest: `sha256:${'0'.repeat(64)}`,
+                bytes_base64: '',
+            }),
+        );
+        const client = clientWith(transport);
+        await expect(
+            client.readArtifact({ artifactId: FULL64_A, start: 5, end: 2 }),
+        ).rejects.toMatchObject({ code: 'invalid_arguments' });
+        await expect(
+            client.readArtifact({ artifactId: FULL64_A, start: 1 }),
+        ).rejects.toMatchObject({ code: 'invalid_arguments' });
+        expect(transport.intents).toHaveLength(0);
+    });
+
+    test('read_artifact_durable_range_preserves_metadata', async () => {
+        const bytes = new TextEncoder().encode('durable range');
+        const digest = await sha256Bytes(bytes);
+        const wholeDigest = `sha256:${'e'.repeat(64)}`;
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, { path: 'host.txt' }),
+        );
+        const { client, reads } = clientWithDurableArtifact(
+            async () => ({
+                artifact_id: FULL64_A,
+                media_type: 'text/plain',
+                size_bytes: bytes.byteLength,
+                artifact_size_bytes: 100,
+                digest,
+                whole_digest: wholeDigest,
+                range: { start: 10, end: 10 + bytes.byteLength },
+                bytes,
+            }),
+            transport,
+        );
+
+        const content = await client.readArtifact({
+            artifactId: FULL64_A,
+            start: 10,
+            end: 10 + bytes.byteLength,
+        });
+        expect(content).toMatchObject({
+            sizeBytes: bytes.byteLength,
+            artifactSizeBytes: 100,
+            digest,
+            wholeDigest,
+            range: { start: 10, end: 10 + bytes.byteLength },
+        });
+        expect(reads).toEqual([FULL64_A]);
+        expect(transport.intents).toHaveLength(0);
+    });
+
+    test('host_tree_result_is_capped_before_mapping', async () => {
+        const entries = Array.from(
+            { length: MAX_HOST_TREE_ENTRIES + 1 },
+            (_, index) => ({ path: `file-${index}.txt`, kind: 'file' }),
+        );
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, { entries }),
+        );
+        const client = clientWith(transport);
+        await expect(
+            client.tree({ source: 'host', path: 'src' }),
+        ).rejects.toMatchObject({ code: 'invalid_event' });
+    });
+
+    test('host_changes_result_is_capped_before_mapping', async () => {
+        const files = Array.from(
+            { length: MAX_HOST_DIFF_FILES + 1 },
+            (_, index) => ({ path: `file-${index}.txt` }),
+        );
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {
+                snapshot: {
+                    scope: 'branch',
+                    files,
+                    head_digest: `sha256:${'a'.repeat(64)}`,
+                    captured_at_ms: 1,
+                },
+            }),
+        );
+        const client = clientWith(transport);
+        await expect(
+            client.changesSnapshot({ taskId: TASK_ID, scope: 'branch' }),
+        ).rejects.toMatchObject({ code: 'invalid_event' });
+    });
+
+    test('host_artifact_size_cap_is_enforced_before_decode', async () => {
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {
+                path: 'host.txt',
+                media_type: 'text/plain',
+                size_bytes: MAX_HOST_ARTIFACT_RETURN_BYTES + 1,
+                digest: `sha256:${'0'.repeat(64)}`,
+                bytes_base64: 'A',
+            }),
+        );
+        const client = clientWith(transport);
+        await expect(
+            client.readArtifact({ artifactId: FULL64_A }),
+        ).rejects.toMatchObject({
+            code: 'invalid_event',
+            message: expect.stringContaining('client cap'),
+        });
+    });
+
+    test('host_artifact_base64_cap_is_enforced_before_decode', async () => {
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {
+                path: 'host.txt',
+                media_type: 'text/plain',
+                size_bytes: 1,
+                digest: `sha256:${'0'.repeat(64)}`,
+                bytes_base64: 'A'.repeat(MAX_HOST_ARTIFACT_BASE64_CHARS + 1),
+            }),
+        );
+        const client = clientWith(transport);
+        await expect(
+            client.readArtifact({ artifactId: FULL64_A }),
+        ).rejects.toMatchObject({
+            code: 'invalid_event',
+            message: expect.stringContaining('client cap'),
+        });
+    });
+
+    test('host_artifact_malformed_range_is_refused', async () => {
+        const bytes = new TextEncoder().encode('four');
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {
+                path: 'host.txt',
+                media_type: 'text/plain',
+                size_bytes: bytes.byteLength,
+                artifact_size_bytes: 10,
+                digest: await sha256Bytes(bytes),
+                whole_digest: `sha256:${'0'.repeat(64)}`,
+                range: { start: 0, end: 5 },
+                bytes_base64: base64(bytes),
+            }),
+        );
+        const client = clientWith(transport);
+        await expect(
+            client.readArtifact({ artifactId: FULL64_A }),
+        ).rejects.toMatchObject({ code: 'invalid_event' });
+    });
+
+    test('host_git_diff_requires_snapshot_wrapper', async () => {
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {
+                scope: 'branch',
+                files: [],
+                head_digest: `sha256:${'a'.repeat(64)}`,
+                captured_at_ms: 1,
+            }),
+        );
+        const client = clientWith(transport);
+        await expect(
+            client.changesSnapshot({ taskId: TASK_ID, scope: 'branch' }),
+        ).rejects.toMatchObject({ code: 'invalid_event' });
     });
 
     test('read_artifact_corrupt_durable_record_is_refused_without_host', async () => {
@@ -543,9 +828,9 @@ describe('AgentClient companion data routing', () => {
         }, transport);
 
         await expect(
-            client.readArtifact({ artifactId: 'art_00000000000000a3' }),
+            client.readArtifact({ artifactId: FULL64_C }),
         ).rejects.toMatchObject({ code: 'snapshot_corrupt' });
-        expect(reads).toEqual(['art_00000000000000a3']);
+        expect(reads).toEqual([FULL64_C]);
         expect(transport.intents).toHaveLength(0);
     });
 });
