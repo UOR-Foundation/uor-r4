@@ -1,0 +1,504 @@
+spec = "uor-r4.stack-contract/2"
+id = "fbs-deepseek-scenario-smoke"
+title = "FBS aligned-scenario 1,024-step GPU smoke"
+lane = "fbs"
+state = "experimental"
+revision = 1
+decision = "docs/harness/prep/one-model-end-to-end-scenario-gpu-smoke-2026-11-11.md"
+source_pin = "7a450a88f35d4c2ae35e7b16d53e1f3450c62470"
+summary = "One fresh-start 1,024-step training of the current FBS/Hamming geometric path on the aligned scenario corpus, exported as a bound uor-r4.lut-stack/10 artifact and scored against the same-evaluator previous-token count table."
+
+[model]
+tokenizer_sha256 = "d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89"
+vocab = 4096
+width = 256
+layers = 6
+training_context = 192
+context = 192
+objective = "cell"
+training = "float32 on CUDA; train-as-served rounding is applied before each forward"
+serving = "bound integer UORLUT01 artifact; Q12 writer points and branch-free table arithmetic"
+
+[artifact]
+family = "uor-r4.lut-stack"
+provenance = "required"
+schema = "uor-r4.lut-stack/10"
+
+[[artifact.sections]]
+id = "trunk"
+required = true
+owner = "fbs-trunk"
+format = "4-bit matrices, group scales, i16/i32/u32 tables"
+description = "The SpiralCore/FBS recurrence, route maps, Hamilton gates and serving tables."
+
+[[artifact.sections]]
+id = "hamming-reads"
+required = true
+owner = "hamming-copy-read"
+format = "Q24 rotations and weights, Q16 margins, i16 ask tables when present"
+exponent = -24
+description = "The trained copy and type reads, including the latest-exact copy rule."
+
+[[artifact.sections]]
+id = "turn-memory"
+required = true
+owner = "turn-memory"
+format = "u32 keys and values, i32 Q24 move weights"
+exponent = -24
+description = "The opening and reply tables that carry stated facts across turns."
+
+[[artifact.sections]]
+id = "writer"
+required = true
+owner = "whole-table-readout"
+format = "native vector writer cells and Q12 i16 token points"
+exponent = -12
+description = "The native writer and whole-table nearest-token readout."
+
+[[inputs]]
+id = "tokenizer"
+source = "store:w2-inputs/2026-10-25/driver-data/tokenizer.json"
+sha256 = "d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89"
+
+[[inputs]]
+id = "scenario-receipt"
+source = "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/scenario-corpus-v1/scenario-manifest.json"
+sha256 = "4991326286c3ebe2f3a3e975c23e633fe4bb2662e6f6746333535cdff9f68604"
+
+[[inputs]]
+id = "trainer-dev-tokens"
+source = "store:w2-inputs/2026-10-25/driver-data/ft/dev/tokens.u16"
+sha256 = "0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b"
+
+[[inputs]]
+id = "trainer-dev-mask"
+source = "store:w2-inputs/2026-10-25/driver-data/ft/dev/response_mask.u8"
+sha256 = "a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078"
+
+[[inputs]]
+id = "base-artifact"
+source = "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/arm-r-s2-c8256-bound.uorlut"
+sha256 = "a1d705586b35d7da282913b1e21b242a74c0661b32d73e2ec89f56310a8140e8"
+
+[[inputs]]
+id = "train-tokens"
+source = "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/scenario-corpus-v1/train/tokens.u16"
+sha256 = "3412e1b6ccb46db986959aa08b60490d46b3a2a3524fad476cf1fedd838259d8"
+
+[[inputs]]
+id = "train-mask"
+source = "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/scenario-corpus-v1/train/response_mask.u8"
+sha256 = "b0f745fbea8c11f7e9c2993ca03a4eb3ae5ee101b2b0ca0c23e544cac9cb92e0"
+
+[[inputs]]
+id = "train-manifest"
+source = "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/scenario-corpus-v1/train/manifest.json"
+sha256 = "d660f4e695363bbf121391841d17b147e8aec30071d5e59de4008b646c57ae57"
+
+[[inputs]]
+id = "train-scenarios"
+source = "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/scenario-corpus-v1/train/scenarios.jsonl"
+sha256 = "9799855ae6aaa5dcfdff514ca68bd142b11226be449538035a3576a2902d9c43"
+
+[[inputs]]
+id = "development-tokens"
+source = "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/scenario-corpus-v1/development/tokens.u16"
+sha256 = "612638bba7213f1960cc118a41e6e51ff36074953bb3c7a22f8a9445f1b11777"
+
+[[inputs]]
+id = "development-mask"
+source = "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/scenario-corpus-v1/development/response_mask.u8"
+sha256 = "b42518ff047712e7966dbd2619ea314cd0c21dd460b79b1d9cf05491ec54de92"
+
+[[inputs]]
+id = "development-manifest"
+source = "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/scenario-corpus-v1/development/manifest.json"
+sha256 = "42dfd893ec4defd6f6a53539b5c7c564dc886fe1fe430179716757111447baae"
+
+[[inputs]]
+id = "development-scenarios"
+source = "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/scenario-corpus-v1/development/scenarios.jsonl"
+sha256 = "2d49834d597aed75bf452b1f4469eea29b7a1ad6f42838da366f26efd7b4a299"
+
+[[inputs]]
+id = "fresh-tokens"
+source = "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/scenario-corpus-v1/fresh/tokens.u16"
+sha256 = "574558344f9626d665112183a62ec6d9ce703fd51d6dc5b1ead6328accdc178d"
+
+[[inputs]]
+id = "fresh-mask"
+source = "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/scenario-corpus-v1/fresh/response_mask.u8"
+sha256 = "8517e0aed1e0f6d695e63cd3d5ab10427911947296213b1b7670265de8df6667"
+
+[[inputs]]
+id = "fresh-manifest"
+source = "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/scenario-corpus-v1/fresh/manifest.json"
+sha256 = "a6b671bb48db8fec737a247e43e2b421d09ad2f9cebd6dbbafb177060b43f735"
+
+[[inputs]]
+id = "fresh-scenarios"
+source = "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/scenario-corpus-v1/fresh/scenarios.jsonl"
+sha256 = "43b6dc81d480270013b467dbafc4281cc17e764b321b341b919ed4625719faae"
+
+[[evidence]]
+id = "source-pin"
+kind = "authority"
+locator = "docs/loop/tasks/one-model-end-to-end/deepseek-273/ORDER.md"
+result = "pass"
+scope = "source identity"
+mechanisms = ["tokenizer", "fbs-trunk", "hamming-copy-read", "turn-memory", "whole-table-readout", "integer-export", "short-cycle-stop"]
+statement = "The trainer and exporter are the main-track code at 7a450a88f; this contract binds the planned aligned-corpus run without changing that code."
+
+[[evidence]]
+id = "aligned-corpus"
+kind = "report"
+locator = "docs/loop/tasks/one-model-end-to-end/deepseek-268/REPORT.md"
+result = "pass"
+scope = "aligned scenario corpus construction"
+mechanisms = ["tokenizer", "fbs-trunk", "whole-table-readout"]
+statement = "The scenario corpus receipt binds 20,000 TRAIN rows and disjoint development and Fresh panels by content hashes."
+
+[[evidence]]
+id = "scenario-baseline"
+kind = "report"
+locator = "docs/loop/tasks/one-model-end-to-end/deepseek-272/REPORT.md"
+result = "pass"
+scope = "arm-r and count-table behavior on the aligned panels"
+mechanisms = ["hamming-copy-read", "turn-memory", "whole-table-readout", "integer-export"]
+statement = "Arm r copied 10 of 110 development and 11 of 110 Fresh copy prompts; the previous-token table answered no grounded archetype."
+
+[[evidence]]
+id = "run-pending"
+kind = "report"
+locator = "docs/loop/tasks/one-model-end-to-end/deepseek-273/REPORT.md"
+result = "not-run"
+scope = "planned 1,024-step aligned-corpus smoke"
+mechanisms = ["fbs-trunk", "hamming-copy-read", "turn-memory", "whole-table-readout", "integer-export", "short-cycle-stop"]
+statement = "No later checkpoint, artifact or held-out result exists when this contract is registered."
+
+[[mechanisms]]
+id = "tokenizer"
+status = "integrated"
+implementation = "crates/uor-r4-tokenizer/src/lib.rs"
+evidence = ["crates/uor-r4-tokenizer/src/lib.rs", "docs/model/data-and-tokenizer.md"]
+evidence_ids = ["source-pin"]
+flags = []
+conflicts_with = []
+depends_on = []
+sidecars = []
+load_order = 10
+cleanup_order = 90
+sections = []
+invariants = ["The tokenizer bytes hash to d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89.", "Every token id is below the artifact vocabulary of 4096."]
+non_claims = ["The tokenizer is not evidence of language capability."]
+
+[[mechanisms]]
+id = "fbs-trunk"
+status = "integrated"
+implementation = "crates/uor-r4-float-train/src/geometric_stack_native.rs"
+evidence = ["crates/uor-r4-float-train/src/geometric_stack_native.rs", "crates/uor-r4-float-train/src/hamilton_sheet.rs"]
+evidence_ids = ["source-pin", "aligned-corpus", "run-pending"]
+conflicts_with = []
+depends_on = ["tokenizer"]
+sidecars = ["model.safetensors", "config.json"]
+load_order = 20
+cleanup_order = 80
+sections = ["trunk", "writer"]
+invariants = ["Every projection is a SpiralCore/FBS route table.", "The recurrence and Hamilton gates preserve the declared geometric arithmetic.", "The writer produces one width-256 query for every served position."]
+non_claims = ["The trunk alone does not establish useful conversation."]
+
+[[mechanisms.flags]]
+name = "--objective"
+value = "cell"
+required = true
+
+[[mechanisms]]
+id = "hamming-copy-read"
+status = "integrated"
+implementation = "crates/uor-r4-float-train/src/flock_read_hamming.rs"
+evidence = ["crates/uor-r4-float-train/src/flock_read_hamming.rs", "docs/mechanisms/flock-read.md"]
+evidence_ids = ["source-pin", "scenario-baseline", "run-pending"]
+conflicts_with = []
+depends_on = ["fbs-trunk"]
+sidecars = ["hamming_read.safetensors"]
+load_order = 30
+cleanup_order = 70
+sections = ["hamming-reads"]
+invariants = ["Each copy head reads its latest exact earlier match at full weight.", "The trainer and artifact use one-token copy keys and the same latest-exact rule.", "A missing exact match reads no copied value."]
+non_claims = ["A copy hit does not by itself preserve the copied value through the writer."]
+
+[[mechanisms.flags]]
+name = "--hamming-read"
+value = "4"
+required = true
+
+[[mechanisms]]
+id = "turn-memory"
+status = "integrated"
+implementation = "crates/uor-r4-float-train/src/flock_read_memory.rs"
+evidence = ["crates/uor-r4-float-train/src/flock_read_memory.rs", "crates/uor-r4-integer/src/stack/memory.rs"]
+evidence_ids = ["source-pin", "scenario-baseline", "run-pending"]
+conflicts_with = []
+depends_on = ["hamming-copy-read"]
+sidecars = ["turn_memory.safetensors", "turn_memory_reply.safetensors"]
+load_order = 40
+cleanup_order = 60
+sections = ["turn-memory"]
+invariants = ["The opening and reply tables are addressed by exact integer keys.", "A key owned by the latest-exact copy read is left out of the turn memory.", "Training dropout changes training only; serving uses the stored table at every row."]
+non_claims = ["The memory is not shown to recover values from the end of the question."]
+
+[[mechanisms.flags]]
+name = "--turn-memory"
+value = "8"
+required = true
+
+[[mechanisms.flags]]
+name = "--turn-memory-reply"
+value = "true"
+required = true
+
+[[mechanisms.flags]]
+name = "--turn-memory-dropout"
+value = "500"
+required = true
+
+[[mechanisms.flags]]
+name = "--turn-memory-leave-copied"
+value = "true"
+required = true
+
+[[mechanisms]]
+id = "whole-table-readout"
+status = "integrated"
+implementation = "crates/uor-r4-float-train/src/in_space_long.rs"
+evidence = ["crates/uor-r4-float-train/src/in_space_long.rs", "docs/model/pipeline-map.md"]
+evidence_ids = ["source-pin", "aligned-corpus", "run-pending"]
+conflicts_with = []
+depends_on = ["fbs-trunk"]
+sidecars = []
+load_order = 50
+cleanup_order = 50
+sections = ["writer"]
+invariants = ["The decoded token is the whole table's nearest point to the served query.", "Cell and nearest objectives decode through the same whole-table readout."]
+non_claims = ["Teacher-forced token fit is not free-running complete-reply capability."]
+
+[[mechanisms.flags]]
+name = "--objective"
+value = "cell"
+required = true
+
+[[mechanisms]]
+id = "integer-export"
+status = "not-run"
+implementation = "crates/uor-r4-integer/src/bin/fbs-export.rs"
+evidence = ["crates/uor-r4-integer/src/bin/fbs-export.rs", "crates/uor-r4-integer/src/stack/format.rs"]
+evidence_ids = ["source-pin", "run-pending"]
+conflicts_with = []
+depends_on = ["fbs-trunk", "hamming-copy-read", "turn-memory", "whole-table-readout"]
+sidecars = ["artifact:writer", "artifact:hamming", "artifact:memory"]
+load_order = 60
+cleanup_order = 40
+sections = ["trunk", "hamming-reads", "turn-memory", "writer"]
+invariants = ["The exported schema is exactly uor-r4.lut-stack/10.", "The artifact records the stack-contract and tokenizer identities.", "The artifact records the latest-exact copy rule used by training.", "The integer session loads and serves the artifact without floating-point arithmetic."]
+non_claims = ["Float-to-integer export agreement does not establish language capability."]
+
+[[mechanisms.flags]]
+name = "--run-config"
+value = "config.json"
+required = true
+
+[[mechanisms]]
+id = "short-cycle-stop"
+status = "integrated"
+implementation = "crates/uor-r4-integer/src/stack/chat.rs"
+evidence = ["crates/uor-r4-integer/src/stack/chat.rs", "crates/uor-r4-integer/src/generation.rs"]
+evidence_ids = ["source-pin", "run-pending"]
+flags = []
+conflicts_with = []
+depends_on = ["integer-export"]
+sidecars = []
+load_order = 70
+cleanup_order = 30
+sections = []
+invariants = ["A repeated cycle of period one through four ends the reply after the declared repetition.", "Cycle stopping is deterministic and does not sample."]
+non_claims = ["Cycle stopping does not recover content displaced by the cycle."]
+
+[[commands]]
+id = "train"
+role = "train"
+program = "cargo"
+args = ["run", "--release", "--locked", "-p", "uor-r4-float-train", "--bin", "train-in-space", "--", "--objective", "cell", "--retain-rates", "1", "--decay-mult", "1", "--lr", "0.001", "--lr-end", "0", "--train-as-served", "1", "--context", "192", "--width", "256", "--hamming-read", "4", "--batch", "16", "--turn-memory", "8", "--turn-memory-reply", "1", "--turn-memory-dropout", "500", "--samples", "6", "--reply-tokens", "48", "--steps", "1024", "--eval-every", "256", "--hamming-copy-latest", "1", "--turn-memory-leave-copied", "1"]
+env = []
+inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "train-scenarios", "trainer-dev-tokens", "trainer-dev-mask", "tokenizer"]
+outputs = ["model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors", "config.json"]
+timeout_seconds = 7200
+
+[[commands]]
+id = "score-development"
+role = "score"
+program = "cpu-scenario-grade"
+args = ["ARTIFACT", "CORPUS_ROOT", "TOKENIZER", "--split", "development", "--max-cases", "1024", "--reply-tokens", "64", "--table-baseline", "1"]
+env = []
+inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "development-tokens", "development-mask", "development-manifest", "development-scenarios", "tokenizer", "base-artifact"]
+outputs = ["development.json"]
+timeout_seconds = 1800
+
+[[commands]]
+id = "score-fresh"
+role = "score"
+program = "cpu-scenario-grade"
+args = ["ARTIFACT", "CORPUS_ROOT", "TOKENIZER", "--split", "fresh", "--max-cases", "1024", "--reply-tokens", "64", "--table-baseline", "1"]
+env = []
+inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "fresh-tokens", "fresh-mask", "fresh-manifest", "fresh-scenarios", "tokenizer", "base-artifact"]
+outputs = ["fresh.json"]
+timeout_seconds = 1800
+
+[[commands]]
+id = "export"
+role = "export"
+program = "fbs-export"
+args = ["--raw-gates", "--raw-transition", "--run-config", "config.json", "--stack-contract", "conformance/stack/fbs-deepseek-scenario-smoke.toml", "--stack-contract-semantic-blake3", "SEMANTIC_BLAKE3", "--tokenizer", "tokenizer.json", "SNAPSHOT_JSON", "step-001024.uorlut"]
+env = []
+inputs = ["model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors", "config.json", "tokenizer"]
+outputs = ["step-001024.uorlut"]
+timeout_seconds = 1800
+
+[[commands]]
+id = "serve"
+role = "serve"
+program = "uor-chat"
+args = ["--stack", "step-001024.uorlut", "--tokenizer", "tokenizer.json", "--protocol", "2", "--max-tokens", "64"]
+env = []
+inputs = ["step-001024.uorlut", "tokenizer"]
+outputs = ["chat.json"]
+timeout_seconds = 300
+
+[[commands]]
+id = "audit"
+role = "verify"
+program = "cargo"
+args = ["xtask", "stack-audit", "--contract", "conformance/stack/fbs-deepseek-scenario-smoke.toml"]
+env = []
+inputs = ["fbs-deepseek-scenario-smoke.toml"]
+outputs = ["stack-audit.json"]
+timeout_seconds = 300
+
+[[readings]]
+id = "grounded-asked-value"
+class = "semantic"
+description = "Fresh asked-value hits over memorize, paraphrase, selection and update."
+mechanism = "whole-table-readout"
+unit = "count of 441"
+better = "higher"
+bar = 20.0
+
+[[readings]]
+id = "each-grounded-family"
+class = "semantic"
+description = "Each of the four grounded archetypes independently reaches at least five asked-value hits."
+mechanism = "hamming-copy-read"
+unit = "count of about 110"
+better = "higher"
+bar = 5.0
+
+[[readings]]
+id = "control-abstention"
+class = "semantic"
+description = "Fresh wrong-memory and no-memory controls abstain correctly."
+mechanism = "turn-memory"
+unit = "count of 220"
+better = "higher"
+bar = 10.0
+
+[[readings]]
+id = "copy-positive-control"
+class = "semantic"
+description = "Fresh direct-copy prompts still name the asked value."
+mechanism = "integer-export"
+unit = "count of 110"
+better = "higher"
+bar = 11.0
+
+[[readings]]
+id = "distractor-safety"
+class = "semantic"
+description = "Fresh non-copy rows do not emit a distractor value."
+mechanism = "integer-export"
+unit = "count of 882"
+better = "lower"
+bar = 10.0
+
+[[readings]]
+id = "complete-replies"
+class = "structural"
+description = "Fresh replies stop on EOS."
+mechanism = "short-cycle-stop"
+unit = "count of 1024"
+better = "higher"
+
+[[probes]]
+id = "context-boundary"
+class = "boundary"
+mechanism = "fbs-trunk"
+axis = "context length"
+expectation = "A short turn is served and an oversized turn is refused with an explicit context error."
+cases = ["inside window", "oversize turn"]
+fixture = "conformance/stack/fixtures/context-boundary.v2.json"
+fixture_sha256 = "8b89092c838c0191fd4e257d7e884cb0990d66be2434d99c63beef28744b3830"
+layers = ["chat"]
+
+[[probes]]
+id = "copy-boundary"
+class = "boundary"
+mechanism = "hamming-copy-read"
+axis = "candidate count and tie order"
+expectation = "A source is available to a later question and a fresh rerun is deterministic."
+cases = ["source present", "kept-set order"]
+fixture = "conformance/stack/fixtures/copy-boundary.v2.json"
+fixture_sha256 = "b418f3b7fe72b457eab34ecdb703279125747f81a39eeca3e315af9aae84b479"
+layers = ["chat"]
+
+[[probes]]
+id = "memory-precedence"
+class = "metamorphic"
+mechanism = "turn-memory"
+axis = "explicit, sieve and absent memory"
+expectation = "Explicit memory overrides the sieve, the sieve derives a value, and an absent value emits no line."
+cases = ["automatic", "explicit overrides", "absent"]
+fixture = "conformance/stack/fixtures/memory-precedence.v2.json"
+fixture_sha256 = "409e782ef2d63e55f7ccd6a5c495d3269ee274b0f9825b030d3340d00263d6d7"
+layers = ["chat"]
+
+[[probes]]
+id = "cycle-period-boundary"
+class = "boundary"
+mechanism = "short-cycle-stop"
+axis = "cycle period"
+expectation = "Every served reply reports a terminal EOS, cap or short-cycle stop."
+cases = ["recorded stop", "no unreported exhaustion"]
+fixture = "conformance/stack/fixtures/cycle-boundary.v2.json"
+fixture_sha256 = "ac70c4a9594db51b90485ce488e74c988aa0085ca8cd7fa2e982ee7342941a4f"
+layers = ["chat"]
+
+[[probes]]
+id = "float-integer-boundary"
+class = "parity"
+mechanism = "integer-export"
+axis = "execution layer"
+expectation = "The artifact and tokenizer identities reach the product chat path and one integer token is generated."
+cases = ["chat script"]
+fixture = "conformance/stack/fixtures/representation-parity.v2.json"
+fixture_sha256 = "d0fc311df673ba2d5ecb4352c72a90c9f41e9d59b0d498ad094b7ca2c1ca5751"
+layers = ["chat"]
+
+[[non_claims]]
+id = "not-general-chat"
+statement = "This smoke does not answer general questions reliably and is not a completed frontier-capable chat model."
+
+[[non_claims]]
+id = "not-mechanism-retirement"
+statement = "A provisional miss routes the next step; it does not retire the named mechanism."
+
+[[non_claims]]
+id = "not-board-capability"
+statement = "Contract validation and probe execution are structural evidence, not a capability pass."
