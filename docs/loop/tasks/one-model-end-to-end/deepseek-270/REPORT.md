@@ -29,6 +29,17 @@ Every candidate decision uses trace features only. The reference is read by
 the scorer after the controller returns. The control and candidates emit only
 served tokens or EOS.
 
+## What changed
+
+- `bake-off/reply-control-v3.json` is the checked record.
+- `bake-off/reply-control-v3/` holds the V3 socket, control, scoreboard and
+  pick. Earlier V1/V2 documents remain as the rule-development record.
+- The standalone instrument crate gains shared trace types, the frozen flow
+  rule, the bake-off scorer and a controller module whose candidate versions
+  live only on sibling branches.
+- Serving code was not changed after the reply-control trace. The base current
+  rule remains the pick.
+
 ## Measurements
 
 Real arm-r seed-2 artifact:
@@ -50,17 +61,6 @@ All arms score the same 1,141 cases and the same 48-token trace.
 The stability predicate never fired because all trace margins were nonzero.
 Fixed and permeability are kill-line hits. Shuffled and random are worse, so
 the measured differences are not explained by arbitrary stopping.
-
-## What changed
-
-- `bake-off/reply-control-v3.json` is the checked record.
-- `bake-off/reply-control-v3/` holds the V3 socket, control, scoreboard and
-  pick. Earlier V1/V2 documents remain as the rule-development record.
-- The standalone instrument crate gains shared trace types, the frozen flow
-  rule, the bake-off scorer and a controller module whose candidate versions
-  live only on sibling branches.
-- Serving code was not changed after the reply-control trace. The base current
-  rule remains the pick.
 
 ## Checks run at the head
 
