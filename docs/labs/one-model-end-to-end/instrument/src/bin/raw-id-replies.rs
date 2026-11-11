@@ -23,12 +23,33 @@
 //! positions, short-cycle state, reply position and the `opaque`, `reflective` or `permeable`
 //! class. Each traced reply is also replayed untraced and must match id for id.
 //!
+//! `--place-rows 1` (claude-352) needs an artifact with a place read and adds `"place"` to each
+//! reply line: one `[held, offered]` pair a generated id, each a number or `null`, read from
+//! `IntegerStackSession::last_place` right after the `serve_step` that chose that id. That is
+//! the place read's register after that step, in `last_place`'s own words: "the place it holds,
+//! if it is set, and the place whose token that step's readout was offered, if its row was
+//! open". Pair `r` is so the register after stepping the token before reply id `r` (the prompt's
+//! last id for `r = 0`, reply id `r - 1` after), the step whose readout chose id `r`. A place is
+//! a session position, which is the index into the row's prompt: a row's session starts empty.
+//!
+//! `--places KIT` (needs `--place-rows 1`) reads a place kit, the
+//! `[reply start, place, value start, value length]` labels `train-in-space --turn-census
+//! --places-out` writes in corpus positions, and for each row with a `position` (the corpus
+//! position of the reply's first target, which is a kit reply start) adds `"value_row"`, the
+//! reply row at which the value's first token is chosen (value start − `position`), and
+//! `"true_place"`, the labelled place as an index into the prompt (place − (`position` − prompt
+//! length)). A reply the kit does not label gets `null` for both; a place before the prompt's
+//! first token gets `"true_place": null` and `"true_place_outside": true`. The receipt gains
+//! `place_rows`: the rows with a `position`, those with a true place, those whose place is
+//! outside the prompt, and the kit's hash and the corpus hash it names. The kit's corpus hash
+//! is not checked here: the reader has no corpus.
+//!
 //! It is an instrument: it trains nothing, changes no artifact and moves no bar.
 //!
 //! ```text
 //! raw-id-replies --stack ART.uorlut --samples ROWS.json --out REPLIES.jsonl \
 //!   --mark-reply 0|1 [--max-tokens 48] [--count-visits 0|1] [--time-steps 0|1] \
-//!   [--trace-control 0|1 --trace-out TRACE.jsonl]
+//!   [--trace-control 0|1 --trace-out TRACE.jsonl] [--place-rows 0|1 [--places KIT.json]]
 //! ```
 //!
 //! `ROWS.json` is a JSON array of objects with a `prompt` array of token ids (a float score's
@@ -44,11 +65,13 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use uor_r4_integer::generation::short_cycle;
-use uor_r4_integer::stack::{HammingStepRead, IntegerStackModel, IntegerStackSession};
+use uor_r4_integer::stack::{
+    read_hamming_uorlut01, HammingStepRead, IntegerStackModel, IntegerStackSession,
+};
 
 const SCHEMA: &str = "uor-r4.raw-id-replies/1";
 const EOS: u32 = 1;
-const USAGE: &str = "usage: raw-id-replies --stack FILE --samples FILE --out FILE --mark-reply 0|1 [--max-tokens N] [--count-visits 0|1] [--time-steps 0|1] [--trace-control 0|1 --trace-out FILE]";
+const USAGE: &str = "usage: raw-id-replies --stack FILE --samples FILE --out FILE --mark-reply 0|1 [--max-tokens N] [--count-visits 0|1] [--time-steps 0|1] [--trace-control 0|1 --trace-out FILE] [--place-rows 0|1 [--places FILE]]";
 /// How many values the early-stopping scan reads between two looks at its bound.
 const BLOCK: usize = 16;
 
@@ -403,6 +426,71 @@ fn replay_reply(
     }
 }
 
+/// A place kit as `turn_census::place_kit` writes it (claude-351); the reader keeps its labels.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PlaceKitFile {
+    tokens_sha256: String,
+    #[serde(rename = "marks")]
+    _marks: Value,
+    #[serde(rename = "stop")]
+    _stop: Vec<u32>,
+    places: Vec<[u32; 4]>,
+}
+
+/// The kit's labels keyed by reply start: `(place, value start)`, in corpus positions.
+struct PlaceLabels {
+    by_reply: std::collections::BTreeMap<usize, (usize, usize)>,
+    tokens_sha256: String,
+    sha256: String,
+}
+
+fn place_labels(bytes: &[u8], path: &str) -> Result<PlaceLabels> {
+    let kit: PlaceKitFile = serde_json::from_slice(bytes).map_err(|e| format!("{path}: {e}"))?;
+    let mut by_reply = std::collections::BTreeMap::new();
+    for [reply, place, value, _] in kit.places {
+        let (reply, place, value) = (reply as usize, place as usize, value as usize);
+        // The kit's own check: a place stands before its reply and its value inside it.
+        if place >= reply || value < reply {
+            return Err(format!("{path}: label at reply {reply} has place {place} and value start {value}"));
+        }
+        if by_reply.insert(reply, (place, value)).is_some() {
+            return Err(format!("{path}: two labels for the reply at {reply}"));
+        }
+    }
+    Ok(PlaceLabels { by_reply, tokens_sha256: kit.tokens_sha256, sha256: sha256_hex(bytes) })
+}
+
+/// Where a row's labelled place stands: its value row and its place as a prompt index.
+#[derive(Debug, PartialEq, Eq)]
+enum TruePlace {
+    Unlabelled,
+    Inside { value_row: usize, place: usize },
+    Outside { value_row: usize },
+}
+
+/// The kit's label for the reply whose first target is at corpus `position`, read against a
+/// prompt of `prompt_len` ids that ends there.
+fn true_place(labels: &PlaceLabels, position: usize, prompt_len: usize) -> Result<TruePlace> {
+    let start = position
+        .checked_sub(prompt_len)
+        .ok_or_else(|| format!("position {position} is before a prompt of {prompt_len} ids"))?;
+    Ok(match labels.by_reply.get(&position) {
+        None => TruePlace::Unlabelled,
+        Some(&(place, value)) if place >= start => {
+            TruePlace::Inside { value_row: value - position, place: place - start }
+        }
+        Some(&(_, value)) => TruePlace::Outside { value_row: value - position },
+    })
+}
+
+#[derive(Default)]
+struct PlaceTally {
+    rows: usize,
+    true_place: usize,
+    outside: usize,
+}
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("raw-id-replies: {error}");
@@ -439,10 +527,11 @@ fn prompt_ids(row: &Value, index: usize) -> Result<Vec<u32>> {
 }
 
 fn run() -> Result<()> {
-    run_with_args(std::env::args().skip(1))
+    println!("{}", run_with_args(std::env::args().skip(1))?);
+    Ok(())
 }
 
-fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
+fn run_with_args(args: impl Iterator<Item = String>) -> Result<Value> {
     let args: Vec<String> = args.collect();
     let need = |name: &str| flag(&args, name).ok_or_else(|| format!("missing {name}\n{USAGE}"));
     let stack_path = need("--stack")?;
@@ -483,6 +572,15 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
     if trace_path.as_deref() == Some(out_path.as_str()) {
         return Err("--trace-out must differ from --out".to_owned());
     }
+    let place_rows = match flag(&args, "--place-rows").as_deref() {
+        None | Some("0") => false,
+        Some("1") => true,
+        Some(other) => return Err(format!("--place-rows takes 0 or 1, not {other}")),
+    };
+    let places_path = flag(&args, "--places");
+    if places_path.is_some() && !place_rows {
+        return Err("--places needs --place-rows 1".to_owned());
+    }
 
     let artifact = fs::read(&stack_path).map_err(|e| format!("{stack_path}: {e}"))?;
     let samples = fs::read(&samples_path).map_err(|e| format!("{samples_path}: {e}"))?;
@@ -492,6 +590,21 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
         // A marked run on a model without a turn memory would be an unmarked run by another name.
         return Err("--mark-reply 1 needs an artifact with a turn memory".to_owned());
     }
+    if place_rows {
+        let image = read_hamming_uorlut01(&artifact).map_err(|e| format!("artifact: {e}"))?;
+        if image.and_then(|image| image.place).is_none() {
+            // Without a place read the register is never set: every pair would be null.
+            return Err("--place-rows 1 needs an artifact with a place read".to_owned());
+        }
+    }
+    let labels = places_path
+        .as_deref()
+        .map(|path| {
+            let bytes = fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+            place_labels(&bytes, path)
+        })
+        .transpose()?;
+    let mut place_tally = PlaceTally::default();
     let rows: Vec<Value> =
         serde_json::from_slice(&samples).map_err(|e| format!("{samples_path}: {e}"))?;
     let mut out = OpenOptions::new()
@@ -530,6 +643,8 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
         let mut session = model.session();
         session.clear_reply_start();
         let mut pick = EOS;
+        // One `[held, offered]` a generated id, taken after the step that chose it.
+        let mut registers = Vec::new();
         for (at, &token) in prompt.iter().enumerate() {
             if mark && at + 1 == prompt.len() {
                 session.mark_reply_start();
@@ -557,6 +672,9 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
             clock.serve_ns += started.elapsed().as_nanos();
             clock.serve_steps += 1;
             pick = served;
+            if place_rows {
+                registers.push(session.last_place());
+            }
             if let (Some(table), Some(query)) = (table, session.last_query_q12()) {
                 visits.count(table, query, session.last_native_token());
             }
@@ -612,6 +730,9 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
             clock.serve_ns += started.elapsed().as_nanos();
             clock.serve_steps += 1;
             pick = served;
+            if place_rows {
+                registers.push(session.last_place());
+            }
             if let (Some(table), Some(query)) = (table, session.last_query_q12()) {
                 visits.count(table, query, session.last_native_token());
             }
@@ -624,8 +745,41 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
                 ));
             }
         }
-        writeln!(out, "{}", json!({"i": index, "ids": ids}))
-            .map_err(|e| format!("{out_path}: {e}"))?;
+        let mut line = json!({"i": index, "ids": ids});
+        if place_rows {
+            let pairs: Vec<Value> =
+                registers.iter().map(|(held, offered)| json!([held, offered])).collect();
+            line["place"] = Value::Array(pairs);
+        }
+        if let Some(labels) = &labels {
+            if let Some(position) = row.get("position") {
+                let position = position
+                    .as_u64()
+                    .and_then(|p| usize::try_from(p).ok())
+                    .ok_or_else(|| format!("row {index}: position is not a corpus index"))?;
+                place_tally.rows += 1;
+                match true_place(labels, position, prompt.len())
+                    .map_err(|e| format!("row {index}: {e}"))?
+                {
+                    TruePlace::Unlabelled => {
+                        line["value_row"] = Value::Null;
+                        line["true_place"] = Value::Null;
+                    }
+                    TruePlace::Inside { value_row, place } => {
+                        place_tally.true_place += 1;
+                        line["value_row"] = json!(value_row);
+                        line["true_place"] = json!(place);
+                    }
+                    TruePlace::Outside { value_row } => {
+                        place_tally.outside += 1;
+                        line["value_row"] = json!(value_row);
+                        line["true_place"] = Value::Null;
+                        line["true_place_outside"] = json!(true);
+                    }
+                }
+            }
+        }
+        writeln!(out, "{line}").map_err(|e| format!("{out_path}: {e}"))?;
     }
     out.flush().map_err(|e| format!("{out_path}: {e}"))?;
     if let Some(trace) = trace.as_mut() {
@@ -674,8 +828,16 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
             "short_cycle_rows": trace_tally.cycles,
         });
     }
-    println!("{receipt}");
-    Ok(())
+    if let Some(labels) = &labels {
+        receipt["place_rows"] = json!({
+            "rows": place_tally.rows,
+            "true_place": place_tally.true_place,
+            "true_place_outside": place_tally.outside,
+            "places_sha256": labels.sha256,
+            "kit_tokens_sha256": labels.tokens_sha256,
+        });
+    }
+    Ok(receipt)
 }
 
 #[cfg(test)]
@@ -886,5 +1048,221 @@ mod tests {
             }
         }
         let _ = fs::remove_dir_all(root);
+    }
+
+    // The integer crate's place-read conversation (`stack/tests.rs`, claude-351): a user turn
+    // states the value `30 31` at positions 4 and 5, a later one asks for it with `PLACE_ASK`,
+    // and the reply opens it with `PLACE_OPENS`, says it and stops on `PLACE_DOT`.
+    const PLACE_BOS: u32 = 500;
+    const PLACE_EOS: u32 = 501;
+    const PLACE_SEP: u32 = 502;
+    const PLACE_USER: u32 = 504;
+    const PLACE_MODEL: u32 = 505;
+    const PLACE_BEFORE: u32 = 21;
+    const PLACE_ASK: u32 = 50;
+    const PLACE_OPENS: u32 = 60;
+    const PLACE_DOT: u32 = 32;
+    const PLACE_TALK: [u32; 22] = [
+        PLACE_BOS, PLACE_USER, 20, PLACE_BEFORE, 30, 31, PLACE_DOT, PLACE_EOS, PLACE_SEP,
+        PLACE_MODEL, 40, PLACE_EOS, PLACE_SEP, PLACE_USER, 20, PLACE_ASK, PLACE_SEP, PLACE_MODEL,
+        PLACE_OPENS, 30, 31, PLACE_DOT,
+    ];
+
+    /// A hand-built artifact with a place read, built as the integer crate's `place_trunk` builds
+    /// it through the public API: a synthetic trunk with copy reads at depths 1 and 3, an ask
+    /// table whose `PLACE_ASK` row finds the token after `PLACE_BEFORE`, and the classes stop
+    /// (`PLACE_DOT`), arm (`PLACE_ASK`) and open (`PLACE_OPENS`).
+    fn place_artifact() -> Vec<u8> {
+        use uor_r4_integer::stack::synthetic::{
+            synthetic_fbs_trunk_with, FbsSynth, FBS_SYNTH_NON_SQUARE,
+        };
+        use uor_r4_integer::stack::{
+            add_hamming_ask_uorlut01, add_hamming_place_uorlut01, served_copy_codes_uorlut01,
+            AskImage, PlaceImage, PlaceMarks, PLACE_ARM, PLACE_OPEN, PLACE_STOP,
+        };
+        let shape = FbsSynth {
+            context: 40,
+            ..FBS_SYNTH_NON_SQUARE
+        };
+        let mut snap = synthetic_fbs_trunk_with(20261029, shape);
+        let (vocab, width, layers) = (snap.vocab, snap.width, snap.layers.len());
+        let mut read = synthetic_hamming(width, layers, 4, 194);
+        let depths = [1, 3];
+        let all = std::mem::take(&mut read.depths);
+        read.reads = all
+            .iter()
+            .zip(std::mem::take(&mut read.reads))
+            .filter(|(depth, _)| depths.contains(depth))
+            .map(|(_, r)| r)
+            .collect();
+        read.depths = depths.to_vec();
+        for r in &mut read.reads {
+            // The copy heads at full weight and the type heads off, as `place_trunk` has them.
+            r.weight[width..].fill(Default::default());
+        }
+        snap.hamming = Some(read);
+        let bytes = export_fbs_trunk_uorlut01(&snap).expect("export with the reads");
+        let table = served_copy_codes_uorlut01(&bytes)
+            .expect("parse")
+            .expect("reads")
+            .table;
+        let row = |v: u32| &table[v as usize * width..][..width];
+        let mut ask = vec![0i16; vocab * width];
+        for (k, a) in ask[PLACE_ASK as usize * width..][..width].iter_mut().enumerate() {
+            *a = row(PLACE_BEFORE)[k] - row(PLACE_ASK)[k];
+        }
+        let asks = [None, Some(AskImage { table: ask, carry: None })];
+        let asked = add_hamming_ask_uorlut01(&bytes, &asks).expect("the readout read asks");
+        let marks = PlaceMarks {
+            bos: PLACE_BOS,
+            eos: PLACE_EOS,
+            sep: vec![PLACE_SEP],
+            system: vec![503],
+            user: vec![PLACE_USER],
+            assistant: vec![PLACE_MODEL],
+        };
+        let mut class = vec![0i16; vocab];
+        class[PLACE_DOT as usize] = PLACE_STOP;
+        class[PLACE_ASK as usize] = PLACE_ARM;
+        class[PLACE_OPENS as usize] = PLACE_OPEN;
+        let place = PlaceImage::checked(marks, class, vocab).expect("the classes");
+        add_hamming_place_uorlut01(&asked, &place).expect("the place read is added")
+    }
+
+    /// claude-352, check I-l: `--place-rows 1` prints the register after each step that chose a
+    /// reply id, and `--places` the kit's true place and value row in the prompt's terms.
+    #[test]
+    fn place_rows_print_the_register_and_the_true_place() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("uor-place-rows-{}-{nonce}", std::process::id()));
+        fs::create_dir_all(&root).expect("temp directory");
+        let stack = root.join("placed.uorlut");
+        let samples = root.join("samples.json");
+        let kit = root.join("places.json");
+        let placed_out = root.join("placed.jsonl");
+        let plain_out = root.join("plain.jsonl");
+        fs::write(&stack, place_artifact()).expect("artifact");
+        // Each prompt is the conversation up to a reply row, at corpus positions from 1000:
+        // the reply start (the register set, not open), the open row, and the row after the
+        // stop; then the reply start again at another corpus place, with no kit label.
+        let base = 1000usize;
+        let rows: Vec<Value> = [18usize, 19, 22, 18]
+            .iter()
+            .enumerate()
+            .map(|(i, &end)| {
+                let position = if i == 3 { 5000 + end } else { base + end };
+                json!({"prompt": PLACE_TALK[..end].to_vec(), "position": position})
+            })
+            .collect();
+        fs::write(&samples, serde_json::to_vec(&rows).expect("rows")).expect("samples");
+        // The labels: the reply at 1018 reads the value stated at 1004 and says it from its
+        // first target; the reply at 1019 is labelled with a place before its prompt's first
+        // token; the reply at 1022 by the value stated at 1005, said one row later.
+        let kit_json = json!({
+            "tokens_sha256": "00",
+            "marks": {},
+            "stop": [PLACE_DOT],
+            "places": [[1018, 1004, 1018, 2], [1019, 990, 1019, 1], [1022, 1005, 1023, 1]],
+        });
+        fs::write(&kit, serde_json::to_vec(&kit_json).expect("kit")).expect("kit file");
+        let args = |out: &Path, place: bool| {
+            let mut args = vec![
+                "--stack".to_owned(),
+                stack.display().to_string(),
+                "--samples".to_owned(),
+                samples.display().to_string(),
+                "--out".to_owned(),
+                out.display().to_string(),
+                "--mark-reply".to_owned(),
+                "0".to_owned(),
+                "--max-tokens".to_owned(),
+                "3".to_owned(),
+            ];
+            if place {
+                args.extend([
+                    "--place-rows".to_owned(),
+                    "1".to_owned(),
+                    "--places".to_owned(),
+                    kit.display().to_string(),
+                ]);
+            }
+            args
+        };
+        let receipt = run_with_args(args(&placed_out, true).into_iter()).expect("place rows");
+        let plain_receipt = run_with_args(args(&plain_out, false).into_iter()).expect("plain rows");
+        let read = |path: &Path| -> Vec<Value> {
+            fs::read_to_string(path)
+                .expect("replies")
+                .lines()
+                .map(|line| serde_json::from_str(line).expect("reply JSON"))
+                .collect()
+        };
+        let (placed, plain) = (read(&placed_out), read(&plain_out));
+        let _ = fs::remove_dir_all(&root);
+        // Row 0 is served from `PLACE_MODEL`: the find set the register at the value's first
+        // token, position 4, and the row is not open; the replies 40 and 486 are neither open
+        // nor stop tokens, so it stays. Row 1 is served from `PLACE_OPENS`: the row is open and
+        // offered place 4; the reply 118 is not the offered token 30, so the next row closes
+        // and the register keeps place 4. Row 2 is served from `PLACE_DOT`, which cleared it.
+        // Row 3 is row 0's prompt at a corpus place the kit does not label.
+        let want = [
+            json!({"i": 0, "ids": [40, 486, 82], "place": [[4, null], [4, null], [4, null]],
+                "value_row": 0, "true_place": 4}),
+            json!({"i": 1, "ids": [118, 182, 191], "place": [[4, 4], [4, null], [4, null]],
+                "value_row": 0, "true_place": null, "true_place_outside": true}),
+            json!({"i": 2, "ids": [447, 43, 219], "place": [[null, null], [null, null], [null, null]],
+                "value_row": 1, "true_place": 5}),
+            json!({"i": 3, "ids": [40, 486, 82], "place": [[4, null], [4, null], [4, null]],
+                "value_row": null, "true_place": null}),
+        ];
+        assert_eq!(placed, want);
+        // Off, every line is `{"i", "ids"}` with the same ids, and the receipt has no place rows.
+        for (plain, placed) in plain.iter().zip(&placed) {
+            assert_eq!(*plain, json!({"i": placed["i"], "ids": placed["ids"]}));
+        }
+        assert_eq!(plain.len(), placed.len());
+        assert!(plain_receipt.get("place_rows").is_none());
+        let counts = &receipt["place_rows"];
+        assert_eq!(
+            [&counts["rows"], &counts["true_place"], &counts["true_place_outside"]],
+            [&json!(4), &json!(2), &json!(1)]
+        );
+        // The kit and the register refuse what they cannot read.
+        let kit_only = args(&root.join("unused.jsonl"), true);
+        let without_rows: Vec<String> = kit_only
+            .iter()
+            .filter(|arg| !matches!(arg.as_str(), "--place-rows" | "1"))
+            .cloned()
+            .collect();
+        let error = run_with_args(without_rows.into_iter()).unwrap_err();
+        assert!(error.contains("--places needs --place-rows 1"), "{error}");
+    }
+
+    #[test]
+    fn true_place_reads_the_kit_in_prompt_terms() {
+        let labels = place_labels(
+            br#"{"tokens_sha256":"00","marks":{},"stop":[],"places":[[20,12,23,2],[40,5,40,1]]}"#,
+            "kit",
+        )
+        .expect("kit");
+        // The prompt of 10 ids covers corpus 10..20: place 12 is prompt index 2, the value's
+        // first token is chosen at reply row 3.
+        assert_eq!(
+            true_place(&labels, 20, 10).unwrap(),
+            TruePlace::Inside { value_row: 3, place: 2 }
+        );
+        assert_eq!(true_place(&labels, 40, 10).unwrap(), TruePlace::Outside { value_row: 0 });
+        assert_eq!(true_place(&labels, 21, 10).unwrap(), TruePlace::Unlabelled);
+        assert!(true_place(&labels, 5, 10).is_err(), "a prompt longer than its position");
+        let after = br#"{"tokens_sha256":"00","marks":{},"stop":[],"places":[[20,20,23,2]]}"#;
+        assert!(place_labels(after, "kit").is_err(), "a place stands before its reply");
+        let twice = br#"{"tokens_sha256":"00","marks":{},"stop":[],"places":[[20,1,23,2],[20,2,24,1]]}"#;
+        assert!(place_labels(twice, "kit").is_err(), "one label a reply");
+        let unknown = br#"{"tokens_sha256":"00","marks":{},"stop":[],"places":[],"gain":1}"#;
+        assert!(place_labels(unknown, "kit").is_err(), "the kit's own shape");
     }
 }
