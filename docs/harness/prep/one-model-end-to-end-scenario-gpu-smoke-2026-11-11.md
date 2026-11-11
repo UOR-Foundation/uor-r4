@@ -5,9 +5,11 @@ Lab: deepseek. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to
 configuration probe after the aligned scenario readout: the current
 FBS/Hamming model has not been trained on the aligned TRAIN.
 
-TEST FITNESS: pending fresh-context non-author review 13.
+TEST FITNESS: FIT
 
-PRE-RUN REVIEW: pending.
+PRE-RUN REVIEW: GO
+
+Review receipt: `local/deepseek/scenario-gpu-smoke-2026-11-11/fresh-review-13.md`.
 
 ## Why
 
@@ -265,8 +267,8 @@ zero.
 
 ## Controls
 
-- No neural comparator, dense control, transformer control or generated
-  teacher.
+- This sheet honours D23/D28 and the owner's withdrawal: no neural comparator,
+  dense control, transformer control or generated teacher is permitted.
 - The copy archetype is the model-path positive control.
 - Wrong-memory and no-memory abstention are safety controls; the distractor
   count is reported beside them.
