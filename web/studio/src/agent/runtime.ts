@@ -1520,7 +1520,7 @@ export class AgentRuntime {
         }
         return this.withTask(input.taskId, async () => {
             this.requireTaskView(input.taskId);
-            return this.taskStore!.recordDiffComment({
+            const result = await this.taskStore!.appendDiffComment({
                 task_id: input.taskId,
                 path: input.path,
                 line: input.line,
@@ -1534,6 +1534,11 @@ export class AgentRuntime {
                     ? {}
                     : { created_at_ms: input.createdAtMs }),
             });
+            const control = this.active.get(input.taskId);
+            if (control !== undefined && control.runId === result.run_id) {
+                control.sequence = result.sequence + 1;
+            }
+            return result.comment;
         });
     }
 

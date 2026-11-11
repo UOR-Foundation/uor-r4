@@ -1,4 +1,5 @@
 import {
+    AGENT_EVENT_SCHEMA,
     AGENT_RUN_STATES,
     MAX_EVENT_BYTES,
     MAX_EVENTS_PER_RUN,
@@ -58,6 +59,12 @@ const RUN_ID_PATTERN = /^run_[0-9a-f]{16}$/;
 const ARTIFACT_ID_PATTERN = /^art_[0-9a-f]{64}$/;
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const RUN_STATES: ReadonlySet<string> = new Set(AGENT_RUN_STATES);
+const TERMINAL_RUN_STATES: ReadonlySet<string> = new Set([
+    'finished',
+    'failed',
+    'cancelled',
+    'expired',
+]);
 const IMPORT_FENCE_KEY = '__import__';
 const IMPORT_HEARTBEAT_MS = Math.max(1, Math.floor(LEASE_STALE_MS / 3));
 const MAX_DURABLE_ARTIFACT_BYTES = 8 * 1024 * 1024;
@@ -69,7 +76,7 @@ const MAX_DIFF_COMMENT_BODY = 8192;
 const MAX_DIFF_COMMENT_PATH = 1024;
 const MAX_DIFF_COMMENT_DIGEST = 256;
 
-export interface DiffCommentInput {
+export interface AppendDiffCommentInput {
     task_id: string;
     path: string;
     line: number;
@@ -78,6 +85,15 @@ export interface DiffCommentInput {
     scope: 'last_turn' | 'branch';
     comment_id?: string;
     created_at_ms?: number;
+}
+
+export interface AppendedDiffComment {
+    comment: DiffCommentRecord;
+    run_id: string;
+    sequence: number;
+    event_id: string;
+    digest: string;
+    prev_digest: string | null;
 }
 
 export interface DiffCommentRecord {
@@ -166,6 +182,7 @@ interface ReplayInput {
 interface ReplayResult {
     report: OpenReport;
     replayed: RunRecord[];
+    comments: DiffCommentRecord[];
 }
 
 function byteLength(text: string): number {
@@ -466,6 +483,86 @@ function requireStoredEvent(value: unknown): asserts value is EventRecord {
     if (!isNonNegativeInteger(value.recorded_at_ms)) {
         corrupt('event record recorded_at_ms is invalid');
     }
+}
+
+function diffCommentKey(record: DiffCommentRecord): [string, string, number, string] {
+    return [record.task_id, record.path, record.line, record.head_digest];
+}
+
+function requireStoredDiffComment(value: unknown): asserts value is DiffCommentRecord {
+    if (!isObject(value)) corrupt('diff comment record is not an object');
+    if (typeof value.task_id !== 'string' || !TASK_ID_PATTERN.test(value.task_id)) {
+        corrupt('diff comment task_id is invalid');
+    }
+    if (typeof value.comment_id !== 'string' || value.comment_id.length === 0 || value.comment_id.length > 128) {
+        corrupt('diff comment comment_id is invalid');
+    }
+    if (typeof value.path !== 'string' || value.path.length === 0 || value.path.length > MAX_DIFF_COMMENT_PATH) {
+        corrupt('diff comment path is invalid');
+    }
+    if (!isNonNegativeInteger(value.line)) {
+        corrupt('diff comment line is invalid');
+    }
+    if (typeof value.body !== 'string' || value.body.length > MAX_DIFF_COMMENT_BODY) {
+        corrupt('diff comment body is invalid');
+    }
+    if (typeof value.head_digest !== 'string' || value.head_digest.length === 0 || value.head_digest.length > MAX_DIFF_COMMENT_DIGEST) {
+        corrupt('diff comment head_digest is invalid');
+    }
+    if (value.scope !== 'last_turn' && value.scope !== 'branch') {
+        corrupt('diff comment scope is invalid');
+    }
+    if (!isNonNegativeInteger(value.created_at_ms)) {
+        corrupt('diff comment created_at_ms is invalid');
+    }
+}
+
+function diffCommentRecordFromEvent(
+    event: AgentIncomingEvent,
+    lastTurnDigests: ReadonlySet<string>,
+): DiffCommentRecord {
+    const data = event.data as Record<string, unknown>;
+    if (
+        typeof data.comment_id !== 'string' ||
+        data.comment_id.length === 0 ||
+        data.comment_id.length > 128 ||
+        typeof data.path !== 'string' ||
+        data.path.length === 0 ||
+        data.path.length > MAX_DIFF_COMMENT_PATH ||
+        !isNonNegativeInteger(data.line) ||
+        typeof data.body !== 'string' ||
+        data.body.length > MAX_DIFF_COMMENT_BODY ||
+        typeof data.head_digest !== 'string' ||
+        data.head_digest.length === 0 ||
+        data.head_digest.length > MAX_DIFF_COMMENT_DIGEST
+    ) {
+        corrupt('diff.comment event payload is malformed');
+    }
+    return {
+        task_id: event.task_id,
+        comment_id: data.comment_id,
+        path: data.path,
+        line: data.line,
+        body: data.body,
+        head_digest: data.head_digest,
+        scope: lastTurnDigests.has(data.head_digest) ? 'last_turn' : 'branch',
+        created_at_ms: event.recorded_at_ms,
+    };
+}
+
+function lastTurnDigestsOf(events: AgentIncomingEvent[]): Set<string> {
+    const digests = new Set<string>();
+    for (const event of events) {
+        if (event.type !== 'changes.snapshot') continue;
+        const data = event.data as Record<string, unknown>;
+        if (
+            data.scope === 'last_turn' &&
+            typeof data.head_digest === 'string'
+        ) {
+            digests.add(data.head_digest);
+        }
+    }
+    return digests;
 }
 
 function requireStoredSnapshot(value: unknown): asserts value is SnapshotRecord {
@@ -1552,7 +1649,15 @@ export class AgentTaskStore {
      * on a moved or changed line is never silently attached to a new line.
      * They are local browser records: no remote service or share path exists.
      */
-    async recordDiffComment(input: DiffCommentInput): Promise<DiffCommentRecord> {
+    /**
+     * Append one canonical local `diff.comment` event and its projection.
+     *
+     * The event is the authority: it follows the run's digest chain even when
+     * the run is terminal, because a comment is an annotation and never a run
+     * state transition. The `comments` store is written in the same transaction
+     * and is rebuilt from canonical events on open/import.
+     */
+    async appendDiffComment(input: AppendDiffCommentInput): Promise<AppendedDiffComment> {
         this.requireOpen();
         if (this.importInProgress) {
             throw new AgentStoreError(
@@ -1587,35 +1692,192 @@ export class AgentTaskStore {
         }
         this.beginWrite();
         try {
+            const task = await this.readOne<TaskRecord>('tasks', input.task_id);
+            if (task === undefined) {
+                throw new AgentStoreError('task_not_found', 'task is missing');
+            }
+            requireStoredTask(task);
+            const finishedRuns = (await this.readAll<RunRecord>('runs'))
+                .filter((candidate) => candidate.task_id === input.task_id)
+                .map((candidate) => {
+                    requireStoredRun(candidate);
+                    return candidate;
+                })
+                .filter((candidate) => TERMINAL_RUN_STATES.has(candidate.state))
+                .sort((left, right) =>
+                    right.started_at_ms - left.started_at_ms ||
+                    right.generation - left.generation ||
+                    right.run_id.localeCompare(left.run_id),
+                );
+            if (finishedRuns.length === 0) {
+                throw new AgentStoreError(
+                    'out_of_order',
+                    'local comments are available after the run finishes',
+                );
+            }
+            let run: RunRecord | null = null;
+            for (const candidate of finishedRuns) {
+                const pairs = await this.readEventPairs(
+                    candidate.task_id,
+                    candidate.run_id,
+                );
+                const candidateEvents: AgentIncomingEvent[] = [];
+                for (const pair of pairs) {
+                    candidateEvents.push(await this.materializeEvent(pair.record));
+                }
+                const candidateScope = lastTurnDigestsOf(candidateEvents).has(input.head_digest)
+                    ? 'last_turn'
+                    : 'branch';
+                if (candidateScope === input.scope) {
+                    run = candidate;
+                    break;
+                }
+            }
+            if (run === null) {
+                invalidArgument(
+                    'comment does not bind to a snapshot in any finished run',
+                );
+            }
+            const derivedScope = input.scope;
+
+            const generation = run.generation;
+            const sequence = run.last_sequence + 1;
+            if (sequence >= MAX_EVENTS_PER_RUN) {
+                throw new AgentStoreError('limit_exceeded', 'run event limit is reached');
+            }
+            const now = input.created_at_ms ?? this.clock();
+            const eventId = `evt_${run.run_id}_${generation}_${sequence
+                .toString()
+                .padStart(12, '0')}`;
+            const commentId = input.comment_id ?? `cmt_${randomHex(16)}`;
+            const event = {
+                schema: AGENT_EVENT_SCHEMA,
+                event_id: eventId,
+                project_id: task.project_id,
+                task_id: run.task_id,
+                run_id: run.run_id,
+                generation,
+                sequence,
+                recorded_at_ms: now,
+                type: 'diff.comment',
+                data: {
+                    comment_id: commentId,
+                    path: input.path,
+                    line: input.line,
+                    body: input.body,
+                    head_digest: input.head_digest,
+                },
+            } as unknown as AgentIncomingEvent;
+            const validation = validateAgentEvent(event);
+            if (!validation.ok) {
+                throw new AgentStoreError(validation.code, validation.message);
+            }
+            const canonical = canonicalJson(event);
+            if (byteLength(canonical) > MAX_EVENT_BYTES) {
+                throw new AgentStoreError('limit_exceeded', 'event exceeds max_event_bytes');
+            }
+            const digest = await digestEvent(event as AgentEvent);
             const record: DiffCommentRecord = {
-                task_id: input.task_id,
-                comment_id: input.comment_id ?? `cmt_${randomHex(16)}`,
+                task_id: run.task_id,
+                comment_id: commentId,
                 path: input.path,
                 line: input.line,
                 body: input.body,
                 head_digest: input.head_digest,
-                scope: input.scope,
-                created_at_ms: input.created_at_ms ?? this.clock(),
+                scope: derivedScope,
+                created_at_ms: now,
             };
-            const transaction = this.requireDb().transaction(['comments', 'leases'], 'readwrite');
+            const db = this.requireDb();
+            const transaction = db.transaction(
+                ['tasks', 'runs', 'events', 'comments', 'leases'],
+                'readwrite',
+            );
             try {
-                await this.checkImportFence(
-                    transaction.objectStore('leases'),
-                    this.clock(),
+                const leases = transaction.objectStore('leases');
+                await this.checkImportFence(leases, now);
+                const lease = (await requestResult(leases.get(run.task_id))) as
+                    | LeaseRecord
+                    | undefined;
+                if (lease !== undefined) {
+                    requireStoredLease(lease);
+                    if (
+                        lease.writer_id !== this.writerId &&
+                        now - lease.heartbeat_at_ms <= LEASE_STALE_MS
+                    ) {
+                        throw new AgentStoreError(
+                            'stale_generation',
+                            'task lease is held by another active writer',
+                        );
+                    }
+                }
+                const current = (await requestResult(
+                    transaction.objectStore('runs').get([run.task_id, run.run_id]),
+                )) as RunRecord | undefined;
+                if (current === undefined) {
+                    throw new AgentStoreError('run_not_found', 'run disappeared before append');
+                }
+                requireStoredRun(current);
+                if (
+                    current.last_sequence !== run.last_sequence ||
+                    current.last_digest !== run.last_digest
+                ) {
+                    throw new AgentStoreError(
+                        'out_of_order',
+                        'run cursor changed before the comment was appended',
+                    );
+                }
+                const existing = (await requestResult(
+                    transaction
+                        .objectStore('events')
+                        .get([run.task_id, run.run_id, generation, sequence]),
+                )) as EventRecord | undefined;
+                if (existing !== undefined) {
+                    throw new AgentStoreError(
+                        'duplicate_event',
+                        'comment event key is already present',
+                    );
+                }
+                await requestResult(
+                    transaction.objectStore('events').put(
+                        jsonClean({
+                            event_id: eventId,
+                            canonical,
+                            digest,
+                            prev_digest: current.last_digest,
+                            recorded_at_ms: now,
+                        } satisfies EventRecord),
+                        [run.task_id, run.run_id, generation, sequence],
+                    ),
                 );
                 await requestResult(
-                    transaction.objectStore('comments').put(jsonClean(record), [
-                        record.task_id,
-                        record.path,
-                        record.line,
-                        record.head_digest,
-                    ]),
+                    transaction.objectStore('runs').put(
+                        jsonClean({
+                            ...current,
+                            last_sequence: sequence,
+                            last_event_id: eventId,
+                            last_digest: digest,
+                        } satisfies RunRecord),
+                        [run.task_id, run.run_id],
+                    ),
+                );
+                await requestResult(
+                    transaction
+                        .objectStore('comments')
+                        .put(jsonClean(record), diffCommentKey(record)),
                 );
                 await transactionDone(transaction);
             } catch (error) {
+                try { transaction.abort(); } catch { /* already finished */ }
                 throw storageError(error);
             }
-            return jsonClean(record);
+            return {
+                comment: jsonClean(record),
+                run_id: run.run_id,
+                sequence,
+                event_id: eventId,
+                digest,
+                prev_digest: run.last_digest,
+            };
         } finally {
             this.endWrite();
         }
@@ -1627,20 +1889,7 @@ export class AgentTaskStore {
         const records = (await this.readAll<DiffCommentRecord>('comments'))
             .filter((record) => record.task_id === taskId)
             .map((record) => {
-                if (
-                    !isNonEmptyString(record.comment_id) ||
-                    !isNonEmptyString(record.path) ||
-                    record.path.length > MAX_DIFF_COMMENT_PATH ||
-                    !isNonNegativeInteger(record.line) ||
-                    typeof record.body !== 'string' ||
-                    record.body.length > MAX_DIFF_COMMENT_BODY ||
-                    !isNonEmptyString(record.head_digest) ||
-                    record.head_digest.length > MAX_DIFF_COMMENT_DIGEST ||
-                    (record.scope !== 'last_turn' && record.scope !== 'branch') ||
-                    !isNonNegativeInteger(record.created_at_ms)
-                ) {
-                    corrupt('diff comment record is malformed');
-                }
+                requireStoredDiffComment(record);
                 return jsonClean(record);
             });
         records.sort((left, right) =>
@@ -2145,6 +2394,35 @@ export class AgentTaskStore {
             this.assertRunRecordMatches(run, verified);
             verifiedByRun.set(runKey(run.task_id, run.run_id), verified);
         }
+        const expectedComments = new Map<string, DiffCommentRecord>();
+        for (const run of sortedRuns) {
+            const verified = verifiedByRun.get(runKey(run.task_id, run.run_id))!;
+            const lastTurnDigests = lastTurnDigestsOf(verified.events);
+            for (const event of verified.events) {
+                if (event.type !== 'diff.comment') continue;
+                const record = diffCommentRecordFromEvent(event, lastTurnDigests);
+                expectedComments.set(diffCommentKey(record).join('\u0000'), record);
+            }
+        }
+        const storedComments = (await this.readAll<DiffCommentRecord>('comments')).map((record) => {
+            requireStoredDiffComment(record);
+            return record;
+        });
+        if (storedComments.length !== expectedComments.size) {
+            corrupt('comments projection does not match canonical diff.comment events');
+        }
+        for (const record of storedComments) {
+            const expected = expectedComments.get(diffCommentKey(record).join('\u0000'));
+            if (
+                expected === undefined ||
+                expected.comment_id !== record.comment_id ||
+                expected.body !== record.body ||
+                expected.scope !== record.scope ||
+                expected.created_at_ms !== record.created_at_ms
+            ) {
+                corrupt('comments projection does not match canonical diff.comment events');
+            }
+        }
         for (const change of changes) {
             const verified = verifiedByRun.get(
                 runKey(change.task_id, change.run_id),
@@ -2268,6 +2546,7 @@ export class AgentTaskStore {
         let events: EventPair[] = [];
         let snapshots = new Map<string, SnapshotBundleRecord>();
         let changes: ChangeRecord[] = [];
+        let commentRecords: DiffCommentRecord[] = [];
         try {
         await this.drainWrites();
         checkpoint = this.store.checkpoint();
@@ -2444,6 +2723,7 @@ export class AgentTaskStore {
         this.throwImportHeartbeatError();
         const scratch = createAgentStore();
         const scratchResult = await this.replayInto(scratch, input);
+        commentRecords = scratchResult.comments;
         for (const change of changes) {
             const view = scratch.getRun(change.task_id, change.run_id);
             if (view === null) {
@@ -2569,6 +2849,13 @@ export class AgentTaskStore {
                         change.run_id,
                         change.head_digest,
                     ]),
+                );
+            }
+            for (const comment of commentRecords) {
+                await requestResult(
+                    transaction
+                        .objectStore('comments')
+                        .put(jsonClean(comment), diffCommentKey(comment)),
                 );
             }
             await transactionDone(transaction);
@@ -3007,6 +3294,7 @@ export class AgentTaskStore {
                 orphanRuns,
                 strict: false,
             });
+            await this.replaceCommentProjection(result.comments, db);
             return result.report;
         } catch (error) {
             this.store.restore(checkpoint);
@@ -3016,11 +3304,31 @@ export class AgentTaskStore {
         }
     }
 
+    private async replaceCommentProjection(
+        records: DiffCommentRecord[],
+        db?: IDBDatabase,
+    ): Promise<void> {
+        const database = db ?? this.requireDb();
+        const transaction = database.transaction('comments', 'readwrite');
+        try {
+            const store = transaction.objectStore('comments');
+            await requestResult(store.clear());
+            for (const record of records) {
+                await requestResult(
+                    store.put(jsonClean(record), diffCommentKey(record)),
+                );
+            }
+            await transactionDone(transaction);
+        } catch (error) {
+            try { transaction.abort(); } catch { /* already finished */ }
+            throw storageError(error);
+        }
+    }
+
     private async replayInto(
         target: AgentStore,
         input: ReplayInput,
-    ): Promise<ReplayResult> {
-        const taskIds = new Set<string>();
+    ): Promise<ReplayResult> {        const taskIds = new Set<string>();
         for (const task of input.tasks) {
             if (taskIds.has(task.task_id)) {
                 corrupt('duplicate task record in replay input');
@@ -3046,6 +3354,7 @@ export class AgentTaskStore {
             }
         }
         const incomplete: RestoreIncomplete[] = [];
+        const replayedComments = new Map<string, DiffCommentRecord>();
         const addIncomplete = (entry: RestoreIncomplete) => {
             if (
                 !incomplete.some(
@@ -3115,12 +3424,18 @@ export class AgentTaskStore {
                     });
                     continue;
                 }
-                await this.verifyAndReplay(
+                const runComments = await this.verifyAndReplay(
                     target,
                     run,
                     pairs,
                     input.snapshots.get(composite) ?? null,
                 );
+                for (const comment of runComments) {
+                    replayedComments.set(
+                        diffCommentKey(comment).join('\u0000'),
+                        comment,
+                    );
+                }
                 replayed.push(run);
                 replayedKeys.add(composite);
             }
@@ -3176,6 +3491,7 @@ export class AgentTaskStore {
                 incomplete,
             },
             replayed,
+            comments: [...replayedComments.values()],
         };
     }
 
@@ -3184,9 +3500,11 @@ export class AgentTaskStore {
         run: RunRecord,
         pairs: EventPair[],
         bundle: SnapshotBundleRecord | null,
-    ): Promise<void> {
+    ): Promise<DiffCommentRecord[]> {
         const verified = await this.verifyEventChain(run.task_id, run.run_id, pairs);
         if (bundle !== null) this.assertSnapshotBundleSize(bundle);
+        const lastTurnDigests = lastTurnDigestsOf(verified.events);
+        const comments = new Map<string, DiffCommentRecord>();
         const anchors = bundle === null ? [] : snapshotRecordsOf(bundle);
         const matched = new Set<SnapshotRecord>();
         const verifyAnchor = (anchor: SnapshotRecord): void => {
@@ -3202,6 +3520,11 @@ export class AgentTaskStore {
         for (let index = 0; index < verified.events.length; index += 1) {
             const event = verified.events[index]!;
             const digest = verified.digests[index]!;
+            if (event.type === 'diff.comment') {
+                const record = diffCommentRecordFromEvent(event, lastTurnDigests);
+                comments.set(diffCommentKey(record).join('\u0000'), record);
+                continue;
+            }
             if (event.type === 'run.resumed') {
                 const current = target.getRun(run.task_id, run.run_id);
                 if (current === null) {
@@ -3249,6 +3572,7 @@ export class AgentTaskStore {
             corrupt('replayed run is missing from AgentStore');
         }
         this.assertRunRecordMatches(run, verified, view);
+        return [...comments.values()];
     }
 
     private assertRunRecordMatches(
@@ -3268,12 +3592,24 @@ export class AgentTaskStore {
             corrupt('run record cursor does not match the verified event chain');
         }
         if (view !== undefined) {
+            let stateIndex = -1;
+            for (let index = count - 1; index >= 0; index -= 1) {
+                if (verified.events[index]!.type !== 'diff.comment') {
+                    stateIndex = index;
+                    break;
+                }
+            }
+            if (stateIndex < 0) {
+                corrupt('run has no state transition before its comment events');
+            }
+            const stateEvent = verified.events[stateIndex]!;
+            const stateDigest = verified.digests[stateIndex]!;
             if (
-                run.generation !== view.generation ||
+                run.generation !== stateEvent.generation ||
                 run.state !== view.state ||
-                run.last_sequence !== view.lastSequence ||
-                run.last_event_id !== view.lastEventId ||
-                run.last_digest !== view.lastDigest
+                stateEvent.sequence !== view.lastSequence ||
+                stateEvent.event_id !== view.lastEventId ||
+                stateDigest !== view.lastDigest
             ) {
                 corrupt('run record does not match the replayed run');
             }

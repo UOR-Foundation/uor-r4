@@ -50,10 +50,6 @@ export const MAX_COMMENT_BODY = 8192;
 
 let nextReviewId = 0;
 
-function byteLength(value: string): number {
-    return new TextEncoder().encode(value).byteLength;
-}
-
 export function snapshotFileLines(file: Record<string, unknown>): string[] | null {
     const content = typeof file.content === 'string'
         ? file.content
@@ -104,9 +100,29 @@ export function diffCommentStatus(
     return { current: true, reason: null };
 }
 
+function completeUtf8Prefix(bytes: Uint8Array): Uint8Array {
+    let end = bytes.length;
+    let index = end - 1;
+    let continuation = 0;
+    while (index >= 0 && (bytes[index]! & 0xc0) === 0x80 && continuation < 3) {
+        index -= 1;
+        continuation += 1;
+    }
+    if (index < 0) return bytes;
+    const lead = bytes[index]!;
+    let length = 0;
+    if ((lead & 0x80) === 0) length = 1;
+    else if ((lead & 0xe0) === 0xc0) length = 2;
+    else if ((lead & 0xf0) === 0xe0) length = 3;
+    else if ((lead & 0xf8) === 0xf0) length = 4;
+    else return bytes;
+    if (index + length > end) end = index;
+    return bytes.slice(0, end);
+}
+
 /**
  * Build a branch-scope review snapshot from files the user chose locally.
- * This is a local source only: it never reads Git or the host companion.
+ * Reads only bounded byte slices; it never reads Git or the host companion.
  */
 export async function createUploadedSnapshot(files: File[]): Promise<ChangesSnapshot> {
     let truncated = files.length > MAX_UPLOAD_FILES;
@@ -114,19 +130,15 @@ export async function createUploadedSnapshot(files: File[]): Promise<ChangesSnap
     const selected = files.slice(0, MAX_UPLOAD_FILES);
     const records: Array<Record<string, unknown>> = [];
     for (const [index, file] of selected.entries()) {
-        const raw = await file.text();
-        let content = raw;
-        let fileTruncated = false;
-        if (byteLength(content) > MAX_UPLOAD_FILE_BYTES) {
-            content = content.slice(0, MAX_UPLOAD_FILE_BYTES);
-            fileTruncated = true;
-        }
-        if (totalBytes + byteLength(content) > MAX_UPLOAD_TOTAL_BYTES) {
-            const remaining = Math.max(0, MAX_UPLOAD_TOTAL_BYTES - totalBytes);
-            content = content.slice(0, remaining);
-            fileTruncated = true;
-        }
-        totalBytes += byteLength(content);
+        const remaining = Math.max(0, MAX_UPLOAD_TOTAL_BYTES - totalBytes);
+        const cap = Math.min(MAX_UPLOAD_FILE_BYTES, remaining);
+        const readLength = cap === 0 ? 0 : Math.min(file.size, cap + 1);
+        const buffer = new Uint8Array(await file.slice(0, readLength).arrayBuffer() as ArrayBuffer);
+        let fileTruncated = file.size > cap || buffer.byteLength > cap;
+        let bytes: Uint8Array<ArrayBufferLike> = fileTruncated ? buffer.slice(0, cap) : buffer;
+        if (fileTruncated) bytes = completeUtf8Prefix(bytes);
+        const content = new TextDecoder('utf-8').decode(bytes);
+        totalBytes += bytes.byteLength;
         if (content.split('\n').length > MAX_REVIEW_LINES) fileTruncated = true;
         if (fileTruncated) truncated = true;
         records.push({

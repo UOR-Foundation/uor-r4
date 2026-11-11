@@ -15,8 +15,11 @@ import {
     type HostTransport,
     type HostTransportCapabilities,
 } from '../agent/hostClient.js';
-import { AgentTaskStore } from '../agent/store.js';
-import { DiffReview, createUploadedSnapshot, type DiffComment } from './DiffReview.js';
+import { AgentTaskStore, type DiffCommentRecord } from '../agent/store.js';
+import { createDesktopActions } from '../adapters/desktopActions.js';
+import { ChangesPanel } from './DesktopTools.js';
+import { makeFiles } from './studioTestFixtures.js';
+import { DiffReview, createUploadedSnapshot, MAX_UPLOAD_FILE_BYTES, type DiffComment } from './DiffReview.js';
 
 const ALL_FALSE: HostCapabilities = {
     tree: false,
@@ -143,6 +146,7 @@ function changesSnapshotEvent(
     runId: string,
     generation: number,
     sequence: number,
+    scope: 'last_turn' | 'branch',
     files: Array<Record<string, unknown>>,
     headDigest: string,
 ): AgentIncomingEvent {
@@ -157,7 +161,7 @@ function changesSnapshotEvent(
         recorded_at_ms: 1_794_283_200_000 + sequence,
         type: 'changes.snapshot',
         data: {
-            scope: 'last_turn',
+            scope,
             files,
             head_digest: headDigest,
             captured_at_ms: 1_794_283_200_000 + sequence,
@@ -181,6 +185,7 @@ async function seedLastTurn(
             run.runId,
             cursor.generation,
             cursor.lastSequence + 1,
+            'last_turn',
             files,
             headDigest,
         ),
@@ -189,6 +194,38 @@ async function seedLastTurn(
         throw new Error(`changes.snapshot was rejected: ${applied.message ?? ''}`);
     }
     return { taskId: task.taskId, runId: run.runId, files, headDigest };
+}
+
+function applyLocalBranch(
+    client: AgentClient,
+    seeded: { taskId: string; runId: string },
+    files: Array<Record<string, unknown>> = [{ path: 'local-branch.ts', status: 'modified' }],
+): void {
+    const task = client.store.snapshot().tasks.find((candidate) => candidate.taskId === seeded.taskId);
+    if (task === undefined) throw new Error('task is missing');
+    const run = client.store.getRunCursor(seeded.taskId, seeded.runId);
+    if (run === null) throw new Error('run cursor is missing');
+    const applied = client.store.apply(
+        changesSnapshotEvent(
+            seeded.taskId,
+            task.projectId,
+            seeded.runId,
+            run.generation,
+            run.lastSequence + 1,
+            'branch',
+            files,
+            `sha256:${'b'.repeat(64)}`,
+        ),
+    );
+    if (applied.status !== 'applied') {
+        throw new Error(`local branch changes.snapshot was rejected: ${applied.message ?? ''}`);
+    }
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((settle) => { resolve = settle; });
+    return { promise, resolve };
 }
 
 function snapshot(
@@ -242,6 +279,7 @@ describe('DiffReview change sources', () => {
         const transport = new RecordingFixtureTransport();
         const client = new AgentClient({ transport });
         const seeded = await seedLastTurn(client);
+        applyLocalBranch(client, seeded);
 
         const result = await client.changesSnapshot({
             taskId: seeded.taskId,
@@ -253,7 +291,32 @@ describe('DiffReview change sources', () => {
             files: seeded.files,
             headDigest: seeded.headDigest,
         });
-        expect(transport.branchCalls).toEqual([]);
+        const branch = await client.changesSnapshot({
+            taskId: seeded.taskId,
+            scope: 'branch',
+        });
+        expect(branch).toMatchObject({
+            scope: 'branch',
+            files: [{ path: 'fixture-branch.ts', status: 'modified' }],
+            headDigest: `sha256:${'d'.repeat(64)}`,
+        });
+        expect(transport.branchCalls).toHaveLength(1);
+    });
+
+    test('local_branch_snapshot_never_becomes_companion_data', async () => {
+        const client = new AgentClient({ transport: new FixtureTransport() });
+        const seeded = await seedLastTurn(client);
+        applyLocalBranch(client, seeded);
+
+        await expect(
+            client.changesSnapshot({ taskId: seeded.taskId, scope: 'branch' }),
+        ).rejects.toMatchObject({ code: 'host_unavailable' });
+        await expect(
+            client.changesSnapshot({ taskId: seeded.taskId, scope: 'last_turn' }),
+        ).resolves.toMatchObject({
+            scope: 'last_turn',
+            files: seeded.files,
+        });
     });
 
     test('changes_snapshot_branch_scope', async () => {
@@ -286,7 +349,7 @@ describe('DiffReview change sources', () => {
 
     test('durable_diff_comments_are_keyed_by_task_path_line_and_head', () => {
         const prototype = AgentTaskStore.prototype as unknown as Record<string, unknown>;
-        expect(typeof prototype.recordDiffComment).toBe('function');
+        expect(typeof prototype.appendDiffComment).toBe('function');
         expect(typeof prototype.readDiffComments).toBe('function');
     });
 
@@ -340,6 +403,21 @@ describe('DiffReview static browser review', () => {
         expect(host.textContent).toContain('stored in this browser');
         expect(host.querySelector('[data-diff-file="src/math.ts"]')).not.toBeNull();
         expect(host.querySelector('[data-diff-line="2"]')?.textContent).toContain('return a + b;');
+    });
+
+    test('uploaded_reading_is_byte_bounded_and_multibyte_safe', async () => {
+        const prefix = 'a'.repeat(MAX_UPLOAD_FILE_BYTES - 2);
+        const file = new File([`${prefix}😀tail`], 'emoji.txt', { type: 'text/plain' });
+        expect(file.size).toBeGreaterThan(MAX_UPLOAD_FILE_BYTES);
+
+        const uploaded = await createUploadedSnapshot([file]);
+        const content = uploaded.files[0]?.content;
+        expect(typeof content).toBe('string');
+        expect(uploaded.truncated).toBe(true);
+        expect((content as string).includes('\uFFFD')).toBe(false);
+        expect(new TextEncoder().encode(content as string).byteLength).toBeLessThanOrEqual(MAX_UPLOAD_FILE_BYTES);
+        expect((content as string).endsWith('a')).toBe(true);
+        expect((content as string).endsWith('tail')).toBe(false);
     });
 
     test('branch_truncation_is_surfaced_accessible', () => {
@@ -440,12 +518,113 @@ describe('DiffReview local comments', () => {
         expect(onComment).not.toHaveBeenCalled();
         expect(host.querySelector('[role="alert"]')?.textContent).toContain('Line 99 is not present');
     });
+
+    test('scope_and_task_transition_cannot_write_with_old_snapshot', async () => {
+        const taskA = 'tsk_9a3c5e7b1d2f4a60';
+        const taskB = 'tsk_1b2c3d4e5f607182';
+        const snapshotA = snapshot();
+        const branch = deferred<ChangesSnapshot | null>();
+        const taskBSnapshot = deferred<ChangesSnapshot | null>();
+        const taskBComments = deferred<DiffCommentRecord[]>();
+        const recordA: DiffCommentRecord = {
+            task_id: taskA,
+            comment_id: 'cmt_saved',
+            path: 'src/a.ts',
+            line: 2,
+            body: 'check this line',
+            head_digest: snapshotA.headDigest,
+            scope: 'last_turn',
+            created_at_ms: 1,
+        };
+        const changesSnapshot = vi.fn((input: { taskId: string; scope: string }) => {
+            if (input.taskId === taskB) return taskBSnapshot.promise;
+            if (input.scope === 'branch') return branch.promise;
+            return Promise.resolve(snapshotA);
+        });
+        const readDiffComments = vi.fn((taskId: string) =>
+            taskId === taskA ? Promise.resolve([recordA]) : taskBComments.promise,
+        );
+        const addDiffComment = vi.fn(async (input: {
+            taskId: string; scope: string; path: string; line: number; body: string; headDigest: string;
+        }): Promise<DiffCommentRecord> => ({
+            task_id: input.taskId,
+            comment_id: 'cmt_new',
+            path: input.path,
+            line: input.line,
+            body: input.body,
+            head_digest: input.headDigest,
+            scope: input.scope as 'last_turn' | 'branch',
+            created_at_ms: 2,
+        }));
+        const fake = { changesSnapshot, readDiffComments, addDiffComment } as unknown as AgentClient;
+        const actions = createDesktopActions({ invoke: vi.fn(async () => { throw new Error('no host'); }) });
+        const panel = (taskId: string) => <ChangesPanel actions={actions} files={makeFiles()} copy={vi.fn()} agentClient={fake} taskId={taskId} />;
+
+        act(() => { render(panel(taskA), host); });
+        await vi.waitFor(() => expect(host.querySelector('textarea')).not.toBeNull());
+        const body = host.querySelector<HTMLTextAreaElement>('textarea')!;
+        act(() => {
+            body.value = 'old scope note';
+            body.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        const oldForm = host.querySelector('form')!;
+
+        const branchButton = Array.from(host.querySelectorAll('button'))
+            .find((button) => button.textContent === 'Branch')!;
+        act(() => { branchButton.click(); });
+        expect(host.querySelector('form')).toBeNull();
+        act(() => { oldForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+        await Promise.resolve();
+        expect(addDiffComment).not.toHaveBeenCalled();
+
+        await act(async () => {
+            branch.resolve(snapshot({
+                scope: 'branch',
+                files: [{ path: 'src/branch.ts', status: 'modified' }],
+            }));
+            await Promise.resolve();
+        });
+        await vi.waitFor(() => expect(host.querySelector('textarea')).not.toBeNull());
+        const branchForm = host.querySelector('form')!;
+
+        act(() => { render(panel(taskB), host); });
+        expect(host.querySelector('form')).toBeNull();
+        expect(host.textContent).not.toContain('check this line');
+        act(() => { branchForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
+        await Promise.resolve();
+        expect(addDiffComment).not.toHaveBeenCalled();
+
+        await act(async () => {
+            taskBSnapshot.resolve(snapshot({ headDigest: `sha256:${'b'.repeat(64)}` }));
+            taskBComments.resolve([]);
+            await Promise.resolve();
+        });
+        await vi.waitFor(() => expect(host.querySelector('textarea')).not.toBeNull());
+
+        const bodyB = host.querySelector<HTMLTextAreaElement>('textarea')!;
+        act(() => {
+            bodyB.value = 'new task note';
+            bodyB.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        await act(async () => {
+            host.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+            await Promise.resolve();
+        });
+        expect(addDiffComment).toHaveBeenCalledWith(expect.objectContaining({
+            taskId: taskB,
+            scope: 'branch',
+            headDigest: `sha256:${'b'.repeat(64)}`,
+            body: 'new task note',
+        }));
+    });
 });
 
 describe('DiffReview control surface', () => {
     test('no_merge_control_without_service_identity', () => {
         renderReview();
 
+        expect(host.querySelector('[data-diff-review]')).not.toBeNull();
+        expect(host.textContent).toContain('Local review only');
         expect(host.textContent).not.toMatch(/\bmerge\b/i);
         expect(Array.from(host.querySelectorAll('button')).map((button) => button.textContent).join(' ')).not.toMatch(/\bmerge\b/i);
     });
@@ -453,6 +632,8 @@ describe('DiffReview control surface', () => {
     test('no_checkpoint_restore_control_is_rendered', () => {
         renderReview();
 
+        expect(host.querySelector('[data-diff-review]')).not.toBeNull();
+        expect(host.textContent).toContain('Local review only');
         expect(host.textContent).not.toMatch(/restore checkpoint/i);
         expect(host.textContent).not.toMatch(/\bcheckpoint\b/i);
         expect(Array.from(host.querySelectorAll('button')).map((button) => button.textContent).join(' ')).not.toMatch(/restore|checkpoint/i);

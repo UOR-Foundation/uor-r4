@@ -85,6 +85,133 @@ async function readStoredComments(page: Page): Promise<StoredComment[]> {
     }, DB_NAME);
 }
 
+async function clearStoredComments(page: Page): Promise<void> {
+    await page.evaluate(async (dbName) => {
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+            const open = indexedDB.open(dbName);
+            open.onsuccess = () => resolve(open.result);
+            open.onerror = () => reject(open.error);
+        });
+        try {
+            const tx = db.transaction('comments', 'readwrite');
+            tx.objectStore('comments').clear();
+            await new Promise<void>((resolve, reject) => {
+                tx.oncomplete = () => resolve();
+                tx.onabort = () => reject(tx.error ?? new Error('transaction aborted'));
+                tx.onerror = () => reject(tx.error ?? new Error('transaction failed'));
+            });
+        } finally {
+            db.close();
+        }
+    }, DB_NAME);
+}
+
+async function addCommentDirect(
+    page: Page,
+    input: {
+        taskId: string;
+        path: string;
+        line: number;
+        body: string;
+        headDigest: string;
+        scope: 'last_turn' | 'branch';
+    },
+): Promise<{ comment_id: string; body: string; head_digest: string }> {
+    return page.evaluate(async (payload) => {
+        const api = (window as unknown as {
+            __studioTest?: {
+                clientForTest?: () => {
+                    addDiffComment(input: typeof payload): Promise<{
+                        comment_id: string;
+                        body: string;
+                        head_digest: string;
+                    }>;
+                } | null;
+            };
+        }).__studioTest;
+        const client = api?.clientForTest?.();
+        if (!client) throw new Error('studio test client is missing');
+        return client.addDiffComment(payload);
+    }, input);
+}
+
+async function addCommentOutcome(
+    page: Page,
+    input: {
+        taskId: string;
+        path: string;
+        line: number;
+        body: string;
+        headDigest: string;
+        scope: 'last_turn' | 'branch';
+    },
+): Promise<{ ok: boolean; code?: string; message?: string }> {
+    return page.evaluate(async (payload) => {
+        const api = (window as unknown as {
+            __studioTest?: {
+                clientForTest?: () => {
+                    addDiffComment(input: typeof payload): Promise<unknown>;
+                } | null;
+            };
+        }).__studioTest;
+        const client = api?.clientForTest?.();
+        if (!client) return { ok: false, code: 'runtime_unavailable', message: 'client missing' };
+        try {
+            await client.addDiffComment(payload);
+            return { ok: true };
+        } catch (error) {
+            const failure = error as { code?: string; message?: string };
+            return { ok: false, code: failure.code, message: failure.message };
+        }
+    }, input);
+}
+
+async function readCommentsDirect(
+    page: Page,
+    taskId: string,
+): Promise<Array<{ comment_id: string; path: string; line: number; body: string; head_digest: string }>> {
+    return page.evaluate(async (id) => {
+        const api = (window as unknown as {
+            __studioTest?: {
+                clientForTest?: () => {
+                    readDiffComments(taskId: string): Promise<Array<{
+                        comment_id: string;
+                        path: string;
+                        line: number;
+                        body: string;
+                        head_digest: string;
+                    }>>;
+                } | null;
+            };
+        }).__studioTest;
+        const client = api?.clientForTest?.();
+        if (!client) throw new Error('studio test client is missing');
+        return client.readDiffComments(id);
+    }, taskId);
+}
+
+function exportedCommentEvents(text: string): Array<{
+    task_id: string;
+    run_id: string;
+    generation: number;
+    sequence: number;
+    record: { event_id: string; canonical: string; digest: string; prev_digest: string | null };
+}> {
+    return text
+        .split('\n')
+        .filter((line) => line.length > 0)
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .filter((line) => line.kind === 'event')
+        .map((line) => line as unknown as {
+            task_id: string;
+            run_id: string;
+            generation: number;
+            sequence: number;
+            record: { event_id: string; canonical: string; digest: string; prev_digest: string | null };
+        })
+        .filter((line) => (JSON.parse(line.record.canonical) as { type?: string }).type === 'diff.comment');
+}
+
 test.describe('Task 21 changes review and local comments', () => {
     test('diff_comment_survives_reload', async ({ page }) => {
         await openStudio(page);
@@ -95,6 +222,8 @@ test.describe('Task 21 changes review and local comments', () => {
         });
         const appended = await call<Outcome>(page, 'appendChanges');
         expect(appended.ok, JSON.stringify(appended)).toBe(true);
+        const finished = await call<Outcome>(page, 'finishFixtureForTest');
+        expect(finished.ok, JSON.stringify(finished)).toBe(true);
 
         await page.reload();
         await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
@@ -124,6 +253,31 @@ test.describe('Task 21 changes review and local comments', () => {
             scope: 'last_turn',
         });
 
+        const exported = await call<string>(page, 'exportNdjson');
+        const commentEvents = exportedCommentEvents(exported);
+        expect(commentEvents).toHaveLength(1);
+        expect(commentEvents[0]!.task_id).toBe(seeded.taskId);
+        expect(commentEvents[0]!.run_id).toBe(seeded.runId);
+        expect(commentEvents[0]!.record.prev_digest).not.toBeNull();
+        const canonical = JSON.parse(commentEvents[0]!.record.canonical) as {
+            type: string;
+            data: Record<string, unknown>;
+        };
+        expect(canonical.type).toBe('diff.comment');
+        expect(canonical.data).toEqual({
+            body: text,
+            comment_id: expect.stringMatching(/^cmt_[0-9a-f]+$/) as unknown as string,
+            head_digest: 'turn:3:fixture',
+            line: 0,
+            path: 'src/a.ts',
+        });
+        expect(JSON.parse(commentEvents[0]!.record.canonical)).not.toHaveProperty('data.scope');
+
+        const rejectedImport = await call<Outcome>(page, 'importNdjson', '{"kind":"header"}\n');
+        expect(rejectedImport.ok).toBe(false);
+        expect((await call<{ phase: string }>(page, 'open')).phase).toBe('ready');
+        expect(await readCommentsDirect(page, seeded.taskId)).toHaveLength(1);
+
         await page.reload();
         await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
         await expect.poll(async () => (await call<{ phase: string }>(page, 'open')).phase).toBe('ready');
@@ -136,6 +290,92 @@ test.describe('Task 21 changes review and local comments', () => {
         await expect(reloaded.locator('[data-diff-stale-comments]')).toHaveCount(0);
         await expect(reloaded).not.toContainText(/\bmerge\b/i);
         await expect(reloaded).not.toContainText(/restore checkpoint|checkpoint/i);
+
+        await clearStoredComments(page);
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        await expect.poll(async () => (await call<{ phase: string }>(page, 'open')).phase).toBe('ready');
+        await selectTask(page, seeded.taskId);
+        await openChanges(page);
+        const rebuilt = page.locator('#studio-typed-root [data-diff-review]');
+        await expect(rebuilt.locator('[data-diff-current-comments]')).toContainText(text);
+        expect(await readCommentsDirect(page, seeded.taskId)).toHaveLength(1);
+    });
+
+    test('finished_run_comment_is_canonical_and_importable', async ({ page }) => {
+        await openStudio(page);
+        await call<{ phase: string }>(page, 'open');
+        const seeded = await call<FixtureSeed>(page, 'createTaskAndEvents', {
+            mode: 'message',
+            title: 'Canonical comment task',
+        });
+        expect((await call<Outcome>(page, 'appendChanges')).ok).toBe(true);
+        expect((await call<Outcome>(page, 'finishFixtureForTest')).ok).toBe(true);
+        const second = await call<FixtureSeed>(page, 'createSecondRun');
+        expect(second.taskId).toBe(seeded.taskId);
+        expect(second.runId).not.toBe(seeded.runId);
+        expect((await call<Outcome>(page, 'finishFixtureForTest')).ok).toBe(true);
+
+        const added = await addCommentDirect(page, {
+            taskId: seeded.taskId,
+            path: 'src/a.ts',
+            line: 0,
+            body: 'canonical note',
+            headDigest: 'turn:3:fixture',
+            scope: 'last_turn',
+        });
+        expect(added.body).toBe('canonical note');
+
+        const running = await call<FixtureSeed>(page, 'createTaskAndEvents', {
+            mode: 'message',
+            title: 'Running comment task',
+        });
+        const runningRejected = await addCommentOutcome(page, {
+            taskId: running.taskId,
+            path: 'src/a.ts',
+            line: 0,
+            body: 'too early',
+            headDigest: 'turn:3:fixture',
+            scope: 'last_turn',
+        });
+        expect(runningRejected).toMatchObject({ ok: false, code: 'out_of_order' });
+
+        const invalidBody = await addCommentOutcome(page, {
+            taskId: seeded.taskId,
+            path: 'src/a.ts',
+            line: 0,
+            body: 'x'.repeat(9000),
+            headDigest: 'turn:3:fixture',
+            scope: 'last_turn',
+        });
+        expect(invalidBody).toMatchObject({ ok: false, code: 'invalid_arguments' });
+
+        const exported = await call<string>(page, 'exportNdjson');
+        const events = exportedCommentEvents(exported);
+        expect(events).toHaveLength(1);
+        expect(events[0]!.run_id).toBe(seeded.runId);
+        expect(JSON.parse(events[0]!.record.canonical).data).toMatchObject({
+            path: 'src/a.ts',
+            line: 0,
+            body: 'canonical note',
+            head_digest: 'turn:3:fixture',
+        });
+
+        await call(page, 'reset');
+        expect((await call<{ phase: string }>(page, 'open')).phase).toBe('ready');
+        const imported = await call<Outcome>(page, 'importNdjson', exported);
+        expect(imported.ok, JSON.stringify(imported)).toBe(true);
+        const importedComments = await readCommentsDirect(page, seeded.taskId);
+        expect(importedComments).toHaveLength(1);
+        expect(importedComments[0]).toMatchObject({
+            path: 'src/a.ts',
+            line: 0,
+            body: 'canonical note',
+            head_digest: 'turn:3:fixture',
+        });
+
+        const reexported = await call<string>(page, 'exportNdjson');
+        expect(exportedCommentEvents(reexported)).toHaveLength(1);
     });
 
     test('static_browser_reviews_uploaded_file_locally', async ({ page }) => {

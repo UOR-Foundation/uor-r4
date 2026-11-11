@@ -213,11 +213,11 @@ describe('AgentClient', () => {
         const branch = await client.changesSnapshot({
             taskId: task.taskId,
             scope: 'branch',
-        });
-        expect(branch).toMatchObject({
-            scope: 'branch',
-            files: [{ path: 'local-branch.ts' }],
-        });
+        }).then(
+            () => null,
+            (error: { code?: string }) => error.code ?? 'unknown',
+        );
+        expect(branch).toBe('host_unavailable');
     });
 
     test('scope_mismatch_does_not_leak_local_changes_or_mask_host_fallback', async () => {
@@ -254,6 +254,12 @@ describe('AgentClient', () => {
                 scope: 'last_turn',
             }),
         ).resolves.toBeNull();
+        await expect(
+            branchClient.changesSnapshot({
+                taskId: branchTask.taskId,
+                scope: 'branch',
+            }),
+        ).rejects.toMatchObject({ code: 'host_unavailable' });
 
         const transport = new HostChangesTransport();
         const hostClient = new AgentClient({ transport });
@@ -264,6 +270,9 @@ describe('AgentClient', () => {
         });
         applyChanges(hostClient, hostTask, hostRun, 2, 'last_turn', [
             { path: 'local-last-turn.ts' },
+        ]);
+        applyChanges(hostClient, hostTask, hostRun, 3, 'branch', [
+            { path: 'local-branch.ts' },
         ]);
         const hostBranch = await hostClient.changesSnapshot({
             taskId: hostTask.taskId,

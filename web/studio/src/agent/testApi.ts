@@ -290,6 +290,7 @@ export interface StudioTestApi {
     writeSnapshot(taskId?: string, runId?: string): Promise<Outcome>;
     readSnapshot(): Promise<Outcome>;
     appendChanges(): Promise<Outcome>;
+    finishFixtureForTest(): Promise<Outcome>;
     appendResume(): Promise<Outcome>;
     recordChanges(headDigest?: string): Promise<Outcome>;
     readChanges(): Promise<Outcome>;
@@ -2694,6 +2695,30 @@ export function installStudioTestApi(owner?: StudioAgentOwnerForTest): void {
                 head_digest: 'turn:3:fixture',
                 captured_at_ms: state.nowMs + 3,
             });
+        },
+        async finishFixtureForTest() {
+            try {
+                const fixture = currentFixture();
+                const task = requireClient().store.snapshot().tasks.find(
+                    (candidate) => candidate.taskId === fixture.taskId,
+                );
+                const run = task?.runs.find(
+                    (candidate) => candidate.runId === fixture.runId,
+                ) ?? null;
+                if (run === null) {
+                    return { ok: false, code: 'run_not_found', message: 'fixture run is missing' };
+                }
+                if (TERMINAL_STATES.has(run.state)) {
+                    return { ok: true, record: { already: true } };
+                }
+                return appendFixtureEvent(fixture, 'run.finished', {
+                    status: 'finished',
+                    finished_at_ms: state.nowMs + run.lastSequence + 1,
+                    duration_ms: run.lastSequence + 1,
+                });
+            } catch (error) {
+                return failure(error);
+            }
         },
         async appendResume() {
             const fixture = currentFixture();

@@ -736,22 +736,20 @@ export class AgentClient {
     async changesSnapshot(
         input: ChangesSnapshotInput,
     ): Promise<ChangesSnapshot | null> {
-        const local: AgentChangeSnapshotView | null =
-            this.store.latestChangesSnapshot(
-                input.taskId,
-                input.runId,
-                input.scope,
-            );
-        if (local !== null) {
+        if (input.scope === 'last_turn') {
+            const local: AgentChangeSnapshotView | null =
+                this.store.latestChangesSnapshot(
+                    input.taskId,
+                    input.runId,
+                    'last_turn',
+                );
+            if (local === null) return null;
             return {
-                scope: local.scope,
+                scope: 'last_turn',
                 files: local.files,
                 headDigest: local.headDigest,
                 capturedAtMs: local.capturedAtMs,
             };
-        }
-        if (input.scope === 'last_turn') {
-            return null;
         }
         const result = await this.hostClient.execute({
             tool: 'git.changes',
@@ -771,7 +769,7 @@ export class AgentClient {
         const taskStore = this.requireReady();
         if (this.runtime !== null) return this.runtime.addDiffComment(input);
         if (taskStore !== null) {
-            return taskStore.recordDiffComment({
+            const result = await taskStore.appendDiffComment({
                 task_id: input.taskId,
                 path: input.path,
                 line: input.line,
@@ -785,6 +783,7 @@ export class AgentClient {
                     ? {}
                     : { created_at_ms: input.createdAtMs }),
             });
+            return result.comment;
         }
         throw new AgentClientError(
             'runtime_unavailable',

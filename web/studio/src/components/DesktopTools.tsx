@@ -4,7 +4,7 @@ import { desktopRepositoryPath } from '../adapters/desktopActions.js';
 import type { WorkspaceApi } from '../adapters/workflow.js';
 import { AgentClientError, type AgentClient, type ChangesSnapshot } from '../agent/client.js';
 import type { DiffCommentRecord } from '../agent/store.js';
-import { DiffReview, createUploadedSnapshot, type DiffComment, type DiffCommentDraft, type DiffSource, type DiffScope } from './DiffReview.js';
+import { DiffReview, createUploadedSnapshot, snapshotFileLines, type DiffComment, type DiffCommentDraft, type DiffSource, type DiffScope } from './DiffReview.js';
 import { Icon } from './ui/Icon.js';
 
 interface DesktopPanelProps { actions: DesktopActions; files: WorkspaceApi; idPrefix?: string }
@@ -51,34 +51,56 @@ export function ChangesPanel({ actions, files, copy, idPrefix = '', agentClient 
     const [comments, setComments] = useState<DiffComment[]>([]);
     const [commentError, setCommentError] = useState<string | null>(null);
     const [commentRevision, setCommentRevision] = useState(0);
+    const [loadedKey, setLoadedKey] = useState<string | null>(null);
+    const [commentsKey, setCommentsKey] = useState<string | null>(null);
     const reviewOperation = useRef(0);
+    const identityKey = `${taskId ?? ''}:${scope}`;
+    const reviewReady = loadedKey === identityKey;
+    const commentsReady = commentsKey === taskId;
+    const identityRef = useRef<{
+        key: string;
+        taskId: string | null;
+        scope: DiffScope;
+        loadedKey: string | null;
+        snapshot: ChangesSnapshot | null;
+    }>({ key: identityKey, taskId, scope, loadedKey: null, snapshot: null });
+    identityRef.current = {
+        key: identityKey,
+        taskId,
+        scope,
+        loadedKey: reviewReady ? identityKey : null,
+        snapshot: reviewReady ? snapshot : null,
+    };
+    const visibleComments = reviewReady && commentsReady ? comments : [];
     const id = (name: string) => `${idPrefix}${name}`;
     useEffect(() => { operation.current += 1; setRefreshing(false); setSummary(''); setDiff(''); setDisplayDiff(''); diffRef.current = ''; return () => { operation.current += 1; }; }, [revision]);
 
     useEffect(() => {
         const request = ++reviewOperation.current;
+        const currentKey = `${taskId ?? ''}:${scope}`;
+        setSnapshot(null);
+        setSource(null);
+        setReviewError(null);
+        setLoadedKey(null);
         if (scope === 'branch' && uploaded !== null) {
             setSnapshot(uploaded);
             setSource('upload');
-            setReviewError(null);
             setReviewLoading(false);
+            setLoadedKey(currentKey);
             return () => { reviewOperation.current += 1; };
         }
         if (agentClient === null || taskId === null) {
-            setSnapshot(null);
-            setSource(null);
-            setReviewError(null);
             setReviewLoading(false);
             return () => { reviewOperation.current += 1; };
         }
         setReviewLoading(true);
-        setReviewError(null);
         void (async () => {
             try {
                 const result = await agentClient.changesSnapshot({ taskId, scope });
                 if (request !== reviewOperation.current) return;
                 setSnapshot(result);
                 setSource(scope === 'last_turn' ? 'browser' : 'host');
+                setLoadedKey(currentKey);
             } catch (error) {
                 if (request !== reviewOperation.current) return;
                 setSnapshot(null);
@@ -99,6 +121,7 @@ export function ChangesPanel({ actions, files, copy, idPrefix = '', agentClient 
         let active = true;
         if (agentClient === null || taskId === null) {
             setComments([]);
+            setCommentsKey(null);
             setCommentError(null);
             return () => { active = false; };
         }
@@ -106,11 +129,13 @@ export function ChangesPanel({ actions, files, copy, idPrefix = '', agentClient 
             (records) => {
                 if (!active) return;
                 setComments(records.map(commentFromRecord));
+                setCommentsKey(taskId);
                 setCommentError(null);
             },
             (error: unknown) => {
                 if (!active) return;
                 setComments([]);
+                setCommentsKey(taskId);
                 setCommentError(`Local comments could not be loaded: ${error instanceof Error ? error.message : String(error)}`);
             },
         );
@@ -137,30 +162,58 @@ export function ChangesPanel({ actions, files, copy, idPrefix = '', agentClient 
         const selected = input.files === null ? [] : Array.from(input.files);
         input.value = '';
         if (selected.length === 0) return;
+        setLoadedKey(null);
+        setSnapshot(null);
+        setSource(null);
+        setReviewError(null);
+        setReviewLoading(true);
         try {
             const next = await createUploadedSnapshot(selected);
             setUploaded(next);
             setScope('branch');
         } catch (error) {
+            setReviewLoading(false);
             setReviewError(`The uploaded file could not be read: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
+    function changeScope(next: DiffScope): void {
+        if (next === scope) return;
+        setLoadedKey(null);
+        setSnapshot(null);
+        setSource(null);
+        setReviewError(null);
+        setReviewLoading(true);
+        setScope(next);
+    }
     async function addComment(draft: DiffCommentDraft): Promise<void> {
-        if (agentClient === null || taskId === null) throw new Error('Select a browser task before adding a local comment.');
-        if (snapshot === null) throw new Error('No current snapshot is loaded; reload changes before commenting.');
+        const identity = identityRef.current;
+        if (agentClient === null || identity.taskId === null) throw new Error('Select a browser task before adding a local comment.');
+        const current = identity.snapshot;
+        if (identity.loadedKey !== identity.key || current === null) {
+            throw new Error('The change source is still loading; wait for the new snapshot before commenting.');
+        }
+        const file = current.files.find((candidate) => candidate.path === draft.path);
+        if (file === undefined) throw new Error('This file is not in the loaded snapshot.');
+        const lines = snapshotFileLines(file);
+        if (draft.line > 0 && (lines === null || draft.line > lines.length)) {
+            throw new Error(`Line ${draft.line} is not present in this snapshot.`);
+        }
+        const requestKey = identity.key;
         const record = await agentClient.addDiffComment({
-            taskId,
-            scope,
+            taskId: identity.taskId,
+            scope: identity.scope,
             path: draft.path,
             line: draft.line,
             body: draft.body,
-            headDigest: snapshot.headDigest,
+            headDigest: current.headDigest,
         });
+        if (identityRef.current.key !== requestKey) return;
         const saved = commentFromRecord(record);
         setComments((current) => [
             ...current.filter((item) => !(item.scope === saved.scope && item.path === saved.path && item.line === saved.line && item.headDigest === saved.headDigest)),
             saved,
         ]);
+        setCommentsKey(saved.taskId);
         setCommentError(null);
         setCommentRevision((value) => value + 1);
     }
@@ -170,20 +223,26 @@ export function ChangesPanel({ actions, files, copy, idPrefix = '', agentClient 
             <div class="diff-upload">
                 <label for={id('diffUpload')}>Upload a diff or text file to review locally</label>
                 <input id={id('diffUpload')} type="file" multiple accept=".diff,.patch,.txt,.md,text/plain" onChange={(event) => { void upload(event.currentTarget); }} />
-                {uploaded !== null && <button id={id('btnClearUpload')} type="button" onClick={() => setUploaded(null)}>Remove uploaded diff</button>}
+                {uploaded !== null && <button id={id('btnClearUpload')} type="button" onClick={() => { setLoadedKey(null); setSnapshot(null); setSource(null); setReviewLoading(true); setUploaded(null); }}>Remove uploaded diff</button>}
             </div>
             {commentError !== null && <p class="panel-summary" role="alert">{commentError}</p>}
             <DiffReview
                 taskId={taskId}
                 scope={scope}
-                onScope={setScope}
-                comments={comments}
+                onScope={changeScope}
+                comments={visibleComments}
                 onComment={addComment}
-                snapshot={snapshot}
-                source={source}
-                loading={reviewLoading}
+                snapshot={reviewReady ? snapshot : null}
+                source={reviewReady ? source : null}
+                loading={reviewLoading || !reviewReady}
                 error={reviewError}
-                commentDisabledReason={agentClient === null || taskId === null ? 'Select a browser task to add a local comment.' : null}
+                commentDisabledReason={
+                    agentClient === null || taskId === null
+                        ? 'Select a browser task to add a local comment.'
+                        : !reviewReady || reviewLoading
+                          ? 'Loading this change source; wait for the new snapshot before commenting.'
+                          : null
+                }
                 idPrefix={id('diffReview-')}
             />
         </section>
