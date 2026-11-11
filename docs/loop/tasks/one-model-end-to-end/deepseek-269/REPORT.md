@@ -16,6 +16,10 @@ replay id for id.
 - **The first synthetic replay exceeded its context.** The 8-position trunk
   could not hold a 4-token prompt and 8 reply steps. The test now uses a
   2-token prompt and a 4-token cap; it exercises the same trace path.
+- **The first local PR gate found four new D32 sites.** Each was a tuple-index
+  `.0` on `serve_step`'s `(token, margin)` result, which the source scanner
+  treats as a floating-point literal. The four sites are now destructured; no
+  serving behavior changed.
 - **A recursive `rustfmt` invocation reformatted unrelated integer modules.**
   Those formatter-only changes were removed, and the four intended integer
   edits were reapplied. `rustfmt --check` remains non-clean over the entire
