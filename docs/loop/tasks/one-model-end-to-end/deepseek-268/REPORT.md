@@ -38,6 +38,9 @@ no model was trained and no language or capability claim is made.
   in `response_mask.u8`. Every scored question has one authoritative value;
   the intentionally unscored general-dialogue rows account for the remaining
   3.2%.
+- The writer decodes the masked stream and requires every assistant turn to
+  appear there in full. The validator also fixes which archetypes carry a
+  concrete value and which must abstain.
 - Each split writes `tokens.u16`, `response_mask.u8`, `manifest.json` and
   `scenarios.jsonl`; the root writes `scenario-manifest.json`. The split and
   root manifests now carry the tokenizer path, SHA-256, CID and dialogue ids.
@@ -115,7 +118,7 @@ tokenizer binding and required the negative mutations to demonstrate refusal.
 
 ## Size budget
 
-The generator, CLI and focused test are 1,276 changed lines before this report,
+The generator, CLI and focused test are 1,293 changed lines before this report,
 above the ORDER's 1,200-line stop line. The implementation and reporting are
 separate commits so the code artifact can be reviewed independently. No bar,
 item status, model, trainer, exporter or serving path changed.
