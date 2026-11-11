@@ -5,7 +5,7 @@ Lab: deepseek. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to
 configuration probe after the aligned scenario readout: the current
 FBS/Hamming model has not been trained on the aligned TRAIN.
 
-TEST FITNESS: pending fresh-context non-author review 10.
+TEST FITNESS: pending fresh-context non-author review 11.
 
 PRE-RUN REVIEW: pending.
 
@@ -53,7 +53,7 @@ while retaining the wrong-memory and no-memory abstention controls?
   must be a clean, pushed descendant whose `crates`, `conformance`, `scripts`,
   `xtask`, `Cargo.toml` and `Cargo.lock` trees are byte-identical to that pin.
   The exact reviewed execution head is frozen in the review receipt at
-  `local/deepseek/scenario-gpu-smoke-2026-11-11/fresh-review-10.md`; the launcher
+  `local/deepseek/scenario-gpu-smoke-2026-11-11/fresh-review-11.md`; the launcher
   requires `TEST FITNESS: FIT`, `PRE-RUN REVIEW: GO` and a matching
   `REVIEWED HEAD: <sha>` line from that receipt.
   [`launch-pins.env`](../../loop/tasks/one-model-end-to-end/deepseek-273/launch-pins.env)
@@ -145,7 +145,7 @@ The exact execution path is:
 
 - after the final input/pin commit, read the exact
   `REVIEWED HEAD:` value from
-  `local/deepseek/scenario-gpu-smoke-2026-11-11/fresh-review-10.md`, set
+  `local/deepseek/scenario-gpu-smoke-2026-11-11/fresh-review-11.md`, set
   `RUN_HEAD` to it, then run
   `uor-pod up --lab deepseek --session deepseek-scenario-gpu-smoke
   --purpose "aligned-corpus geometric smoke" --hours 3 --count 1 --gpu 5090
@@ -153,7 +153,10 @@ The exact execution path is:
 - `local/deepseek/scenario-gpu-smoke-2026-11-11/launch.sh POD` generates the
   run id, stages
   the sealed input after verifying the same pod commit and unchanged code
-  subtree, starts the watcher, and calls `uor-pod run`;
+  subtree, starts the watcher, and calls `uor-pod run`. The verified bootstrap
+  source is `/root/build/src-<RUN_HEAD>`; job binaries reuse
+  `/root/build/target-sm120`, and only inputs, runs and seals are written under
+  `/workspace/uor-r4`;
 - `.../job.sh` runs training, smoke scoring, final snapshot and bound export;
 - the job checks that a 128-bit-nonce run prefix is absent, exclusively creates
   and reads back a per-claim `claim-<run-id>.json`, proves the prefix contains
@@ -329,7 +332,7 @@ miss cannot retire a mechanism.
 - Status at preflight: **0 running pods**, **$0/h**, no live lease; the Vast
   listing showed 14 verified RTX 5090 offers, cheapest `$0.563/h`. This check is
   repeated immediately before `uor-pod up`; the captured review-time output is
-  `local/deepseek/scenario-gpu-smoke-2026-11-11/pod-status-before-review-10.txt`.
+  `local/deepseek/scenario-gpu-smoke-2026-11-11/pod-status-before-review-11.txt`.
 - One Vast RTX 5090 pod at no more than `$1.60/h`, one GPU only, leased for
   three hours and renewed by the watcher while the job moves.
 - Expected: about 10 minutes of build/tests, 5 minutes of smoke, 20 to

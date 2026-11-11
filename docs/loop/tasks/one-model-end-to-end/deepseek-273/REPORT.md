@@ -8,7 +8,8 @@ Lab: deepseek. Item:
 the exact reviewed execution-head procedure are in
 [`launch-pins.env`](./launch-pins.env).
 
-**Status:** pre-run, pending fresh-context review 10. No GPU job has started.
+**Status:** pre-run, pending fresh-context review 11. No GPU model job has
+started.
 
 ## What did not work
 
@@ -50,6 +51,13 @@ lock, unknown pods could be marked KEEP, pre-watcher hangs remained, job
 failure provenance was incomplete, and the Markdown renderer dropped
 timeout-only command details. Those findings are repaired in the current
 registration.
+
+The first billed launch at review 10 stopped before watcher or job start:
+`uor-pod` now bootstraps source at `/root/build/src-<sha>`, while the launcher
+still verified `/workspace/uor-r4`. The launcher recorded the failure and
+released and destroyed the pod. The measured failed-launch cost was
+`$0.041756`; no model process ran. The reviewed path now binds the bootstrap
+source root and writes only inputs, runs and seals under `/workspace/uor-r4`.
 
 ## What changed
 
@@ -111,11 +119,11 @@ kept the correction bounded and checked against the registered evidence path.
 
 ## Still open
 
-Review 10, the GPU smoke, bound export, held-out scenario reads, row
+Review 11, the GPU smoke, bound export, held-out scenario reads, row
 classification, final cost and post-run exact-head review remain. This file
 will be replaced with the completed report before merge.
 
 ## Plain summary
 
-The registration and its control instrument are now ready for review 10. No
+The registration and its control instrument are now ready for review 11. No
 model result has been claimed.
