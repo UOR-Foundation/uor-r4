@@ -629,7 +629,10 @@ export class LoopbackHostTransport implements HostTransport {
             terminal: this.capabilityValues.terminal === true,
             git: this.capabilityValues.git === true,
             mcp: this.capabilityValues.mcp === true,
-            approvals: this.capabilityValues.approvals === true,
+            // There is no loopback approval route and no native confirmation
+            // dialog on this surface: approval-required tools are GUI-only or
+            // deny-only here, never page-approved.
+            approvals: false,
         };
     }
 
@@ -717,7 +720,8 @@ export class LoopbackHostTransport implements HostTransport {
     ): Promise<void> {
         const query =
             cursor === null ? '' : `?cursor=${encodeURIComponent(cursor)}`;
-        const response = await fetchImpl(
+        const aborted = abortPromise(controller);
+        const responsePromise = fetchImpl(
             this.url(`${LOOPBACK_RESULTS_PATH}${query}`),
             {
                 method: 'GET',
@@ -727,6 +731,11 @@ export class LoopbackHostTransport implements HostTransport {
                 signal: controller?.signal,
             },
         );
+        // A hostile fetch that ignores the abort signal must not become an
+        // unhandled rejection after disposal wins the race.
+        const normalizedResponse = Promise.resolve(responsePromise);
+        void normalizedResponse.catch(() => undefined);
+        const response = await Promise.race([normalizedResponse, aborted]);
         await this.ensureOk(response);
         const headerCursor = response.headers.get('x-uor-host-cursor');
         if (headerCursor !== null && headerCursor.length > 0) {
@@ -741,23 +750,38 @@ export class LoopbackHostTransport implements HostTransport {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
-        for (;;) {
-            const read = await reader.read();
-            if (read.done) break;
-            buffer += decoder.decode(read.value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() ?? '';
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (trimmed.length === 0) continue;
-                if (controller?.signal.aborted === true) return;
-                listener(this.parseLine(trimmed));
+        try {
+            for (;;) {
+                const readPromise = reader.read();
+                void readPromise.catch(() => undefined);
+                const read = await Promise.race([readPromise, aborted]);
+                if (read.done) break;
+                buffer += decoder.decode(read.value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() ?? '';
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (trimmed.length === 0) continue;
+                    if (controller?.signal.aborted === true) return;
+                    listener(this.parseLine(trimmed));
+                }
             }
-        }
-        buffer += decoder.decode();
-        const trailing = buffer.trim();
-        if (trailing.length > 0 && controller?.signal.aborted !== true) {
-            listener(this.parseLine(trailing));
+            buffer += decoder.decode();
+            const trailing = buffer.trim();
+            if (trailing.length > 0 && controller?.signal.aborted !== true) {
+                listener(this.parseLine(trailing));
+            }
+        } finally {
+            try {
+                void reader.cancel().catch(() => undefined);
+            } catch {
+                // A disposal cannot block the transport lifecycle.
+            }
+            try {
+                reader.releaseLock();
+            } catch {
+                // A pending read may already own the lock; disposal still wins.
+            }
         }
     }
 
@@ -998,4 +1022,18 @@ function base64(bytes: Uint8Array): string {
     let binary = '';
     for (const byte of bytes) binary += String.fromCharCode(byte);
     return globalThis.btoa(binary);
+}
+
+function abortPromise(controller: AbortController | null): Promise<never> {
+    if (controller === null) return new Promise<never>(() => undefined);
+    const aborted = new Promise<never>((_, reject) => {
+        const fail = () => reject(new DOMException('Aborted', 'AbortError'));
+        if (controller.signal.aborted) {
+            fail();
+        } else {
+            controller.signal.addEventListener('abort', fail, { once: true });
+        }
+    });
+    void aborted.catch(() => undefined);
+    return aborted;
 }

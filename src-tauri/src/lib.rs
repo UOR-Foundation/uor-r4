@@ -14,6 +14,7 @@ use std::process::Command;
 
 pub mod agent_data;
 pub mod agent_host;
+pub mod agent_server;
 pub mod mcp;
 pub(crate) mod process_control;
 pub mod sidecar;
@@ -2551,7 +2552,9 @@ pub fn dispatch_agent_host_rpc(
     args: &Value,
 ) -> Result<Value, String> {
     match cmd {
-        "agent_host_capabilities" => Ok(host.capabilities()),
+        // The JSON-RPC/loopback entrypoint has no native confirmation dialog:
+        // approval-required tools can be denied there, never approved.
+        "agent_host_capabilities" => Ok(host.capabilities_for_surface(false)),
         "agent_host_invoke" => {
             let intent = args
                 .get("intent")

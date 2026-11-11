@@ -1730,7 +1730,7 @@ describe('HostClient fix-1 pending failure', () => {
             timers: scheduler,
             pendingTimeoutMs: 10,
         });
-        const pending = client.execute(await validIntent());
+        const pending = client.execute(await validIntent(), { timeoutMs: 10 });
         await until(
             () => scheduler.pending === 1,
             'pending timeout scheduled',
@@ -2702,5 +2702,335 @@ describe('Tauri host bridge adapter', () => {
                 decision: 'approved',
             }),
         ).rejects.toMatchObject({ code: 'approval_forbidden' });
+    });
+});
+
+describe('HostClient Task 18 loopback and hostile transport', () => {
+    test('loopback_capabilities_do_not_advertise_page_approvals', async () => {
+        const transport = new LoopbackHostTransport({
+            token: 'launch-token',
+            baseUrl: 'http://127.0.0.1:4173',
+            fetch: (async () => new Response(null, { status: 204 })) as typeof fetch,
+            capabilities: { ...ALL_CAPS, approvals: true },
+        });
+        const capabilities = await transport.capabilities();
+        expect(capabilities.streaming).toBe('ndjson');
+        expect(capabilities.tree).toBe(true);
+        expect(capabilities.approvals).toBe(false);
+        await expect(
+            transport.approve({
+                approvalId: 'apr_5c2e8a1f9b7d3e40',
+                decision: 'approved',
+            }),
+        ).rejects.toMatchObject({ code: 'host_unavailable' });
+    });
+
+    test('slow_host_call_is_not_failed_by_the_default_pending_timeout', async () => {
+        const scheduler = new ManualScheduler();
+        const transport = new ManualStreamTransport();
+        const client = new HostClient({ transport, timers: scheduler });
+        const intent = await validIntent({
+            intent_id: 'hti_0123456789abcdef_000000000101',
+        });
+        const pending = client.execute(intent);
+        void pending.catch(() => undefined);
+        await until(
+            () => transport.subscriptions.length === 1,
+            'slow host subscription',
+            500,
+        );
+        await flush();
+        expect(scheduler.pending).toBe(0);
+        transport.subscriptions[0]!.listener(await validResult(intent));
+        await expect(pending).resolves.toMatchObject({
+            intent_id: intent.intent_id,
+        });
+        client.close();
+    });
+
+    test('explicit_timeout_settles_once_without_cancelling_host_work', async () => {
+        const scheduler = new ManualScheduler();
+        const transport = new ManualStreamTransport();
+        const client = new HostClient({
+            transport,
+            timers: scheduler,
+            pendingTimeoutMs: 30_000,
+        });
+        const intent = await validIntent({
+            intent_id: 'hti_0123456789abcdef_000000000102',
+        });
+        const pending = client.execute(intent, { timeoutMs: 10 });
+        let settlements = 0;
+        void pending.then(
+            () => {
+                settlements += 1;
+            },
+            () => {
+                settlements += 1;
+            },
+        );
+        await until(
+            () => transport.subscriptions.length === 1,
+            'explicit timeout subscription',
+            500,
+        );
+        await until(() => scheduler.pending >= 1, 'explicit timer', 500);
+        expect(scheduler.runNext()).toBe(true);
+        await expect(pending).rejects.toMatchObject({ code: 'transport_closed' });
+        transport.subscriptions[0]!.listener(
+            await validResult(intent, { output: { late: true } }),
+        );
+        await flush();
+        expect(settlements).toBe(1);
+        client.close();
+    });
+
+    test('duplicate_stream_result_settles_execute_once', async () => {
+        const scheduler = new ManualScheduler();
+        const transport = new ManualStreamTransport();
+        const client = new HostClient({ transport, timers: scheduler });
+        const intent = await validIntent({
+            intent_id: 'hti_0123456789abcdef_000000000103',
+        });
+        const pending = client.execute(intent);
+        let settlements = 0;
+        void pending.then(
+            () => {
+                settlements += 1;
+            },
+            () => {
+                settlements += 1;
+            },
+        );
+        await until(
+            () => transport.subscriptions.length === 1,
+            'duplicate subscription',
+            500,
+        );
+        const result = await validResult(intent);
+        transport.subscriptions[0]!.listener(result);
+        transport.subscriptions[0]!.listener(result);
+        await expect(pending).resolves.toMatchObject({
+            intent_id: intent.intent_id,
+        });
+        await flush();
+        expect(settlements).toBe(1);
+        client.close();
+    });
+
+    test('loopback_result_preserves_artifact_identity_and_range_metadata', async () => {
+        const intent = await validIntent({
+            intent_id: 'hti_data_000000000104',
+            tool: 'artifact.read',
+            request_scope: 'data',
+            task_id: 'tsk_0000000000000000',
+            run_id: 'run_0000000000000000',
+            generation: 1,
+            arguments: { artifact_id: `art_${'a'.repeat(64)}`, start: 2, end: 5 },
+        });
+        const output = {
+            artifact_id: `art_${'a'.repeat(64)}`,
+            path: 'data.bin',
+            media_type: 'application/octet-stream',
+            size_bytes: 3,
+            artifact_size_bytes: 10,
+            digest: `sha256:${'b'.repeat(64)}`,
+            whole_digest: `sha256:${'c'.repeat(64)}`,
+            bytes_base64: 'MjM0',
+            range: { start: 2, end: 5 },
+        };
+        const result = await validResult(intent, {
+            output,
+            artifact: {
+                artifact_id: `art_${'a'.repeat(64)}`,
+                digest: `sha256:${'c'.repeat(64)}`,
+                media_type: 'application/octet-stream',
+                size_bytes: 10,
+            },
+        });
+        const fetchImpl = (async (
+            input: RequestInfo | URL,
+            init: RequestInit = {},
+        ): Promise<Response> => {
+            if (String(input).includes('/v1/studio/host/intents')) {
+                return new Response(JSON.stringify(result), {
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                });
+            }
+            return new Response(
+                new ReadableStream<Uint8Array>({
+                    start(controller) {
+                        controller.close();
+                    },
+                }),
+                {
+                    status: 200,
+                    headers: { 'content-type': 'application/x-ndjson' },
+                },
+            );
+        }) as typeof fetch;
+        const client = new HostClient({
+            transport: new LoopbackHostTransport({
+                token: 'launch-token',
+                baseUrl: 'http://127.0.0.1:4173',
+                fetch: fetchImpl,
+            }),
+            timers: new ManualScheduler(),
+        });
+        const settled = await client.execute(intent);
+        expect(settled.output).toEqual(output);
+        expect(settled.artifact).toEqual(result.artifact);
+        client.close();
+    });
+
+    test('hostile_invoke_getter_error_rejects_without_pending_timeout', async () => {
+        const scheduler = new ManualScheduler();
+        const transport: HostTransport = {
+            kind: 'bridge',
+            supportsStream: true,
+            async capabilities() {
+                return {
+                    kind: 'bridge',
+                    hostAvailable: true,
+                    streaming: 'channel',
+                    ...ALL_FALSE,
+                };
+            },
+            invoke() {
+                const hostile = new Proxy(
+                    {},
+                    {
+                        get(_target, key) {
+                            if (key === 'schema') {
+                                throw new Error('hostile response getter');
+                            }
+                            return undefined;
+                        },
+                    },
+                );
+                return hostile as unknown as Promise<{ accepted: true }>;
+            },
+            subscribe: () => ({
+                close: () => undefined,
+                cursor: () => null,
+            }),
+            async approve(input) {
+                return {
+                    approvalId: input.approvalId,
+                    decision: input.decision,
+                };
+            },
+        };
+        const client = new HostClient({ transport, timers: scheduler });
+        const pending = client.execute(await validIntent());
+        void pending.catch(() => undefined);
+        await expect(disposition(pending)).resolves.toMatch(
+            /^rejected:(internal|invalid_event)$/,
+        );
+        expect(scheduler.pending).toBe(0);
+        client.close();
+    });
+
+    test('hostile_supports_stream_getter_error_settles_without_timeout', async () => {
+        const scheduler = new ManualScheduler();
+        let reads = 0;
+        const listeners: Array<(result: HostToolResult) => void> = [];
+        const transport: HostTransport = {
+            kind: 'bridge',
+            get supportsStream(): boolean {
+                reads += 1;
+                if (reads > 1) {
+                    throw new Error('hostile supportsStream getter');
+                }
+                return true;
+            },
+            async capabilities() {
+                return {
+                    kind: 'bridge',
+                    hostAvailable: true,
+                    streaming: 'channel',
+                    ...ALL_FALSE,
+                };
+            },
+            async invoke() {
+                return { accepted: true };
+            },
+            subscribe: (listener) => {
+                listeners.push(listener);
+                return {
+                    close: () => undefined,
+                    cursor: () => null,
+                };
+            },
+            async approve(input) {
+                return {
+                    approvalId: input.approvalId,
+                    decision: input.decision,
+                };
+            },
+        };
+        const client = new HostClient({ transport, timers: scheduler });
+        const intent = await validIntent();
+        const pending = client.execute(intent);
+        void pending.catch(() => undefined);
+        await until(() => reads >= 1, 'accepted hostile transport', 500);
+        await flush();
+        expect(reads).toBe(1);
+        expect(scheduler.pending).toBe(0);
+        listeners[0]!(await validResult(intent));
+        await expect(pending).resolves.toMatchObject({
+            intent_id: intent.intent_id,
+        });
+        client.close();
+    });
+
+    test('loopback_read_disposal_cancels_the_stream_and_leaves_no_pending', async () => {
+        const scheduler = new ManualScheduler();
+        let readerStarted = false;
+        let cancelled = false;
+        const intent = await validIntent({
+            intent_id: 'hti_0123456789abcdef_000000000105',
+        });
+        const fetchImpl = (async (
+            input: RequestInfo | URL,
+        ): Promise<Response> => {
+            if (String(input).includes('/v1/studio/host/intents')) {
+                return new Response(JSON.stringify({ accepted: true }), {
+                    status: 202,
+                    headers: { 'content-type': 'application/json' },
+                });
+            }
+            const stream = new ReadableStream<Uint8Array>({
+                start() {
+                    readerStarted = true;
+                    // A hostile server ignores the abort signal and holds the
+                    // read forever; disposal must still release the reader.
+                },
+                cancel() {
+                    cancelled = true;
+                },
+            });
+            return new Response(stream, {
+                status: 200,
+                headers: { 'content-type': 'application/x-ndjson' },
+            });
+        }) as typeof fetch;
+        const client = new HostClient({
+            transport: new LoopbackHostTransport({
+                token: 'launch-token',
+                baseUrl: 'http://127.0.0.1:4173',
+                fetch: fetchImpl,
+            }),
+            timers: scheduler,
+            pendingTimeoutMs: 30_000,
+        });
+        const pending = client.execute(intent);
+        void pending.catch(() => undefined);
+        await until(() => readerStarted, 'loopback reader', 500);
+        client.close();
+        await expect(pending).rejects.toMatchObject({ code: 'transport_closed' });
+        await until(() => cancelled, 'loopback read cancellation', 500);
+        expect(scheduler.pending).toBe(0);
     });
 });

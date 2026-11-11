@@ -578,6 +578,7 @@ interface PendingEntry {
     reject: (error: AgentClientError) => void;
     settled: boolean;
     timer: unknown;
+    explicitTimeout: boolean;
     removeAbort: (() => void) | null;
 }
 
@@ -724,8 +725,10 @@ export class HostClient {
         }
         const entry = this.createPending(intent, options);
         if (entry.settled) return entry.promise;
+        let streaming: boolean;
         try {
-            this.ensureSubscription();
+            streaming = this.transport.supportsStream === true;
+            this.ensureSubscription(streaming);
         } catch (error) {
             this.rejectPending(entry, toClientError(error));
             return entry.promise;
@@ -738,28 +741,19 @@ export class HostClient {
             this.rejectPending(entry, toClientError(error));
             return entry.promise;
         }
-        void Promise.resolve(invocation).then(
+        let normalized: Promise<HostInvokeResponse>;
+        try {
+            normalized = Promise.resolve(invocation);
+        } catch (error) {
+            this.rejectPending(entry, toClientError(error));
+            return entry.promise;
+        }
+        void normalized.then(
             (response) => {
-                if (entry.settled) return;
-                const direct = asHostToolResult(response);
-                if (direct !== null) {
-                    void this.settleFromResult(entry, direct);
-                } else if (!isInvokeAccepted(response)) {
-                    this.rejectPending(
-                        entry,
-                        new AgentClientError(
-                            'invalid_event',
-                            'host invoke returned an invalid response',
-                        ),
-                    );
-                } else if (this.transport.supportsStream !== true) {
-                    this.rejectPending(
-                        entry,
-                        new AgentClientError(
-                            'host_unavailable',
-                            'the host transport cannot deliver a streamed result',
-                        ),
-                    );
+                try {
+                    this.handleInvocation(entry, response, streaming);
+                } catch (error) {
+                    this.rejectPending(entry, toClientError(error));
                 }
             },
             (error: unknown) => {
@@ -767,6 +761,48 @@ export class HostClient {
             },
         );
         return entry.promise;
+    }
+
+    private handleInvocation(
+        entry: PendingEntry,
+        response: HostInvokeResponse,
+        streaming: boolean,
+    ): void {
+        if (entry.settled) return;
+        const direct = asHostToolResult(response);
+        if (direct !== null) {
+            void this.settleFromResult(entry, direct);
+            return;
+        }
+        if (!isInvokeAccepted(response)) {
+            this.rejectPending(
+                entry,
+                new AgentClientError(
+                    'invalid_event',
+                    'host invoke returned an invalid response',
+                ),
+            );
+            return;
+        }
+        if (!streaming) {
+            this.rejectPending(
+                entry,
+                new AgentClientError(
+                    'host_unavailable',
+                    'the host transport cannot deliver a streamed result',
+                ),
+            );
+            return;
+        }
+        this.markHostAccepted(entry);
+    }
+
+    private markHostAccepted(entry: PendingEntry): void {
+        if (entry.settled || entry.explicitTimeout) return;
+        if (entry.timer !== null) {
+            this.timers.clearTimeout(entry.timer);
+            entry.timer = null;
+        }
     }
 
     subscribe(
@@ -779,13 +815,19 @@ export class HostClient {
                 'host client is closed',
             );
         }
-        if (this.transport.supportsStream !== true) {
+        let streaming: boolean;
+        try {
+            streaming = this.transport.supportsStream === true;
+        } catch (error) {
+            throw toClientError(error);
+        }
+        if (!streaming) {
             throw new AgentClientError(
                 'host_unavailable',
                 'the host transport has no result stream',
             );
         }
-        this.ensureSubscription();
+        this.ensureSubscription(streaming);
         const entry: StreamListenerEntry = {
             listener,
             ...(options.onError === undefined
@@ -882,6 +924,7 @@ export class HostClient {
             reject,
             settled: false,
             timer: null,
+            explicitTimeout: options.timeoutMs !== undefined,
             removeAbort: null,
         };
         this.pending.set(intent.intent_id, entry);
@@ -917,9 +960,9 @@ export class HostClient {
         return entry;
     }
 
-    private ensureSubscription(): void {
+    private ensureSubscription(streaming: boolean): void {
         if (this.subscription !== null || this.closed) return;
-        if (this.transport.supportsStream !== true) return;
+        if (!streaming) return;
         const generation = ++this.subscriptionGeneration;
         const subscription = this.transport.subscribe(
             (result) => {

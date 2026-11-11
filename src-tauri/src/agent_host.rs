@@ -262,6 +262,23 @@ fn internal_failure(message: impl Into<String>) -> HostFailure {
     HostFailure::new("internal", message)
 }
 
+fn static_failure_code(code: &str) -> &'static str {
+    match code {
+        "invalid_arguments" => "invalid_arguments",
+        "approval_forbidden" => "approval_forbidden",
+        "approval_expired" => "approval_expired",
+        "approval_digest_mismatch" => "approval_digest_mismatch",
+        "cross_task_event" => "cross_task_event",
+        "out_of_order" => "out_of_order",
+        "stale_generation" => "stale_generation",
+        "limit_exceeded" => "limit_exceeded",
+        "host_denied" => "host_denied",
+        "host_unavailable" => "host_unavailable",
+        "cursor_expired" => "cursor_expired",
+        _ => "internal",
+    }
+}
+
 fn sha256_prefixed(bytes: &[u8]) -> String {
     format!("sha256:{}", sha256_bytes(bytes))
 }
@@ -587,6 +604,7 @@ struct HostApprovalRecord {
 }
 
 struct HostSubscriber {
+    id: u64,
     sink: Box<dyn Fn(&HostToolResult) + Send>,
 }
 
@@ -668,8 +686,18 @@ impl AgentHost {
         self.confirmed_mcp_sessions.remove(session_id);
     }
 
-    /// Capabilities and the read-only grant list for the page.
+    /// Capabilities and the read-only grant list for a surface that can open
+    /// the host's native confirmation dialog.
     pub fn capabilities(&self) -> Value {
+        self.capabilities_for_surface(true)
+    }
+
+    /// Capabilities for an explicit confirmation surface.
+    ///
+    /// A dialog-less entrypoint (the loopback JSON-RPC shim or the offline
+    /// stdio runner) must report `approvals: false`: approval-required tools
+    /// can only be denied there, never approved by the page.
+    pub fn capabilities_for_surface(&self, approvals_available: bool) -> Value {
         json!({
             "tree": true,
             "changes": true,
@@ -677,7 +705,7 @@ impl AgentHost {
             "terminal": self.backend.terminal_enabled(),
             "git": true,
             "mcp": true,
-            "approvals": true,
+            "approvals": approvals_available,
             "runtime": false,
             "grants": self.backend.agent_grants(),
         })
@@ -790,8 +818,45 @@ impl AgentHost {
         }
     }
 
+    /// Validate an intent without executing it, so an HTTP transport can
+    /// reject malformed bodies before it acknowledges the request.
+    pub fn validate_intent(value: &Value) -> Result<(), String> {
+        parse_intent(value).map(|_| ())
+    }
+
+    /// Execute one validated intent and always return a transport result.
+    ///
+    /// `invoke` reports parse/ownership/approval failures as `Err`; the HTTP
+    /// transport needs a canonical `HostToolResult` for the browser instead.
+    /// A failure after parsing therefore becomes an explicit error result, not
+    /// a dropped request.
+    pub fn invoke_transport(
+        &mut self,
+        mcp: &dyn HostMcpDispatch,
+        intent_value: Value,
+    ) -> Result<HostToolResult, String> {
+        let parsed = parse_intent(&intent_value)?;
+        match self.invoke(mcp, intent_value) {
+            Ok(result) => Ok(result),
+            Err(error) => {
+                let (code, message) = match error.split_once(": ") {
+                    Some((code, message)) => (static_failure_code(code), message.to_string()),
+                    None => ("internal", error),
+                };
+                Ok(self.finish(
+                    parsed,
+                    "error",
+                    None,
+                    Some(HostFailure::new(code, message)),
+                    None,
+                    None,
+                ))
+            }
+        }
+    }
+
     /// Return transport results after `cursor`, plus the latest result cursor.
-    pub fn poll(&self, cursor: Option<&str>) -> Result<Value, String> {
+    pub fn poll_results(&self, cursor: Option<&str>) -> Result<(u64, Vec<HostToolResult>), String> {
         let after = match cursor {
             None => 0,
             Some(value) => value.parse::<u64>().map_err(|_| {
@@ -813,6 +878,12 @@ impl AgentHost {
             .filter(|result| result_sequence(result) > after)
             .cloned()
             .collect();
+        Ok((latest, results))
+    }
+
+    /// Return transport results after `cursor`, plus the latest result cursor.
+    pub fn poll(&self, cursor: Option<&str>) -> Result<Value, String> {
+        let (latest, results) = self.poll_results(cursor)?;
         Ok(json!({ "cursor": latest.to_string(), "results": results }))
     }
 
@@ -821,13 +892,28 @@ impl AgentHost {
         &mut self,
         sink: Box<dyn Fn(&HostToolResult) + Send>,
     ) -> Result<Value, String> {
+        self.subscribe_with_id(sink).map(|(_, value)| value)
+    }
+
+    /// Register one sink and return its identity so a finite stream can release
+    /// itself without waiting for the eviction bound.
+    pub fn subscribe_with_id(
+        &mut self,
+        sink: Box<dyn Fn(&HostToolResult) + Send>,
+    ) -> Result<(u64, Value), String> {
         if self.subscribers.len() >= MAX_HOST_SUBSCRIBERS {
             self.subscribers.remove(0);
         }
         let id = self.next_subscriber_id;
         self.next_subscriber_id += 1;
-        self.subscribers.push(HostSubscriber { sink });
-        Ok(json!({ "subscribed": true, "subscription_id": id }))
+        self.subscribers.push(HostSubscriber { id, sink });
+        Ok((id, json!({ "subscribed": true, "subscription_id": id })))
+    }
+
+    /// Release one sink when its transport ends.
+    pub fn unsubscribe(&mut self, subscription_id: u64) {
+        self.subscribers
+            .retain(|subscriber| subscriber.id != subscription_id);
     }
 
     /// Resolve a host-issued approval by page decision.
