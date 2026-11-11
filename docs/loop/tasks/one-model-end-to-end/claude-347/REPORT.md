@@ -7,7 +7,7 @@ Five laptop readings on the replicated arm r model, asked for by an outside revi
 | Reading | State |
 |---|---|
 | 1. Float against integer, row by row | done, with one part not readable on this path (below) |
-| 2. Selection from the model's own state | not run yet |
+| 2. Does the model pick the fact itself | done, in a changed form (ORDER, amendment 2) |
 | 3. General turns in wording TRAIN does not hold | done |
 | 4. What the model holds, in full | done |
 | 5. The BPB scorer's floor | done |
@@ -16,7 +16,9 @@ Five laptop readings on the replicated arm r model, asked for by an outside revi
 
 - **Reading 3: neither arm answers a general question in wording TRAIN does not hold.** Each of the ten general questions was reworded and checked absent from TRAIN's token stream. Asked one at a time in a fresh conversation, arm r answers 0, 0 and 0 of 10 and arm rt 1, 0 and 1 of 10 (seeds 1, 2, 3); the one right reply is "No." to "Can a cat bark?". In TRAIN's wording the same programs answer 4, 4 and 5 (arm r) and 9, 10 and 9 (arm rt). The usual reply to a reworded question is the question said back.
 - **Reading 3: in the 18-turn script the reworded questions take recall down too.** With the four facts stated and the sieve writing the memory line, recall is 0 of 4 at every seed for arm r and 1 of 4 at every seed for arm rt, against 3, 4, 4 and 3, 3, 3 in the same script with TRAIN's wording. The second reworded question draws "2 plus 2 is 2 is 2 is", and arm r then gives that same reply to all twelve turns after it, recall questions included.
-- **Reading 1 could not compare the replies with the turn memory on.** `uor-chat --prompt-ids` steps raw token ids and never tells the session where the reply begins (`mark_reply_start`, `crates/uor-r4-integer/src/stack/session.rs`); only the text chat does. So on this path the integer artifact answers with its turn memory off. The first comparison, against the float replies scored with the memory on, showed 678, 691 and 644 of 1,141 rows equal, and that number is an instrument reading, not a model reading: against the float replies scored with the memory **off**, the same integer replies are equal on 981, 1,022 and 1,048 rows. The memory-on comparison needs a reader that marks the reply start on raw ids. It is not in this REPORT.
+- **Reading 2: the model does not pick the fact; the chat program's rule does.** The same 18-turn script with the sieve off: recall is 0 of 4 at every seed on both arms, against 3, 4, 4 and 3, 3, 3 with it on. The general turns do not move (3, 2, 2 and 9, 10, 9 either way).
+- **Reading 2 was not run as the ORDER first described it.** The state-distance count was withdrawn before any run (ORDER, amendment 2): the laptop files carry no fact labels, and a miss on that count would have closed nothing.
+- **Reading 1 could not compare the replies with the turn memory on through `uor-chat`.** `uor-chat --prompt-ids` steps raw token ids and never tells the session where the reply begins (`mark_reply_start`, `crates/uor-r4-integer/src/stack/session.rs`); only the text chat does. So on this path the integer artifact answers with its turn memory off. The first comparison, against the float replies scored with the memory on, showed 678, 691 and 644 of 1,141 rows equal, and that number is an instrument reading, not a model reading: against the float replies scored with the memory **off**, the same integer replies are equal on 981, 1,022 and 1,048 rows. The memory-on comparison needs a reader that marks the reply start on raw ids. It is not in this REPORT.
 - **With the memory off on both sides, 160, 119 and 93 of 1,141 rows still differ** between the float model and its integer export (seeds 1, 2, 3). Most of them are rows without a memory line: 146, 94 and 93.
 - **The samples do not name which rows are recall rows.** `reference_named` is 0 on every row. The split used here is read from the prompt itself: a row is a line row when its prompt holds the memory line's opening ids (`53,91,353`). 641 rows are line rows and 500 are not, at every seed.
 - **Reading 4 cannot give a count of learned values for the trunk.** The trunk's tables are stored packed (`*.fbs`, 32-bit words), so the artifact gives stored words and bytes, not learned values.
@@ -67,6 +69,28 @@ The instrument reading, kept so it is not taken for a model reading: against the
 **Instrument or model?** The memory-on gap is the instrument: the raw-id path does not switch the turn memory on. The memory-off differences are the model's export, and they fall where neither side reproduces the reference; they move 5, 0 and 1 right answers.
 
 The chat program printed a median of 1,009, 1,015 and 1,010 generated tokens per second a row. These are short prompts (17 to 192 tokens), each in a fresh process; it is not a reading at context 8,256.
+
+### Reading 2: does the model pick the fact itself?
+
+Read from what the model says (the ORDER's second amendment gives the reason the state count was withdrawn). The registered 18-turn script, `conv-4.txt`, with its first line `/memory auto` removed: the four facts are stated, nothing writes a memory line, and the four recall questions are asked as before.
+
+| | Arm r, seeds 1, 2, 3 | Arm rt, seeds 1, 2, 3 |
+|---|---|---|
+| Sieve on: recall of 4 | 3, 4, 4 | 3, 3, 3 |
+| Sieve off: recall of 4 | 0, 0, 0 | 0, 0, 0 |
+| Sieve on: general of 10 | 3, 2, 2 | 9, 10, 9 |
+| Sieve off: general of 10 | 3, 2, 2 | 9, 10, 9 |
+
+Seed 2 with the sieve off, word for word:
+
+| Asked | Arm r | Arm rt |
+|---|---|---|
+| What is my friend's name? | Okay, you grew up in Lisbon. | The opposite of hot is my friend's name? |
+| What is my dog called? | It's name? | The opposite of big is my dog called? |
+| Where did I grow up? | Where did I grow up? | Where did I grow up? |
+| What is my lucky number? | The opposite of | I grow up? |
+
+**Instrument or model?** Model. One line of the script differs, and the sieve-on column is the registered reading. Which fact answers a question is picked by the chat program's rule code and by nothing in the model: with the rule off, no recall question is answered at any seed. The general turns do not move, so they do not depend on the line.
 
 ### Reading 3: general turns in wording TRAIN does not hold
 
@@ -196,9 +220,11 @@ Chat program `uor-chat-bd2532281`: `69bc535af70325fd8362818a1f07f549e91cdbcb28d0
 
 Reading 3: `r3/conv-4.txt` `33d19426dc0077e300af4a4e093747c484d27da45c4cf05a3da61f46ea8989e4`, `r3/conv-5.txt` `3e887941bd8f3853b76562de2cd48c6e7bd909efc9355c1c65d4d1f943a3431e`; outputs `r3/conv-<4|5>-<r|rt>-s<seed>.out` and `r3/say-<r|rt>-s<seed>.jsonl`. TRAIN is the store whose manifest is `3d87db7ec2313d7d684f557920edb4fa3c0b7b18a543782707d50a6e258b379d` (60,000 conversations, 8,127,216 tokens). The ids came from `cargo build --release -p uor-r4-tokenizer --example token-counts` at this branch.
 
+Reading 2: `r2/conv-4-nosieve.txt` `774998237dd21fdb3a6a2ba7b033975ac5c39049b9e78652b583a0c7544dcd95`; replies `r2/nosieve-<r|rt>-s<seed>.replies`.
+
 ## Still open
 
-- Reading 2.
+- The state-level form of reading 2, which belongs to the learned selector's own sheet if that proposal is taken up.
 - The memory-on comparison of reading 1: a reader that steps raw ids and marks the reply start.
 
 ## Plain summary

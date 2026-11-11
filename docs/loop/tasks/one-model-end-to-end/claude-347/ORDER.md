@@ -33,6 +33,11 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 
 `uor-harness loop claim one-model-end-to-end --lab-topic review-fixes` was refused on 10 Nov: "item one-model-end-to-end is already claimed by worktree .worktrees/claude-e8 (docs/loop/tasks/one-model-end-to-end/claude-346/ORDER.md)". claude-346 (PR #3913) is a draft under the hold and has no work in flight. The ORDER is written by hand in its own worktree, `.worktrees/claude-review`, on branch `claude/review-fixes`.
 
+## Amendments (10 Nov, [claude]'s own decision review; Casey can reverse either)
+
+1. **Reading 1 gets a reader.** `uor-chat --prompt-ids` never marks where the reply begins, so it answers with the turn memory off, and the first comparison against the memory-on float replies read 678, 691 and 644 of 1,141 for that reason alone. A small instrument program, `raw-id-replies`, steps the same ids through `serve_step` and marks the reply start as the text chat does. Its unmarked replies must equal `uor-chat --prompt-ids` id for id. The instrument folder is in scope for it.
+2. **Reading 2 is read from what the model says, not from a state distance.** The planned count (is the question's state nearest to the right fact's state) is withdrawn for two reasons. The laptop's score files do not carry which turn answers a question, so the labels would come from a rule on repeated spans, which the outside review warns mislabels. And the state at the end of a question is the one that picks the next token: a miss there could not tell "the trunk does not hold it" from "that state is not where it is held", so it would close nothing. The reading that replaces it is exact and needs no label: the registered 18-turn script with the sieve off. If the model picks the fact itself, recall survives. The state-level question goes to the learned selector's own sheet, if Casey takes that proposal up.
+
 ## Files in scope
 
 - `docs/loop/tasks/one-model-end-to-end/claude-347/**`
