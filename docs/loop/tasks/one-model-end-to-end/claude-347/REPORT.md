@@ -59,7 +59,13 @@ Each of the 1,141 panel prompts in arm r's sealed float score went through the e
 | Without a line, float equals the reference | 115 | 114 | 109 |
 | Without a line, integer equals the reference | 114 | 115 | 111 |
 
-The reader is built from this branch's library, not from arm r's pin. Its unmarked control against the pinned chat program is exact; its marked path has no second program to be checked against on raw ids.
+**Is it like for like?**
+
+- The float side's "memory" is the checkpoint's turn memory: `score_rows` (`crates/uor-r4-float-train/src/in_space_long.rs`) writes the greedy samples once with the turn memory as loaded and once with it taken out (`set_turn_memory`). The exported artifact carries that memory as its opening and reply tables, and the reply mark is what switches them on in the integer session.
+- No option was passed on any path: no `--copy-rule`, so each side reads under the artifact's own rule, and no `--content-readout`. The artifacts are SpiralCore/FBS stacks.
+- The reader has no short-cycle stop and no reply cap below 48; the float score has neither. Every float reply is 48 ids long, so a reply with no end-of-reply id is compared on all 48.
+- Not checked in code: that the float scorer's greedy pick and the integer `serve_step` pick are the same read. The row agreement is the evidence for it.
+- The reader is built from this branch's library, not from arm r's pin. Its unmarked control against the pinned chat program is exact; its marked path has no second program to be checked against on raw ids.
 
 **Turn memory off for both.** Float: `samples-p-greedy-no-memory.json`. Integer: `uor-chat-bd2532281 --prompt-ids`.
 
