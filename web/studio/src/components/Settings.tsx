@@ -88,7 +88,7 @@ export function Settings({ ui, onClose, onChange, onSuccess, onError, onSettings
             </section>
             <section aria-label="Account and team">
                 <h3>Account</h3>
-                <p><strong>Local settings.</strong> Accounts and team settings require an optional service. Local settings are stored on this device.</p>
+                <p>Accounts and team settings require an optional service. Local settings are stored on this device.</p>
             </section>
             <section aria-label="Data controls">
                 <h3>Data</h3>

@@ -426,6 +426,13 @@ describe('composer interactions', () => {
         expect(host.querySelector('[role="listbox"]')).toBeNull();
         pressKey(textarea, 'Enter');
         expect(generation.send).toHaveBeenCalledWith('/unknown');
+        act(() => {
+            store.dispatch({
+                type: 'generation/finished',
+                outcome: 'complete',
+                generationId: store.getState().session.activeGeneration!.generationId,
+            });
+        });
         prompt('@unknown');
         expect(host.querySelector('[role="listbox"]')).toBeNull();
         pressKey(textarea, 'Enter');

@@ -767,3 +767,48 @@ test('forced_colors_keeps_composer_and_code_editor_focus_indicators', async ({ p
     expect(await readFocus('#studio-typed-root .code-frame')).toEqual({ width: '2px', line: 'solid', color: 'rgb(0, 0, 0)', offset: '2px' });
     expect(await readFocus('#studio-typed-root .code-input textarea[aria-label="File contents"]')).toEqual({ width: '2px', line: 'solid', color: 'rgb(0, 0, 0)', offset: '2px' });
 });
+
+test('final_a11y_targets_headings_focus', async ({ page }) => {
+    for (const [width, height] of [[390, 844], [1024, 900], [1440, 900]] as const) {
+        await openTypedAt(page, width, height);
+        const root = page.locator('#studio-typed-root');
+        await expect(page.locator('a.skip-link'), `${width}: exactly one mode-correct skip link`).toHaveCount(1);
+        await expect(page.locator('a.skip-link')).toHaveAttribute('href', '#harness-main');
+        await expect(root.locator('a.skip-link')).toHaveCount(0);
+        const rail = root.locator('[data-region="task-rail"]');
+        if (await rail.isHidden()) {
+            await root.locator('[data-action="toggle-projects"]').click();
+            await expect(rail).toBeVisible();
+        }
+        const navigation = root.locator('nav[aria-label="Studio"]');
+        for (const label of ['Agent', 'Workspace', 'Changes', 'Terminal', 'Models', 'Guide']) {
+            await navigation.getByRole('button', { name: label, exact: true }).click();
+            await expect(root.locator('main h1:visible'), `${width} ${label}: one h1`).toHaveCount(1);
+            expectWellFormed(await visibleHeadings(page, '#studio-typed-root main'), `${width} ${label}`);
+            expect(await targetViolations(page, 24), `${width} ${label}: 24px targets`).toEqual([]);
+        }
+        expectRailWellFormed(await visibleHeadings(page, '#studio-typed-root aside.project-sidebar'));
+        await navigation.getByRole('button', { name: 'Agent', exact: true }).click();
+
+        const prompt = promptLocator(page);
+        await prompt.focus();
+        const composerFocus = await root.locator('.agent-composer').evaluate((element) => {
+            const style = getComputedStyle(element);
+            return { width: Number.parseFloat(style.outlineWidth), line: style.outlineStyle, offset: style.outlineOffset };
+        });
+        expect(composerFocus.line, `${width}: composer focus must be visible`).toBe('solid');
+        expect(composerFocus.width, `${width}: composer focus width`).toBeGreaterThanOrEqual(2);
+        expect(composerFocus.offset, `${width}: composer focus offset`).not.toBe('0px');
+
+        const settingsButton = root.locator('.session-toolbar-actions button[aria-label="Settings"]');
+        await settingsButton.click();
+        const settings = page.getByRole('dialog', { name: 'Studio settings', exact: true });
+        await expect(settings).toBeVisible();
+        expect(await page.evaluate(() => Boolean(document.activeElement?.closest('dialog'))), `${width}: focus enters the dialog`).toBe(true);
+        expect(await targetViolations(page, 24, 'dialog[open]'), `${width}: dialog targets`).toEqual([]);
+        await page.keyboard.press('Escape');
+        await expect(settings).toBeHidden();
+        await expect(settingsButton, `${width}: focus returns to the invoker`).toBeFocused();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+    }
+});

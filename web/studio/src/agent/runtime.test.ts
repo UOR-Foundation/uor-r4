@@ -1120,7 +1120,7 @@ describe('AgentRuntime tool results, stop and host resolution', () => {
             expect(view.events[view.events.length - 1]!.data).toMatchObject({
                 safe_boundary: true,
             });
-            expect(taskState(store, task.taskId)).toBe('idle');
+            expect(taskState(store, task.taskId)).toBe('cancelled');
         } finally {
             model.streams.forEach((stream) => stream.end());
             await runtime.dispose();
@@ -1315,7 +1315,7 @@ describe('AgentRuntime tool results, stop and host resolution', () => {
             expect(receipt.cleared).toBe(true);
             const durable = await taskStore.listTasks({ includeArchived: true });
             expect(durable[0]!.hold).toBeUndefined();
-            expect(taskState(store, task.taskId)).toBe('idle');
+            expect(taskState(store, task.taskId)).toBe('failed');
             const after = runView(store, task.taskId, run.runId);
             expect(after.events).toHaveLength(countBefore);
             expect(eventTypes(after)).not.toContain('tool.completed');
@@ -1361,7 +1361,7 @@ describe('AgentRuntime tool results, stop and host resolution', () => {
                 in_flight_tool_id: 'tool_refused',
                 retryable: false,
             });
-            expect(taskState(store, task.taskId)).toBe('idle');
+            expect(taskState(store, task.taskId)).toBe('failed');
             const durable = await taskStore.listTasks({ includeArchived: true });
             expect(durable[0]!.hold).toBeUndefined();
             releaseTool!({ status: 'ok', output: { late: true } });
@@ -3920,7 +3920,7 @@ describe('AgentRuntime Task 13 fix round 2 ingested terminal delivery', () => {
                 .snapshot()
                 .tasks.find((candidate) => candidate.taskId === task.taskId)!;
             expect(taskView.latestRunId).toBe(run.runId);
-            expect(taskView.state).toBe('idle');
+            expect(taskView.state).toBe('failed');
             expect(types).not.toContain('message.steered');
             expect(types).not.toContain('message.forced');
             model.streams.forEach((stream) => stream.end());
@@ -3981,7 +3981,7 @@ describe('AgentRuntime Task 13 fix round 2 ingested terminal delivery', () => {
                 .snapshot()
                 .tasks.find((candidate) => candidate.taskId === task.taskId)!;
             expect(taskView.latestRunId).toBe(run.runId);
-            expect(taskView.state).toBe('idle');
+            expect(taskView.state).toBe('cancelled');
             model.streams.forEach((stream) => stream.end());
         } finally {
             await runtime.dispose();

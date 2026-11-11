@@ -2498,7 +2498,7 @@ test.describe('browser agent task store', () => {
         );
         expect(resolved.ok, JSON.stringify(resolved)).toBe(true);
         const cleared = await call<TaskViewSummary>(page, 'taskView');
-        expect(cleared.state).toBe('idle');
+        expect(cleared.state).toBe('failed');
         expect(cleared.hold).toBeNull();
         const after = await call<CursorView>(page, 'cursor');
         expect(after).toMatchObject({
@@ -3227,7 +3227,7 @@ test.describe('Task 13 parallel tasks, reload and hostile ingestion', () => {
         const before = (await call<Outcome>(page, 'taskSnapshotForTest', hold.taskId))
             .record as LiveRunSnapshot;
         expect(before.hold).toBeNull();
-        expect(before.taskState).toBe('idle');
+        expect(before.taskState).toBe('failed');
 
         await page.reload();
         await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
@@ -3235,7 +3235,7 @@ test.describe('Task 13 parallel tasks, reload and hostile ingestion', () => {
         const restored = (await call<Outcome>(page, 'taskSnapshotForTest', hold.taskId))
             .record as LiveRunSnapshot;
         expect(restored.hold).toBeNull();
-        expect(restored.taskState).toBe('idle');
+        expect(restored.taskState).toBe('failed');
         const durable = (await readDb(page)).taskRecords.find(
             (record) => record.task_id === hold.taskId,
         );

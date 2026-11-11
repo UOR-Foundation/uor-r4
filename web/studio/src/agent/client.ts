@@ -65,6 +65,10 @@ export interface TaskSummary {
         | 'waiting_for_approval'
         | 'waiting_for_background'
         | 'cancelling'
+        | 'finished'
+        | 'failed'
+        | 'cancelled'
+        | 'expired'
         | 'archived'
         | 'restoring';
 }

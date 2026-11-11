@@ -178,7 +178,7 @@ describe('AgentStore reducer', () => {
 
         expect(store.snapshot().runs[0].state).toBe('finished');
         expect(store.snapshot().runs[0].endedAtMs).toBe(2);
-        expect(store.snapshot().tasks[0].state).toBe('idle');
+        expect(store.snapshot().tasks[0].state).toBe('finished');
     });
 
     test('waiting_for_background_hold_survives_the_terminal_run_and_clears', () => {
@@ -194,7 +194,7 @@ describe('AgentStore reducer', () => {
                 stop_outcome: 'ack_timeout',
             }),
         );
-        expect(store.snapshot().tasks[0]!.state).toBe('idle');
+        expect(store.snapshot().tasks[0]!.state).toBe('failed');
 
         const baseRecord = {
             taskId: TASK_ID,
@@ -223,7 +223,7 @@ describe('AgentStore reducer', () => {
         expect(store.snapshot().runs[0]!.state).toBe('failed');
 
         store.upsertTask({ ...baseRecord, hold: null });
-        expect(store.snapshot().tasks[0]!.state).toBe('idle');
+        expect(store.snapshot().tasks[0]!.state).toBe('failed');
         expect(store.snapshot().tasks[0]!.hold).toBeNull();
     });
 
@@ -252,7 +252,7 @@ describe('AgentStore reducer', () => {
                 tool_call_id: 'tool_old',
             },
         });
-        expect(store.snapshot().tasks[0]!.state).toBe('idle');
+        expect(store.snapshot().tasks[0]!.state).toBe('finished');
     });
 
     test('reducer_ignores_duplicate_event', async () => {

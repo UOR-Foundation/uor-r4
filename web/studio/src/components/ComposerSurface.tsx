@@ -178,7 +178,7 @@ export function ComposerSurface(props: ComposerSurfaceProps) {
     }
 
     function submit() {
-        if (sendingRef.current || !mountedRef.current) return;
+        if (props.disabled || sendingRef.current || !mountedRef.current) return;
         const textarea = textareaRef.current;
         const initial = textarea?.value ?? props.value;
         if (!initial.trim()) return;

@@ -33,6 +33,10 @@ export type TaskState =
     | 'waiting_for_approval'
     | 'waiting_for_background'
     | 'cancelling'
+    | 'finished'
+    | 'failed'
+    | 'cancelled'
+    | 'expired'
     | 'archived'
     | 'restoring';
 
@@ -1217,6 +1221,11 @@ function taskStateFor(
             return 'waiting_for_background';
         case 'cancelling':
             return 'cancelling';
+        case 'finished':
+        case 'failed':
+        case 'cancelled':
+        case 'expired':
+            return displayRunState(latestRun);
         default:
             return 'idle';
     }

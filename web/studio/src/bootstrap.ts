@@ -173,7 +173,9 @@ export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?:
     const requestedTheme = new URLSearchParams(window.location.search).get('theme')
         || (window.location.hash === '#theme=light' ? 'light' : (window.location.hash === '#theme=dark' ? 'dark' : null));
     if (requestedTheme === 'light' || requestedTheme === 'dark') apis.ui.updateSettings({ theme: requestedTheme });
-    const gatedTestApi = studioTestApiEnabled(import.meta.env.VITE_STUDIO_TEST, window.location.search);
+    const buildEnablesTestApi = import.meta.env.VITE_STUDIO_TEST === '1';
+    const gatedTestApi = buildEnablesTestApi
+        && studioTestApiEnabled(import.meta.env.VITE_STUDIO_TEST, window.location.search);
     const testApi = gatedTestApi ? await import('./agent/testApi.js') : null;
     const owner = createStudioAgentOwner({
         ...(testApi === null ? {} : {

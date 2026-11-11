@@ -1095,7 +1095,7 @@ describe('task runtime send identity', () => {
         pressKey(promptElement(), 'Enter');
         await settleAsync();
         expect(transport.calls.filter((call) => call.method === 'startRun')).toHaveLength(startsBefore);
-        expect(uiApi.api.toast).toHaveBeenCalledWith('This task already has an active run. Queue, steer or force the message instead.', 'error');
+        expect(uiApi.api.toast).not.toHaveBeenCalled();
         expect(promptElement().value).toBe('hold this draft');
     });
 
