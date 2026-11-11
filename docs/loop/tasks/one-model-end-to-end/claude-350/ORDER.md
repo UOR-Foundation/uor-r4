@@ -52,13 +52,13 @@ Panel: the 1,000 conversations of claude-349 (562 recall replies, 1,945 general 
 
 ## What stage 1 decides
 
-Fixed before the count. A row routes the build; only the Find row's last clause stops it.
+Fixed before the count. A row routes the build. Only the Find row's last clause stops it, and the Stop, Open and Window rows can send a plan change to the owner.
 
 | Choice | Rule |
 |---|---|
 | Instrument | A below 562 of 562, or a disagreement with the writer's receipts: repair the instrument and read nothing else. |
-| Stop | B1 at or above 0.95: build B1. Else B2 at or above 0.95: a learned gain per source token. Else the stop reads the trunk's point, and the sheet says so. |
-| Open | C at or above 0.95 right, with at most 0.02 of rows opened wrongly: a learned gain per reply token. Else the open reads the trunk's point. |
+| Stop | B1 at or above 0.95: build B1. Else B2 at or above 0.95: a learned gain per source token. Else a plan change, back to the owner: a stop that reads the trunk's state is a state-keyed read, which the hold covers. |
+| Open | C at or above 0.95 right, with at most 0.02 of rows opened wrongly: a learned gain per reply token. Else a plan change, back to the owner, for the same reason. |
 | Find | The simplest of D1 to D4 at or above 0.80 is built. If none reaches it, the misses are traced, the form is widened once to two learned targets per token (two ask heads), and D is recounted. Below 0.50 after that: not built as written; the trace goes to the owner. |
 | Arm | The simplest of E1 to E3 at or above 0.90 of what D reaches is built; a register set on more than 0.15 of general replies moves the choice to the next rule. |
 | Label | F equal on at least 0.90: labels from the tokens. Else the corpus writer emits place marks, and that change joins stage 2. A learned pair seen fewer than 100 times in TRAIN is named as a gap. |
