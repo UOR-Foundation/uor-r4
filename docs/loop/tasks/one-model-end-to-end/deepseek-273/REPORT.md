@@ -84,6 +84,8 @@ the count table produced zero on every scored metric.
 - Decision program: parses the four pinned preflight reports and emits schema
   `/3` row 4 as expected for the unchanged base.
 - Shell syntax and ShellCheck: pass.
+- Exact-head transcripts are retained under
+  `local/deepseek/scenario-gpu-smoke-2026-11-11/checks/`.
 - Clippy with `-D warnings`: stops on pre-existing warnings in
   `prompt_reply_rank.rs` and `suffix_arbitration.rs`, outside this change.
 
