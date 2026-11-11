@@ -1,6 +1,6 @@
 # REPORT: register the LexLean MVM workbench item, kimi-20
 
-Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569, registration parent only). New item: `studio-lexlean-mvm-workbench`; official issue sync is pending. Order: [ORDER.md](ORDER.md). Base: `93e089ff256654e75a19641b7e2fbd2bc8e24524`. References #3569; leaves its status and acceptance unchanged.
+Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569, registration parent only). New item: `studio-lexlean-mvm-workbench`; official issue sync is pending. Order: [ORDER.md](ORDER.md). Base: `93e089ff256654e75a19641b7e2fbd2bc8e24524`. Draft PR: #3938. References #3569; leaves its status and acceptance unchanged.
 
 ## What did not work
 
@@ -30,8 +30,9 @@ Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harne
 - `git diff --cached --check`: **PASS** on the approved design before this REPORT update; rerun at the final head.
 - Independent design sequence: first **CHANGES** (C1–C4/I1–I12 plus minors), second **CHANGES** (I13 CoW/message-cap and I14 duplicated-tab ownership), final **APPROVE** with no unresolved Critical/Important design inconsistency. The final corrections and named tests are in the design/plan/item/ORDER.
 - Residual implementation tests, not design blockers: Web Locks availability/fallback in the desktop WebView, Vite emission from `node_modules/.cache`, AgentHost GitHub tool registration, exact smoke-target availability and Tasks 1–2 native/browser preflight.
-- The first policy command omitted `--bin uor-harness` and refused because the package has two binaries. The report check then required the parent-registration `--order` and passed with it. `loop pr-check --local` has no `--order` option and reads the committed diff; before the first commit it reported no ORDER as expected. These invocation/staging diagnostics are not policy passes or product failures. Final policy is rerun on the committed head.
-- Loop report/policy checks, full gates, final fresh exact-head review and required GitHub checks are pending and are not claimed.
+- The first policy command omitted `--bin uor-harness`; the report check then required the parent-registration `--order` and passed with it. `loop pr-check --local` reads committed diffs and reported no ORDER before the first commit as expected. These invocation/staging diagnostics are not policy passes or product failures.
+- `loop report --check --order docs/loop/tasks/studio-ide-harness/kimi-20/ORDER.md`: **PASS**. `loop pr-check --local` at `0f9be9435`: **PASS**, with the expected new-item scope/commit-order advisories and pre-existing FILEMAP warnings; its 5,169-byte ORDER read-path advisory is addressed by the subsequent trim. Final policy is rerun on the trimmed committed head.
+- Full gates, final fresh exact-head review and required GitHub checks are pending and are not claimed.
 - Final HEAD/tree, PR identity, actual protected merge, official issue sync/render, fresh-main verification and cleanup remain pending until observed.
 
 ## Skills used
