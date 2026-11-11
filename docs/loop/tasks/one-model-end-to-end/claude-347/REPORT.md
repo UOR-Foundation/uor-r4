@@ -23,6 +23,7 @@ Five laptop readings on the replicated arm r model, asked for by an outside revi
 - **The samples do not name which rows are recall rows.** `reference_named` is 0 on every row. The split used here is read from the prompt itself: a row is a line row when its prompt holds the memory line's opening ids (`53,91,353`). 641 rows are line rows and 500 are not, at every seed.
 - **Reading 4 cannot give a count of learned values for the trunk.** The trunk's tables are stored packed (`*.fbs`), so the artifact gives stored entries and bytes, not learned values.
 - **The item's claim was refused.** `uor-harness loop claim` answered that claude-346's worktree holds the item; the ORDER records it.
+- **The first queue attempt was refused.** At `2c57f87230a973dec1610d925e2b868b9dbce7fe` `loop queue` found two faults. This REPORT lacked three required headings. And the float scan (D32) counted two sites in the reader: each was a tuple index, `.0`, that the formatter had put at the start of a line, which the scan reads as a float literal. The reader holds no float. It now takes the pair apart by name, and the scan counts none.
 
 ## What held
 
@@ -30,6 +31,13 @@ Five laptop readings on the replicated arm r model, asked for by an outside revi
 - **With the memory on, the two say the same thing on 1,073, 1,095 and 1,110 of 1,141 rows.** On the 641 line rows: 631, 631 and 639.
 - **The reader's control held on every row.** With no reply mark its replies equal `uor-chat --prompt-ids` on 1,141 of 1,141 rows at each seed.
 - **No row failed to run.** 1,141 rows a seed on each path, no error line, empty error files.
+
+## What changed
+
+- **The reader:** `docs/labs/one-model-end-to-end/instrument/src/bin/raw-id-replies.rs`, a new instrument program behind a new `integer-reader` feature in the instrument's `Cargo.toml`. No other program's build changes, and `Cargo.lock` is unchanged.
+- **In the repository:** the ORDER with its two amendments, this REPORT, and five rows in the float-training notebook.
+- **Not changed:** any model, artifact, training code, serving code, sheet or bar.
+- **On the laptop, not committed:** the evidence under `local/claude/claude-347/`.
 
 ## Measurements
 
@@ -256,6 +264,24 @@ Chat program `uor-chat-bd2532281`: `69bc535af70325fd8362818a1f07f549e91cdbcb28d0
 Reading 3: `r3/conv-4.txt` `33d19426dc0077e300af4a4e093747c484d27da45c4cf05a3da61f46ea8989e4`, `r3/conv-5.txt` `3e887941bd8f3853b76562de2cd48c6e7bd909efc9355c1c65d4d1f943a3431e`; outputs `r3/conv-<4|5>-<r|rt>-s<seed>.out` and `r3/say-<r|rt>-s<seed>.jsonl`. TRAIN is the store whose manifest is `3d87db7ec2313d7d684f557920edb4fa3c0b7b18a543782707d50a6e258b379d` (60,000 conversations, 8,127,216 tokens). The ids came from `cargo build --release -p uor-r4-tokenizer --example token-counts` at this branch.
 
 Reading 2: `r2/conv-4-nosieve.txt` `774998237dd21fdb3a6a2ba7b033975ac5c39049b9e78652b583a0c7544dcd95`; replies `r2/nosieve-<r|rt>-s<seed>.replies`.
+
+## Checks run at the head
+
+- **Fresh-context review, four reviewers in this session**, each given the ORDER, the diff and the evidence paths, never the plan.
+  - The reader's code at `eafb16107d13b4430d2bd535109c69d8e57c89c9`: it steps ids as `StackChat::feed` does, the counting is sound, and no §3 rule is touched.
+  - A recount of the tables from the laptop files: all match.
+  - The wording against the tables at `2d8cac53bf30121fab837d46b4d9adf6eb4b396f`: CHANGES, seven items, no wrong number. All seven are taken in `0882f81dcdfc1db1e10d04492c0a99cd0ec6076b`.
+  - Confirmation at `0882f81dcdfc1db1e10d04492c0a99cd0ec6076b`: PASS. Its two optional phrases are taken in `2c57f87230a973dec1610d925e2b868b9dbce7fe`.
+- **The float-scan fix, made after that review.** Two statements of the reader changed: the pair `serve_step` returns is taken apart by name where a tuple index was. The reader was rebuilt (`c84e43b06dc7d63bb5cccbd527d405ee236d3bbb06f389fd5e2d3bdc185bf406`) and run again at seed 1 with the reply marked: 1,141 rows, no error line, and its output is byte for byte the earlier reader's (`f3a9c74bdabdc9423570079b09e891cb8718a946a98f20e0956fb94ed457ca16`).
+- **Ratchets on the fixed tree:** `uor-harness ratchet d23`, `d25` and `d32` each answer OK with nothing added (d32: 31 sites in 1 file, the baseline).
+- **Format:** `rustfmt --check --edition 2021` on the reader is clean.
+- **`uor-harness check`:** 420 rules, 0 errors, on the tree that became `2d8cac53bf30121fab837d46b4d9adf6eb4b396f`. It was not run to its end after the later commits; CI's `loop gates` job runs it at the head.
+- **CI at `2c57f87230a973dec1610d925e2b868b9dbce7fe`:** every check that ran passed (`loop policy`, `loop gates / tests`, `docs archive and links`, `fmt / clippy / tests / no_std / κ`, `cargo audit`, `fuzz smoke`, `wasm-pack build`, `Gate C trend alarm`); the others were skipped.
+- **`loop queue` at `2c57f87230a973dec1610d925e2b868b9dbce7fe`:** refused, for this REPORT's headings and the two float-scan sites (first section).
+
+## Skills used
+
+None beyond the project loop. The fresh-context reviewers were subagents of this session.
 
 ## Still open
 

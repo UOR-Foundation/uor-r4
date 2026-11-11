@@ -114,10 +114,12 @@ fn run() -> Result<()> {
             if mark && at + 1 == prompt.len() {
                 session.mark_reply_start();
             }
-            pick = session
+            // Destructured: the float scan (D32) reads a tuple index that starts a line as a
+            // float literal.
+            let (served, _) = session
                 .serve_step(token)
-                .map_err(|e| format!("row {index}, prompt id {at}: {e}"))?
-                .0;
+                .map_err(|e| format!("row {index}, prompt id {at}: {e}"))?;
+            pick = served;
         }
         let mut ids = Vec::with_capacity(max_tokens);
         loop {
@@ -129,10 +131,10 @@ fn run() -> Result<()> {
             if ids.len() == max_tokens {
                 break;
             }
-            pick = session
+            let (served, _) = session
                 .serve_step(pick)
-                .map_err(|e| format!("row {index}, reply id {}: {e}", ids.len()))?
-                .0;
+                .map_err(|e| format!("row {index}, reply id {}: {e}", ids.len()))?;
+            pick = served;
         }
         writeln!(out, "{}", json!({"i": index, "ids": ids}))
             .map_err(|e| format!("{out_path}: {e}"))?;
