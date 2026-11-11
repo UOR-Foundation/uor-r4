@@ -8,8 +8,10 @@ Lab: deepseek. Item:
 the exact reviewed execution-head procedure are in
 [`launch-pins.env`](./launch-pins.env).
 
-**Status:** pre-run, pending fresh-context review 13. One GPU training job ran,
-but stopped on an instrument assertion before export or held-out scoring.
+**Status:** complete as a registered outcome row 0. One GPU-trained integer
+artifact was exported, sealed, recovered through a laptop audit, and scored on
+all 1,024 development and 1,024 Fresh rows. P3 (the copy positive control)
+failed, so this is an underfit/instrument result, not a mechanism negative.
 
 ## What did not work
 
@@ -73,9 +75,19 @@ explicit run-config `context` key, while the trainer intentionally omits that
 key for its 192 default; the sealed model config records `context: 192` and
 every other asserted field matched. The failed job sealed all 83 files,
 including the 1,024-step checkpoint, and the watcher destroyed the pod. The run
-cost `$0.164052`; total spend is `$0.248815`. This is an instrument failure,
-not a model result. The fixed predicate accepts the trainer's recorded default
-and still requires `context: 192` in the model config.
+cost `$0.079289`; cumulative spend reached `$0.164052`. This is an instrument
+failure, not a model result.
+
+The fourth launch completed source, input, GPU-test, smoke, training, config,
+snapshot and artifact-export checks. It stopped at the on-pod stack audit
+because the pod's offline Cargo cache lacked `serde_spanned v0.6.9`. The job
+sealed 88 files and the watcher destroyed the pod. This run cost `$0.081948`;
+total spend across all four attempts is `$0.246000`.
+
+The sealed artifact was then audited and scored on the laptop. The stack audit
+had no mismatches and retained the expected source and contract identities;
+its only unavailable check was the optional integer-session binary. The
+artifact parsed and served all 2,048 held-out rows.
 
 ## What changed
 
@@ -104,10 +116,37 @@ exact wrappers and matching timeouts.
 
 ## Measurements
 
-No GPU measurement exists yet. Preflight arm-r and count-table readings are in
-the prep sheet and its HF-store paths. Arm-r reproduced 10 development and 11
-Fresh copy hits, zero grounded hits, zero abstentions, and zero distractors;
-the count table produced zero on every scored metric.
+The one RTX 5090 bootstrap, build and D29 gate took 103 seconds. The registered
+GPU Hamming subset passed 79 tests with one timing test ignored. The 64-step
+smoke and its score completed. The 1,024-step run completed in 112 seconds of
+training; in-run DEV top-1 moved only from 4 to 31 of 14,287 and token loss
+stayed near 1.0.
+
+The exported artifact SHA-256 is
+`98e42e3a60501312c86360f3d362e450456507bf02d67bc5d19ece55174f1d90`.
+Model, base and previous-token rows had identical scenario IDs, identities and
+selected ranks.
+
+| Split | Complete | EOS | Short-cycle | Cap | Exact | Grounded asked value | Control abstentions | Distractors | Copy asked value | Distinct replies |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| development | 1,017 | 1,017 | 7 | 0 | 0 | 0/441 | 4/220 | 0/882 | 0/110 | 793 |
+| Fresh | 1,019 | 1,019 | 5 | 0 | 0 | 0/441 | 14/220 | 0/882 | 0/110 | 825 |
+
+Fresh grounded asked-value counts were memorize `0/110`, paraphrase `0/110`,
+selection `0/110` and update `0/111`. The previous-token table was zero on
+every scored metric.
+
+The registered classification is **row 0**: P1 fails (`0/441`), P2 passes
+(`14/220` abstentions and `0/882` distractors), and P3 fails (`0/110`).
+Twenty inspected copy/memorize replies were malformed and contained no asked
+value. This is underfit instrument evidence, not evidence that geometry cannot
+carry language.
+
+The sealed original run is under
+`results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/smoke-20261111t094608z-cee5a565d23347403b49eaeefab7507f/`.
+The repaired evidence bundle, including the artifact, snapshot, audit, both
+reports, decision, recovery record and SHA-256 manifest, is under the matching
+`...-salvage/` path and passed download read-back.
 
 ## Checks run at the head
 
@@ -125,6 +164,11 @@ the count table produced zero on every scored metric.
   untouched unknown and mismatched pods, durable records before owned-pod
   teardown, lock-serialized sealed-failure publication, healthy `gpu=1`
   extension, and stale `gpu=0` stop instead of extension.
+- On-pod training run: input hashes, 79/79 selected GPU tests, smoke checkpoint,
+  smoke score, 1,024-step checkpoint, config and bound export passed.
+- Laptop stack audit: no mismatches; artifact parsed and served.
+- Scenario rows: 1,024/1,024 eligible on both splits, zero prompt-ineligible
+  rows, exact model/base/table identity and rank agreement.
 - Exact-head transcripts are retained under
   `local/deepseek/scenario-gpu-smoke-2026-11-11/checks/`.
 - Clippy with `-D warnings`: stops on pre-existing warnings in
@@ -137,11 +181,16 @@ kept the correction bounded and checked against the registered evidence path.
 
 ## Still open
 
-Review 13, a successful bound export, held-out scenario reads, row
-classification, final cost and post-run exact-head review remain. This file
-will be replaced with the completed report before merge.
+Do not extend this 1,024-step configuration. The model did not learn even the
+direct-copy positive control on aligned data, so more steps or more aligned
+examples are not the next purchase. The next unit must change the learned
+transform or read path and rerun the positive control before repeating this
+panel-level question. The sealed artifact remains available for tracing which
+stage loses the copy signal.
 
 ## Plain summary
 
-The registration and its control instrument are now ready for review 12. No
-model result has been claimed.
+The current geometric training path learned no usable copy behavior in this
+bounded pilot. The run is a valid underfit result, not a test of the proposed
+state-keyed attention replacement. The next work should repair the learned
+transform/read path rather than add steps to the same configuration.
