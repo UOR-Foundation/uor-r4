@@ -15,6 +15,7 @@ import {
     boundedPreview,
     sha256Canonical,
     type HostApprovalInput,
+    type HostArtifactRef,
     type HostClientTimers,
     type HostDataRequest,
     type HostInvokeResponse,
@@ -970,14 +971,53 @@ export class AgentTransportHostTransport implements HostTransport {
                 ...(typeof args.artifact_id === 'string'
                     ? { artifactId: args.artifact_id }
                     : {}),
+                ...(typeof args.start === 'number' ? { start: args.start } : {}),
+                ...(typeof args.end === 'number' ? { end: args.end } : {}),
             });
-            return hostResultFor(intent, {
-                path: content.path,
-                media_type: content.mediaType,
-                size_bytes: content.sizeBytes,
-                digest: content.digest,
-                bytes_base64: base64(content.bytes),
-            });
+            const artifactId =
+                content.artifactId ??
+                (typeof args.artifact_id === 'string'
+                    ? args.artifact_id
+                    : undefined);
+            const wholeSize =
+                content.artifactSizeBytes ??
+                (content.range === undefined ? content.sizeBytes : undefined);
+            const wholeDigest =
+                content.wholeDigest ??
+                (content.range === undefined ? content.digest : undefined);
+            const artifact: HostArtifactRef | undefined =
+                artifactId === undefined
+                    ? undefined
+                    : {
+                          artifact_id: artifactId,
+                          digest: wholeDigest ?? content.digest,
+                          media_type: content.mediaType,
+                          size_bytes: wholeSize ?? content.sizeBytes,
+                      };
+            return hostResultFor(
+                intent,
+                {
+                    ...(artifactId === undefined
+                        ? {}
+                        : { artifact_id: artifactId }),
+                    path: content.path,
+                    media_type: content.mediaType,
+                    size_bytes: content.sizeBytes,
+                    digest: content.digest,
+                    ...(wholeSize === undefined
+                        ? {}
+                        : { artifact_size_bytes: wholeSize }),
+                    ...(wholeDigest === undefined
+                        ? {}
+                        : { whole_digest: wholeDigest }),
+                    ...(content.range === undefined
+                        ? {}
+                        : { range: content.range }),
+                    bytes_base64: base64(content.bytes),
+                },
+                'ok',
+                artifact,
+            );
         }
         throw new AgentClientError(
             'host_unavailable',
@@ -1004,6 +1044,7 @@ async function hostResultFor(
     intent: HostToolIntent,
     output: Record<string, unknown>,
     status: 'ok' | 'error' = 'ok',
+    artifact?: HostArtifactRef,
 ): Promise<HostToolResult> {
     if (intent.approval_id !== undefined) {
         throw new AgentClientError(
@@ -1034,6 +1075,7 @@ async function hostResultFor(
         output: JSON.parse(canonical) as unknown,
         output_digest: await sha256Canonical(output),
         output_preview: boundedPreview(canonical),
+        ...(artifact === undefined ? {} : { artifact }),
         occurred_at_ms: Date.now(),
     };
 }

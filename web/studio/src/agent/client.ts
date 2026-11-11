@@ -29,6 +29,7 @@ export { AgentClientError } from './storeTypes.js';
 export type { AgentIncomingEvent } from '../state/agent.js';
 
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
+const ARTIFACT_ID_PATTERN = /^art_[0-9a-f]{64}$/;
 
 export const MAX_HOST_TREE_ENTRIES = 512;
 export const MAX_HOST_DIFF_FILES = 256;
@@ -226,6 +227,8 @@ export interface ReadArtifactInput {
 }
 
 export interface ArtifactContent {
+    /** Full host/browser artifact identity when the source reported it. */
+    artifactId?: string;
     path: string;
     mediaType: string;
     /** Number of bytes returned, not necessarily the whole artifact size. */
@@ -819,6 +822,9 @@ export class AgentClient {
             }
             const bytes = local.bytes.slice(range.start, range.end);
             return {
+                ...(local.artifactId === undefined
+                    ? {}
+                    : { artifactId: local.artifactId }),
                 path: local.path,
                 mediaType: local.mediaType,
                 sizeBytes: bytes.byteLength,
@@ -832,7 +838,19 @@ export class AgentClient {
         if (input.artifactId !== undefined) {
             try {
                 if (this.runtime !== null) {
-                    return await this.runtime.readArtifact(input);
+                    const content = await this.runtime.readArtifact(input);
+                    if (
+                        content.artifactId !== undefined &&
+                        content.artifactId !== input.artifactId
+                    ) {
+                        throw new AgentClientError(
+                            'invalid_event',
+                            'browser artifact identity does not match the requested artifact',
+                        );
+                    }
+                    return content.artifactId === undefined
+                        ? { ...content, artifactId: input.artifactId }
+                        : content;
                 }
                 if (this.taskStore !== null) {
                     const durable = await this.taskStore.readArtifact(
@@ -841,6 +859,7 @@ export class AgentClient {
                     );
                     if (durable !== null) {
                         return {
+                            artifactId: durable.artifact_id,
                             path: durable.artifact_id,
                             mediaType: durable.media_type,
                             sizeBytes: durable.size_bytes,
@@ -875,7 +894,10 @@ export class AgentClient {
             },
             ...(input.taskId === undefined ? {} : { taskId: input.taskId }),
         });
-        return await hostArtifactContent(result);
+        return artifactIdentity(
+            await hostArtifactContent(result),
+            input.artifactId,
+        );
     }
 
     async hostCapabilities(): Promise<HostCapabilities> {
@@ -1122,10 +1144,15 @@ export class AgentClient {
             return null;
         }
         return {
+            ...(file.artifactId === undefined
+                ? {}
+                : { artifactId: file.artifactId }),
             path: file.path,
             mediaType: file.mediaType,
             sizeBytes: file.bytes.byteLength,
+            artifactSizeBytes: file.bytes.byteLength,
             digest: file.digest,
+            wholeDigest: file.digest,
             bytes: new Uint8Array(file.bytes),
         };
     }
@@ -1294,6 +1321,16 @@ async function hostArtifactContent(
             );
         }
     }
+    let artifactId: string | undefined;
+    if (output.artifact_id !== undefined) {
+        if (
+            typeof output.artifact_id !== 'string' ||
+            !ARTIFACT_ID_PATTERN.test(output.artifact_id)
+        ) {
+            return invalidHostData('host artifact identity is malformed');
+        }
+        artifactId = output.artifact_id;
+    }
     if (
         typeof output.path !== 'string' ||
         output.path.length === 0 ||
@@ -1354,6 +1391,15 @@ async function hostArtifactContent(
         }
         rangeValue = { start: range.start, end: range.end };
         artifactSizeBytes = output.artifact_size_bytes;
+    } else if (output.artifact_size_bytes !== undefined) {
+        if (
+            typeof output.artifact_size_bytes !== 'number' ||
+            !Number.isSafeInteger(output.artifact_size_bytes) ||
+            output.artifact_size_bytes !== output.size_bytes
+        ) {
+            return invalidHostData('host whole artifact total size is malformed');
+        }
+        artifactSizeBytes = output.artifact_size_bytes;
     }
     let wholeDigest: string | undefined;
     if (output.whole_digest !== undefined) {
@@ -1364,6 +1410,15 @@ async function hostArtifactContent(
             return invalidHostData('host artifact whole digest is malformed');
         }
         wholeDigest = output.whole_digest;
+    }
+    if (
+        rangeValue === undefined &&
+        wholeDigest !== undefined &&
+        wholeDigest !== output.digest
+    ) {
+        return invalidHostData(
+            'host full artifact whole digest does not match its bytes',
+        );
     }
     if (
         rangeValue !== undefined &&
@@ -1377,6 +1432,7 @@ async function hostArtifactContent(
         );
     }
     return {
+        ...(artifactId === undefined ? {} : { artifactId }),
         path: output.path,
         mediaType: output.media_type,
         sizeBytes: bytes.byteLength,
@@ -1386,4 +1442,20 @@ async function hostArtifactContent(
         ...(rangeValue === undefined ? {} : { range: rangeValue }),
         bytes,
     };
+}
+
+function artifactIdentity(
+    content: ArtifactContent,
+    requested: string | undefined,
+): ArtifactContent {
+    if (requested === undefined || content.artifactId === undefined) {
+        return content;
+    }
+    if (content.artifactId !== requested) {
+        throw new AgentClientError(
+            'invalid_event',
+            'host artifact identity does not match the requested artifact',
+        );
+    }
+    return content;
 }

@@ -1,4 +1,4 @@
-export type StudioSection = 'agent' | 'workspace' | 'changes' | 'terminal' | 'models' | 'guide' | 'browser';
+export type StudioSection = 'agent' | 'workspace' | 'changes' | 'pr' | 'artifacts' | 'terminal' | 'models' | 'guide' | 'browser';
 
 export interface FileNode {
     path: string;

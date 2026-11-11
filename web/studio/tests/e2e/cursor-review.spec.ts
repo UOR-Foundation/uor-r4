@@ -575,3 +575,148 @@ test.describe('Task 21 changes review and local comments', () => {
         await expect(review).toContainText('Select a browser task to add a local comment.');
     });
 });
+
+test.describe('Task 22 read-only PR and digest-bound artifacts', () => {
+    test('pr_tab_is_read_only_and_explicitly_unavailable_without_a_hosted_integration', async ({ page }) => {
+        await openStudio(page);
+        const requests: string[] = [];
+        page.on('request', (request) => requests.push(request.url()));
+
+        await page.locator('#studio-typed-root [data-pane-target="pr"]').click();
+        const panel = page.locator('#studio-typed-root [data-pr-panel]');
+        await expect(panel).toBeVisible();
+        await expect(panel.locator('[data-pr-unavailable]')).toContainText(
+            'No local or imported pull request summary is available',
+        );
+        await expect(panel.locator('a[data-pr-link]')).toHaveCount(0);
+        await expect(panel.locator('iframe')).toHaveCount(0);
+        await expect(
+            panel.getByRole('button', { name: /merge|approve|restore checkpoint/i }),
+        ).toHaveCount(0);
+        await expect(panel).not.toContainText(/restore checkpoint/i);
+        await expect(panel).not.toContainText(/github connected/i);
+        expect(requests.filter((url) => /github\.com|pull\/\d+|merge/i.test(url))).toEqual([]);
+    });
+
+    test('artifact_preview_reads_verified_browser_bytes_without_a_network_request', async ({ page }) => {
+        await openStudio(page);
+        expect((await call<{ phase: string }>(page, 'open')).phase).toBe('ready');
+        const artifactId = `art_${'a1'.repeat(32)}`;
+        const text = 'digest-bound local artifact';
+        const seeded = await seedArtifactForReview(page, artifactId, text);
+
+        const requests: string[] = [];
+        page.on('request', (request) => requests.push(request.url()));
+
+        await page.locator('#studio-typed-root [data-pane-target="artifacts"]').click();
+        const panel = page.locator('#studio-typed-root [data-artifact-panel]');
+        await expect(panel).toBeVisible();
+        const identity = panel.getByLabel('Artifact ID', { exact: true });
+        await expect(identity).toBeVisible();
+        await identity.fill(artifactId);
+        await expect(identity).toHaveValue(artifactId);
+        await panel.getByRole('button', { name: 'Load artifact', exact: true }).click();
+
+        const preview = panel.locator('[data-artifact-preview="text"]');
+        await expect(preview).toBeVisible();
+        await expect(preview).toHaveText(text);
+        await expect(panel.locator('[data-artifact-metadata]')).toContainText(seeded.digest);
+        await expect(panel.locator('[data-artifact-metadata]')).toContainText('text/plain');
+        await expect(panel.locator('iframe')).toHaveCount(0);
+        expect(requests.filter((url) => url.includes(artifactId) || url.includes('example.com'))).toEqual([]);
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        await expect.poll(async () => (await call<{ phase: string }>(page, 'open')).phase).toBe('ready');
+        await page.locator('#studio-typed-root [data-pane-target="artifacts"]').click();
+        const reloaded = page.locator('#studio-typed-root [data-artifact-panel]');
+        const reloadedIdentity = reloaded.getByLabel('Artifact ID', { exact: true });
+        await reloadedIdentity.fill(artifactId);
+        await expect(reloadedIdentity).toHaveValue(artifactId);
+        await reloaded.getByRole('button', { name: 'Load artifact', exact: true }).click();
+        await expect(reloaded.locator('[data-artifact-preview="text"]')).toHaveText(text);
+    });
+
+    test('corrupt_artifact_and_expired_link_are_refused_without_preview_or_request', async ({ page }) => {
+        await openStudio(page);
+        expect((await call<{ phase: string }>(page, 'open')).phase).toBe('ready');
+        const corruptId = `art_${'c1'.repeat(32)}`;
+        await seedArtifactForReview(page, corruptId, 'corrupt artifact', {
+            digestOverride: `sha256:${'0'.repeat(64)}`,
+        });
+
+        const requests: string[] = [];
+        page.on('request', (request) => requests.push(request.url()));
+
+        await page.locator('#studio-typed-root [data-pane-target="artifacts"]').click();
+        const panel = page.locator('#studio-typed-root [data-artifact-panel]');
+        const identity = panel.getByLabel('Artifact ID', { exact: true });
+        await identity.fill(corruptId);
+        await expect(identity).toHaveValue(corruptId);
+        await panel.getByRole('button', { name: 'Load artifact', exact: true }).click();
+        await expect(panel.locator('[data-artifact-error]')).toContainText('failed verification');
+        await expect(panel.locator('[data-artifact-preview]')).toHaveCount(0);
+
+        const expired = `https://example.com/artifact?token=expired`;
+        await identity.fill(expired);
+        await expect(identity).toHaveValue(expired);
+        await panel.getByRole('button', { name: 'Load artifact', exact: true }).click();
+        await expect(panel.locator('[data-artifact-error]')).toContainText('Artifact ID must be art_');
+        await expect(panel.locator('[data-artifact-preview]')).toHaveCount(0);
+        await expect(identity).toHaveValue('');
+        await expect(panel.locator('a[href*="example.com"]')).toHaveCount(0);
+        expect(requests.filter((url) => url.includes('example.com') || url.includes(corruptId))).toEqual([]);
+    });
+});
+
+async function seedArtifactForReview(
+    page: Page,
+    artifactId: string,
+    text: string,
+    options: { digestOverride?: string } = {},
+): Promise<{ artifactId: string; digest: string; bytes: number[] }> {
+    return page.evaluate(
+        async ({ dbName, artifactId: id, text: body, digestOverride }) => {
+            const request = <T>(input: IDBRequest<T>): Promise<T> =>
+                new Promise<T>((resolve, reject) => {
+                    input.onsuccess = () => resolve(input.result);
+                    input.onerror = () => reject(input.error);
+                });
+            const done = (tx: IDBTransaction): Promise<void> =>
+                new Promise<void>((resolve, reject) => {
+                    tx.oncomplete = () => resolve();
+                    tx.onabort = () => reject(tx.error ?? new Error('transaction aborted'));
+                    tx.onerror = () => reject(tx.error ?? new Error('transaction failed'));
+                });
+            const db = await new Promise<IDBDatabase>((resolve, reject) => {
+                const open = indexedDB.open(dbName);
+                open.onsuccess = () => resolve(open.result);
+                open.onerror = () => reject(open.error);
+            });
+            try {
+                const bytes = new TextEncoder().encode(body);
+                const digestBytes = new Uint8Array(
+                    await crypto.subtle.digest('SHA-256', bytes),
+                );
+                let hex = '';
+                for (const byte of digestBytes) hex += byte.toString(16).padStart(2, '0');
+                const digest = digestOverride ?? `sha256:${hex}`;
+                const tx = db.transaction('artifacts', 'readwrite');
+                await request(
+                    tx.objectStore('artifacts').put({
+                        artifact_id: id,
+                        media_type: 'text/plain',
+                        size_bytes: bytes.byteLength,
+                        digest,
+                        blob: new Blob([bytes], { type: 'text/plain' }),
+                    }, id),
+                );
+                await done(tx);
+                return { artifactId: id, digest, bytes: [...bytes] };
+            } finally {
+                db.close();
+            }
+        },
+        { dbName: 'uor-r4.studio.agent', artifactId, text, digestOverride: options.digestOverride },
+    );
+}
