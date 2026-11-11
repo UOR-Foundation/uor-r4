@@ -37,7 +37,7 @@ Five laptop readings on the replicated arm r model, asked for by an outside revi
 
 Each of the 1,141 panel prompts in arm r's sealed float score went through the exported artifact: `uor-chat-bd2532281 --stack r-s<seed>-c8256.uorlut --tokenizer tokenizer.json --prompt-ids <the row's prompt> --max-tokens 48`, greedy `serve_step`. The two replies are compared up to and including the first end-of-reply id; the float score keeps 48 ids and runs on past it.
 
-**Turn memory on for both**, as a text chat turn runs it. Float: `samples-p-greedy-memory.json`. Integer: `raw-id-replies --mark-reply 1`, built from this branch ([source](../../../../labs/one-model-end-to-end/instrument/src/bin/raw-id-replies.rs)), which steps the same ids through `serve_step` and marks the reply start before the prompt's last id, as `StackChat::feed` does.
+**Turn memory on for both**, with the reply mark set as the text chat sets it. Float: `samples-p-greedy-memory.json`. Integer: `raw-id-replies --mark-reply 1`, built from this branch ([source](../../../../labs/one-model-end-to-end/instrument/src/bin/raw-id-replies.rs)), which steps the same ids through `serve_step` and marks the reply start before the prompt's last id, as `StackChat::feed` does.
 
 | | Seed 1 | Seed 2 | Seed 3 |
 |---|---|---|---|
@@ -236,7 +236,7 @@ The M4 sheet ([m4-lawful-likelihood-bpb](../../../../harness/prep/m4-lawful-like
 | Lowest BPB this scorer can report (every target predicted) | 0.7188 |
 | Largest share of targets outside the top eight that still reaches 0.90, every other target predicted | 1.892% |
 
-Under this mapping the floor is 0.72 BPB, and 0.90 needs fewer than 1.892% of targets outside the top eight, even with every other target ranked first: one in 53 still reaches it, one in 52 does not. The sheet's other branch scores Q24 candidate scores; it was not computed here. The sheet and the M4 bar are outside this unit's scope: this is a reading, proposed as an addendum to the sheet.
+Under this mapping the floor is 0.72 BPB, and 0.90 needs at most 1.892% of targets outside the top eight, even with every other target ranked first: one in 53 still reaches it, one in 52 does not. The sheet's other branch scores Q24 candidate scores; it was not computed here. The sheet and the M4 bar are outside this unit's scope: this is a reading, proposed as an addendum to the sheet.
 
 ## Evidence
 
