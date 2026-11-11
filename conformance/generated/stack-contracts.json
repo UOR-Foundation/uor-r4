@@ -2627,6 +2627,66 @@
         "commands": [
           {
             "args": [
+              "-e",
+              "-f",
+              "conformance/stack/scenario-preflight-gate.jq",
+              "--arg",
+              "split",
+              "development",
+              "--arg",
+              "base_artifact_sha256",
+              "BASE_SHA256",
+              "--argjson",
+              "corpus_context",
+              "256",
+              "--argjson",
+              "copy_hits",
+              "10",
+              "preflight-development"
+            ],
+            "env": [],
+            "id": "preflight-development",
+            "inputs": [
+              "scenario-preflight-gate.jq",
+              "preflight-development"
+            ],
+            "outputs": [],
+            "program": "jq",
+            "role": "verify",
+            "timeout_seconds": 300
+          },
+          {
+            "args": [
+              "-e",
+              "-f",
+              "conformance/stack/scenario-preflight-gate.jq",
+              "--arg",
+              "split",
+              "fresh",
+              "--arg",
+              "base_artifact_sha256",
+              "BASE_SHA256",
+              "--argjson",
+              "corpus_context",
+              "256",
+              "--argjson",
+              "copy_hits",
+              "11",
+              "preflight-fresh"
+            ],
+            "env": [],
+            "id": "preflight-fresh",
+            "inputs": [
+              "scenario-preflight-gate.jq",
+              "preflight-fresh"
+            ],
+            "outputs": [],
+            "program": "jq",
+            "role": "verify",
+            "timeout_seconds": 300
+          },
+          {
+            "args": [
               "run",
               "--release",
               "--locked",
@@ -2701,7 +2761,7 @@
           },
           {
             "args": [
-              "ARTIFACT",
+              "BASE_ARTIFACT",
               "CORPUS_ROOT",
               "TOKENIZER",
               "--split",
@@ -2714,7 +2774,7 @@
               "1"
             ],
             "env": [],
-            "id": "score-development",
+            "id": "score-base-development",
             "inputs": [
               "scenario-receipt",
               "train-tokens",
@@ -2728,7 +2788,7 @@
               "base-artifact"
             ],
             "outputs": [
-              "development.json"
+              "base-development.json"
             ],
             "program": "cpu-scenario-grade",
             "role": "score",
@@ -2736,7 +2796,42 @@
           },
           {
             "args": [
-              "ARTIFACT",
+              "step-001024.uorlut",
+              "CORPUS_ROOT",
+              "TOKENIZER",
+              "--split",
+              "development",
+              "--max-cases",
+              "1024",
+              "--reply-tokens",
+              "64",
+              "--table-baseline",
+              "1"
+            ],
+            "env": [],
+            "id": "score-model-development",
+            "inputs": [
+              "scenario-receipt",
+              "train-tokens",
+              "train-mask",
+              "train-manifest",
+              "development-tokens",
+              "development-mask",
+              "development-manifest",
+              "development-scenarios",
+              "tokenizer",
+              "step-001024.uorlut"
+            ],
+            "outputs": [
+              "model-development.json"
+            ],
+            "program": "cpu-scenario-grade",
+            "role": "score",
+            "timeout_seconds": 1800
+          },
+          {
+            "args": [
+              "BASE_ARTIFACT",
               "CORPUS_ROOT",
               "TOKENIZER",
               "--split",
@@ -2749,7 +2844,7 @@
               "1"
             ],
             "env": [],
-            "id": "score-fresh",
+            "id": "score-base-fresh",
             "inputs": [
               "scenario-receipt",
               "train-tokens",
@@ -2763,11 +2858,119 @@
               "base-artifact"
             ],
             "outputs": [
-              "fresh.json"
+              "base-fresh.json"
             ],
             "program": "cpu-scenario-grade",
             "role": "score",
             "timeout_seconds": 1800
+          },
+          {
+            "args": [
+              "step-001024.uorlut",
+              "CORPUS_ROOT",
+              "TOKENIZER",
+              "--split",
+              "fresh",
+              "--max-cases",
+              "1024",
+              "--reply-tokens",
+              "64",
+              "--table-baseline",
+              "1"
+            ],
+            "env": [],
+            "id": "score-model-fresh",
+            "inputs": [
+              "scenario-receipt",
+              "train-tokens",
+              "train-mask",
+              "train-manifest",
+              "fresh-tokens",
+              "fresh-mask",
+              "fresh-manifest",
+              "fresh-scenarios",
+              "tokenizer",
+              "step-001024.uorlut"
+            ],
+            "outputs": [
+              "model-fresh.json"
+            ],
+            "program": "cpu-scenario-grade",
+            "role": "score",
+            "timeout_seconds": 1800
+          },
+          {
+            "args": [
+              "-n",
+              "-f",
+              "conformance/stack/scenario-decision.jq",
+              "--arg",
+              "run_id",
+              "RUN_ID",
+              "--arg",
+              "source_head",
+              "REVIEWED_HEAD",
+              "--arg",
+              "code_pin",
+              "IMPLEMENTATION_PIN",
+              "--arg",
+              "job_sha256",
+              "JOB_SHA256",
+              "--arg",
+              "launcher_sha256",
+              "LAUNCHER_SHA256",
+              "--arg",
+              "watcher_sha256",
+              "WATCHER_SHA256",
+              "--arg",
+              "scorer_sha256",
+              "SCORER_SHA256",
+              "--arg",
+              "review_sha256",
+              "REVIEW_SHA256",
+              "--arg",
+              "input_manifest_sha256",
+              "INPUT_MANIFEST_SHA256",
+              "--arg",
+              "bundle_sha256",
+              "BUNDLE_SHA256",
+              "--arg",
+              "base_artifact_sha256",
+              "BASE_SHA256",
+              "--arg",
+              "contract_semantic_blake3",
+              "CONTRACT_SEMANTIC_BLAKE3",
+              "--arg",
+              "artifact_sha256",
+              "MODEL_ARTIFACT_SHA256",
+              "--slurpfile",
+              "base-development",
+              "base-development.json",
+              "--slurpfile",
+              "model-development",
+              "model-development.json",
+              "--slurpfile",
+              "base-fresh",
+              "base-fresh.json",
+              "--slurpfile",
+              "model-fresh",
+              "model-fresh.json"
+            ],
+            "env": [],
+            "id": "classify",
+            "inputs": [
+              "scenario-decision.jq",
+              "base-development.json",
+              "model-development.json",
+              "base-fresh.json",
+              "model-fresh.json"
+            ],
+            "outputs": [
+              "decision.json"
+            ],
+            "program": "jq",
+            "role": "verify",
+            "timeout_seconds": 300
           },
           {
             "args": [
@@ -2853,7 +3056,17 @@
               "xtask",
               "stack-audit",
               "--contract",
-              "conformance/stack/fbs-deepseek-scenario-smoke.toml"
+              "conformance/stack/fbs-deepseek-scenario-smoke.toml",
+              "--artifact",
+              "step-001024.uorlut",
+              "--tokenizer",
+              "tokenizer.json",
+              "--config",
+              "config.json",
+              "--checkpoint",
+              "models/step-001024",
+              "--out",
+              "stack-audit.json"
             ],
             "env": [],
             "id": "audit",
@@ -2893,7 +3106,7 @@
             "result": "pass",
             "scope": "source identity",
             "sha256": null,
-            "statement": "The trainer and exporter are the main-track code at 7a450a88f; this contract binds the planned aligned-corpus run without changing that code."
+            "statement": "The runnable implementation, including the table-baseline scorer, is the code at 894869f; later contract and documentation bytes are bound by this contract's semantic hash."
           },
           {
             "id": "aligned-corpus",
@@ -2968,6 +3181,16 @@
             "id": "base-artifact",
             "sha256": "a1d705586b35d7da282913b1e21b242a74c0661b32d73e2ec89f56310a8140e8",
             "source": "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/arm-r-s2-c8256-bound.uorlut"
+          },
+          {
+            "id": "preflight-development",
+            "sha256": "a7ec4f34981b9f07906a0e2523964b205df3700aa2afa2e139c0d67a3eacb15c",
+            "source": "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/preflight-v3/arm-r-development.json"
+          },
+          {
+            "id": "preflight-fresh",
+            "sha256": "7429e6c4e4fe887d52ac58a0cc750d4fdb06d22ae83b3e6e492a4fb0c635c3f9",
+            "source": "store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/preflight-v3/arm-r-fresh.json"
           },
           {
             "id": "train-tokens",
@@ -3480,15 +3703,15 @@
           }
         ],
         "revision": 1,
-        "source_pin": "7a450a88f35d4c2ae35e7b16d53e1f3450c62470",
+        "source_pin": "894869f262973d64c6d44661fa71afaa7ebe9241",
         "spec": "uor-r4.stack-contract/2",
         "state": "experimental",
         "summary": "One fresh-start 1,024-step training of the current FBS/Hamming geometric path on the aligned scenario corpus, exported as a bound uor-r4.lut-stack/10 artifact and scored against the same-evaluator previous-token count table.",
         "title": "FBS aligned-scenario 1,024-step GPU smoke"
       },
-      "semantic_blake3": "16768b86f8f889a70ea3bd463b148ecd6ac6822ef63c8b2aff281a2f47de7bf1",
+      "semantic_blake3": "705fa688316af9ae72b1cfacc8fb874dab2f13e0efd3209c7b784ce952bea6e3",
       "source": "conformance/stack/fbs-deepseek-scenario-smoke.toml",
-      "source_blake3": "f3b41712b07ada1fa56d4808b5b2e7eaf9d55e955d780432e3e39b448787476d"
+      "source_blake3": "5b2a8385ac61bb1c3e47344c89171bdd08955cc7aaffe313d35a7f3c678f1e92"
     }
   ],
   "schema": "uor-r4.stack-contract.generated/2",

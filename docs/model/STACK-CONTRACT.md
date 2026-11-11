@@ -433,12 +433,12 @@ Schema: `uor-r4.lut-stack/6`
 
 One fresh-start 1,024-step training of the current FBS/Hamming geometric path on the aligned scenario corpus, exported as a bound uor-r4.lut-stack/10 artifact and scored against the same-evaluator previous-token count table.
 
-- Source: `conformance/stack/fbs-deepseek-scenario-smoke.toml` (BLAKE3 `f3b41712b07ada1fa56d4808b5b2e7eaf9d55e955d780432e3e39b448787476d`)
-- Semantic hash: `16768b86f8f889a70ea3bd463b148ecd6ac6822ef63c8b2aff281a2f47de7bf1`
+- Source: `conformance/stack/fbs-deepseek-scenario-smoke.toml` (BLAKE3 `5b2a8385ac61bb1c3e47344c89171bdd08955cc7aaffe313d35a7f3c678f1e92`)
+- Semantic hash: `705fa688316af9ae72b1cfacc8fb874dab2f13e0efd3209c7b784ce952bea6e3`
 - Lane: `fbs`
 - State: `experimental`
 - Revision: 1
-- Source pin: `7a450a88f35d4c2ae35e7b16d53e1f3450c62470`
+- Source pin: `894869f262973d64c6d44661fa71afaa7ebe9241`
 - Decision: docs/harness/prep/one-model-end-to-end-scenario-gpu-smoke-2026-11-11.md
 
 ### Model
@@ -477,6 +477,8 @@ Schema: `uor-r4.lut-stack/10`
 | `trainer-dev-tokens` | `store:w2-inputs/2026-10-25/driver-data/ft/dev/tokens.u16` | `0919e90f953e988edf05cbb8a69e24bafda0cb8b8ddbbb5d1e9d808c81a6555b` |
 | `trainer-dev-mask` | `store:w2-inputs/2026-10-25/driver-data/ft/dev/response_mask.u8` | `a838bb1a67e96572cb10a86b5a3587dda25f0190eaf85133026e04c281afb078` |
 | `base-artifact` | `store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/arm-r-s2-c8256-bound.uorlut` | `a1d705586b35d7da282913b1e21b242a74c0661b32d73e2ec89f56310a8140e8` |
+| `preflight-development` | `store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/preflight-v3/arm-r-development.json` | `a7ec4f34981b9f07906a0e2523964b205df3700aa2afa2e139c0d67a3eacb15c` |
+| `preflight-fresh` | `store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/preflight-v3/arm-r-fresh.json` | `7429e6c4e4fe887d52ac58a0cc750d4fdb06d22ae83b3e6e492a4fb0c635c3f9` |
 | `train-tokens` | `store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/scenario-corpus-v1/train/tokens.u16` | `3412e1b6ccb46db986959aa08b60490d46b3a2a3524fad476cf1fedd838259d8` |
 | `train-mask` | `store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/scenario-corpus-v1/train/response_mask.u8` | `b0f745fbea8c11f7e9c2993ca03a4eb3ae5ee101b2b0ca0c23e544cac9cb92e0` |
 | `train-manifest` | `store:results/deepseek/one-model-end-to-end-scenario-gpu-smoke-2026-11-11/input/scenario-corpus-v1/train/manifest.json` | `d660f4e695363bbf121391841d17b147e8aec30071d5e59de4008b646c57ae57` |
@@ -506,7 +508,7 @@ Schema: `uor-r4.lut-stack/10`
 
 | ID | Kind | Result | Scope | Locator | SHA-256 | Mechanisms | Statement |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `source-pin` | `authority` | `pass` | source identity | `docs/loop/tasks/one-model-end-to-end/deepseek-273/ORDER.md` | -- | `tokenizer`<br>`fbs-trunk`<br>`hamming-copy-read`<br>`turn-memory`<br>`whole-table-readout`<br>`integer-export`<br>`short-cycle-stop` | The trainer and exporter are the main-track code at 7a450a88f; this contract binds the planned aligned-corpus run without changing that code. |
+| `source-pin` | `authority` | `pass` | source identity | `docs/loop/tasks/one-model-end-to-end/deepseek-273/ORDER.md` | -- | `tokenizer`<br>`fbs-trunk`<br>`hamming-copy-read`<br>`turn-memory`<br>`whole-table-readout`<br>`integer-export`<br>`short-cycle-stop` | The runnable implementation, including the table-baseline scorer, is the code at 894869f; later contract and documentation bytes are bound by this contract's semantic hash. |
 | `aligned-corpus` | `report` | `pass` | aligned scenario corpus construction | `docs/loop/tasks/one-model-end-to-end/deepseek-268/REPORT.md` | -- | `tokenizer`<br>`fbs-trunk`<br>`whole-table-readout` | The scenario corpus receipt binds 20,000 TRAIN rows and disjoint development and Fresh panels by content hashes. |
 | `scenario-baseline` | `report` | `pass` | arm-r and count-table behavior on the aligned panels | `docs/loop/tasks/one-model-end-to-end/deepseek-272/REPORT.md` | -- | `hamming-copy-read`<br>`turn-memory`<br>`whole-table-readout`<br>`integer-export` | Arm r copied 10 of 110 development and 11 of 110 Fresh copy prompts; the previous-token table answered no grounded archetype. |
 | `run-pending` | `report` | `not-run` | planned 1,024-step aligned-corpus smoke | `docs/loop/tasks/one-model-end-to-end/deepseek-273/REPORT.md` | -- | `fbs-trunk`<br>`hamming-copy-read`<br>`turn-memory`<br>`whole-table-readout`<br>`integer-export`<br>`short-cycle-stop` | No later checkpoint, artifact or held-out result exists when this contract is registered. |
@@ -534,19 +536,29 @@ Schema: `uor-r4.lut-stack/10`
 
 ### Commands
 
+- **preflight-development (`verify`)**: `jq -e -f conformance/stack/scenario-preflight-gate.jq --arg split development --arg base_artifact_sha256 BASE_SHA256 --argjson corpus_context 256 --argjson copy_hits 10 preflight-development`
+  - env --; inputs `scenario-preflight-gate.jq`<br>`preflight-development`; outputs --; timeout 300s
+- **preflight-fresh (`verify`)**: `jq -e -f conformance/stack/scenario-preflight-gate.jq --arg split fresh --arg base_artifact_sha256 BASE_SHA256 --argjson corpus_context 256 --argjson copy_hits 11 preflight-fresh`
+  - env --; inputs `scenario-preflight-gate.jq`<br>`preflight-fresh`; outputs --; timeout 300s
 - **train (`train`)**: `cargo run --release --locked -p uor-r4-float-train --bin train-in-space -- --objective cell --retain-rates 1 --decay-mult 1 --lr 0.001 --lr-end 0 --train-as-served 1 --context 192 --width 256 --hamming-read 4 --batch 16 --turn-memory 8 --turn-memory-reply 1 --turn-memory-dropout 500 --samples 6 --reply-tokens 48 --steps 1024 --eval-every 256 --hamming-copy-latest 1 --turn-memory-leave-copied 1 --seed 273`
   - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`train-scenarios`<br>`trainer-dev-tokens`<br>`trainer-dev-mask`<br>`tokenizer`; outputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`; timeout 7200s
-- **score-development (`score`)**: `cpu-scenario-grade ARTIFACT CORPUS_ROOT TOKENIZER --split development --max-cases 1024 --reply-tokens 64 --table-baseline 1`
-  - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`development-tokens`<br>`development-mask`<br>`development-manifest`<br>`development-scenarios`<br>`tokenizer`<br>`base-artifact`; outputs `development.json`; timeout 1800s
-- **score-fresh (`score`)**: `cpu-scenario-grade ARTIFACT CORPUS_ROOT TOKENIZER --split fresh --max-cases 1024 --reply-tokens 64 --table-baseline 1`
-  - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`fresh-tokens`<br>`fresh-mask`<br>`fresh-manifest`<br>`fresh-scenarios`<br>`tokenizer`<br>`base-artifact`; outputs `fresh.json`; timeout 1800s
+- **score-base-development (`score`)**: `cpu-scenario-grade BASE_ARTIFACT CORPUS_ROOT TOKENIZER --split development --max-cases 1024 --reply-tokens 64 --table-baseline 1`
+  - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`development-tokens`<br>`development-mask`<br>`development-manifest`<br>`development-scenarios`<br>`tokenizer`<br>`base-artifact`; outputs `base-development.json`; timeout 1800s
+- **score-model-development (`score`)**: `cpu-scenario-grade step-001024.uorlut CORPUS_ROOT TOKENIZER --split development --max-cases 1024 --reply-tokens 64 --table-baseline 1`
+  - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`development-tokens`<br>`development-mask`<br>`development-manifest`<br>`development-scenarios`<br>`tokenizer`<br>`step-001024.uorlut`; outputs `model-development.json`; timeout 1800s
+- **score-base-fresh (`score`)**: `cpu-scenario-grade BASE_ARTIFACT CORPUS_ROOT TOKENIZER --split fresh --max-cases 1024 --reply-tokens 64 --table-baseline 1`
+  - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`fresh-tokens`<br>`fresh-mask`<br>`fresh-manifest`<br>`fresh-scenarios`<br>`tokenizer`<br>`base-artifact`; outputs `base-fresh.json`; timeout 1800s
+- **score-model-fresh (`score`)**: `cpu-scenario-grade step-001024.uorlut CORPUS_ROOT TOKENIZER --split fresh --max-cases 1024 --reply-tokens 64 --table-baseline 1`
+  - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`fresh-tokens`<br>`fresh-mask`<br>`fresh-manifest`<br>`fresh-scenarios`<br>`tokenizer`<br>`step-001024.uorlut`; outputs `model-fresh.json`; timeout 1800s
+- **classify (`verify`)**: `jq -n -f conformance/stack/scenario-decision.jq --arg run_id RUN_ID --arg source_head REVIEWED_HEAD --arg code_pin IMPLEMENTATION_PIN --arg job_sha256 JOB_SHA256 --arg launcher_sha256 LAUNCHER_SHA256 --arg watcher_sha256 WATCHER_SHA256 --arg scorer_sha256 SCORER_SHA256 --arg review_sha256 REVIEW_SHA256 --arg input_manifest_sha256 INPUT_MANIFEST_SHA256 --arg bundle_sha256 BUNDLE_SHA256 --arg base_artifact_sha256 BASE_SHA256 --arg contract_semantic_blake3 CONTRACT_SEMANTIC_BLAKE3 --arg artifact_sha256 MODEL_ARTIFACT_SHA256 --slurpfile base-development base-development.json --slurpfile model-development model-development.json --slurpfile base-fresh base-fresh.json --slurpfile model-fresh model-fresh.json`
+  - env --; inputs `scenario-decision.jq`<br>`base-development.json`<br>`model-development.json`<br>`base-fresh.json`<br>`model-fresh.json`; outputs `decision.json`; timeout 300s
 - **snapshot (`export`)**: `fbs-snapshot models/step-001024 step-001024.snapshot.json`
   - env --; inputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`; outputs `step-001024.snapshot.json`; timeout 1800s
 - **export (`export`)**: `fbs-export --raw-gates --raw-transition --run-config config.json --stack-contract conformance/stack/fbs-deepseek-scenario-smoke.toml --stack-contract-semantic-blake3 SEMANTIC_BLAKE3 --tokenizer tokenizer.json SNAPSHOT_JSON step-001024.uorlut`
   - env --; inputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`<br>`tokenizer`<br>`step-001024.snapshot.json`<br>`fbs-deepseek-scenario-smoke.toml`; outputs `step-001024.uorlut`; timeout 1800s
 - **serve (`serve`)**: `uor-chat --stack step-001024.uorlut --tokenizer tokenizer.json --protocol 2 --max-tokens 64`
   - env --; inputs `step-001024.uorlut`<br>`tokenizer`; outputs `chat.json`; timeout 300s
-- **audit (`verify`)**: `cargo xtask stack-audit --contract conformance/stack/fbs-deepseek-scenario-smoke.toml`
+- **audit (`verify`)**: `cargo xtask stack-audit --contract conformance/stack/fbs-deepseek-scenario-smoke.toml --artifact step-001024.uorlut --tokenizer tokenizer.json --config config.json --checkpoint models/step-001024 --out stack-audit.json`
   - env --; inputs `fbs-deepseek-scenario-smoke.toml`<br>`step-001024.uorlut`<br>`tokenizer`<br>`config.json`<br>`model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`; outputs `stack-audit.json`; timeout 300s
 
 ### Non-claims
