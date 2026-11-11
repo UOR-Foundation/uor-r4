@@ -64,7 +64,10 @@ use std::cell::RefCell;
 use std::path::Path;
 
 use candle_core::{DType, Device, Tensor, Var};
-use uor_r4_integer::fbs_snapshot::{HammingTraceHead, HammingTraceRead, HammingTraceWindow};
+use uor_r4_integer::fbs_snapshot::{
+    place_find, place_first, HammingTraceHead, HammingTraceRead, HammingTraceWindow, PlaceImage,
+    PlaceMarks, PlaceRow, PlaceState, PLACE_ARM, PLACE_OPEN, PLACE_STOP,
+};
 
 use crate::geometric_stack::hamilton_gate;
 use crate::{invalid, Result};
@@ -634,6 +637,11 @@ pub struct HammingRead {
     /// read only, each ask head's asked point adds the asked points of the `rows` rows before it
     /// in its window, each scaled by one learned scalar per token of that row, starting at zero.
     pub(crate) carry: Option<Hold>,
+    /// The place read, when on ([`HammingReads::with_place`], claude-351): at the readout read
+    /// only, the ask heads find a place in an earlier user turn, one register a conversation
+    /// holds it, and at an open reply row the copy mix's source is the point of the token at the
+    /// place. The ask heads then write nothing at this read.
+    pub(crate) place: Option<PlaceRead>,
 }
 
 /// The held ask write (claude-333): how many rows a write is held for, and the per-token gain
@@ -1164,8 +1172,11 @@ impl HammingReads {
         if spans.is_empty() {
             return Ok(None);
         }
+        // claude-351: under the place read the readout read's question rows learn from the place
+        // pull alone, so the found-copy pull passes that read over.
         self.reads
             .iter()
+            .filter(|read| read.place.is_none())
             .map(|read| read.pull_bits(ids, time, table, &pairs, &spans))
             .collect::<Result<Vec<_>>>()
             .map(Some)
@@ -1394,6 +1405,11 @@ impl HammingReads {
             tensors.insert("carry_rows".to_owned(), Tensor::new(&[rows], device)?);
         }
         candle_core::safetensors::save(&tensors, directory.join(FILE))?;
+        // claude-351: only a read with the place read writes its host state, so every other
+        // checkpoint is as before.
+        if let Some(place) = self.place() {
+            std::fs::write(directory.join(PLACE_FILE), serde_json::to_vec(&place.saved()?)?)?;
+        }
         Ok(())
     }
 
@@ -1446,6 +1462,7 @@ impl HammingReads {
                     .transpose()?,
                 hold: None,
                 carry: None,
+                place: None,
             });
         }
         // claude-333: a hold is saved as the stream read's gain and its row count, both or
@@ -1543,11 +1560,13 @@ impl HammingReads {
         } else {
             reads
         };
-        match tensors.get("copy_keys") {
-            None => Ok(Some(reads)),
-            Some(_) if tensors.contains_key("copy_key") => Err(invalid(
-                "the saved Hamming read records both a copy key and per-head copy keys",
-            )),
+        let reads = match tensors.get("copy_keys") {
+            None => reads,
+            Some(_) if tensors.contains_key("copy_key") => {
+                return Err(invalid(
+                    "the saved Hamming read records both a copy key and per-head copy keys",
+                ));
+            }
             Some(tensor) => {
                 let keys: Vec<usize> = tensor.to_vec1::<u32>()?.into_iter().map(|k| k as usize).collect();
                 if keys.windows(2).all(|w| w[0] == w[1]) {
@@ -1555,9 +1574,12 @@ impl HammingReads {
                         "the saved Hamming read records per-head copy keys that are all the same; one key is saved as copy_key",
                     ));
                 }
-                Ok(Some(reads.with_copy_keys(&keys)?))
+                reads.with_copy_keys(&keys)?
             }
-        }
+        };
+        // claude-351: the place read's host state is saved beside the tensors, and only by a
+        // read that has it.
+        Ok(Some(reads.with_saved_place(directory)?))
     }
 }
 
@@ -1607,6 +1629,7 @@ impl HammingRead {
             ask: None,
             hold: None,
             carry: None,
+            place: None,
         })
     }
 
@@ -1987,6 +2010,13 @@ impl HammingRead {
                 force_codes(&key, &forced, true, head_width)?,
             )
         };
+        // claude-351: the place read, at the readout read only. The register program runs on the
+        // host over each window's tokens, its questions asked on this forward's own codes. No
+        // gradient passes through it.
+        let offers = match (&self.place, readout) {
+            (Some(place), true) => Some(self.place_rows(place, &query, &key, ids, time)?),
+            _ => None,
+        };
         let zero = Tensor::new(&[0u32], device)?;
         let margins = self.margin.as_tensor();
         // A decode's scope names positions in its one window (claude-215); a row cut names one
@@ -2188,11 +2218,34 @@ impl HammingRead {
             Ok(means[kind].sub(&asked)?.broadcast_mul(&matched)?)
         };
         let copied = if readout { moved(0)? } else { means[0].clone() };
+        // claude-351: at an open row the point of the token at the place is the mix's source in
+        // place of the copy heads' mean, `n + w_c ⊙ (c − n)`; a closed row reads as before.
+        let copied = match &offers {
+            None => copied,
+            Some(rows) => {
+                let (mut at, mut open) = (Vec::with_capacity(asking), Vec::with_capacity(asking));
+                for b in 0..batch {
+                    for t in from..time {
+                        let offer = rows[b * time + t].offer;
+                        at.push(offer.map_or(0, |place| ids[b * time + place]));
+                        open.push(if offer.is_some() { 1.0f32 } else { 0.0 });
+                    }
+                }
+                let source = table.index_select(&Tensor::from_vec(at, asking, device)?, 0)?;
+                let open = Tensor::from_vec(open, (asking, 1), device)?;
+                source
+                    .sub(&asked)?
+                    .broadcast_mul(&open)?
+                    .add(&copied.broadcast_mul(&open.affine(-1.0, 1.0)?)?)?
+            }
+        };
         // claude-330: an ask head combines in the copy form, through the type weight row.
         let typed = match (&self.ask, readout) {
             (Some(_), true) => moved(1)?,
             _ => means[1].clone(),
         };
+        // claude-351: under the place read the readout read's ask heads find and write nothing.
+        let typed = if offers.is_some() { typed.zeros_like()? } else { typed };
         let written = typed.broadcast_mul(&type_weight)?;
         let added = copied.broadcast_mul(&copy_weight)?.add(&written)?;
         // claude-333: the stream read's ask write `u = w_y ⊙ y`, held for the next rows of its
@@ -2223,6 +2276,537 @@ impl HammingRead {
             return Err(invalid("the row capture needs whole windows, not a decode step"));
         }
         Ok(out.reshape((batch, asks, width))?)
+    }
+}
+
+/// claude-351: how far a place count runs before it saturates. A count is read by its sign, so
+/// the bound is how many net votes a token needs to change sides: enough that a token right a
+/// little over half the time stays armed, and few enough that the wrong votes of the first steps,
+/// before the question rows have learned, are undone soon.
+pub const PLACE_COUNT_BOUND: i16 = 64;
+
+/// claude-351: where the place read's host state is saved, beside the reads' tensors.
+const PLACE_FILE: &str = "hamming_place.json";
+
+/// The place read's two gains (claude-351): one saturating signed count per token each, read by
+/// its sign. `arm` says whether a question row's find sets the register; `open` whether a reply
+/// row opens the read. No gradient reaches either: each is a vote on what the labels show.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlaceCounts {
+    pub arm: Vec<i16>,
+    pub open: Vec<i16>,
+}
+
+/// The place read's host state (claude-351), on the readout read: the marks that frame a
+/// conversation, the tokens a read stops at (B1), and the two gains. Clones share the gains, so
+/// the reads a model applies and the reads its training step votes on are one.
+#[derive(Clone)]
+pub struct PlaceRead {
+    marks: PlaceMarks,
+    stop: Vec<bool>,
+    counts: std::sync::Arc<std::sync::Mutex<PlaceCounts>>,
+}
+
+/// What [`PlaceRead`] saves.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PlaceSaved {
+    marks: PlaceMarks,
+    stop: Vec<u32>,
+    counts: PlaceCounts,
+}
+
+impl PlaceRead {
+    fn new(marks: PlaceMarks, stop: Vec<bool>, counts: PlaceCounts) -> Result<Self> {
+        let vocab = stop.len();
+        if counts.arm.len() != vocab || counts.open.len() != vocab {
+            return Err(invalid(format!(
+                "the place read has {} arm and {} open counts for {vocab} tokens",
+                counts.arm.len(),
+                counts.open.len()
+            )));
+        }
+        let place = Self { marks, stop, counts: std::sync::Arc::new(std::sync::Mutex::new(counts)) };
+        // The marks are checked as the artifact's are, before any row reads them.
+        place.image()?;
+        Ok(place)
+    }
+
+    fn counts(&self) -> Result<std::sync::MutexGuard<'_, PlaceCounts>> {
+        self.counts.lock().map_err(|_| invalid("the place read's counts are poisoned"))
+    }
+
+    /// The tables the register program reads, as the artifact carries them: each token's stop,
+    /// arm and open bits, the last two from the counts' signs as they stand now.
+    pub fn image(&self) -> Result<PlaceImage> {
+        let counts = self.counts()?;
+        let class = (0..self.stop.len())
+            .map(|v| {
+                let bit = |on: bool, bit: i16| if on { bit } else { 0 };
+                bit(self.stop[v], PLACE_STOP) | bit(counts.arm[v] > 0, PLACE_ARM) | bit(counts.open[v] > 0, PLACE_OPEN)
+            })
+            .collect();
+        PlaceImage::checked(self.marks.clone(), class, self.stop.len()).map_err(invalid)
+    }
+
+    /// The two gains as they stand, for a sheet's reading.
+    pub fn gains(&self) -> Result<PlaceCounts> {
+        Ok(self.counts()?.clone())
+    }
+
+    fn saved(&self) -> Result<PlaceSaved> {
+        let stop = (0..self.stop.len() as u32).filter(|&v| self.stop[v as usize]).collect();
+        Ok(PlaceSaved { marks: self.marks.clone(), stop, counts: self.counts()?.clone() })
+    }
+}
+
+/// The tokens a read stops at as flags over `vocab` tokens; a token past the vocabulary is refused.
+fn stop_flags(stop: &[u32], vocab: usize) -> Result<Vec<bool>> {
+    let mut flags = vec![false; vocab];
+    for &token in stop {
+        *flags
+            .get_mut(token as usize)
+            .ok_or_else(|| invalid(format!("stop token {token} is past the {vocab}-token vocabulary")))? = true;
+    }
+    Ok(flags)
+}
+
+/// What a window's reply is labelled with (claude-351), in the window's own positions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlaceLabel {
+    /// The place, the position in an earlier user turn of the value's first token, and the
+    /// value-start row, the reply row that predicts that token.
+    At { place: usize, value_row: usize },
+    /// The reply has a place, and the window does not hold it: the reply teaches nothing.
+    Outside,
+}
+
+/// A batch's labels (claude-351), keyed by the flat row each reply starts at, `b · time + t`, the
+/// row of the last token of its role marker. A reply with no entry has no label.
+pub type PlaceLabels = std::collections::HashMap<usize, PlaceLabel>;
+
+/// What the trainer of the place read needs beside its corpus (claude-351), written by
+/// `--turn-census` from that corpus and its oracle twin: the marks, the tokens a read stops at,
+/// and each labelled reply's `[reply start, place, value start, value length]` in corpus
+/// positions, in ascending reply start.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlaceKit {
+    pub marks: PlaceMarks,
+    pub stop: Vec<u32>,
+    pub places: Vec<[u32; 4]>,
+}
+
+impl PlaceKit {
+    /// The kit at `path`, refused unless its places are in ascending reply start and each place
+    /// stands before its reply and its value inside it.
+    pub fn load(path: &Path) -> Result<Self> {
+        let kit: Self = serde_json::from_slice(&std::fs::read(path)?)
+            .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+        kit.check()?;
+        Ok(kit)
+    }
+
+    pub fn check(&self) -> Result<()> {
+        let ordered = self.places.windows(2).all(|w| w[0][0] < w[1][0]);
+        let whole = self.places.iter().all(|&[reply, s, p, len]| s >= 2 && s < reply && reply <= p && len >= 1);
+        if !ordered || !whole {
+            return Err(invalid("the place kit's labels are out of order, or a place does not stand before its reply"));
+        }
+        Ok(())
+    }
+
+    /// The labels of the windows that start at the corpus positions `starts`, each `time` long.
+    /// A reply that starts at corpus position `r` is reported at the row before it. Its place is
+    /// a candidate only from the window's third position on, so an earlier one is [`Outside`].
+    ///
+    /// [`Outside`]: PlaceLabel::Outside
+    pub fn labels(&self, starts: &[usize], time: usize) -> PlaceLabels {
+        let mut out = PlaceLabels::new();
+        for (b, &start) in starts.iter().enumerate() {
+            let from = self.places.partition_point(|p| (p[0] as usize) <= start);
+            let inside = self.places[from..].iter().take_while(|p| (p[0] as usize) <= start + time);
+            for &[reply, s, p, _] in inside {
+                let (reply, s, p) = (reply as usize, s as usize, p as usize);
+                let label = if s >= start + 2 {
+                    PlaceLabel::At { place: s - start, value_row: p - 1 - start }
+                } else {
+                    PlaceLabel::Outside
+                };
+                out.insert(b * time + reply - 1 - start, label);
+            }
+        }
+        out
+    }
+}
+
+thread_local! {
+    /// claude-351: the kit the training step labels its windows from, when the place read trains.
+    static PLACE_KIT: RefCell<Option<std::sync::Arc<PlaceKit>>> = const { RefCell::new(None) };
+}
+
+/// Make `kit` the labels the training step reads on this thread, or none.
+pub fn set_place_kit(kit: Option<PlaceKit>) {
+    PLACE_KIT.with(|cell| *cell.borrow_mut() = kit.map(std::sync::Arc::new));
+}
+
+/// The labels the training step reads on this thread, if set.
+pub fn place_kit() -> Option<std::sync::Arc<PlaceKit>> {
+    PLACE_KIT.with(|cell| cell.borrow().clone())
+}
+
+/// A float margin in bits at Q16, as the export rounds it, so the trainer's find tests the
+/// margin the artifact will.
+fn margin_q16(margin: f32) -> i32 {
+    (f64::from(margin) * 65536.0).round() as i32
+}
+
+/// One row's sign bits, a byte a coordinate, packed a head to a word in coordinate order, as
+/// [`pack_signs`] packs a served code.
+fn pack_heads(row: &[u8], head_width: usize) -> Vec<u64> {
+    row.chunks(head_width)
+        .map(|head| head.iter().enumerate().fold(0u64, |word, (i, &b)| word | (u64::from(b != 0) << i)))
+        .collect()
+}
+
+/// The register program over a batch's windows (claude-351): one [`PlaceState`] a window, read
+/// from the window's first token as a session reads a conversation, each question asked through
+/// [`place_find`]. `q[r · asks + j]` is ask head `j`'s question code at flat row `r` and
+/// `k[r · asks + j]` its key code of the token before row `r`, `asks = margins.len()`.
+fn place_pass(
+    image: &PlaceImage,
+    first: u64,
+    margins: &[i32],
+    ids: &[u32],
+    time: usize,
+    q: &[u64],
+    k: &[u64],
+) -> Vec<PlaceRow> {
+    let asks = margins.len();
+    let mut rows = Vec::with_capacity(ids.len());
+    for (b, window) in ids.chunks(time).enumerate() {
+        let base = b * time;
+        let mut state = PlaceState::default();
+        for t in 0..window.len() {
+            rows.push(state.advance(&window[..=t], image, |users| {
+                // The key code of the token at `p` is the one row `p + 1` holds.
+                place_find(first, margins, users, t, |j| q[(base + t) * asks + j], |j, p| k[(base + p + 1) * asks + j])
+            }));
+        }
+    }
+    rows
+}
+
+/// One vote on a token's count: up or down by one, held inside [`PLACE_COUNT_BOUND`].
+fn place_vote(counts: &mut [i16], token: u32, up: bool) {
+    if let Some(count) = counts.get_mut(token as usize) {
+        *count = (*count + if up { 1 } else { -1 }).clamp(-PLACE_COUNT_BOUND, PLACE_COUNT_BOUND);
+    }
+}
+
+/// What a pass teaches (claude-351), from `rows` ([`place_pass`]) and the batch's `labels`.
+///
+/// The arm count of a question row's token goes up when the row's find is the labelled place,
+/// and down when it is another place or the reply has no label. The open count of a reply row's
+/// token goes up at the value-start row when the register is at the labelled place, and down at
+/// an earlier row of that reply, or at any row of a reply whose register is set anywhere else.
+/// A row the step opened is left out, as is every row after the value-start row. A reply whose
+/// place the window does not hold votes on nothing.
+///
+/// Returns the pull's pairs, flat rows `(t, s)`: every row `t` of a labelled question, from the
+/// window's second, with the labelled place `s`.
+fn place_learn(
+    rows: &[PlaceRow],
+    ids: &[u32],
+    time: usize,
+    labels: &PlaceLabels,
+    counts: &mut PlaceCounts,
+) -> Vec<(u32, u32)> {
+    let mut pairs = Vec::new();
+    for (b, window) in rows.chunks(time).enumerate() {
+        let base = b * time;
+        // The reply the rows are in: its label, and whether its value-start row has passed.
+        let mut reply: Option<(Option<PlaceLabel>, bool)> = None;
+        for (t, row) in window.iter().enumerate() {
+            if let Some((content, found)) = &row.asked {
+                let label = labels.get(&(base + t)).copied();
+                reply = Some((label, false));
+                match label {
+                    Some(PlaceLabel::Outside) => {}
+                    Some(PlaceLabel::At { place, .. }) => {
+                        for &(at, pos) in found {
+                            place_vote(&mut counts.arm, ids[base + at], pos == place);
+                        }
+                        let asking = content.clone().filter(|&at| at >= 1);
+                        pairs.extend(asking.map(|at| ((base + at) as u32, (base + place) as u32)));
+                    }
+                    None => {
+                        for &(at, _) in found {
+                            place_vote(&mut counts.arm, ids[base + at], false);
+                        }
+                    }
+                }
+            }
+            let (Some(held), Some((label, passed))) = (row.held, reply.as_mut()) else {
+                continue;
+            };
+            if row.stepped || *passed {
+                continue;
+            }
+            let token = ids[base + t];
+            match *label {
+                Some(PlaceLabel::Outside) => {}
+                Some(PlaceLabel::At { place, value_row }) if held == place => {
+                    if t == value_row {
+                        place_vote(&mut counts.open, token, true);
+                    }
+                    if t < value_row {
+                        place_vote(&mut counts.open, token, false);
+                    }
+                    *passed = t >= value_row;
+                }
+                _ => place_vote(&mut counts.open, token, false),
+            }
+        }
+    }
+    pairs
+}
+
+impl HammingRead {
+    /// claude-351: the register program's rows over `ids`' windows of `time`, its questions asked
+    /// on the ask heads' sign codes in `query` and `key` `(rows, width)`, the forward's own or
+    /// [`Self::place_codes`]'. The codes cross to the host as one byte a coordinate.
+    fn place_rows(
+        &self,
+        place: &PlaceRead,
+        query: &Tensor,
+        key: &Tensor,
+        ids: &[u32],
+        time: usize,
+    ) -> Result<Vec<PlaceRow>> {
+        let head_width = query.dim(1)? / self.heads;
+        let copy_heads = self.copy_heads();
+        let asks = self.heads - copy_heads;
+        let host = |codes: &Tensor| -> Result<Vec<u64>> {
+            let bits = codes
+                .narrow(1, copy_heads * head_width, asks * head_width)?
+                .contiguous()?
+                .ge(0.0)?
+                .to_vec2::<u8>()?;
+            Ok(bits.iter().flat_map(|row| pack_heads(row, head_width)).collect())
+        };
+        let margins: Vec<i32> = self.margin.as_tensor().to_vec1::<f32>()?[copy_heads..]
+            .iter()
+            .map(|&m| margin_q16(m))
+            .collect();
+        let image = place.image()?;
+        Ok(place_pass(&image, place_first(head_width), &margins, ids, time, &host(query)?, &host(key)?))
+    }
+
+    /// claude-351: every row's question and key coordinates as the readout read's forward
+    /// computes them for its ask heads, `(rows, width)` each, detached: the current token's point
+    /// plus its question row, and the previous token's point, both through the key's rotation.
+    fn place_codes(&self, ids: &[u32], time: usize, table: &Tensor) -> Result<(Tensor, Tensor)> {
+        let ask = self
+            .ask
+            .as_ref()
+            .ok_or_else(|| invalid("the place read finds with the ask heads"))?;
+        let (rows, device) = (ids.len(), table.device());
+        let table = table.detach();
+        let points = |ids: Vec<u32>| -> Result<Tensor> {
+            Ok(table.index_select(&Tensor::from_vec(ids, rows, device)?, 0)?)
+        };
+        let previous: Vec<u32> = (0..rows)
+            .map(|r| if r % time == 0 { ids[r] } else { ids[r - 1] })
+            .collect();
+        let (current, previous) = (points(ids.to_vec())?, points(previous)?);
+        as_trained(|| {
+            Ok((
+                Self::rotate(&self.key_rotation, &self.asked(&current, ask, ids, time)?)?.detach(),
+                Self::rotate(&self.key_rotation, &previous)?.detach(),
+            ))
+        })
+    }
+
+    /// claude-351: the place pull over `pairs`, flat rows `(t, s)`. Each row's question row is
+    /// pulled toward the key that names the token before the place, on the half of each ask head
+    /// the question row moves: the sum over the pairs of the nearer head's `bits / half`, and how
+    /// many pairs. The key and the rotation are detached, so only the question rows learn. The
+    /// other half of a question is the previous token's own code, which nothing here moves.
+    fn place_pull_bits(
+        &self,
+        ids: &[u32],
+        table: &Tensor,
+        pairs: &[(u32, u32)],
+    ) -> Result<(Tensor, usize)> {
+        let ask = self
+            .ask
+            .as_ref()
+            .ok_or_else(|| invalid("the place pull needs the ask heads"))?;
+        let (n, device) = (pairs.len(), table.device());
+        let width = table.dim(1)?;
+        let head_width = width / self.heads;
+        let half = head_width / 2;
+        let (copy_heads, asks) = (self.copy_heads(), self.heads - self.copy_heads());
+        let table = table.detach();
+        let tokens = |rows: Vec<u32>| Tensor::from_vec(rows, n, device);
+        let asking: Vec<u32> = pairs.iter().map(|&(t, _)| ids[t as usize]).collect();
+        check_ask_ids(ask, &asking)?;
+        let named: Vec<u32> = pairs.iter().map(|&(_, s)| ids[s as usize - 1]).collect();
+        let current = table.index_select(&tokens(asking.clone())?, 0)?;
+        let keyed = table.index_select(&tokens(named)?, 0)?;
+        let rotation = self.key_rotation.as_tensor().detach();
+        let (query, key) = as_trained(|| {
+            let question = current.add(&ask.as_tensor().index_select(&tokens(asking)?, 0)?)?;
+            Ok((
+                Self::rotate_by(&rotation, &question)?,
+                Self::rotate_by(&rotation, &keyed)?.detach(),
+            ))
+        })?;
+        let signs = |p: &Tensor| -> Result<Tensor> {
+            Ok(p.ge(0.0)?.to_dtype(DType::F32)?.affine(2.0, -1.0)?)
+        };
+        // Each ask head's first half, `(n, asks, half)`.
+        let halves = |p: &Tensor| -> Result<Tensor> {
+            Ok(p.narrow(1, copy_heads * head_width, asks * head_width)?
+                .reshape((n, asks, head_width))?
+                .narrow(2, 0, half)?
+                .contiguous()?)
+        };
+        // The read's straight-through code on the question; the key's code is a constant.
+        let q = halves(&query)?;
+        let q = q.add(&signs(&q)?.sub(&q)?.detach())?;
+        let k = signs(&halves(&key)?)?;
+        let bits = q.mul(&k)?.sum(2)?.affine(-0.5, half as f64 / 2.0)?;
+        let values = bits.detach().to_vec2::<f32>()?;
+        let chosen: Vec<u32> = values
+            .iter()
+            .enumerate()
+            .map(|(i, row)| (i * asks + nearer_head(row)) as u32)
+            .collect();
+        let picked = bits.flatten_all()?.index_select(&tokens(chosen)?, 0)?;
+        Ok((picked.sum_all()?.affine(1.0 / half as f64, 0.0)?, n))
+    }
+}
+
+/// The head with the fewest bits, the lower head on a tie: the one a pair pulls.
+fn nearer_head(bits: &[f32]) -> usize {
+    (0..bits.len())
+        .min_by(|&a, &b| bits[a].total_cmp(&bits[b]).then(a.cmp(&b)))
+        .unwrap_or(0)
+}
+
+impl HammingReads {
+    /// The same reads with the place read on the readout read (claude-351, `--hamming-place`):
+    /// one place register a conversation, set by the ask heads' two-token find over the earlier
+    /// user turns, and at an open reply row the point of the token at the place as the copy
+    /// mix's source. `marks` frame a conversation and `stop` are the tokens a read stops at.
+    /// Both gains start at zero, so at the start no row arms and the forward is the forward
+    /// without it, less the readout read's ask write, which the place read replaces. The readout
+    /// read's ask heads take a margin of an eighth of a head's bits: a find is a match on both
+    /// tokens of the question, and a quarter would pass half of the candidates that match one.
+    pub fn with_place(self, marks: PlaceMarks, stop: &[u32]) -> Result<Self> {
+        let vocab = self.place_vocab()?;
+        let counts = PlaceCounts { arm: vec![0; vocab], open: vec![0; vocab] };
+        let mut reads = self.with_place_state(marks, stop, counts)?;
+        let read = &mut reads.reads[1];
+        let head_width = read.weight.dim(1)? / read.heads;
+        let copy_heads = read.copy_heads();
+        let device = read.weight.device().clone();
+        let margins: Vec<f32> = read
+            .margin
+            .as_tensor()
+            .to_vec1::<f32>()?
+            .into_iter()
+            .enumerate()
+            .map(|(h, m)| if h < copy_heads { m } else { (head_width / 8) as f32 })
+            .collect();
+        read.margin = Var::from_tensor(&Tensor::from_vec(margins, read.heads, &device)?)?;
+        Ok(reads)
+    }
+
+    /// How many tokens the readout read's question table has, the place read's vocabulary; the
+    /// reads the place read cannot sit on are refused here.
+    fn place_vocab(&self) -> Result<usize> {
+        if !self.has_ask() {
+            return Err(invalid("the place read finds with the ask heads; turn them on with --hamming-ask 1"));
+        }
+        if self.carry_rows() > 0 {
+            return Err(invalid(
+                "the place read and the question carry both change the readout read's question; one is on at a time",
+            ));
+        }
+        let read = self
+            .reads
+            .get(1)
+            .ok_or_else(|| invalid("the place read is the readout read's, and there is none"))?;
+        let head_width = read.weight.dim(1)? / read.heads;
+        if head_width > 64 || !head_width.is_multiple_of(8) {
+            return Err(invalid(format!(
+                "the place read needs heads of whole 8-coordinate blocks of at most 64 coordinates, not {head_width}"
+            )));
+        }
+        match &read.ask {
+            Some(ask) => Ok(ask.as_tensor().dim(0)?),
+            None => Err(invalid("the place read finds with the ask heads")),
+        }
+    }
+
+    /// The reads with the place read's host state attached as given, margins untouched.
+    fn with_place_state(mut self, marks: PlaceMarks, stop: &[u32], counts: PlaceCounts) -> Result<Self> {
+        let vocab = self.place_vocab()?;
+        self.reads[1].place = Some(PlaceRead::new(marks, stop_flags(stop, vocab)?, counts)?);
+        Ok(self)
+    }
+
+    /// The reads with the place read saved in `directory`, when it holds one.
+    fn with_saved_place(self, directory: &Path) -> Result<Self> {
+        let path = directory.join(PLACE_FILE);
+        if !path.exists() {
+            return Ok(self);
+        }
+        let saved: PlaceSaved = serde_json::from_slice(&std::fs::read(&path)?)
+            .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+        self.with_place_state(saved.marks, &saved.stop, saved.counts)
+    }
+
+    /// The readout read's place read, when on.
+    pub fn place(&self) -> Option<&PlaceRead> {
+        self.reads.get(1).and_then(|r| r.place.as_ref())
+    }
+
+    /// One training step of the place read (claude-351) on `ids`' windows of `time`, with the
+    /// batch's `labels`: the register program runs over every window on the ask heads' own
+    /// codes, the two gains take their votes, and the place pull is returned, the mean over
+    /// every row of every labelled question of the nearer head's distance to the key of the
+    /// labelled place, for the caller to scale. `None` when no question in the batch is labelled.
+    pub fn place_step(
+        &self,
+        ids: &[u32],
+        time: usize,
+        table: &Tensor,
+        labels: &PlaceLabels,
+    ) -> Result<Option<Tensor>> {
+        let read = self
+            .reads
+            .get(1)
+            .ok_or_else(|| invalid("the place read is the readout read's, and there is none"))?;
+        let place = read
+            .place
+            .as_ref()
+            .ok_or_else(|| invalid("the place step needs the place read; turn it on with --hamming-place"))?;
+        if time == 0 || !ids.len().is_multiple_of(time) {
+            return Err(invalid("the place step needs whole windows"));
+        }
+        let (query, key) = read.place_codes(ids, time, table)?;
+        let rows = read.place_rows(place, &query, &key, ids, time)?;
+        let pairs = place_learn(&rows, ids, time, labels, &mut *place.counts()?);
+        if pairs.is_empty() {
+            return Ok(None);
+        }
+        let (sum, terms) = read.place_pull_bits(ids, table, &pairs)?;
+        Ok(Some(sum.affine(1.0 / terms as f64, 0.0)?))
     }
 }
 
@@ -5475,3 +6059,186 @@ mod i1_digest {
     }
 }
 // I1-DIGEST END
+
+/// claude-351: the place read's host side, which runs with no device.
+#[cfg(test)]
+mod place_tests {
+    use super::*;
+
+    const BOS: u32 = 0;
+    const SEP: u32 = 2;
+    const USER: u32 = 4;
+    const MODEL: u32 = 5;
+    const DOT: u32 = 13;
+    const ASK: u32 = 15;
+    const MY: u32 = 20;
+    const NAME: u32 = 21;
+    const IS: u32 = 22;
+    const OK: u32 = 23;
+    const ITS: u32 = 24;
+    const MAYA: u32 = 30;
+    /// "my name is maya ." / "ok ." / "name ?" / "it's maya .": the question's last row asks
+    /// for the place after "name is", position 5; the reply starts at row 16 and names the
+    /// value from row 17.
+    const TALK: [u32; 20] = [
+        BOS, USER, MY, NAME, IS, MAYA, DOT, SEP, MODEL, OK, DOT, SEP, USER, NAME, ASK, SEP, MODEL,
+        ITS, MAYA, DOT,
+    ];
+    const VOCAB: usize = 32;
+
+    fn marks() -> PlaceMarks {
+        PlaceMarks { bos: BOS, eos: 1, sep: vec![SEP], system: vec![3], user: vec![USER], assistant: vec![MODEL] }
+    }
+
+    /// A token's key code on one head of 16 coordinates: its id in each half.
+    fn key(token: u32) -> u64 {
+        u64::from(token) | (u64::from(token) << 8)
+    }
+
+    /// The codes of `ids`' rows for one ask head: a row asks as its own token does, but for
+    /// `ASK`, whose learned question names "is"; a row's key code is the token before it.
+    fn codes(ids: &[u32]) -> (Vec<u64>, Vec<u64>) {
+        let q = ids.iter().map(|&t| key(if t == ASK { IS } else { t })).collect();
+        let k = (0..ids.len()).map(|r| key(ids[r.saturating_sub(1)])).collect();
+        (q, k)
+    }
+
+    fn place() -> PlaceRead {
+        let counts = PlaceCounts { arm: vec![0; VOCAB], open: vec![0; VOCAB] };
+        PlaceRead::new(marks(), stop_flags(&[DOT], VOCAB).expect("flags"), counts).expect("a place read")
+    }
+
+    /// One pass and its votes, with an exact margin: the rows' offers and the pull's pairs.
+    fn step(place: &PlaceRead, labels: &PlaceLabels) -> (Vec<Option<usize>>, Vec<(u32, u32)>) {
+        let (q, k) = codes(&TALK);
+        let image = place.image().expect("an image");
+        let rows = place_pass(&image, place_first(16), &[1 << 16], &TALK, TALK.len(), &q, &k);
+        let pairs = place_learn(&rows, &TALK, TALK.len(), labels, &mut place.counts().expect("counts"));
+        (rows.into_iter().map(|r| r.offer).collect(), pairs)
+    }
+
+    fn kit() -> PlaceKit {
+        PlaceKit { marks: marks(), stop: vec![DOT], places: vec![[17, 5, 18, 1]] }
+    }
+
+    #[test]
+    fn the_gains_learn_the_arm_then_the_open_and_then_the_read_opens() {
+        let (place, labels) = (place(), kit().labels(&[0], TALK.len()));
+        assert_eq!(labels.get(&16), Some(&PlaceLabel::At { place: 5, value_row: 17 }));
+        let closed = vec![None; TALK.len()];
+        // Nothing is armed: the find is right, so the question token's arm count goes up, and
+        // both rows of the question pull toward the place.
+        let (offers, pairs) = step(&place, &labels);
+        assert_eq!((offers, pairs), (closed.clone(), vec![(13, 5), (14, 5)]));
+        let gains = place.gains().expect("gains");
+        assert_eq!((gains.arm[ASK as usize], gains.open.iter().any(|&c| c != 0)), (1, false));
+        // The register is set: the value-start row's token goes up, the row before it down.
+        assert_eq!(step(&place, &labels).0, closed);
+        let gains = place.gains().expect("gains");
+        assert_eq!((gains.open[ITS as usize], gains.open[MODEL as usize]), (1, -1));
+        assert_eq!(gains.open.iter().filter(|&&c| c != 0).count(), 2);
+        // The read opens at the value-start row and offers the place; "maya" steps onto the
+        // stop token and the register clears. An opened value row votes as before, and no other.
+        let mut open = closed;
+        open[17] = Some(5);
+        assert_eq!(step(&place, &labels).0, open);
+        let gains = place.gains().expect("gains");
+        assert_eq!((gains.arm[ASK as usize], gains.open[ITS as usize], gains.open[MODEL as usize]), (3, 2, -2));
+        assert_eq!(gains.open[MAYA as usize], 0);
+    }
+
+    #[test]
+    fn a_reply_with_no_label_or_another_place_votes_down_and_one_outside_votes_on_nothing() {
+        // No label: the find is a wrong vote, and nothing is pulled.
+        let place = place();
+        assert_eq!(step(&place, &PlaceLabels::new()).1, Vec::new());
+        assert_eq!(place.gains().expect("gains").arm[ASK as usize], -1);
+        // Outside: no vote and no pull.
+        let place = self::place();
+        let outside = PlaceLabels::from([(16, PlaceLabel::Outside)]);
+        assert_eq!(step(&place, &outside).1, Vec::new());
+        assert_eq!(place.gains().expect("gains"), PlaceCounts { arm: vec![0; VOCAB], open: vec![0; VOCAB] });
+        // Another place, with the register armed: the find votes down, and every reply row
+        // votes its token's open count down, for the register is set at a place that is not it.
+        let place = self::place();
+        place.counts().expect("counts").arm[ASK as usize] = 2;
+        let other = PlaceLabels::from([(16, PlaceLabel::At { place: 4, value_row: 17 })]);
+        assert_eq!(step(&place, &other).1, vec![(13, 4), (14, 4)]);
+        let gains = place.gains().expect("gains");
+        assert_eq!(gains.arm[ASK as usize], 1);
+        for token in [MODEL, ITS, MAYA, DOT] {
+            assert_eq!(gains.open[token as usize], -1, "token {token}");
+        }
+    }
+
+    #[test]
+    fn a_count_saturates_at_its_bound() {
+        let mut counts = vec![0i16; 4];
+        for _ in 0..200 {
+            place_vote(&mut counts, 1, true);
+            place_vote(&mut counts, 2, false);
+        }
+        place_vote(&mut counts, 9, true);
+        assert_eq!(counts, vec![0, PLACE_COUNT_BOUND, -PLACE_COUNT_BOUND, 0]);
+    }
+
+    #[test]
+    fn a_windows_labels_are_in_its_own_positions() {
+        let kit = kit();
+        kit.check().expect("a sound kit");
+        // The window starts four tokens in: the place, corpus position 5, is its second
+        // position, before any candidate, so the label is outside.
+        assert_eq!(kit.labels(&[4], 16), PlaceLabels::from([(12, PlaceLabel::Outside)]));
+        // Two windows: the second, from corpus position 3, holds the place at its third position.
+        let two = kit.labels(&[0, 3], 20);
+        assert_eq!(two.get(&16), Some(&PlaceLabel::At { place: 5, value_row: 17 }));
+        assert_eq!(two.get(&(20 + 13)), Some(&PlaceLabel::At { place: 2, value_row: 14 }));
+        assert_eq!(two.len(), 2);
+        // A window that ends before the reply's first token has no row for it.
+        assert!(kit.labels(&[0], 16).is_empty());
+        assert!(kit.labels(&[17], 16).is_empty());
+        // Refused: labels out of order, and a place at or after its reply.
+        let mut bad = kit.clone();
+        bad.places.push([17, 5, 18, 1]);
+        assert!(bad.check().is_err());
+        bad.places = vec![[17, 17, 18, 1]];
+        assert!(bad.check().is_err());
+    }
+
+    #[test]
+    fn a_rows_bits_pack_as_a_served_code_and_the_nearer_head_is_the_lower_on_a_tie() {
+        let coordinates: Vec<f32> = (0..64).map(|i| if i % 3 == 0 { 0.5 } else { -0.5 }).collect();
+        let bytes: Vec<u8> = coordinates.iter().map(|&c| u8::from(c >= 0.0)).collect();
+        assert_eq!(pack_heads(&bytes, 64), pack_signs(&coordinates));
+        // Two heads of 16: each head's bits start again at bit 0.
+        let two = pack_heads(&bytes[..32], 16);
+        assert_eq!(two, vec![pack_signs(&coordinates[..16])[0], pack_signs(&coordinates[16..32])[0]]);
+        assert_eq!(margin_q16(8.0), 8 << 16);
+        assert_eq!((nearer_head(&[3.0, 3.0]), nearer_head(&[4.0, 3.0]), nearer_head(&[])), (0, 1, 0));
+    }
+
+    #[test]
+    fn the_image_reads_the_counts_by_their_sign() {
+        let place = place();
+        {
+            let mut counts = place.counts().expect("counts");
+            counts.arm[ASK as usize] = 1;
+            counts.arm[NAME as usize] = -3;
+            counts.open[ITS as usize] = PLACE_COUNT_BOUND;
+        }
+        let image = place.image().expect("an image");
+        assert!(image.has(ASK, PLACE_ARM) && !image.has(NAME, PLACE_ARM) && !image.has(MY, PLACE_ARM));
+        assert!(image.has(ITS, PLACE_OPEN) && !image.has(OK, PLACE_OPEN));
+        assert!(image.has(DOT, PLACE_STOP) && !image.has(MAYA, PLACE_STOP));
+        // The saved form and back: the same marks, stop tokens and counts.
+        let saved = place.saved().expect("saved");
+        let text = serde_json::to_vec(&saved).expect("json");
+        let back: PlaceSaved = serde_json::from_slice(&text).expect("json");
+        let again = PlaceRead::new(back.marks, stop_flags(&back.stop, VOCAB).expect("flags"), back.counts).expect("a place read");
+        assert_eq!(again.image().expect("an image"), image);
+        // Counts for another vocabulary are refused.
+        let short = PlaceCounts { arm: vec![0; 3], open: vec![0; VOCAB] };
+        assert!(PlaceRead::new(marks(), vec![false; VOCAB], short).is_err());
+        assert!(stop_flags(&[VOCAB as u32], VOCAB).is_err());
+    }
+}

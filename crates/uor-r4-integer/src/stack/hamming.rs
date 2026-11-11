@@ -11,7 +11,7 @@ use crate::fbs_snapshot::{CodeRole, ForcedCode, HammingTraceHead, HammingTraceRe
 
 use core::ops::Range;
 
-use crate::fbs_snapshot::{place_pick, PlaceImage, PlaceState};
+use crate::fbs_snapshot::{place_find, place_first, PlaceImage, PlaceState};
 
 use super::format::{Container, StackHamming, HAMMING_WEIGHT_EXP};
 use super::kernels::{stack_div_u64, stack_hamilton, NORM_FINE_EXP, RESIDUAL_EXP};
@@ -967,20 +967,16 @@ struct ServedPlace {
 
 impl ServedPlace {
     /// The place the question at the last row `t` of `tokens` finds among `users`, the contents
-    /// of the finished user turns ([`place_pick`]). A head asks with its learned question for
-    /// `x_t` in the first half and `x_{t−1}`'s key code in the second; its key at `s` is
-    /// `x_{s−1}`'s key code in the first half and `x_{s−2}`'s in the second.
+    /// of the finished user turns: [`place_find`], the two-token question the float trainer
+    /// asks too, on this artifact's question and key codes.
     fn find(&self, table: &[i16], tokens: &[u32], users: &[Range<usize>]) -> Option<usize> {
         let t = tokens.len().checked_sub(1).filter(|&t| t >= 1)?;
         let heads = &self.heads;
-        let joined = |near: u64, far: u64| (near & self.first) | (far & !self.first);
-        let queries: Vec<u64> = heads
-            .ask_queries(table, tokens, t, 0)?
-            .into_iter()
-            .enumerate()
-            .map(|(j, ask)| joined(ask, heads.key(tokens[t - 1], j)))
-            .collect();
-        place_pick(&queries, &heads.margins, users, |j, s| joined(heads.key(tokens[s - 1], j), heads.key(tokens[s - 2], j)))
+        let asks = heads.ask_queries(table, tokens, t, 0)?;
+        if asks.len() != heads.margins.len() {
+            return None;
+        }
+        place_find(self.first, &heads.margins, users, t, |j| asks[j], |j, p| heads.key(tokens[p], j))
     }
 }
 
@@ -1029,7 +1025,7 @@ impl ServedHamming {
                 place = Some(ServedPlace {
                     heads: TypeHeads::new(&image.record, read, table, vocab, width).with_ask(ask),
                     image: tables.clone(),
-                    first: (1u64 << (width / image.record.heads / 2)) - 1,
+                    first: place_first(width / image.record.heads),
                 });
             }
             let typed = places.is_none() && type_weight.iter().any(|&w| w != 0);

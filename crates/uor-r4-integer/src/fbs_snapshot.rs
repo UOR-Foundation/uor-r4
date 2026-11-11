@@ -2733,7 +2733,8 @@ pub const PLACE_OPEN: i16 = 4;
 
 /// The place read's tables (claude-351): the marks that frame a conversation, and each vocabulary
 /// entry's class, [`PLACE_STOP`], [`PLACE_ARM`] and [`PLACE_OPEN`] or-ed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PlaceImage {
     pub marks: PlaceMarks,
     pub class: Vec<i16>,
@@ -2945,6 +2946,33 @@ impl PlaceState {
         self.offer = row.offer;
         row
     }
+}
+
+/// The two-token question at row `t` and its find (claude-351): what the integer session and the
+/// float trainer both call, so the question is put together in one place. Head `j` asks with its
+/// learned question code for `x_t` (`ask(j)`) in the bits of `first`, a head's first half, and
+/// with `x_{t−1}`'s key code in the rest; its key at `s` is `x_{s−1}`'s key code in the first
+/// half and `x_{s−2}`'s in the rest. `key(j, p)` is head `j`'s key code of the token at position
+/// `p`. Row 0 has no token before it and finds nothing. The rest is [`place_pick`]'s.
+pub fn place_find(
+    first: u64,
+    margins: &[i32],
+    users: &[Range<usize>],
+    t: usize,
+    ask: impl Fn(usize) -> u64,
+    key: impl Fn(usize, usize) -> u64,
+) -> Option<usize> {
+    if t < 1 {
+        return None;
+    }
+    let joined = |near: u64, far: u64| (near & first) | (far & !first);
+    let queries: Vec<u64> = (0..margins.len()).map(|j| joined(ask(j), key(j, t - 1))).collect();
+    place_pick(&queries, margins, users, |j, s| joined(key(j, s - 1), key(j, s - 2)))
+}
+
+/// The bits of a head's first half, of a head of `head_width` coordinates (at most 64).
+pub fn place_first(head_width: usize) -> u64 {
+    (1u64 << (head_width / 2)) - 1
 }
 
 /// One question row's find (claude-351): over the candidate positions, each head's nearest key,
