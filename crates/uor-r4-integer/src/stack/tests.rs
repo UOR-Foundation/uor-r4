@@ -2123,6 +2123,42 @@ fn a_read_step_leaves_the_session_as_a_choosing_step_does() {
     assert_eq!(read.last_native_token(), Some(pick), "the writer head still chooses");
 }
 
+/// claude-348: a read step that is refused clears its mark, so the next step chooses again.
+#[test]
+fn a_refused_read_step_leaves_the_next_step_choosing() {
+    let mut snap = synthetic_fbs_trunk(20261110);
+    snap.readout_nearest = true;
+    let model = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&snap).expect("export")).expect("parse");
+    let vocab = model.shape().vocab as u32;
+    let (mut fresh, mut refused) = (model.session(), model.session());
+    assert!(refused.read_step(vocab).is_err(), "an id outside the vocabulary is refused");
+    assert_eq!(refused.serve_step(3).expect("a choosing step"), fresh.serve_step(3).expect("a choosing step"));
+    assert!(refused.last_native_token().is_some(), "the step after a refused read step chooses");
+}
+
+/// claude-348: a feed that stops on an id outside the vocabulary has read its last stepped token
+/// without a choice. Asking for a reply to the history up to that token steps it again, and the
+/// reply is what a session stepped in full serves. The model has no turn memory, whose own reset
+/// would hide this.
+#[test]
+fn stack_chat_serves_the_last_token_after_a_feed_that_stopped_on_an_error() -> ChatTest {
+    let (model, json) = chat(7)?;
+    assert!(model.turn_memory().is_none());
+    let mut chat = open_chat(&model, &json)?;
+    let (bos, eos) = (chat.protocol().bos_id, chat.protocol().eos_id);
+    let vocab = model.shape().vocab as u32;
+    // The fixture's context is six tokens: two read, the refused id, and two of reply fit.
+    let good = [bos, 5 % vocab];
+    let bad = [&good[..], &[vocab]].concat();
+    assert!(
+        matches!(chat.reply_history(&bad, 2), Err(super::StackChatError::Stack(_))),
+        "the engine refuses an id outside the vocabulary after reading the two before it"
+    );
+    let reply = chat.reply_history(&good, 2)?;
+    assert_eq!(reply.ids, served_reference(&model, &good, 2, eos, false)?);
+    Ok(())
+}
+
 /// claude-259: the chat's history is the tokens the session stepped, each once. A reply that ends
 /// on EOS or a short cycle leaves its last id pending; the next turn steps it and kept a second
 /// copy in the history ("16, 1, 1, 201" on a7r-s1), which the next turn's prompt then carried.
