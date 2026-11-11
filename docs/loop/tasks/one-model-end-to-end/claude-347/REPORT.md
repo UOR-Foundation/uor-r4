@@ -14,19 +14,19 @@ Five laptop readings on the replicated arm r model, asked for by an outside revi
 
 ## What did not work, first
 
-- **Reading 3: neither arm answers a general question in wording TRAIN does not hold.** Each of the ten general questions was reworded and checked absent from TRAIN's token stream. Asked one at a time in a fresh conversation, arm r answers 0, 0 and 0 of 10 and arm rt 1, 0 and 1 of 10 (seeds 1, 2, 3); the one right reply is "No." to "Can a cat bark?". In TRAIN's wording the same programs answer 4, 4 and 5 (arm r) and 9, 10 and 9 (arm rt). The usual reply to a reworded question is the question said back.
+- **Reading 3: neither arm answers more than one of ten general questions in wording TRAIN does not hold.** Each of the ten general questions was reworded and checked absent from TRAIN's token stream. Asked one at a time in a fresh conversation, arm r answers 0, 0 and 0 of 10 and arm rt 1, 0 and 1 of 10 (seeds 1, 2, 3); the one right reply is "No." to "Can a cat bark?". In TRAIN's wording the same programs answer 4, 4 and 5 (arm r) and 9, 10 and 9 (arm rt). The usual reply to a reworded question is the question said back.
 - **Reading 3: in the 18-turn script the reworded questions take recall down too.** With the four facts stated and the sieve writing the memory line, recall is 0 of 4 at every seed for arm r and 1 of 4 at every seed for arm rt, against 3, 4, 4 and 3, 3, 3 in the same script with TRAIN's wording. The second reworded question draws "2 plus 2 is 2 is 2 is", and arm r then gives that same reply to all twelve turns after it, recall questions included.
-- **Reading 2: the model does not pick the fact; the chat program's rule does.** The same 18-turn script with the sieve off: recall is 0 of 4 at every seed on both arms, against 3, 4, 4 and 3, 3, 3 with it on. The general turns do not move (3, 2, 2 and 9, 10, 9 either way).
+- **Reading 2: with the sieve's line removed, neither arm answers any recall question.** The same 18-turn script with the sieve off: recall is 0 of 4 at every seed on both arms, against 3, 4, 4 and 3, 3, 3 with it on. So in this script recall depends on the rule's line. The reading does not separate picking the fact from reading a turn that far back. The general turns do not move (3, 2, 2 and 9, 10, 9 either way).
 - **Reading 2 was not run as the ORDER first described it.** The state-distance count was withdrawn before any run (ORDER, amendment 2): the laptop files carry no fact labels, and a miss on that count would have closed nothing.
 - **Reading 1's first number was an instrument reading.** `uor-chat --prompt-ids` steps raw token ids and never tells the session where the reply begins (`mark_reply_start`, `crates/uor-r4-integer/src/stack/session.rs`); only the text chat does. So on that path the integer artifact answers with its turn memory off, and against the float replies scored with the memory on only 678, 691 and 644 of 1,141 rows were equal. The comparison below was made with a reader written for it, `raw-id-replies`, which marks the reply start as the text chat does.
 - **The float model and its integer export still differ on some rows.** Turn memory on for both: 68, 46 and 31 of 1,141 rows (seeds 1, 2, 3). Turn memory off for both: 160, 119 and 93, of which 146, 94 and 93 are rows without a memory line.
 - **The samples do not name which rows are recall rows.** `reference_named` is 0 on every row. The split used here is read from the prompt itself: a row is a line row when its prompt holds the memory line's opening ids (`53,91,353`). 641 rows are line rows and 500 are not, at every seed.
-- **Reading 4 cannot give a count of learned values for the trunk.** The trunk's tables are stored packed (`*.fbs`, 32-bit words), so the artifact gives stored words and bytes, not learned values.
+- **Reading 4 cannot give a count of learned values for the trunk.** The trunk's tables are stored packed (`*.fbs`), so the artifact gives stored entries and bytes, not learned values.
 - **The item's claim was refused.** `uor-harness loop claim` answered that claude-346's worktree holds the item; the ORDER records it.
 
 ## What held
 
-- **The integer export keeps the float model's right answers.** Turn memory on for both, replies that equal the reference word for word: float 602, 606, 612; integer 601, 607, 614. Right in float only: 5, 0, 1. Right in the integer only: 4, 1, 3. With the memory off: float 537, 503, 498; integer 532, 503, 497.
+- **The integer export is right as often as the float model, within 2 rows of 1,141 with the memory on.** Turn memory on for both, replies that equal the reference word for word: float 602, 606, 612; integer 601, 607, 614. Right in float only: 5, 0, 1. Right in the integer only: 4, 1, 3. With the memory off: float 537, 503, 498; integer 532, 503, 497.
 - **With the memory on, the two say the same thing on 1,073, 1,095 and 1,110 of 1,141 rows.** On the 641 line rows: 631, 631 and 639.
 - **The reader's control held on every row.** With no reply mark its replies equal `uor-chat --prompt-ids` on 1,141 of 1,141 rows at each seed.
 - **No row failed to run.** 1,141 rows a seed on each path, no error line, empty error files.
@@ -37,7 +37,7 @@ Five laptop readings on the replicated arm r model, asked for by an outside revi
 
 Each of the 1,141 panel prompts in arm r's sealed float score went through the exported artifact: `uor-chat-bd2532281 --stack r-s<seed>-c8256.uorlut --tokenizer tokenizer.json --prompt-ids <the row's prompt> --max-tokens 48`, greedy `serve_step`. The two replies are compared up to and including the first end-of-reply id; the float score keeps 48 ids and runs on past it.
 
-**Turn memory on for both**, the way the product runs. Float: `samples-p-greedy-memory.json`. Integer: `raw-id-replies --mark-reply 1`, built from this branch ([source](../../../../labs/one-model-end-to-end/instrument/src/bin/raw-id-replies.rs)), which steps the same ids through `serve_step` and marks the reply start before the prompt's last id, as `StackChat::feed` does.
+**Turn memory on for both**, as a text chat turn runs it. Float: `samples-p-greedy-memory.json`. Integer: `raw-id-replies --mark-reply 1`, built from this branch ([source](../../../../labs/one-model-end-to-end/instrument/src/bin/raw-id-replies.rs)), which steps the same ids through `serve_step` and marks the reply start before the prompt's last id, as `StackChat::feed` does.
 
 | | Seed 1 | Seed 2 | Seed 3 |
 |---|---|---|---|
@@ -97,7 +97,7 @@ Split by whether the prompt holds a memory line:
 
 The instrument reading, kept so it is not taken for a model reading: against the float replies scored with the memory on (`samples-p-greedy-memory.json`), 678, 691 and 644 rows are equal, and the integer reply equals the memory-off float reply but not the memory-on one on 307, 332 and 404 rows. The reverse case is 4, 1 and 0 rows.
 
-**Instrument or model?** The 678, 691, 644 gap was the instrument: the chat program's raw-id path does not switch the turn memory on. The differences that remain once both sides run the same way are the export's, and they fall where neither side reproduces the reference: they move the count of right answers by 1, 1 and 2 with the memory on and by 5, 0 and 1 with it off.
+**Instrument or model?** The 678, 691, 644 gap was the instrument: the chat program's raw-id path does not switch the turn memory on. The differences that remain once both sides run the same way are between the float model and its export. Most fall where neither side is right: 59, 45 and 27 of the 68, 46 and 31 with the memory on, and 137, 115 and 88 of the 160, 119 and 93 with it off. With the memory on the export loses 5, 0 and 1 right replies and gains 4, 1 and 3, a net of −1, +1 and +2. With it off it loses 14, 2 and 3 and gains 9, 2 and 2, a net of −5, 0 and −1.
 
 The chat program printed a median of 1,009, 1,015 and 1,010 generated tokens per second a row. These are short prompts (17 to 192 tokens), each in a fresh process; it is not a reading at context 8,256.
 
@@ -121,7 +121,7 @@ Seed 2 with the sieve off, word for word:
 | Where did I grow up? | Where did I grow up? | Where did I grow up? |
 | What is my lucky number? | The opposite of | I grow up? |
 
-**Instrument or model?** Model. One line of the script differs, and the sieve-on column is the registered reading. Which fact answers a question is picked by the chat program's rule code and by nothing in the model: with the rule off, no recall question is answered at any seed. The general turns do not move, so they do not depend on the line.
+**Instrument or model?** Model, for this configuration. One line of the script differs, and the sieve-on column is the registered reading. With the sieve's line removed, neither arm answers any recall question at any seed, so in this script recall depends on the rule's line. The reading does not separate selection from reading earlier turns: without the line the fact is four or more turns back, and a model that could pick the fact but not read that far would score the same. The general turns do not move, so they do not depend on the line.
 
 ### Reading 3: general turns in wording TRAIN does not hold
 
@@ -194,9 +194,9 @@ The TRAIN-wording rows repeat the earlier readings of arm rt (9, 10, 9 general; 
 | 17 | What is my lucky number? | 2 plus 2 is 2 is 2 is | It's 40. |
 | 18 | Can a cat bark? | 2 plus 2 is 2 is 2 is | Can a cat bark? |
 
-Seeds 1 and 3 read the same: arm r repeats "2 plus 2 is 2 is 2 is" from turn 6 to turn 18, and arm rt recovers at turn 13.
+At seeds 1 and 3 the repeat falls on the same turns: arm r gives "2 plus 2 is 2 is 2 is" from turn 6 to turn 18, and arm rt from turn 6 to turn 12. The other replies differ a little by seed; arm rt answers "No." at turn 18 at seed 1 only.
 
-**Instrument or model?** Model. The programs, artifacts, facts and recall questions are the ones behind the earlier readings, which this run repeats; only the ten general lines changed. Two things are read apart. A reworded question gets no answer even alone, so the general answers are a lookup of TRAIN's wording. And one repeating reply in the history is then copied forward over a correct memory line, which is the copy read taking the latest matching span from the model's own bad reply.
+**Instrument or model?** Model. The programs, artifacts, facts and recall questions are the ones behind the earlier readings, which this run repeats; only the ten general lines changed. Two things are read apart. General answers arrive almost only in TRAIN's wording, even for a question asked alone. This reading does not show whether the turn memory or the trunk supplies them; claude-345 read arm rt's general count at 0 of 10 with its turn memory taken out (seed 2). And once the repeating reply is in the history, arm r gives it on every later turn, including recall turns where the line holds the answer (turns 8 and 11 above). Which part of the model repeats it was not traced.
 
 ### Reading 4: what the model holds
 
@@ -204,7 +204,7 @@ Identical at seeds 1, 2 and 3 of each arm.
 
 Arm r (`r-s<seed>-c8256.uorlut`, 14,186,496 bytes, `uor-r4.lut-stack/7`, a header of 8,777 bytes, 90 tables):
 
-| Section | Tables | Stored words | Bytes | Share of table bytes |
+| Section | Tables | Stored entries | Bytes | Share of table bytes |
 |---|---|---|---|---|
 | Turn memory | 6 | 3,007,301 | 12,029,204 | 84.8% |
 | Token table (4,096 × 256, 16-bit) | 1 | 1,048,576 | 2,097,152 | 14.8% |
@@ -213,13 +213,15 @@ Arm r (`r-s<seed>-c8256.uorlut`, 14,186,496 bytes, `uor-r4.lut-stack/7`, a heade
 | Final norm | 1 | 256 | 512 | under 0.01% |
 | All tables | 90 | 4,073,341 | 14,177,268 | |
 
-The turn memory holds 7,414 opening keys and 140,003 reply keys of 20 ids each; the reply keys alone are 2,800,060 words, 11,200,240 bytes.
+An entry is 16 bits in the token table and the final norm, 32 bits in the turn memory and the copy reads, and packed in the trunk. The file's other 451 bytes (14,186,496 − 8,777 − 14,177,268) were not attributed.
 
-Arm rt (`rt-s<seed>-c8256.uorlut`, 55,424,640 bytes, `uor-r4.lut-stack/9`, chain tail 9): the turn memory is 13,316,831 words, 53,267,324 bytes, 96.1% of the table bytes, with 7,414 opening keys and 630,933 reply keys. The other four sections are the same as arm r's.
+The turn memory holds 7,414 opening keys and 140,003 reply keys of 20 ids each; the reply keys alone are 2,800,060 ids, 11,200,240 bytes, 79.0% of the table bytes.
+
+Arm rt (`rt-s<seed>-c8256.uorlut`, 55,424,640 bytes, `uor-r4.lut-stack/9`, chain tail 9): the turn memory is 13,316,831 entries, 53,267,324 bytes, 96.1% of the table bytes, with 7,414 opening keys and 630,933 reply keys. The other four sections are the same as arm r's.
 
 A session snapshot was 48,069 bytes at position 198 (one row). It was not measured at the full context.
 
-By bytes, arm r is 85% stored TRAIN replies and arm rt is 96%. The figure quoted before this unit, 1,112,576 values, leaves the turn memory out.
+By bytes the turn memory (keys taken from TRAIN, and their index) is 84.8% of arm r's table bytes and 96.1% of arm rt's. The figure quoted before this unit, 1,112,576 values, leaves the turn memory out.
 
 ### Reading 5: the BPB scorer's floor
 
@@ -234,7 +236,7 @@ The M4 sheet ([m4-lawful-likelihood-bpb](../../../../harness/prep/m4-lawful-like
 | Lowest BPB this scorer can report (every target predicted) | 0.7188 |
 | Largest share of targets outside the top eight that still reaches 0.90, every other target predicted | 1.892% |
 
-So this scorer reports 0.72 BPB for a model that is right on every token, and one target in 53 outside the top eight puts 0.90 out of reach however good the rest is. The number measures the fixed share the scorer gives the prediction more than it measures the model. The sheet's other branch scores Q24 candidate scores; it was not computed here. The sheet and the M4 bar are outside this unit's scope: this is a reading, proposed as an addendum to the sheet.
+Under this mapping the floor is 0.72 BPB, and 0.90 needs fewer than 1.892% of targets outside the top eight, even with every other target ranked first: one in 53 still reaches it, one in 52 does not. The sheet's other branch scores Q24 candidate scores; it was not computed here. The sheet and the M4 bar are outside this unit's scope: this is a reading, proposed as an addendum to the sheet.
 
 ## Evidence
 
@@ -262,8 +264,8 @@ Reading 2: `r2/conv-4-nosieve.txt` `774998237dd21fdb3a6a2ba7b033975ac5c39049b9e7
 
 ## Plain summary
 
-The model answers a general question only in the wording it was trained on. Reworded, the ten questions get 0 right answers on arm r and 1, 0, 1 on arm rt, and the usual reply is the question said back. In a longer conversation one such question is enough to break the rest: the model repeats one bad reply, and recall of stated facts falls from 3 or 4 of 4 to 0 (arm r) and 1 (arm rt).
+The model answers a general question almost only in the wording it was trained on. Reworded, the ten questions get 0 right answers on arm r and 1, 0, 1 on arm rt, and the usual reply is the question said back. In the 18-turn script with all ten reworded, the model repeats one bad reply from the second reworded question on (arm r to the end, arm rt for seven turns), and recall of stated facts falls from 3 or 4 of 4 to 0 (arm r) and 1 (arm rt).
 
-Which stated fact answers a question is picked by the chat program's rule, not by the model: with the rule off, recall is 0 of 4 at every seed.
+Recall in that script depends on the line the chat program's rule writes: with the rule off, recall is 0 of 4 at every seed on both arms. This does not tell picking the fact apart from reading that far back.
 
-The export to integers is not where anything is lost. Run the way the product runs, the integer model says exactly what the float model says on 94% to 97% of the panel's prompts and is right as often (601, 607, 614 against 602, 606, 612). By bytes the artifact is mostly stored replies: 85% for arm r, 96% for arm rt. The BPB scorer in the M4 sheet cannot report below 0.72 and stops being able to reach 0.90 once 1.9% of targets fall outside its top eight.
+With the turn memory on for both, the export to integers changes the count of right replies by −1, +1 and +2 of 1,141: the integer model says exactly what the float model says on 94% to 97% of the panel's prompts and is right about as often (601, 607, 614 against 602, 606, 612). By bytes the artifact is mostly turn memory, keys taken from TRAIN and their index: 84.8% for arm r, 96.1% for arm rt. The M4 sheet's rank branch cannot report below 0.72 BPB and cannot reach 0.90 once more than 1.892% of targets fall outside its top eight.
