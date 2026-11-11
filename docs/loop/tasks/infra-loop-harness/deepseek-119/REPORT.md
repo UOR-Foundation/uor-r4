@@ -56,7 +56,12 @@ contracts still resolve.
 - `cargo clippy --offline -p repo-model --lib --tests -- -D warnings`: pass.
 - `rustfmt --edition 2021 crates/repo-model/src/stack.rs`: clean.
 - `git diff --check`: pass.
-- Report check and local PR check run after the final committed head.
+- `uor-harness loop report --check --order .../ORDER.md`: pass.
+- `UOR_LAB=deepseek uor-harness loop pr-check --local`: `PASS`. Its
+  commit-order advisory records that the first ORDER commit wrapped the item
+  link before the parser-required same-line form was restored; scope,
+  report, owner paths, rule sources and rendered views pass. Its file-map
+  advisory is pre-existing and names no file in this unit.
 
 ## Skills used
 
