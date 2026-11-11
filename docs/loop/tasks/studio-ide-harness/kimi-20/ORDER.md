@@ -1,6 +1,6 @@
 # ORDER: register the LexLean MVM workbench item, kimi-20
 
-Lab: kimi. Parent: [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569, registration only). New item: `studio-lexlean-mvm-workbench`. Base: `93e089ff256654e75a19641b7e2fbd2bc8e24524`. References #3569; never closes it or changes acceptance.
+Lab: kimi. Item: [studio-ide-harness](../../../../roadmap/items/studio-ide-harness.md) (#3569, registration only). New item: `studio-lexlean-mvm-workbench`. Base: `93e089ff256654e75a19641b7e2fbd2bc8e24524`. References #3569; never closes it or changes acceptance.
 
 ## Owner goal
 
