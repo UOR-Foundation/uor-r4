@@ -50,7 +50,7 @@ while retaining the wrong-memory and no-memory abstention controls?
   launcher SHA-256
   `5161c08e09198b50349308152488f6edae8cb2aa8d31e64e86505f8e0bfbb32b`,
   watcher SHA-256
-  `52d4cc30e40d539120f702fcf8c6d3f8f800eb8bea4ecbb2c9e3c9fcc2b41f26`,
+  `cf1949e13736485bdf3f22a1167efebd6471a58e745dbc1124a8567e3ae7038e`,
   and scorer-driver SHA-256
   `d1ec3b7b0f676da422f6b5eb4871597634e4c25e49cd041fb66be2a3c865597d`.
   The pod job asserts the source and job hashes independently.
