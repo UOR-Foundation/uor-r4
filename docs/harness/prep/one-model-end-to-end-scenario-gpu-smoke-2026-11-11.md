@@ -5,7 +5,7 @@ Lab: deepseek. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to
 configuration probe after the aligned scenario readout: the current
 FBS/Hamming model has not been trained on the aligned TRAIN.
 
-TEST FITNESS: pending a fresh-context non-author review.
+TEST FITNESS: pending fresh-context non-author review 4.
 
 PRE-RUN REVIEW: pending.
 
@@ -44,16 +44,18 @@ while retaining the wrong-memory and no-memory abstention controls?
   --hamming-copy-latest 1 --turn-memory 8 --turn-memory-reply 1
   --turn-memory-dropout 500 --turn-memory-leave-copied 1 --batch 16
   --steps 1024 --eval-every 256 --samples 6 --reply-tokens 48`.
-- **Frozen launch pins:** source commit
-  `f7f7ac97c67a784b7261abdbdb95cf0fa785f241`, `job.sh` SHA-256
-  `0dbd7f05ba6c1214f6e3f8ff2e7dc1c2ded53966e5f577b98445d0d2aa5adfe4`,
-  launcher SHA-256
-  `5161c08e09198b50349308152488f6edae8cb2aa8d31e64e86505f8e0bfbb32b`,
-  watcher SHA-256
-  `cf1949e13736485bdf3f22a1167efebd6471a58e745dbc1124a8567e3ae7038e`,
-  and scorer-driver SHA-256
-  `d1ec3b7b0f676da422f6b5eb4871597634e4c25e49cd041fb66be2a3c865597d`.
-  The pod job asserts the source and job hashes independently.
+- **Frozen identity:** the code/config pin is
+  `894869f262973d64c6d44661fa71afaa7ebe9241`. Every later execution head
+  must be a clean, pushed descendant whose `crates`, `conformance`, `scripts`,
+  `xtask`, `Cargo.toml` and `Cargo.lock` trees are byte-identical to that pin.
+  The exact reviewed execution head is frozen in the review receipt at
+  `local/deepseek/scenario-gpu-smoke-2026-11-11/fresh-review-4.md`; the launcher
+  requires `TEST FITNESS: FIT`, `PRE-RUN REVIEW: GO` and a matching
+  `REVIEWED HEAD: <sha>` line from that receipt.
+  [`launch-pins.env`](../../loop/tasks/one-model-end-to-end/deepseek-273/launch-pins.env)
+  fixes all four invoked-script hashes. The launcher and scorer check every
+  script; the pod job independently checks its own hash, the exact head and the
+  unchanged code/config subtree.
 - **Base comparison:** arm-r artifact
   `a1d705586b35d7da282913b1e21b242a74c0661b32d73e2ec89f56310a8140e8`,
   schema `/10`, stack-contract semantic hash
@@ -137,17 +139,24 @@ and receipt-bound by:
 
 The exact execution path is:
 
-- after the final input/pin/review commit,
+- after the final input/pin commit, read the exact
+  `REVIEWED HEAD:` value from
+  `local/deepseek/scenario-gpu-smoke-2026-11-11/fresh-review-4.md`, set
+  `RUN_HEAD` to it, then run
   `uor-pod up --lab deepseek --session deepseek-scenario-gpu-smoke
   --purpose "aligned-corpus geometric smoke" --hours 3 --count 1 --gpu 5090
-  --ref CODE_PIN` creates a pod from that exact remote commit;
+  --ref "$RUN_HEAD"` to create a pod from that exact remote commit;
 - `local/deepseek/scenario-gpu-smoke-2026-11-11/launch.sh POD RUN_ID` stages
-  the sealed input after verifying the same pod commit, starts the watcher,
-  and calls `uor-pod run`; `UOR_SMOKE_PIN` and `UOR_SMOKE_JOB_SHA256` must name
-  the independently recorded code and job hashes;
+  the sealed input after verifying the same pod commit and unchanged code
+  subtree, starts the watcher, and calls `uor-pod run`;
 - `.../job.sh` runs training, smoke scoring, final snapshot and bound export;
-- the job seals and uploads its run root, downloads it back, verifies
-  `SHA256SUMS`, and writes the terminal `COMPLETE` or `FAILED` marker;
+- the job reserves an empty store prefix, seals and uploads its run root,
+  downloads it back, verifies `SHA256SUMS` and the exact file count, then writes
+  a separate post-readback sentinel naming the terminal `COMPLETE` or `FAILED`
+  state;
+- the watcher destroys the pod only after that sentinel says the seal read back,
+  the job exits and the GPU query reports no compute process; a failed or
+  missing seal preserves the pod instead;
 - `.../score.sh RUN_ID` downloads the terminal-sealed artifact and runs both
   held-out reports, with the count table, on the D84 CPU-development
   workstation (AMD Ryzen 9 9950X, 16 cores / 32 threads, 60 GiB RAM); it writes
@@ -257,8 +266,9 @@ zero.
 
 ## Instrument checks
 
-- **I-p:** clean tracked checkout at the exact pushed head on the pod; the job
-  fails unless the commit and job-script SHA-256 equal the launch values.
+- **I-p:** clean tracked checkout at the exact reviewed branch tip on the pod;
+  the launcher and job fail unless the reviewed head, all four invoked-script
+  hashes and the unchanged code/config subtree equal the frozen values.
 - **I-h:** every tokenizer, corpus receipt, split manifest, label, token, mask
   and trainer-`ft/dev` hash equals the table above before model work; the
   trainer logs the usable TRAIN window count.
@@ -273,7 +283,7 @@ zero.
   snapshot and an artifact that `cpu-scenario-grade` parses; the artifact
   records stack contract
   `fbs-deepseek-scenario-smoke` and semantic hash
-  `cfbc7af2f0b9f4807647b667ccb5d4b3848b140eecc466d3e96165f9b539990c`.
+  `16768b86f8f889a70ea3bd463b148ecd6ac6822ef63c8b2aff281a2f47de7bf1`.
   The artifact, snapshot and checkpoint SHA-256s are recorded.
 - **I-c:** `config.json` names objective `cell`, width 256, four Hamming reads,
   context 192, batch 16, no micro-batch, 1,024 steps, seed 273,
@@ -281,9 +291,11 @@ zero.
   `turn_memory_leave_copied: true`; the job asserts every field.
 - **I-d:** both scenario reads contain 1,024 case rows with zero
   prompt-ineligible rows and include the previous-token table rows.
-- **Seal:** the pod's run folder is sealed with a file list and SHA-256 sums,
-  uploaded to the HF store, and downloaded/read back before deletion. A run is
-  never written into an existing root (L-002). An exit trap seals failures too.
+- **Seal:** the pod reserves an otherwise empty unique store root, seals its run
+  folder with a file list and SHA-256 sums, uploads it, downloads it back and
+  verifies both hashes and the exact file set. Only then does it write the
+  external post-readback sentinel that permits teardown. A run is never written
+  into an existing root (L-002). An exit trap seals failures too.
 
 ## Minimum test power
 
@@ -295,23 +307,26 @@ miss cannot retire a mechanism.
 ## Compute and stop rule
 
 - Status at preflight: **0 running pods**, **$0/h**, no live lease; the Vast
-  listing showed 17 verified RTX 5090 offers, cheapest `$0.563/h`. This check is
+  listing showed 16 verified RTX 5090 offers, cheapest `$0.563/h`. This check is
   repeated immediately before `uor-pod up`; the captured review-time output is
-  `local/deepseek/scenario-gpu-smoke-2026-11-11/pod-status-before-review.txt`.
+  `local/deepseek/scenario-gpu-smoke-2026-11-11/pod-status-before-review-3.txt`.
 - One Vast RTX 5090 pod at no more than `$1.60/h`, one GPU only, leased for
   three hours and renewed by the watcher while the job moves.
 - Expected: about 10 minutes of build/tests, 5 minutes of smoke, 20 to
   40 minutes for 1,024 steps, and 20 minutes for snapshot, export and scoring.
 - The default unit ceiling is cumulative across smoke, final run and any rerun:
-  three hours and `$5` total. Notices fire at two hours and `$3`; the watcher
-  asks the job to seal and stop at three hours, and any extension is set
-  explicitly before launch and recorded rather than left to a silent abandoned
-  watcher. A stalled job is stopped by process group after 15 minutes with no
-  GPU process and no log progress (L-004).
+  three hours and `$5` total. The launcher reads the pod's `up` event and actual
+  hourly rate, adds prior completed-run budgets, refuses an over-budget launch,
+  and passes only the remaining time to the job. Notices fire at two cumulative
+  hours and `$3`; the watcher asks the job to seal and stop at the ceiling. A
+  stalled job is stopped by process group after 25 minutes with no GPU process
+  and no training-log or stage-heartbeat progress (L-004).
 - Stop immediately on non-finite loss, a missing checkpoint or export, an input
   or artifact hash mismatch, or a stalled job with no GPU activity.
 - The watcher is armed before the job ships (L-004). Release and destroy the pod
-  only after the seal is read back and no GPU process remains.
+  only after the post-readback seal sentinel exists, the job exits and the GPU
+  query reports no compute process. A failed or unknown shutdown state is held
+  for a person rather than deleting unique evidence.
 
 ## Cost
 

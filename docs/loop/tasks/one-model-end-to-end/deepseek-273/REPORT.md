@@ -3,10 +3,11 @@
 Lab: deepseek. Item:
 [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md)
 (#3407). Order: [ORDER.md](./ORDER.md). Base code: `7a450a88f`; launch code:
-`f7f7ac97c67a784b7261abdbdb95cf0fa785f241`; job SHA-256:
-`0dbd7f05ba6c1214f6e3f8ff2e7dc1c2ded53966e5f577b98445d0d2aa5adfe4`.
+`894869f262973d64c6d44661fa71afaa7ebe9241`. All invoked-script hashes and
+the exact reviewed execution-head procedure are in
+[`launch-pins.env`](./launch-pins.env).
 
-**Status:** pre-run. No GPU job has started.
+**Status:** pre-run, pending fresh-context review 4. No GPU job has started.
 
 ## What did not work
 
@@ -16,7 +17,11 @@ used an unbound legacy artifact, had no lawful non-neural baseline, and did not
 seal failures or verify current compute capacity. A second review then found
 that the source/job identities were only self-referential, the watcher had no
 stall/cost control, scoring was not source-pinned, and the first failure seal
-started too late. Those findings were repaired before launch.
+started too late. A third review found that the terminal marker preceded
+readback, teardown did not wait for a verified seal, the cumulative cost and
+time bounds were not implemented, scoring did not compare every row and
+identity, the P1 classifier was wrong, and the stack contract omitted the
+training seed. Those findings are repaired in the current registration.
 
 ## What changed
 
@@ -25,7 +30,9 @@ schema `/2` with an optional previous-token count table on exactly the selected
 artifact cases. The planned run uses arm r's batch-16 geometry recipe plus
 explicit train-as-served rounding, a complete receipt-bound input bundle, a
 bound `/10` stack contract, exact source/job hashes, a same-built-in smoke
-score, failure sealing, and a cumulative cost review.
+score, exact file-set failure sealing, a post-readback teardown sentinel,
+persistent cumulative time/cost accounting, stage heartbeats and full
+model/table/base row identity checks.
 
 ## Measurements
 
@@ -51,11 +58,11 @@ kept the correction bounded and checked against the registered evidence path.
 
 ## Still open
 
-The GPU smoke, bound export, held-out scenario reads, row classification, final
-cost and post-run exact-head review remain. This file will be replaced with the
-completed report before merge.
+Review 4, the GPU smoke, bound export, held-out scenario reads, row
+classification, final cost and post-run exact-head review remain. This file
+will be replaced with the completed report before merge.
 
 ## Plain summary
 
-The registration and its control instrument are now ready for a second
-adversarial review. No model result has been claimed.
+The registration and its control instrument are now ready for review 4. No
+model result has been claimed.
