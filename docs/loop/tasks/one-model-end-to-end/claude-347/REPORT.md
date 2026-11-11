@@ -6,7 +6,7 @@ Five laptop readings on the replicated arm r model, asked for by an outside revi
 
 | Reading | State |
 |---|---|
-| 1. Float against integer, row by row | done, with one part not readable on this path (below) |
+| 1. Float against integer, row by row | done, turn memory on and off |
 | 2. Does the model pick the fact itself | done, in a changed form (ORDER, amendment 2) |
 | 3. General turns in wording TRAIN does not hold | done |
 | 4. What the model holds, in full | done |
@@ -18,17 +18,18 @@ Five laptop readings on the replicated arm r model, asked for by an outside revi
 - **Reading 3: in the 18-turn script the reworded questions take recall down too.** With the four facts stated and the sieve writing the memory line, recall is 0 of 4 at every seed for arm r and 1 of 4 at every seed for arm rt, against 3, 4, 4 and 3, 3, 3 in the same script with TRAIN's wording. The second reworded question draws "2 plus 2 is 2 is 2 is", and arm r then gives that same reply to all twelve turns after it, recall questions included.
 - **Reading 2: the model does not pick the fact; the chat program's rule does.** The same 18-turn script with the sieve off: recall is 0 of 4 at every seed on both arms, against 3, 4, 4 and 3, 3, 3 with it on. The general turns do not move (3, 2, 2 and 9, 10, 9 either way).
 - **Reading 2 was not run as the ORDER first described it.** The state-distance count was withdrawn before any run (ORDER, amendment 2): the laptop files carry no fact labels, and a miss on that count would have closed nothing.
-- **Reading 1 could not compare the replies with the turn memory on through `uor-chat`.** `uor-chat --prompt-ids` steps raw token ids and never tells the session where the reply begins (`mark_reply_start`, `crates/uor-r4-integer/src/stack/session.rs`); only the text chat does. So on this path the integer artifact answers with its turn memory off. The first comparison, against the float replies scored with the memory on, showed 678, 691 and 644 of 1,141 rows equal, and that number is an instrument reading, not a model reading: against the float replies scored with the memory **off**, the same integer replies are equal on 981, 1,022 and 1,048 rows. The memory-on comparison needs a reader that marks the reply start on raw ids. It is not in this REPORT.
-- **With the memory off on both sides, 160, 119 and 93 of 1,141 rows still differ** between the float model and its integer export (seeds 1, 2, 3). Most of them are rows without a memory line: 146, 94 and 93.
+- **Reading 1's first number was an instrument reading.** `uor-chat --prompt-ids` steps raw token ids and never tells the session where the reply begins (`mark_reply_start`, `crates/uor-r4-integer/src/stack/session.rs`); only the text chat does. So on that path the integer artifact answers with its turn memory off, and against the float replies scored with the memory on only 678, 691 and 644 of 1,141 rows were equal. The comparison below was made with a reader written for it, `raw-id-replies`, which marks the reply start as the text chat does.
+- **The float model and its integer export still differ on some rows.** Turn memory on for both: 68, 46 and 31 of 1,141 rows (seeds 1, 2, 3). Turn memory off for both: 160, 119 and 93, of which 146, 94 and 93 are rows without a memory line.
 - **The samples do not name which rows are recall rows.** `reference_named` is 0 on every row. The split used here is read from the prompt itself: a row is a line row when its prompt holds the memory line's opening ids (`53,91,353`). 641 rows are line rows and 500 are not, at every seed.
 - **Reading 4 cannot give a count of learned values for the trunk.** The trunk's tables are stored packed (`*.fbs`, 32-bit words), so the artifact gives stored words and bytes, not learned values.
 - **The item's claim was refused.** `uor-harness loop claim` answered that claude-346's worktree holds the item; the ORDER records it.
 
 ## What held
 
-- **The integer export keeps the float model's right answers.** Memory off on both sides, replies that equal the reference word for word: float 537, 503, 498; integer 532, 503, 497. Rows right in float only: 14, 2, 3. Rows right in the integer only: 9, 2, 2.
-- **On the 641 line rows the export is close to exact.** Equal replies: 627, 616 and 641 of 641. Seed 3 is identical on every line row.
-- **No row failed to run.** 1,141 rows a seed, no error line, an empty error file.
+- **The integer export keeps the float model's right answers.** Turn memory on for both, replies that equal the reference word for word: float 602, 606, 612; integer 601, 607, 614. Right in float only: 5, 0, 1. Right in the integer only: 4, 1, 3. With the memory off: float 537, 503, 498; integer 532, 503, 497.
+- **With the memory on, the two say the same thing on 1,073, 1,095 and 1,110 of 1,141 rows.** On the 641 line rows: 631, 631 and 639.
+- **The reader's control held on every row.** With no reply mark its replies equal `uor-chat --prompt-ids` on 1,141 of 1,141 rows at each seed.
+- **No row failed to run.** 1,141 rows a seed on each path, no error line, empty error files.
 
 ## Measurements
 
@@ -36,7 +37,31 @@ Five laptop readings on the replicated arm r model, asked for by an outside revi
 
 Each of the 1,141 panel prompts in arm r's sealed float score went through the exported artifact: `uor-chat-bd2532281 --stack r-s<seed>-c8256.uorlut --tokenizer tokenizer.json --prompt-ids <the row's prompt> --max-tokens 48`, greedy `serve_step`. The two replies are compared up to and including the first end-of-reply id; the float score keeps 48 ids and runs on past it.
 
-Float replies with the turn memory off (`samples-p-greedy-no-memory.json`), the like-for-like comparison:
+**Turn memory on for both**, the way the product runs. Float: `samples-p-greedy-memory.json`. Integer: `raw-id-replies --mark-reply 1`, built from this branch ([source](../../../../labs/one-model-end-to-end/instrument/src/bin/raw-id-replies.rs)), which steps the same ids through `serve_step` and marks the reply start before the prompt's last id, as `StackChat::feed` does.
+
+| | Seed 1 | Seed 2 | Seed 3 |
+|---|---|---|---|
+| Rows | 1,141 | 1,141 | 1,141 |
+| Reader control: unmarked replies equal `uor-chat --prompt-ids` | 1,141 | 1,141 | 1,141 |
+| Replies equal | 1,073 | 1,095 | 1,110 |
+| Replies different | 68 | 46 | 31 |
+| First difference at reply token 0 | 2 | 2 | 1 |
+| First difference at tokens 1 to 5 | 27 | 22 | 18 |
+| First difference at token 6 or later | 39 | 22 | 12 |
+| Float reply equals the reference | 602 | 606 | 612 |
+| Integer reply equals the reference | 601 | 607 | 614 |
+| Right in float only | 5 | 0 | 1 |
+| Right in the integer only | 4 | 1 | 3 |
+| Line rows (641), replies equal | 631 | 631 | 639 |
+| Line rows, float equals the reference | 487 | 492 | 503 |
+| Line rows, integer equals the reference | 487 | 492 | 503 |
+| Rows without a line (500), replies equal | 442 | 464 | 471 |
+| Without a line, float equals the reference | 115 | 114 | 109 |
+| Without a line, integer equals the reference | 114 | 115 | 111 |
+
+The reader is built from this branch's library, not from arm r's pin. Its unmarked control against the pinned chat program is exact; its marked path has no second program to be checked against on raw ids.
+
+**Turn memory off for both.** Float: `samples-p-greedy-no-memory.json`. Integer: `uor-chat-bd2532281 --prompt-ids`.
 
 | | Seed 1 | Seed 2 | Seed 3 |
 |---|---|---|---|
@@ -66,7 +91,7 @@ Split by whether the prompt holds a memory line:
 
 The instrument reading, kept so it is not taken for a model reading: against the float replies scored with the memory on (`samples-p-greedy-memory.json`), 678, 691 and 644 rows are equal, and the integer reply equals the memory-off float reply but not the memory-on one on 307, 332 and 404 rows. The reverse case is 4, 1 and 0 rows.
 
-**Instrument or model?** The memory-on gap is the instrument: the raw-id path does not switch the turn memory on. The memory-off differences are the model's export, and they fall where neither side reproduces the reference; they move 5, 0 and 1 right answers.
+**Instrument or model?** The 678, 691, 644 gap was the instrument: the chat program's raw-id path does not switch the turn memory on. The differences that remain once both sides run the same way are the export's, and they fall where neither side reproduces the reference: they move the count of right answers by 1, 1 and 2 with the memory on and by 5, 0 and 1 with it off.
 
 The chat program printed a median of 1,009, 1,015 and 1,010 generated tokens per second a row. These are short prompts (17 to 192 tokens), each in a fresh process; it is not a reading at context 8,256.
 
@@ -216,6 +241,8 @@ Laptop files under `local/claude/claude-347/` (not committed; sums below are SHA
 | Integer artifact | `f052d8069ed2e9ddbb87fd2feaace2ef2bd45b07580015f49fb4deefb87362c5` | `707dfdc3b564df95497d57303decccebe42ac382045d7a0aae461137fec18ad0` | `d229cf1b32c9eb7deed6698be98a3370ce4f18108063126f69b70f5aebcd309a` |
 | Integer replies (`fi/r-s<seed>/integer.jsonl`) | `a82422cf4eb222d5854d299e0046209b03664074e7c6a13f0f063def9e2ecaae` | `5952639cd7d9f3189fcccdf725ea45c423ee65715ff66d50b38c64933ea518ad` | `2608ae69377fada8fb636071c3fc41b3b396b81c309839935e53a97b48228776` |
 
+Reader `fi2/raw-id-replies`: `07e742ef46da9cd38ba754b7020ad88b22ea1809867fc889503d284759ba10fb`. Its marked replies, `fi2/r-s<seed>-mark1.jsonl`: `f3a9c74bdabdc9423570079b09e891cb8718a946a98f20e0956fb94ed457ca16`, `62872ee5d782eb97a46f8a01798671a3a90a92f6fb959c8c5f3bb63721515712`, `95c47ef132a59e6b336d49257131e0d8ab7718504be4155e5f006324b70276ad`.
+
 Chat program `uor-chat-bd2532281`: `69bc535af70325fd8362818a1f07f549e91cdbcb28d0457a79aa56c1ab58344c`. Tokenizer: `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`. The artifact sums equal the ones in [claude-345's REPORT](../claude-345/REPORT.md). The float files are the pods' sealed scores, `score/r-line/` of each run.
 
 Reading 3: `r3/conv-4.txt` `33d19426dc0077e300af4a4e093747c484d27da45c4cf05a3da61f46ea8989e4`, `r3/conv-5.txt` `3e887941bd8f3853b76562de2cd48c6e7bd909efc9355c1c65d4d1f943a3431e`; outputs `r3/conv-<4|5>-<r|rt>-s<seed>.out` and `r3/say-<r|rt>-s<seed>.jsonl`. TRAIN is the store whose manifest is `3d87db7ec2313d7d684f557920edb4fa3c0b7b18a543782707d50a6e258b379d` (60,000 conversations, 8,127,216 tokens). The ids came from `cargo build --release -p uor-r4-tokenizer --example token-counts` at this branch.
@@ -225,10 +252,12 @@ Reading 2: `r2/conv-4-nosieve.txt` `774998237dd21fdb3a6a2ba7b033975ac5c39049b9e7
 ## Still open
 
 - The state-level form of reading 2, which belongs to the learned selector's own sheet if that proposal is taken up.
-- The memory-on comparison of reading 1: a reader that steps raw ids and marks the reply start.
+- `uor-chat --prompt-ids` cannot run a model's turn memory. Whether it should take a reply mark is a serving change for the next unit.
 
 ## Plain summary
 
 The model answers a general question only in the wording it was trained on. Reworded, the ten questions get 0 right answers on arm r and 1, 0, 1 on arm rt, and the usual reply is the question said back. In a longer conversation one such question is enough to break the rest: the model repeats one bad reply, and recall of stated facts falls from 3 or 4 of 4 to 0 (arm r) and 1 (arm rt).
 
-The exported integer model says what the float model says on 86% to 92% of the panel's prompts when both run without the turn memory, and it keeps the float model's right answers (532, 503, 497 against 537, 503, 498). On the rows that carry a memory line it is identical on 627, 616 and 641 of 641. The comparison with the turn memory on could not be made on this path. By bytes the artifact is mostly stored replies: 85% for arm r, 96% for arm rt. The BPB scorer in the M4 sheet cannot report below 0.72 and stops being able to reach 0.90 once 1.9% of targets fall outside its top eight.
+Which stated fact answers a question is picked by the chat program's rule, not by the model: with the rule off, recall is 0 of 4 at every seed.
+
+The export to integers is not where anything is lost. Run the way the product runs, the integer model says exactly what the float model says on 94% to 97% of the panel's prompts and is right as often (601, 607, 614 against 602, 606, 612). By bytes the artifact is mostly stored replies: 85% for arm r, 96% for arm rt. The BPB scorer in the M4 sheet cannot report below 0.72 and stops being able to reach 0.90 once 1.9% of targets fall outside its top eight.
