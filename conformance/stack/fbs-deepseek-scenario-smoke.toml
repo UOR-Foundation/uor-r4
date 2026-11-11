@@ -327,7 +327,7 @@ non_claims = ["Cycle stopping does not recover content displaced by the cycle."]
 id = "train"
 role = "train"
 program = "cargo"
-args = ["run", "--release", "--locked", "-p", "uor-r4-float-train", "--bin", "train-in-space", "--", "--objective", "cell", "--retain-rates", "1", "--decay-mult", "1", "--lr", "0.001", "--lr-end", "0", "--train-as-served", "1", "--context", "192", "--width", "256", "--hamming-read", "4", "--batch", "16", "--turn-memory", "8", "--turn-memory-reply", "1", "--turn-memory-dropout", "500", "--samples", "6", "--reply-tokens", "48", "--steps", "1024", "--eval-every", "256", "--hamming-copy-latest", "1", "--turn-memory-leave-copied", "1"]
+args = ["run", "--release", "--locked", "-p", "uor-r4-float-train", "--bin", "train-in-space", "--", "--objective", "cell", "--retain-rates", "1", "--decay-mult", "1", "--lr", "0.001", "--lr-end", "0", "--train-as-served", "1", "--context", "192", "--width", "256", "--hamming-read", "4", "--batch", "16", "--turn-memory", "8", "--turn-memory-reply", "1", "--turn-memory-dropout", "500", "--samples", "6", "--reply-tokens", "48", "--steps", "1024", "--eval-every", "256", "--hamming-copy-latest", "1", "--turn-memory-leave-copied", "1", "--seed", "273"]
 env = []
 inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "train-scenarios", "trainer-dev-tokens", "trainer-dev-mask", "tokenizer"]
 outputs = ["model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors", "config.json"]
@@ -354,12 +354,22 @@ outputs = ["fresh.json"]
 timeout_seconds = 1800
 
 [[commands]]
+id = "snapshot"
+role = "export"
+program = "fbs-snapshot"
+args = ["models/step-001024", "step-001024.snapshot.json"]
+env = []
+inputs = ["model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors", "config.json"]
+outputs = ["step-001024.snapshot.json"]
+timeout_seconds = 1800
+
+[[commands]]
 id = "export"
 role = "export"
 program = "fbs-export"
 args = ["--raw-gates", "--raw-transition", "--run-config", "config.json", "--stack-contract", "conformance/stack/fbs-deepseek-scenario-smoke.toml", "--stack-contract-semantic-blake3", "SEMANTIC_BLAKE3", "--tokenizer", "tokenizer.json", "SNAPSHOT_JSON", "step-001024.uorlut"]
 env = []
-inputs = ["model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors", "config.json", "tokenizer"]
+inputs = ["model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors", "config.json", "tokenizer", "step-001024.snapshot.json", "fbs-deepseek-scenario-smoke.toml"]
 outputs = ["step-001024.uorlut"]
 timeout_seconds = 1800
 
@@ -379,7 +389,7 @@ role = "verify"
 program = "cargo"
 args = ["xtask", "stack-audit", "--contract", "conformance/stack/fbs-deepseek-scenario-smoke.toml"]
 env = []
-inputs = ["fbs-deepseek-scenario-smoke.toml"]
+inputs = ["fbs-deepseek-scenario-smoke.toml", "step-001024.uorlut", "tokenizer", "config.json", "model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors"]
 outputs = ["stack-audit.json"]
 timeout_seconds = 300
 

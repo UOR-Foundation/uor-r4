@@ -2672,7 +2672,9 @@
               "--hamming-copy-latest",
               "1",
               "--turn-memory-leave-copied",
-              "1"
+              "1",
+              "--seed",
+              "273"
             ],
             "env": [],
             "id": "train",
@@ -2769,6 +2771,27 @@
           },
           {
             "args": [
+              "models/step-001024",
+              "step-001024.snapshot.json"
+            ],
+            "env": [],
+            "id": "snapshot",
+            "inputs": [
+              "model.safetensors",
+              "hamming_read.safetensors",
+              "turn_memory.safetensors",
+              "turn_memory_reply.safetensors",
+              "config.json"
+            ],
+            "outputs": [
+              "step-001024.snapshot.json"
+            ],
+            "program": "fbs-snapshot",
+            "role": "export",
+            "timeout_seconds": 1800
+          },
+          {
+            "args": [
               "--raw-gates",
               "--raw-transition",
               "--run-config",
@@ -2790,7 +2813,9 @@
               "turn_memory.safetensors",
               "turn_memory_reply.safetensors",
               "config.json",
-              "tokenizer"
+              "tokenizer",
+              "step-001024.snapshot.json",
+              "fbs-deepseek-scenario-smoke.toml"
             ],
             "outputs": [
               "step-001024.uorlut"
@@ -2833,7 +2858,14 @@
             "env": [],
             "id": "audit",
             "inputs": [
-              "fbs-deepseek-scenario-smoke.toml"
+              "fbs-deepseek-scenario-smoke.toml",
+              "step-001024.uorlut",
+              "tokenizer",
+              "config.json",
+              "model.safetensors",
+              "hamming_read.safetensors",
+              "turn_memory.safetensors",
+              "turn_memory_reply.safetensors"
             ],
             "outputs": [
               "stack-audit.json"
@@ -3454,9 +3486,9 @@
         "summary": "One fresh-start 1,024-step training of the current FBS/Hamming geometric path on the aligned scenario corpus, exported as a bound uor-r4.lut-stack/10 artifact and scored against the same-evaluator previous-token count table.",
         "title": "FBS aligned-scenario 1,024-step GPU smoke"
       },
-      "semantic_blake3": "cfbc7af2f0b9f4807647b667ccb5d4b3848b140eecc466d3e96165f9b539990c",
+      "semantic_blake3": "16768b86f8f889a70ea3bd463b148ecd6ac6822ef63c8b2aff281a2f47de7bf1",
       "source": "conformance/stack/fbs-deepseek-scenario-smoke.toml",
-      "source_blake3": "1820d9e636efeb969188b2b3cac49a4eb630590b5d5649496af306f3bf6fdcb7"
+      "source_blake3": "f3b41712b07ada1fa56d4808b5b2e7eaf9d55e955d780432e3e39b448787476d"
     }
   ],
   "schema": "uor-r4.stack-contract.generated/2",

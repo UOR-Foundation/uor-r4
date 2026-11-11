@@ -433,8 +433,8 @@ Schema: `uor-r4.lut-stack/6`
 
 One fresh-start 1,024-step training of the current FBS/Hamming geometric path on the aligned scenario corpus, exported as a bound uor-r4.lut-stack/10 artifact and scored against the same-evaluator previous-token count table.
 
-- Source: `conformance/stack/fbs-deepseek-scenario-smoke.toml` (BLAKE3 `1820d9e636efeb969188b2b3cac49a4eb630590b5d5649496af306f3bf6fdcb7`)
-- Semantic hash: `cfbc7af2f0b9f4807647b667ccb5d4b3848b140eecc466d3e96165f9b539990c`
+- Source: `conformance/stack/fbs-deepseek-scenario-smoke.toml` (BLAKE3 `f3b41712b07ada1fa56d4808b5b2e7eaf9d55e955d780432e3e39b448787476d`)
+- Semantic hash: `16768b86f8f889a70ea3bd463b148ecd6ac6822ef63c8b2aff281a2f47de7bf1`
 - Lane: `fbs`
 - State: `experimental`
 - Revision: 1
@@ -534,18 +534,20 @@ Schema: `uor-r4.lut-stack/10`
 
 ### Commands
 
-- **train (`train`)**: `cargo run --release --locked -p uor-r4-float-train --bin train-in-space -- --objective cell --retain-rates 1 --decay-mult 1 --lr 0.001 --lr-end 0 --train-as-served 1 --context 192 --width 256 --hamming-read 4 --batch 16 --turn-memory 8 --turn-memory-reply 1 --turn-memory-dropout 500 --samples 6 --reply-tokens 48 --steps 1024 --eval-every 256 --hamming-copy-latest 1 --turn-memory-leave-copied 1`
+- **train (`train`)**: `cargo run --release --locked -p uor-r4-float-train --bin train-in-space -- --objective cell --retain-rates 1 --decay-mult 1 --lr 0.001 --lr-end 0 --train-as-served 1 --context 192 --width 256 --hamming-read 4 --batch 16 --turn-memory 8 --turn-memory-reply 1 --turn-memory-dropout 500 --samples 6 --reply-tokens 48 --steps 1024 --eval-every 256 --hamming-copy-latest 1 --turn-memory-leave-copied 1 --seed 273`
   - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`train-scenarios`<br>`trainer-dev-tokens`<br>`trainer-dev-mask`<br>`tokenizer`; outputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`; timeout 7200s
 - **score-development (`score`)**: `cpu-scenario-grade ARTIFACT CORPUS_ROOT TOKENIZER --split development --max-cases 1024 --reply-tokens 64 --table-baseline 1`
   - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`development-tokens`<br>`development-mask`<br>`development-manifest`<br>`development-scenarios`<br>`tokenizer`<br>`base-artifact`; outputs `development.json`; timeout 1800s
 - **score-fresh (`score`)**: `cpu-scenario-grade ARTIFACT CORPUS_ROOT TOKENIZER --split fresh --max-cases 1024 --reply-tokens 64 --table-baseline 1`
   - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`fresh-tokens`<br>`fresh-mask`<br>`fresh-manifest`<br>`fresh-scenarios`<br>`tokenizer`<br>`base-artifact`; outputs `fresh.json`; timeout 1800s
+- **snapshot (`export`)**: `fbs-snapshot models/step-001024 step-001024.snapshot.json`
+  - env --; inputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`; outputs `step-001024.snapshot.json`; timeout 1800s
 - **export (`export`)**: `fbs-export --raw-gates --raw-transition --run-config config.json --stack-contract conformance/stack/fbs-deepseek-scenario-smoke.toml --stack-contract-semantic-blake3 SEMANTIC_BLAKE3 --tokenizer tokenizer.json SNAPSHOT_JSON step-001024.uorlut`
-  - env --; inputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`<br>`tokenizer`; outputs `step-001024.uorlut`; timeout 1800s
+  - env --; inputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`<br>`tokenizer`<br>`step-001024.snapshot.json`<br>`fbs-deepseek-scenario-smoke.toml`; outputs `step-001024.uorlut`; timeout 1800s
 - **serve (`serve`)**: `uor-chat --stack step-001024.uorlut --tokenizer tokenizer.json --protocol 2 --max-tokens 64`
   - env --; inputs `step-001024.uorlut`<br>`tokenizer`; outputs `chat.json`; timeout 300s
 - **audit (`verify`)**: `cargo xtask stack-audit --contract conformance/stack/fbs-deepseek-scenario-smoke.toml`
-  - env --; inputs `fbs-deepseek-scenario-smoke.toml`; outputs `stack-audit.json`; timeout 300s
+  - env --; inputs `fbs-deepseek-scenario-smoke.toml`<br>`step-001024.uorlut`<br>`tokenizer`<br>`config.json`<br>`model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`; outputs `stack-audit.json`; timeout 300s
 
 ### Non-claims
 
