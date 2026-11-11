@@ -91,7 +91,7 @@ fn studio_root(args: &[String]) -> Result<std::path::PathBuf, String> {
 }
 
 fn run_serve_studio(addr: &str, studio_root: &Path, args: &[String]) -> Result<(), String> {
-    let mut host = AgentHost::new(DesktopBackend::new(PinRegistry::with_synthetic_standin()));
+    let mut host = AgentHost::new(DesktopBackend::new(PinRegistry::with_synthetic_standin()))?;
     apply_cli_grants(args, host.backend_mut())?;
     let launch_token = generate_launch_token();
     let server = StudioServer::start(addr, studio_root, Arc::new(Mutex::new(host)), launch_token)?;
@@ -150,7 +150,13 @@ fn main() {
 
     let stdin = io::stdin();
     let mut stdout = io::stdout();
-    let mut host = AgentHost::new(backend);
+    let mut host = match AgentHost::new(backend) {
+        Ok(host) => host,
+        Err(error) => {
+            eprintln!("host startup error: {error}");
+            std::process::exit(1);
+        }
+    };
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };
         if line.trim().is_empty() {

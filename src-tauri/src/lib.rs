@@ -2869,12 +2869,12 @@ pub mod tauri_gui {
     }
 
     impl TauriDesktopState {
-        pub fn new(backend: DesktopBackend) -> Self {
-            Self {
-                inner: Arc::new(Mutex::new(super::agent_host::AgentHost::new(backend))),
+        pub fn new(backend: DesktopBackend) -> Result<Self, String> {
+            Ok(Self {
+                inner: Arc::new(Mutex::new(super::agent_host::AgentHost::new(backend)?)),
                 sidecar: None,
                 mcp: McpManager::default(),
-            }
+            })
         }
 
         pub fn with_sidecar(binary: &Path, stack: &Path, tokenizer: &Path) -> Result<Self, String> {
@@ -2893,7 +2893,7 @@ pub mod tauri_gui {
             tokenizer: &Path,
         ) -> Result<Self, String> {
             Ok(Self {
-                inner: Arc::new(Mutex::new(super::agent_host::AgentHost::new(backend))),
+                inner: Arc::new(Mutex::new(super::agent_host::AgentHost::new(backend)?)),
                 sidecar: Some(SidecarProcess::start(binary, stack, tokenizer)?),
                 mcp: McpManager::default(),
             })
@@ -3697,22 +3697,11 @@ pub mod tauri_gui {
             .ok_or_else(|| "invalid_arguments: decision must be approved | denied".to_string())?;
         let native_confirmed = if decision == "approved" {
             let summary = state.with_host(|host| host.pending_approval_summary(approval_id))?;
-            confirmation_dialog(
-                &app,
-                format!(
-                    "Approve this host tool intent?\n\nTool:\n{}\n\nTask:\n{}\n\nRun:\n{}\n\nTool call:\n{}\n\nRequest digest:\n{}\n\nExpires at (ms):\n{}",
-                    summary.tool,
-                    summary.task_id,
-                    summary.run_id,
-                    summary.tool_call_id,
-                    summary.request_digest,
-                    summary.expires_at_ms,
-                ),
-            )?
-            .title("Approve tool intent")
-            .kind(MessageDialogKind::Warning)
-            .buttons(MessageDialogButtons::OkCancel)
-            .blocking_show()
+            confirmation_dialog(&app, super::agent_host::approval_dialog_message(&summary))?
+                .title("Approve tool intent")
+                .kind(MessageDialogKind::Warning)
+                .buttons(MessageDialogButtons::OkCancel)
+                .blocking_show()
         } else {
             false
         };

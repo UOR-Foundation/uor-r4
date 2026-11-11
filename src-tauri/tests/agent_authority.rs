@@ -16,8 +16,8 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 use uor_r4_desktop_client::agent_host::{
-    hmac_sha256_hex, AgentHost, HostMcpDispatch, HostToolResult, HOST_INTENT_SCHEMA,
-    HOST_RESULT_SCHEMA,
+    approval_dialog_message, hmac_sha256_hex, AgentHost, HostMcpDispatch, HostToolResult,
+    HOST_INTENT_SCHEMA, HOST_RESULT_SCHEMA, MAX_APPROVAL_PREVIEW_CHARS,
 };
 use uor_r4_desktop_client::{handle_rpc_line_with_host, DesktopBackend, PinRegistry};
 
@@ -55,7 +55,7 @@ fn host_with_grant(root: &Path) -> (AgentHost, String) {
         .native_grant_folder(root)
         .expect("grant fixture folder");
     let grant_id = backend.agent_grant_id(root).expect("derive grant id");
-    (AgentHost::new(backend), grant_id)
+    (AgentHost::new(backend).expect("secure host"), grant_id)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -292,6 +292,70 @@ fn agent_host_consumes_approval_by_identity() {
     assert!(host.pending_approval_summary(&approval_id).is_err());
 
     let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn host_approval_records_retain_a_bounded_host_computed_preview() {
+    let root = unique_temp_dir("approval-preview");
+    let (mut host, grant_id) = host_with_grant(&root);
+    let content = "preview-body ".repeat(80);
+    let request = write_intent(&grant_id, "preview.txt", &content);
+    let approval_id = request_approval(&mut host, request);
+
+    let summary = host
+        .pending_approval_summary(&approval_id)
+        .expect("pending approval summary");
+    assert!(
+        summary.preview.contains("path: preview.txt"),
+        "the host must derive the path preview itself: {:?}",
+        summary.preview
+    );
+    assert!(summary.preview.contains("preview-body"));
+    assert!(
+        summary.preview.chars().count() <= MAX_APPROVAL_PREVIEW_CHARS,
+        "preview must stay bounded: {} chars",
+        summary.preview.chars().count()
+    );
+    let dialog = approval_dialog_message(&summary);
+    assert!(
+        dialog.contains("Preview:\npath: preview.txt"),
+        "the native dialog must show the host-derived preview: {dialog}"
+    );
+    assert!(!dialog.contains("page-supplied authority"));
+
+    let forged = task_intent(
+        "file.write",
+        json!({
+            "grant_id": grant_id,
+            "path": "preview.txt",
+            "content": "x",
+            "preview": "page-supplied authority",
+        }),
+        None,
+    );
+    let refused = invoke_error(&mut host, forged);
+    assert_eq!(refused.code.as_deref(), Some("invalid_arguments"));
+    assert!(
+        !host
+            .pending_approval_summary(&approval_id)
+            .expect("original approval stays pending")
+            .preview
+            .contains("page-supplied authority"),
+        "a page preview must never become host approval copy"
+    );
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn host_startup_requires_secure_entropy() {
+    let backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+    let host = AgentHost::new(backend);
+    assert!(
+        host.is_ok(),
+        "this test host must expose a platform CSPRNG for the host receipt key: {:?}",
+        host.err()
+    );
 }
 
 #[test]
@@ -1304,7 +1368,7 @@ fn agent_host_has_no_task_runtime() {
     assert_eq!(unknown["ok"], json!(false));
 
     let backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
-    let fresh = AgentHost::new(backend);
+    let fresh = AgentHost::new(backend).expect("secure host");
     let empty = fresh.poll(None).expect("fresh host poll");
     assert_eq!(
         empty["results"],
@@ -1328,7 +1392,7 @@ fn tauri_subscribe_channel_emits_host_results() {
     let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
     backend.native_grant_folder(&root).expect("grant");
     let grant_id = backend.agent_grant_id(&root).expect("grant id");
-    let state = TauriDesktopState::new(backend);
+    let state = TauriDesktopState::new(backend).expect("host");
 
     let (sender, receiver) = std::sync::mpsc::channel();
     let channel = Channel::new(move |body: InvokeResponseBody| {

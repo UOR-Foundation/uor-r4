@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use uor_r4_studio_agent::{canonical_json, is_valid_id, new_approval_id};
+use uor_r4_studio_agent::{canonical_json, is_valid_id};
 
 use crate::agent_data::{AgentArtifactRange, MAX_AGENT_ARTIFACT_BYTES};
 use crate::{
@@ -41,6 +41,8 @@ pub const MAX_HOST_SUBSCRIBERS: usize = 8;
 pub const MAX_HOST_ARGUMENT_BYTES: usize = 20 * 1024 * 1024;
 /// Maximum characters in a result preview.
 pub const MAX_HOST_PREVIEW_CHARS: usize = 512;
+/// Maximum characters in a host approval's path/argument preview.
+pub const MAX_APPROVAL_PREVIEW_CHARS: usize = 384;
 
 const HOST_RECEIPT_DOMAIN: &str = "uor-r4.studio.host-receipt/1\n";
 const DATA_TASK_ID: &str = "tsk_0000000000000000";
@@ -56,8 +58,14 @@ const AUTHORITY_FIELDS: [&str; 9] = [
     "resolved_by",
     "grants",
 ];
-const ARGUMENT_AUTHORITY_FIELDS: [&str; 5] =
-    ["granted", "receipt", "origin", "resolved_by", "secret"];
+const ARGUMENT_AUTHORITY_FIELDS: [&str; 6] = [
+    "granted",
+    "receipt",
+    "origin",
+    "resolved_by",
+    "secret",
+    "preview",
+];
 
 /// Optional artifact reference carried beside one host result.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,6 +108,20 @@ pub struct HostToolResult {
     pub cursor: Option<String>,
 }
 
+/// Native confirmation text built only from host-held approval data.
+pub fn approval_dialog_message(summary: &HostApprovalSummary) -> String {
+    format!(
+        "Approve this host tool intent?\n\nTool:\n{}\n\nPreview:\n{}\n\nTask:\n{}\n\nRun:\n{}\n\nTool call:\n{}\n\nRequest digest:\n{}\n\nExpires at (ms):\n{}",
+        summary.tool,
+        summary.preview,
+        summary.task_id,
+        summary.run_id,
+        summary.tool_call_id,
+        summary.request_digest,
+        summary.expires_at_ms,
+    )
+}
+
 /// Host-held description of one approval request.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HostApprovalSummary {
@@ -110,6 +132,7 @@ pub struct HostApprovalSummary {
     pub tool_call_id: String,
     pub tool: String,
     pub scope: String,
+    pub preview: String,
     pub request_digest: String,
     pub requested_at_ms: u64,
     pub expires_at_ms: u64,
@@ -335,22 +358,74 @@ fn constant_time_eq(left: &str, right: &str) -> bool {
     difference == 0
 }
 
-fn generate_receipt_key() -> [u8; 32] {
+fn bounded_approval_text(text: &str) -> String {
+    if text.chars().count() <= MAX_APPROVAL_PREVIEW_CHARS {
+        return text.to_string();
+    }
+    let mut bounded: String = text
+        .chars()
+        .take(MAX_APPROVAL_PREVIEW_CHARS.saturating_sub(1))
+        .collect();
+    bounded.push('…');
+    bounded
+}
+
+/// Host-derived preview for the native approval dialog. The page can never
+/// supply this text; [`ARGUMENT_AUTHORITY_FIELDS`] refuses that argument.
+fn approval_preview(arguments: &Value) -> String {
+    const FIELDS: [&str; 9] = [
+        "path",
+        "cwd",
+        "command",
+        "query",
+        "server",
+        "tool",
+        "artifact_id",
+        "url",
+        "content",
+    ];
+    let Some(object) = arguments.as_object() else {
+        return String::new();
+    };
+    let mut parts = Vec::new();
+    for field in FIELDS {
+        let Some(value) = object.get(field).and_then(Value::as_str) else {
+            continue;
+        };
+        parts.push(format!("{field}: {}", bounded_approval_text(value)));
+    }
+    if parts.is_empty() {
+        return match canonical_json(arguments) {
+            Ok(rendered) => bounded_approval_text(&rendered),
+            Err(_) => "(arguments are not canonical)".to_string(),
+        };
+    }
+    bounded_approval_text(&parts.join("\n"))
+}
+
+#[cfg(unix)]
+fn fill_entropy_from_path(path: &Path, key: &mut [u8]) -> Result<(), String> {
     use std::io::Read;
+    let mut file = fs::File::open(path)
+        .map_err(|error| format!("the platform CSPRNG is unavailable: {error}"))?;
+    file.read_exact(key)
+        .map_err(|error| format!("the platform CSPRNG returned an incomplete key: {error}"))
+}
+
+#[cfg(unix)]
+fn fill_platform_entropy(key: &mut [u8]) -> Result<(), String> {
+    fill_entropy_from_path(Path::new("/dev/urandom"), key)
+}
+
+#[cfg(not(unix))]
+fn fill_platform_entropy(_key: &mut [u8]) -> Result<(), String> {
+    Err("no platform CSPRNG is available for the host receipt key on this target".to_string())
+}
+
+fn generate_receipt_key() -> Result<[u8; 32], String> {
     let mut key = [0u8; 32];
-    if let Ok(mut file) = fs::File::open("/dev/urandom") {
-        if file.read_exact(&mut key).is_ok() {
-            return key;
-        }
-    }
-    let mut hasher = Sha256::new();
-    hasher.update(b"UOR-R4-HOST-RECEIPT-KEY-V1");
-    hasher.update(std::process::id().to_le_bytes());
-    if let Ok(duration) = SystemTime::now().duration_since(UNIX_EPOCH) {
-        hasher.update(duration.as_nanos().to_le_bytes());
-    }
-    key.copy_from_slice(&hasher.finalize());
-    key
+    fill_platform_entropy(&mut key)?;
+    Ok(key)
 }
 
 fn is_approval_identity(value: &str) -> bool {
@@ -599,6 +674,7 @@ struct HostApprovalRecord {
     request_scope: String,
     request_digest: String,
     scope: String,
+    preview: String,
     requested_at_ms: u64,
     expires_at_ms: u64,
     decision: Option<ApprovalDecision>,
@@ -649,10 +725,13 @@ impl fmt::Debug for AgentHost {
 
 impl AgentHost {
     /// Wrap the existing desktop backend authority.
-    pub fn new(backend: DesktopBackend) -> Self {
-        Self {
+    ///
+    /// Startup fails when the platform CSPRNG is unavailable: there is no
+    /// PID/time fallback for the host receipt key.
+    pub fn new(backend: DesktopBackend) -> Result<Self, String> {
+        Ok(Self {
             backend,
-            receipt_key: generate_receipt_key(),
+            receipt_key: generate_receipt_key()?,
             approvals: BTreeMap::new(),
             results: VecDeque::new(),
             next_result_sequence: 1,
@@ -661,7 +740,7 @@ impl AgentHost {
             next_subscriber_id: 1,
             confirmed_mcp_sessions: BTreeSet::new(),
             approval_ttl_ms: HOST_APPROVAL_TTL_MS,
-        }
+        })
     }
 
     pub fn backend(&self) -> &DesktopBackend {
@@ -731,6 +810,7 @@ impl AgentHost {
             tool_call_id: record.tool_call_id.clone(),
             tool: record.tool.clone(),
             scope: record.scope.clone(),
+            preview: record.preview.clone(),
             request_digest: record.request_digest.clone(),
             requested_at_ms: record.requested_at_ms,
             expires_at_ms: record.expires_at_ms,
@@ -998,14 +1078,16 @@ impl AgentHost {
             .retain(|_, record| now < record.expires_at_ms);
     }
 
-    fn mint_approval_id(&self) -> String {
+    fn mint_approval_id(&self) -> Result<String, String> {
         for _ in 0..8 {
-            let candidate = new_approval_id();
+            let mut bytes = [0u8; 8];
+            fill_platform_entropy(&mut bytes)?;
+            let candidate = format!("apr_{}", hex::encode(bytes));
             if !self.approvals.contains_key(&candidate) {
-                return candidate;
+                return Ok(candidate);
             }
         }
-        format!("apr_{}", &sha256_bytes(&now_ms().to_le_bytes())[..16])
+        Err("internal: the host could not mint a unique approval identity".to_string())
     }
 
     fn find_binding(&self, intent: &ParsedIntent) -> Option<(String, u64, bool)> {
@@ -1048,7 +1130,7 @@ impl AgentHost {
                         .to_string(),
                 );
             }
-            let approval_id = self.mint_approval_id();
+            let approval_id = self.mint_approval_id()?;
             let requested_at_ms = now_ms();
             let expires_at_ms = requested_at_ms.saturating_add(self.approval_ttl_ms);
             self.approvals.insert(
@@ -1063,6 +1145,7 @@ impl AgentHost {
                     request_scope: intent.request_scope.clone(),
                     request_digest: intent.arguments_digest.clone(),
                     scope: format!("tool:{}", intent.tool),
+                    preview: approval_preview(&intent.arguments),
                     requested_at_ms,
                     expires_at_ms,
                     decision: None,
@@ -1554,4 +1637,28 @@ fn check_binding(record: &HostApprovalRecord, intent: &ParsedIntent) -> Result<(
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod approval_preview_and_entropy_tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn missing_platform_entropy_is_an_error_not_a_weak_key() {
+        let mut key = [0u8; 32];
+        let error = fill_entropy_from_path(Path::new("/nonexistent/uor-r4-entropy"), &mut key)
+            .expect_err("a missing CSPRNG source must fail host startup");
+        assert!(error.contains("CSPRNG"), "{error}");
+        assert_eq!(key, [0u8; 32]);
+    }
+
+    #[test]
+    fn approval_preview_is_bounded_and_utf8_safe() {
+        let preview = approval_preview(&json!({
+            "content": format!("{}😀", "x".repeat(400)),
+        }));
+        assert!(preview.chars().count() <= MAX_APPROVAL_PREVIEW_CHARS);
+        assert!(preview.contains("content: "));
+    }
 }

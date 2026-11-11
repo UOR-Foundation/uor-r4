@@ -93,7 +93,7 @@ impl Lab {
         backend
             .native_grant_folder(&root)
             .expect("grant fixture root");
-        let mut host = AgentHost::new(backend);
+        let mut host = AgentHost::new(backend).expect("secure host");
         setup(&mut host, &root);
         let host = Arc::new(Mutex::new(host));
         let token = generate_launch_token();
@@ -625,9 +625,10 @@ fn loopback_intent_post_reads_body_beyond_one_socket_read() {
 #[test]
 fn no_remote_tls_route_is_registered() {
     let root = unique_dir("tls");
-    let host = Arc::new(Mutex::new(AgentHost::new(DesktopBackend::new(
-        PinRegistry::with_synthetic_standin(),
-    ))));
+    let host = Arc::new(Mutex::new(
+        AgentHost::new(DesktopBackend::new(PinRegistry::with_synthetic_standin()))
+            .expect("secure host"),
+    ));
     let studio_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../web/studio");
     for bind in ["0.0.0.0:0", "[::]:0", "192.0.2.10:0"] {
         let refused = StudioServer::start(bind, &studio_root, Arc::clone(&host), "t".into());

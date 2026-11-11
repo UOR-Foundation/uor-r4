@@ -264,6 +264,7 @@ export function TaskDetail({ task, client, onBack, onOpenSurface }: TaskDetailPr
             {isSynthetic(run) && <p class="task-synthetic">Synthetic replay: deterministic fixture output, not an R4 model or a task brain.</p>}
         </header>
         <RunStatus state={status} detail={statusDetail} stopping={stopPending} stopDisabled={retrying} onStop={active ? stop : undefined} />
+        {task.hold !== null && <p class="task-service-state" data-static-background>Background and cross-device tasks require an optional service. Closing this tab stops local work.</p>}
         {plan !== null && <section class="task-plan" data-task-plan aria-label="Plan">
             <h2>{plan.title}</h2>
             <ol class="task-plan-steps">

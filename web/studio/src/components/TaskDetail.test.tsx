@@ -237,6 +237,27 @@ describe('TaskDetail', () => {
         expect(host.textContent).toContain('Waiting for approval');
     });
 
+    it('shows the bounded background hold as an optional service without a continuation control', async () => {
+        const value = fixture([queued(0), started(1)]);
+        const heldTask: TaskView = {
+            ...value.task,
+            state: 'waiting_for_background',
+            hold: {
+                reason: 'waiting_for_background',
+                run_id: RUN_ID,
+                tool_call_id: 'tool_1',
+            },
+        };
+        await act(async () => {
+            render(<TaskDetail task={heldTask} client={value.client} onBack={vi.fn()} onOpenSurface={vi.fn()} />, host);
+            await Promise.resolve();
+        });
+        expect(host.querySelector('[data-static-background]')?.textContent).toBe(
+            'Background and cross-device tasks require an optional service. Closing this tab stops local work.',
+        );
+        expect(host.textContent).not.toMatch(/continue in background|keep running after/i);
+    });
+
     it('never uses a page boolean to enable approval authority', async () => {
         const value = fixture([
             queued(0),

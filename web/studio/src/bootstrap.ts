@@ -8,9 +8,16 @@ import { StudioApp } from './components/StudioApp.js';
 import { activateStudioMigration, studioMigrationStatus } from './persistence/migration.js';
 import { installLegacyShortcutGuard } from './agent/legacyShortcutGuard.js';
 import { AgentClient } from './agent/client.js';
+import { HostClient } from './agent/hostClient.js';
 import { AgentRuntime, type RuntimeToolExecutor } from './agent/runtime.js';
 import { AgentTaskStore } from './agent/store.js';
 import { ReplayModelPort, type ModelPort } from './agent/modelPort.js';
+import {
+    createTauriHostBridge,
+    StaticHostTransport,
+    TauriHostTransport,
+    type TauriCoreLike,
+} from './agent/transports.js';
 import { createAgentStore, type AgentStore } from './state/agent.js';
 
 interface LegacyAppWindow extends Window {
@@ -30,22 +37,64 @@ export function typedPreviewRequested(search: string): boolean {
     return params.get('legacy') !== '1' && params.get('typed') !== '0';
 }
 
+export type StudioHostKind = 'tauri' | 'static' | 'injected' | 'none';
+
 export interface StudioAgentOwner {
     store: AgentStore;
     taskStore: AgentTaskStore | null;
     runtime: AgentRuntime | null;
     client: AgentClient;
     modelPort: ModelPort;
+    hostKind: StudioHostKind;
     error: { code: string; message: string } | null;
+}
+
+export interface StudioAgentOwnerOptions {
+    indexedDB?: IDBFactory;
+    modelPort?: ModelPort;
+    now?: () => number;
+    toolExecutor?: RuntimeToolExecutor;
+    hostClient?: HostClient | null;
+    tauriCore?: TauriCoreLike | null;
+}
+
+/**
+ * The production host boundary: a real Tauri companion supplies the only host
+ * path; any other page composes the explicit static transport. Callers never
+ * construct a second host client or a page-side approval authority.
+ */
+export function createStudioHostClient(
+    options: { tauriCore?: TauriCoreLike | null } = {},
+): { client: HostClient; kind: 'tauri' | 'static' } {
+    const bridge = createTauriHostBridge(options.tauriCore);
+    if (bridge !== null) {
+        return {
+            client: new HostClient({ transport: new TauriHostTransport({ bridge }) }),
+            kind: 'tauri',
+        };
+    }
+    return {
+        client: new HostClient({ transport: new StaticHostTransport() }),
+        kind: 'static',
+    };
 }
 
 // One production browser owner: the runtime owns the reducer/task adapter and
 // the client is the only UI-facing path. A missing or unopenable IndexedDB
 // keeps the legacy shell usable through an explicit runtime_unavailable client
 // instead of constructing a second store or writer.
-export function createStudioAgentOwner(options: { indexedDB?: IDBFactory; modelPort?: ModelPort; now?: () => number; toolExecutor?: RuntimeToolExecutor } = {}): StudioAgentOwner {
+export function createStudioAgentOwner(options: StudioAgentOwnerOptions = {}): StudioAgentOwner {
     const store = createAgentStore();
     const modelPort = options.modelPort ?? new ReplayModelPort();
+    const host =
+        options.hostClient !== undefined
+            ? options.hostClient === null
+                ? null
+                : { client: options.hostClient, kind: 'injected' as const }
+            : options.toolExecutor !== undefined
+                ? null
+                : createStudioHostClient({ tauriCore: options.tauriCore });
+    const hostKind: StudioHostKind = host === null ? 'none' : host.kind;
     try {
         const taskStore = new AgentTaskStore({
             store,
@@ -59,8 +108,9 @@ export function createStudioAgentOwner(options: { indexedDB?: IDBFactory; modelP
             ownsTaskStore: false,
             ...(options.now === undefined ? {} : { now: options.now }),
             ...(options.toolExecutor === undefined ? {} : { toolExecutor: options.toolExecutor }),
+            ...(host === null ? {} : { hostClient: host.client }),
         });
-        return { store, taskStore, runtime, client: new AgentClient({ runtime }), modelPort, error: null };
+        return { store, taskStore, runtime, client: new AgentClient({ runtime }), modelPort, hostKind, error: null };
     } catch (error) {
         const code = error !== null && typeof error === 'object' && 'code' in error && typeof (error as { code?: unknown }).code === 'string'
             ? (error as { code: string }).code
@@ -71,6 +121,7 @@ export function createStudioAgentOwner(options: { indexedDB?: IDBFactory; modelP
             runtime: null,
             client: new AgentClient({ store }),
             modelPort,
+            hostKind: 'none',
             error: { code, message: error instanceof Error ? error.message : String(error) },
         };
     }
@@ -131,6 +182,7 @@ export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?:
             toolExecutor: testApi.createGatedTestToolExecutor(),
         }),
     });
+    root.dataset.host = owner.hostKind;
     try {
         await owner.client.open();
     } catch {
@@ -172,6 +224,7 @@ export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?:
             worker.removeEventListener('message', forwardMessage);
             if (!legacyWorker) worker.terminate();
             root.dataset.active = 'false';
+            delete root.dataset.host;
             root.hidden = true;
             render(null, root);
             if (previousSkipHref !== null) retargetSkipLink(previousSkipHref);

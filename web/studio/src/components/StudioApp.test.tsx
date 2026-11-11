@@ -66,9 +66,9 @@ describe('StudioApp', () => {
         const paletteInput = host.querySelector<HTMLInputElement>('input[aria-label="Search commands"]')!;
         act(() => { paletteInput.value = 'Go to Changes'; paletteInput.dispatchEvent(new Event('input', { bubbles: true })); });
         act(() => { paletteInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
-        expect(host.textContent).toContain('Native Git is unavailable in this browser build; use the desktop build.');
+        expect(host.textContent).toContain('Git requires the local companion. Uploaded files can still be reviewed locally.');
         act(() => { destination('Terminal').click(); });
-        expect(host.textContent).toContain('Interactive PTY is unavailable in this browser build.');
+        expect(host.textContent).toContain('Interactive terminal requires the local companion. This browser build cannot start a shell.');
         act(() => { destination('Agent').click(); });
         expect(host.textContent).toContain('No messages yet');
         act(() => { button('Inspector').click(); });

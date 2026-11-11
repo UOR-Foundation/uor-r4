@@ -29,15 +29,20 @@ const legacyWindow = window as unknown as {
     __studioApp?: { worker: FakeWorker };
     __studioFiles: Record<string, unknown>;
     __studioUi: Record<string, unknown>;
+    __TAURI__?: { core: { invoke(command: string, payload?: unknown): Promise<unknown> } };
 };
 
 describe('typed Studio bootstrap', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.unstubAllEnvs();
+        vi.unstubAllGlobals();
         vi.stubGlobal('Worker', FakeWorker);
         activateStudioMigration(false);
+        window.history.replaceState({}, '', '/');
         window.localStorage.clear();
         delete legacyWindow.__studioApp;
+        delete legacyWindow.__TAURI__;
         legacyWindow.__studioFiles = { tabs: () => [], activeFile: () => null };
         legacyWindow.__studioUi = {
             getSettings: () => ({}),
@@ -255,6 +260,75 @@ describe('typed Studio bootstrap', () => {
         expect(mounted.agentStore).toBe(mounted.agentClient.store);
         expect(mounted.store).toBeInstanceOf(LifecycleStore);
         mounted.dispose();
+    });
+
+    it('composes the production Tauri host client as the single runtime owner', async () => {
+        const commands: string[] = [];
+        const invoke = vi.fn(async (command: string) => {
+            commands.push(command);
+            if (command === 'agent_host_capabilities') {
+                return {
+                    tree: true,
+                    changes: true,
+                    readArtifact: true,
+                    terminal: true,
+                    git: true,
+                    mcp: true,
+                    approvals: true,
+                };
+            }
+            throw new Error(`unexpected host command ${command}`);
+        });
+        legacyWindow.__TAURI__ = { core: { invoke } };
+        vi.stubGlobal('indexedDB', {} as IDBFactory);
+        const root = document.createElement('div');
+        const mounted = await mountTypedStudio(root);
+        try {
+            expect(root.dataset.host).toBe('tauri');
+            expect(await mounted.agentClient.hostCapabilities()).toEqual({
+                tree: true,
+                changes: true,
+                readArtifact: true,
+                terminal: true,
+                git: true,
+                mcp: true,
+                approvals: true,
+            });
+            expect(commands).toEqual(['agent_host_capabilities']);
+            expect(mounted.agentRuntime).not.toBeNull();
+            expect(mounted.agentRuntime!.hostClient).not.toBeNull();
+            expect(mounted.agentClient.store).toBe(mounted.agentStore);
+            expect(mounted.agentRuntime!.store).toBe(mounted.agentStore);
+            expect(mounted.agentTaskStore!.store).toBe(mounted.agentStore);
+        } finally {
+            mounted.dispose();
+            delete legacyWindow.__TAURI__;
+        }
+    });
+
+    it('keeps the static host explicit and host_unavailable without a Tauri bridge', async () => {
+        vi.stubGlobal('indexedDB', {} as IDBFactory);
+        const root = document.createElement('div');
+        const mounted = await mountTypedStudio(root);
+        try {
+            expect(root.dataset.host).toBe('static');
+            expect(await mounted.agentClient.hostCapabilities()).toEqual({
+                tree: false,
+                changes: false,
+                readArtifact: false,
+                terminal: false,
+                git: false,
+                mcp: false,
+                approvals: false,
+            });
+            expect(mounted.agentRuntime).not.toBeNull();
+            expect(mounted.agentRuntime!.hostClient).not.toBeNull();
+            expect(mounted.agentClient.store).toBe(mounted.agentStore);
+            expect(mounted.agentRuntime!.store).toBe(mounted.agentStore);
+            expect(mounted.agentTaskStore!.store).toBe(mounted.agentStore);
+        } finally {
+            mounted.dispose();
+        }
     });
 
     it('reports an unavailable runtime without removing the legacy shell', async () => {
