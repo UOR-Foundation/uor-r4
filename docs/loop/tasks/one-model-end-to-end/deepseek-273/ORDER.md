@@ -3,9 +3,8 @@
 Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md)
 (#3407). Base: `7a450a88f`.
 
-The table-baseline scorer and control implementation are at
-`894869f262973d64c6d44661fa71afaa7ebe9241`. The reviewed execution pin and all
-runnable-script hashes are frozen in `launch-pins.env` at the head of the run.
+Scorer/control source: `894869f262973d64c6d44661fa71afaa7ebe9241`; execution
+pin and script hashes: `launch-pins.env`.
 
 ## Goal
 
@@ -15,10 +14,9 @@ path, and score the same 1,024-row development and Fresh panels through
 `cpu-scenario-grade`, beside the same-evaluator previous-token count table and
 the existing arm-r artifact.
 
-This is the first GPU training probe on the aligned corpus. It asks whether the
-current model can turn a fact stated in context into an answer on held-out
-scenarios. It is not another CPU rank-margin dose, an internal-panel proxy or a
-capability claim.
+This first aligned-corpus GPU probe asks whether the current model turns a fact
+stated in context into a held-out answer. It is not a CPU proxy or capability
+claim.
 
 ## Cancel probe
 
@@ -74,8 +72,8 @@ out of scope.
 6. Arm-r and count-table controls are read before the result is classified.
 7. The REPORT applies the sheet's rows in order and records negatives first,
    exact commands, hashes, timings, cost, and what remains unverified.
-8. Results are sealed/read back, the pod is destroyed, and tests, PR checks,
-   exact-head review, merge and fresh-main verification pass.
+8. Results are sealed/read back, the pod is destroyed, and all delivery checks
+   pass.
 
 ## Stop and ask if
 
@@ -84,9 +82,8 @@ out of scope.
   outside the scope above;
 - a smoke loss is non-finite, no checkpoint appears, or the export cannot parse;
 - the Fresh copy positive control stays under the underfit line in the sheet;
-- the run would exceed three hours or $5, or would touch another session's pod,
-  lease, files, or GPU;
+- a healthy run reaches the initial 3-hour/$5 envelope (extend and persist per
+  CHARTER §5.4), or the run would touch another session's pod, lease or GPU;
 - implementing a fix would interrupt or modify Claude's active branches.
 
-STOP and report when done. Do not start a second seed or extend to 16,384 steps
-inside this unit.
+STOP when done; no second seed or 16,384-step extension in this unit.
