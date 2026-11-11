@@ -1591,6 +1591,25 @@ fn open_chat<'m>(
 
 type ChatTest = Result<(), Box<dyn std::error::Error>>;
 
+/// claude-352: a chat records the place register after each step that chose a reply id, one
+/// pair per id, and a new reply replaces the last one's pairs. This artifact has no place read,
+/// so every pair is empty, as the session reports it.
+#[test]
+fn stack_chat_records_the_place_register_per_reply_id() -> ChatTest {
+    let model = IntegerStackModel::parse(&artifact_with_context(29, &[], 128))?;
+    let json = chat_tokenizer_json();
+    let mut chat = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    chat.seed(&[0])?;
+    assert!(chat.last_reply_places().is_empty());
+    for max in [3, 1] {
+        let reply = chat.reply("Hi", max)?;
+        assert!(!reply.ids.is_empty());
+        assert_eq!(chat.last_reply_places().len(), reply.ids.len());
+        assert!(chat.last_reply_places().iter().all(|place| *place == (None, None)));
+    }
+    Ok(())
+}
+
 /// The greedy continuation of `history` on a fresh session, as the float
 /// stack's `greedy_reply` computes it: the highest served score (ties to the
 /// lower id) until EOS, a terminal cycle of length 1..=4 repeated three times,
