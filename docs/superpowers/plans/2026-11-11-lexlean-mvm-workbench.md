@@ -44,7 +44,7 @@
 - Test: `crates/uor-r4-mvm/tests/mvm.rs`, `provenance.rs`
 
 **Interfaces:**
-- Consumes: pinned upstream `mvm.rs`, `mvm_cc.rs`, `mvm_initramfs.bin`, exact-output tests and the complete `r4_spiralcore_vsock` module.
+- Consumes: pinned upstream `mvm.rs`, `mvm_cc.rs`, `mvm_initramfs.bin`, exact-output tests and only `lexlean_generated.rs:45,751-46,087` (the self-contained `r4_spiralcore_vsock` tail module); every other generated-file line is excluded.
 - Produces: native `MvmSandbox` boot/status/exec/files/CoW/vsock APIs and `compile_c_to_rv64_elf`; secret/proxy/raw-sector test APIs are not WASM exports.
 
 - [ ] **Step 1: Write failing tests** for all four source hashes plus initramfs bytes; `mvm_boot_reports_rv64imac_and_zero_nic`, `mvm_exec_mutates_virtual_files`, `mvm_cow_restore_is_deterministic`, upstream fib/collatz exact stdout and `EM_RISCV=243`, a second distinct C program, invalid-C no-panic diagnostics, bounded vsock/placeholders, state-changing status and invalid ELF/CID/domain/synthetic-secret refusal.
@@ -120,17 +120,17 @@
 ### Task 6: Opt-in non-production smoke PR and real workbench acceptance
 
 **Files:**
-- Create: `web/studio/tests/e2e/github-smoke.spec.ts`, `local/kimi/lexlean-mvm-workbench/{smoke-target.md,smoke-evidence.md}`
+- Create: `web/studio/tests/e2e/github-smoke.spec.ts`, `docs/loop/tasks/studio-lexlean-mvm-workbench/kimi-1/{smoke-target.md,smoke-evidence.md}`
 - Modify: `web/studio/src/components/{GitHubPanel.tsx,GitHubPanel.test.tsx}`
 
 **Interfaces:**
 - Consumes: Tasks 3–5 workbench, virtual Git, pinned client and `AgentHost` companion.
-- Produces: retained non-production repository/ref/commit/PR identities plus real browser/host evidence.
+- Produces: committed non-production repository/ref/commit/PR identities plus real static-web browser/host and desktop-adapter evidence.
 
 - [ ] **Step 1: Write failing smoke assertions** `github_smoke_is_skipped_by_default`, `github_smoke_creates_branch_edit_commit_and_pr`, `github_smoke_does_not_touch_default_or_unapproved_repository`, `github_smoke_has_no_secret_in_storage_logs_or_mvm`, `github_opened_repo_file_base_sha_matches_pr_diff`, `virtual_git_commit_is_labelled_local_staging_not_github_sha`.
 - [ ] **Step 2: Run** default suite and opt-in smoke before implementation; expected default SKIP with zero writes and opt-in FAIL because no workflow/evidence exists.
-- [ ] **Step 3: Inspect then select a dedicated non-production fork/test repository.** Record exact owner/repo and provisioning authority in `smoke-target.md`; neither the product nor `githubClient` may create a repository. Enable only `UOR_GITHUB_SMOKE=1` plus its exact owner/repo allowlist. Through the real browser workbench and host-approved companion, separately approve branch, small non-code fixture edit, commit and PR. Do not use a model, read/print credentials, merge the PR or mutate a default/production branch.
-- [ ] **Step 4: Verify actual identities through bounded `gh api`** and the real workbench: repository tree seed, base ref/blob SHA, correct diff, one PR after repeated action, no secret persistence and explicit approval states. Exercise desktop companion reads/approval without claiming direct Tauri token writes. Direct static-web token write remains UNVERIFIED unless separately approved and observed.
+- [ ] **Step 3: Inspect then select a dedicated non-production fork/test repository.** Record exact owner/repo and provisioning authority in committed `docs/loop/tasks/studio-lexlean-mvm-workbench/kimi-1/smoke-target.md` and reproduce identities in REPORT; neither the product nor `githubClient` may create a repository. Enable only `UOR_GITHUB_SMOKE=1` plus its exact owner/repo allowlist. Drive the real static-web browser build in Chromium through the host-approved loopback companion `gh`, separately approving branch, small non-code fixture edit, commit and PR. Do not use a model, read/print credentials, merge the PR or mutate a default/production branch.
+- [ ] **Step 4: Verify actual identities through bounded `gh api`** and the real static-web workbench: repository tree seed, base ref/blob SHA, correct diff, one PR after repeated action, no secret persistence and explicit approval states. Exercise desktop companion reads/approval separately; direct Tauri/static-web token writes remain UNVERIFIED unless separately approved and observed.
 - [ ] **Step 5: Commit** `test(studio): accept opt-in non-production github smoke workflow`.
 
 ### Task 7: Final local/desktop acceptance, independent review and protected delivery
