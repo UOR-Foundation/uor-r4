@@ -2771,7 +2771,9 @@
               "--reply-tokens",
               "64",
               "--table-baseline",
-              "1"
+              "1",
+              "--out",
+              "base-development.json"
             ],
             "env": [],
             "id": "score-base-development",
@@ -2806,7 +2808,9 @@
               "--reply-tokens",
               "64",
               "--table-baseline",
-              "1"
+              "1",
+              "--out",
+              "model-development.json"
             ],
             "env": [],
             "id": "score-model-development",
@@ -2841,7 +2845,9 @@
               "--reply-tokens",
               "64",
               "--table-baseline",
-              "1"
+              "1",
+              "--out",
+              "base-fresh.json"
             ],
             "env": [],
             "id": "score-base-fresh",
@@ -2876,7 +2882,9 @@
               "--reply-tokens",
               "64",
               "--table-baseline",
-              "1"
+              "1",
+              "--out",
+              "model-fresh.json"
             ],
             "env": [],
             "id": "score-model-fresh",
@@ -2912,7 +2920,10 @@
               "REVIEWED_HEAD",
               "--arg",
               "code_pin",
-              "IMPLEMENTATION_PIN",
+              "CODE_PIN",
+              "--arg",
+              "implementation_source",
+              "IMPLEMENTATION_SOURCE",
               "--arg",
               "job_sha256",
               "JOB_SHA256",
@@ -2938,6 +2949,15 @@
               "base_artifact_sha256",
               "BASE_SHA256",
               "--arg",
+              "scenario_receipt_sha256",
+              "SCENARIO_RECEIPT_SHA256",
+              "--arg",
+              "preflight_development_sha256",
+              "PREFLIGHT_DEVELOPMENT_SHA256",
+              "--arg",
+              "preflight_fresh_sha256",
+              "PREFLIGHT_FRESH_SHA256",
+              "--arg",
               "contract_semantic_blake3",
               "CONTRACT_SEMANTIC_BLAKE3",
               "--arg",
@@ -2960,6 +2980,9 @@
             "id": "classify",
             "inputs": [
               "scenario-decision.jq",
+              "scenario-receipt",
+              "preflight-development",
+              "preflight-fresh",
               "base-development.json",
               "model-development.json",
               "base-fresh.json",
@@ -3709,9 +3732,9 @@
         "summary": "One fresh-start 1,024-step training of the current FBS/Hamming geometric path on the aligned scenario corpus, exported as a bound uor-r4.lut-stack/10 artifact and scored against the same-evaluator previous-token count table.",
         "title": "FBS aligned-scenario 1,024-step GPU smoke"
       },
-      "semantic_blake3": "705fa688316af9ae72b1cfacc8fb874dab2f13e0efd3209c7b784ce952bea6e3",
+      "semantic_blake3": "6f1ab73f3ff9891ce313efc265f50d67be9f198a98ae2660fcaaa83ae770adec",
       "source": "conformance/stack/fbs-deepseek-scenario-smoke.toml",
-      "source_blake3": "5b2a8385ac61bb1c3e47344c89171bdd08955cc7aaffe313d35a7f3c678f1e92"
+      "source_blake3": "630909fbe6faeee08810afba5e6034063abac3f1f087e6c278f2c13b549a3add"
     }
   ],
   "schema": "uor-r4.stack-contract.generated/2",

@@ -482,20 +482,7 @@ fn grade_table_baseline(
     let mask = read_path(&train_root.join("response_mask.u8"))?;
     let manifest_bytes = read_path(&train_root.join("manifest.json"))?;
     let train = validate_corpus_manifest(&manifest_bytes, &token_bytes, &mask)?;
-    let split_receipt = receipt
-        .splits
-        .get("train")
-        .ok_or_else(|| invalid("scenario receipt has no TRAIN split"))?;
-    if train.split != "train"
-        || train.vocab != receipt.tokenizer.vocab_size
-        || train.bos != receipt.tokenizer.bos_id
-        || train.tokenizer_sha256 != receipt.tokenizer.sha256
-        || train.tokens_sha256 != split_receipt.tokens_sha256
-        || train.mask_sha256 != split_receipt.mask_sha256
-        || sha256(&manifest_bytes) != split_receipt.manifest_sha256
-    {
-        return Err(invalid("scenario TRAIN identity differs from its receipt"));
-    }
+    validate_train_identity(&train, receipt, &manifest_bytes)?;
     let corpus = CpuMaskedCorpus::from_bytes(&token_bytes, &mask, train.vocab, context, train.bos)?;
     let mut unigram = HashMap::<u32, u64>::new();
     let mut pair_counts = HashMap::<(u32, u32), u64>::new();
@@ -563,6 +550,29 @@ fn grade_table_baseline(
         by_archetype,
         rows,
     })
+}
+
+fn validate_train_identity(
+    train: &CpuCorpusIdentity,
+    receipt: &ScenarioReceipt,
+    manifest_bytes: &[u8],
+) -> Result<(), CpuTrainError> {
+    let split_receipt = receipt
+        .splits
+        .get("train")
+        .ok_or_else(|| invalid("scenario receipt has no TRAIN split"))?;
+    if train.split != "train"
+        || train.vocab != receipt.tokenizer.vocab_size
+        || train.bos != receipt.tokenizer.bos_id
+        || train.tokenizer_sha256 != receipt.tokenizer.sha256
+        || train.max_tokens != receipt.config.context
+        || train.tokens_sha256 != split_receipt.tokens_sha256
+        || train.mask_sha256 != split_receipt.mask_sha256
+        || sha256(manifest_bytes) != split_receipt.manifest_sha256
+    {
+        return Err(invalid("scenario TRAIN identity differs from its receipt"));
+    }
+    Ok(())
 }
 
 fn most_frequent_token(counts: &HashMap<u32, u64>) -> Option<u32> {
@@ -1151,6 +1161,25 @@ mod tests {
     fn count_table_frequency_ties_choose_the_lower_token() {
         let counts = HashMap::from([(9, 3), (4, 3), (7, 1)]);
         assert_eq!(most_frequent_token(&counts), Some(4));
+    }
+
+    #[test]
+    fn train_identity_refuses_a_context_that_differs_from_the_receipt() {
+        let (root, _) = scenario_root();
+        let train_root = root.join("train");
+        let token_bytes = fs::read(train_root.join("tokens.u16")).unwrap();
+        let mask = fs::read(train_root.join("response_mask.u8")).unwrap();
+        let manifest = fs::read(train_root.join("manifest.json")).unwrap();
+        let mut train = validate_corpus_manifest(&manifest, &token_bytes, &mask).unwrap();
+        let receipt =
+            parse_receipt(&fs::read(root.join("scenario-manifest.json")).unwrap()).unwrap();
+        train.max_tokens += 1;
+        let error = validate_train_identity(&train, &receipt, &manifest).unwrap_err();
+        assert!(
+            error.to_string().contains("TRAIN identity"),
+            "unexpected error: {error}"
+        );
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

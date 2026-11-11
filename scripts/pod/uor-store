@@ -8,6 +8,7 @@
 #   uor-store get REMOTE [DIR]    download a file, or a folder when REMOTE ends in /,
 #                                 into DIR (default: the current directory)
 #   uor-store ls [PREFIX]         list the store's files (under PREFIX), with sizes
+#   uor-store ls-optional [PREFIX] like ls, but a missing PREFIX is an empty result
 #
 # The token is the owner's `hf auth login` token, which `uor-pod up` copies to
 # /root/.cache/huggingface/token on a pod; it is read by the hf CLI from there
@@ -71,5 +72,23 @@ case $cmd in
         die "listing $STORE failed"
       url=$(tr -d '\r' < "$hdr" | sed -n 's/^[Ll]ink: .*<\([^>]*\)>; *rel="next".*/\1/p' | head -1)
     done;;
+  ls-optional)
+    command -v jq >/dev/null 2>&1 || die "ls-optional needs jq"
+    tokf=${HF_TOKEN_PATH:-${HF_HOME:-$HOME/.cache/huggingface}/token}
+    [ -r "$tokf" ] || die "no Hugging Face token at $tokf"
+    case ${2:-} in /*|*..*) die "PREFIX is a path inside the store (got '$2')";; esac
+    url="https://huggingface.co/api/datasets/$STORE/tree/main${2:+/${2%/}}?recursive=true"
+    body=$(mktemp); hdr=$(mktemp)
+    trap 'rm -f "$body" "$hdr"' EXIT
+    code=$(curl -sS -o "$body" -D "$hdr" -w '%{http_code}' \
+      -H "Authorization: Bearer $(cat "$tokf")" "$url") ||
+      die "listing $STORE failed"
+    case $code in
+      200)
+        jq -r '.[] | select(.type == "file") | "\(.size / 1048576 * 10 | round / 10) MB  \(.path)"' "$body" ||
+          die "listing $STORE returned invalid JSON";;
+      404) ;;
+      *) die "listing $STORE failed with HTTP $code";;
+    esac;;
   *) sed -n '2,15p' "$0"; exit 2;;
 esac
