@@ -108,6 +108,7 @@ impl From<CpuCorpusIdentity> for ScenarioCorpusIdentity {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScenarioGradeCounts {
     pub cases: usize,
+    pub prompt_ineligible: usize,
     pub complete: usize,
     pub eos_stops: usize,
     pub short_cycle_stops: usize,
@@ -126,6 +127,7 @@ impl ScenarioGradeCounts {
     fn empty() -> Self {
         Self {
             cases: 0,
+            prompt_ineligible: 0,
             complete: 0,
             eos_stops: 0,
             short_cycle_stops: 0,
@@ -203,7 +205,6 @@ pub struct ScenarioGradeReport {
     pub eligible_rows: usize,
     pub prompt_ineligible_rows: usize,
     pub selected_rows: usize,
-    pub selection_stride: usize,
     pub selected_ranks: Vec<usize>,
     pub reply_tokens: usize,
     pub elapsed_us: u64,
@@ -301,6 +302,9 @@ pub fn grade_scenarios(
     if model.shape().vocab != corpus.vocab {
         return Err(invalid("scenario artifact vocabulary differs"));
     }
+    model
+        .require_tokenizer_sha256(&tokenizer_sha256)
+        .map_err(|error| invalid(format!("scenario artifact tokenizer binding: {error}")))?;
 
     let cases = parse_cases(&scenarios_bytes, &config.split)?;
     let source_rows = cases.len();
@@ -309,6 +313,7 @@ pub fn grade_scenarios(
     }
     let mut candidates = Vec::new();
     let mut prompt_ineligible_rows = 0usize;
+    let mut ineligible_by_archetype = BTreeMap::<String, usize>::new();
     for case in cases {
         let Some((last, history)) = case.turns.split_last() else {
             return Err(invalid("scenario case has no turns"));
@@ -336,6 +341,7 @@ pub fn grade_scenarios(
         }
         if encoded.tokens.is_empty() || encoded.tokens.len() >= model.shape().context {
             prompt_ineligible_rows += 1;
+            *ineligible_by_archetype.entry(case.archetype).or_default() += 1;
             continue;
         }
         candidates.push(ScenarioCandidate {
@@ -348,7 +354,6 @@ pub fn grade_scenarios(
         return Err(invalid("scenario split has no prompt-eligible cases"));
     }
     let selected_rows = config.max_cases.min(eligible_rows);
-    let selection_stride = eligible_rows.div_ceil(selected_rows);
     let selected = (0..selected_rows)
         .map(|rank| even_rank(rank, eligible_rows, selected_rows))
         .collect::<Vec<_>>();
@@ -380,6 +385,10 @@ pub fn grade_scenarios(
             .push(row.clone());
     }
     counts.finish(&rows);
+    counts.prompt_ineligible = prompt_ineligible_rows;
+    for archetype in ineligible_by_archetype.keys() {
+        by_archetype.entry(archetype.clone()).or_default();
+    }
     let by_archetype = by_archetype
         .into_iter()
         .map(|(archetype, rows)| {
@@ -388,6 +397,10 @@ pub fn grade_scenarios(
                 counts.add(row);
             }
             counts.finish(&rows);
+            counts.prompt_ineligible = ineligible_by_archetype
+                .get(&archetype)
+                .copied()
+                .unwrap_or(0);
             (archetype, counts)
         })
         .collect();
@@ -406,7 +419,6 @@ pub fn grade_scenarios(
         eligible_rows,
         prompt_ineligible_rows,
         selected_rows,
-        selection_stride,
         selected_ranks,
         reply_tokens: config.reply_tokens,
         elapsed_us: started.elapsed().as_micros().try_into().unwrap_or(u64::MAX),
@@ -542,6 +554,12 @@ fn read_path(path: &Path) -> Result<Vec<u8>, CpuTrainError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use uor_r4_integer::stack::export_fbs_trunk_uorlut01;
+    use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth};
     use uor_r4_integer::stack::StackStop;
 
     fn case(value: Option<&str>, distractor: Option<&str>, scored: bool) -> ScenarioCase {
@@ -563,6 +581,180 @@ mod tests {
                 content: "It is amber.".to_owned(),
             }],
         }
+    }
+
+    fn fixture_tokenizer() -> Vec<u8> {
+        let mut vocab = serde_json::Map::new();
+        for (id, surface) in ["<|bos|>", "<|eos|>", "<|unk|>"].iter().enumerate() {
+            vocab.insert((*surface).to_owned(), serde_json::Value::from(id));
+        }
+        for byte in 0u32..256 {
+            let character = if (0x20..=0x7e).contains(&byte) {
+                char::from_u32(byte).expect("ASCII byte is a character")
+            } else {
+                char::from_u32(0x1000 + byte).expect("test byte code point is valid")
+            };
+            vocab.insert(character.to_string(), serde_json::Value::from(byte + 3));
+        }
+        for id in 259u32..4096 {
+            vocab.insert(format!("<filler-{id}>"), serde_json::Value::from(id));
+        }
+        serde_json::to_vec(&serde_json::json!({
+            "model": {
+                "type": "BPE",
+                "vocab": vocab,
+                "merges": []
+            },
+            "pre_tokenizer": {
+                "type": "ByteLevel",
+                "add_prefix_space": false
+            },
+            "added_tokens": [
+                {"id": 0, "content": "<|bos|>"},
+                {"id": 1, "content": "<|eos|>"},
+                {"id": 2, "content": "<|unk|>"}
+            ]
+        }))
+        .unwrap()
+    }
+
+    fn uort(tokens: &[u16], vocab: u32) -> Vec<u8> {
+        let mut bytes = vec![0u8; 64];
+        bytes[..4].copy_from_slice(b"UORT");
+        bytes[4..8].copy_from_slice(&1u32.to_le_bytes());
+        bytes[8..16].copy_from_slice(&(tokens.len() as u64).to_le_bytes());
+        bytes[16..20].copy_from_slice(&vocab.to_le_bytes());
+        for token in tokens {
+            bytes.extend_from_slice(&token.to_le_bytes());
+        }
+        bytes
+    }
+
+    fn scenario_root() -> (PathBuf, PathBuf) {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "uor-scenario-grade-test-{}-{nonce}",
+            std::process::id()
+        ));
+        let split = root.join("development");
+        fs::create_dir_all(&split).unwrap();
+
+        let tokenizer = fixture_tokenizer();
+        let tokenizer_path = root.join("tokenizer.json");
+        fs::write(&tokenizer_path, &tokenizer).unwrap();
+        let tokenizer_sha256 = sha256(&tokenizer);
+
+        let tokens = uort(&[0, 3, 4, 1], 4096);
+        let mask = vec![0, 0, 0, 1];
+        fs::write(split.join("tokens.u16"), &tokens).unwrap();
+        fs::write(split.join("response_mask.u8"), &mask).unwrap();
+
+        let case = serde_json::to_vec(&serde_json::json!({
+            "scenario_id": "dv-test-copy",
+            "family_id": "dv-test",
+            "split": "development",
+            "archetype": "copy",
+            "question_family": "development-1",
+            "entity": null,
+            "attribute": null,
+            "value": "Hi",
+            "distractor_value": "Bye",
+            "scored_question": true,
+            "expected_eos": true,
+            "reference_reply": "Hi",
+            "turns": [
+                {"role": "user", "content": "Hi"},
+                {"role": "assistant", "content": "Hi"}
+            ]
+        }))
+        .unwrap();
+        fs::write(split.join("scenarios.jsonl"), &case).unwrap();
+        let scenarios_sha256 = sha256(&case);
+
+        let manifest = serde_json::to_vec(&serde_json::json!({
+            "schema": "uor-r4-chat-corpus/v1",
+            "mask_schema": "uor-r4-response-mask/u8/v1",
+            "split": "development",
+            "tokenizer": {
+                "sha256": tokenizer_sha256,
+                "vocab_size": 4096,
+                "bos_id": 0
+            },
+            "tokens": 4,
+            "tokens_bytes": tokens.len(),
+            "mask_bytes": mask.len(),
+            "response_tokens": 1,
+            "max_tokens": 64,
+            "tokens_sha256": sha256(&tokens),
+            "mask_sha256": sha256(&mask)
+        }))
+        .unwrap();
+        fs::write(split.join("manifest.json"), &manifest).unwrap();
+
+        let receipt = serde_json::to_vec(&serde_json::json!({
+            "schema": SCENARIO_SCHEMA,
+            "config": {"context": 64},
+            "tokenizer": {
+                "sha256": tokenizer_sha256,
+                "vocab_size": 4096,
+                "bos_id": 0,
+                "dialogue_schema": "uor-r4.literal-role-dialogue/2"
+            },
+            "splits": {
+                "development": {
+                    "rows": 1,
+                    "tokens_sha256": sha256(&tokens),
+                    "mask_sha256": sha256(&mask),
+                    "manifest_sha256": sha256(&manifest),
+                    "scenarios_sha256": scenarios_sha256
+                }
+            }
+        }))
+        .unwrap();
+        fs::write(root.join("scenario-manifest.json"), receipt).unwrap();
+        (root, tokenizer_path)
+    }
+
+    #[test]
+    fn grade_scenarios_generates_a_non_vacuous_reply_through_stack_chat() {
+        let (root, tokenizer_path) = scenario_root();
+        let snapshot = synthetic_fbs_trunk_with(
+            272,
+            FbsSynth {
+                vocab: 4096,
+                d: 64,
+                mlp: 64,
+                layers: 1,
+                context: 64,
+                kept: 8,
+                gain_lo: 0.75,
+                gain_span: 1.5,
+                table: 0.25,
+                decay_step: 0.0625,
+            },
+        );
+        let artifact = export_fbs_trunk_uorlut01(&snapshot).unwrap();
+        let report = grade_scenarios(
+            &artifact,
+            &root,
+            &tokenizer_path,
+            ScenarioGradeConfig {
+                split: "development".to_owned(),
+                max_cases: 1,
+                reply_tokens: 4,
+            },
+        )
+        .unwrap();
+        assert_eq!(report.source_rows, 1);
+        assert_eq!(report.eligible_rows, 1);
+        assert_eq!(report.selected_rows, 1);
+        assert_eq!(report.rows.len(), 1);
+        assert!(report.rows[0].prompt_tokens > 0);
+        assert!(report.rows[0].generated_tokens > 0);
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

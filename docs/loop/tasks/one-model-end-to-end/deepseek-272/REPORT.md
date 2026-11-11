@@ -45,12 +45,13 @@ its internal panel failed admission.
   TRAIN documents and 185,023 training targets.
 - `cpu-scenario-grade` now encodes each held-out prompt with
   `DialogueProtocol::literal_roles_v2`, generates through the exact product
-  `StackChat` path, and reports EOS, short-cycle and cap stops separately from
-  exact references, asked values, distractors and abstentions.
+  `StackChat` path after validating any artifact-embedded tokenizer binding,
+  and reports EOS, short-cycle and cap stops separately from exact references,
+  asked values, distractors and abstentions.
 - The full public-artifact DEV and Fresh passes use all 1,024 cases with no
   prompt-ineligible rows. The non-timing report repeated byte for byte after
   removing only `elapsed_us`; the normalized SHA-256 was
-  `b285c274d6229cc1700f27bee8badfd890828c38bb79f9e2e9f50d160a45c3e6`.
+  `01931345bcdfc90dec01f5f892e12f94ac4521b2c926adc50eaa8883b8a0f565`.
 - The isolated CPU run remained deterministic and artifact-bound. The final
   checkpoint and artifact reloaded, and the independent CPU/serving audit
   matched 16,384 Q12 query coordinates, 64 token decisions and 512 kept cells
@@ -60,12 +61,12 @@ its internal panel failed admission.
 
 - `crates/uor-r4-cpu-train/src/scenario_grade.rs` adds receipt/tokenizer/
   corpus-bound scenario scoring, deterministic case selection and archetype
-  summaries.
+  summaries, including prompt-ineligible counts by archetype.
 - `crates/uor-r4-cpu-train/src/bin/cpu-scenario-grade.rs` exposes the readout.
 - `Cargo.toml` and `lib.rs` register the new component.
 - The item scope and CPU research notebook record the new readout and result.
 
-The change is about 810 new Rust lines plus documentation. The ORDER had no
+The change is about 1,020 new Rust lines plus documentation. The ORDER had no
 line estimate because the readout shape was not known until the cancel probe.
 
 No float trainer, CUDA source, serving schema, bar, milestone or Claude-owned
@@ -168,10 +169,10 @@ target/release/cpu-scenario-grade "$FINAL" "$CORPUS" "$TOKENIZER" \
 ## Checks run at the head
 
 - `cargo test --offline --locked -p uor-r4-cpu-train --lib
-  scenario_grade`: 7 passed.
+  scenario_grade`: 8 passed.
 - `cargo test --offline --locked -p uor-r4-cpu-train --bin
   cpu-scenario-grade`: 2 passed.
-- Full CPU library suite: **502 passed, 5 ignored, 0 failed** in 49.24 s.
+- Full CPU library suite: **503 passed, 5 ignored, 0 failed** in 48.62 s.
 - Release build of `cpu-scenario-grade`: passed.
 - Production `scenario-corpus check`: passed.
 - Zero-step TRAIN ingestion and served-forward parity: passed; the 256-step
@@ -190,14 +191,14 @@ target/release/cpu-scenario-grade "$FINAL" "$CORPUS" "$TOKENIZER" \
 ### Artifact paths
 
 - Baseline and instrument-fault reports:
-  `local/deepseek/scenario-training-2026-11-10/verified-current/baseline/`
+  `local/deepseek/scenario-training-2026-11-10/final-head/baseline/`
   and `.../baseline/` (the latter is the retained pre-StackChat instrument
   fault).
 - Arm-r reports:
-  `local/deepseek/scenario-training-2026-11-10/verified-current/arm-r/`.
+  `local/deepseek/scenario-training-2026-11-10/final-head/arm-r/`.
 - CPU run: `local/deepseek/scenario-training-2026-11-10/rank-margin-16384/`.
 - Final reports:
-  `local/deepseek/scenario-training-2026-11-10/verified-current/trained/`.
+  `local/deepseek/scenario-training-2026-11-10/final-head/trained/`.
 
 ## Skills used
 
