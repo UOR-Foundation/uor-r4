@@ -54,7 +54,8 @@ pub struct Codec<'a> {
 
 /// The documents of a corpus, each as its turns. Refused when a document does not open with the
 /// start mark, a turn has no role marker, or the response mask is not 1 on exactly the assistant
-/// turns' content.
+/// turns' content and end mark (0 on the start mark, every role marker, every separator and
+/// every other turn).
 pub fn documents(tokens: &[u32], mask: &[u8], marks: &Marks) -> Result<Vec<Vec<Turn>>> {
     if tokens.len() != mask.len() {
         return Err("the tokens and the response mask differ in length".to_owned());
@@ -79,6 +80,11 @@ pub fn documents(tokens: &[u32], mask: &[u8], marks: &Marks) -> Result<Vec<Vec<T
             .iter()
             .position(|&t| t == marks.bos)
             .map_or(tokens.len(), |p| start + 1 + p);
+        if mask[start] != 0 {
+            return Err(format!(
+                "the response mask is set on the start mark at token {start}"
+            ));
+        }
         let mut turns = Vec::new();
         let mut i = start + 1;
         while i < end {
@@ -87,12 +93,15 @@ pub fn documents(tokens: &[u32], mask: &[u8], marks: &Marks) -> Result<Vec<Vec<T
             let next = (a..end).find(|&j| {
                 tokens[j..end].starts_with(&marks.sep) && role_at(j + marks.sep.len()).is_some()
             });
-            let mut b = next.unwrap_or(end);
+            let stop = next.unwrap_or(end);
+            let mut b = stop;
             if b > a && tokens[b - 1] == marks.eos {
                 b -= 1;
             }
             let want = u8::from(role == Role::Assistant);
-            if mask[a..b].iter().any(|&m| m != want) {
+            let separator = next.map_or(stop..stop, |j| j..j + marks.sep.len());
+            let marks_clear = mask[i..a].iter().chain(&mask[separator]).all(|&m| m == 0);
+            if !marks_clear || mask[a..stop].iter().any(|&m| m != want) {
                 return Err(format!(
                     "the response mask disagrees with the {role:?} turn at token {a}"
                 ));
@@ -111,7 +120,9 @@ pub fn documents(tokens: &[u32], mask: &[u8], marks: &Marks) -> Result<Vec<Vec<T
 
 /// For every turn of the plain corpus, the content of the memory line that stands before its
 /// twin in the lined corpus (assistant turns only). Refused unless the two corpora hold the same
-/// documents and, with the system turns taken out, the same turns token for token.
+/// documents and, with the system turns taken out, the same turns token for token; and refused
+/// when a system turn of the lined corpus does not stand directly before a reply (so a reply has
+/// at most one line, and no line is left over).
 pub fn pair_lines(
     plain: &[u32],
     plain_docs: &[Vec<Turn>],
@@ -130,8 +141,13 @@ pub fn pair_lines(
         let mut lines = Vec::with_capacity(p.len());
         let mut pending = None;
         let mut twins = p.iter();
-        for turn in l {
+        for (n, turn) in l.iter().enumerate() {
             if turn.role == Role::System {
+                if l.get(n + 1).is_none_or(|next| next.role != Role::Assistant) {
+                    return Err(format!(
+                        "document {d}: a system line that does not stand directly before a reply"
+                    ));
+                }
                 pending = Some(turn.content.clone());
                 continue;
             }
@@ -208,7 +224,8 @@ pub fn holds(text: &str, value: &str) -> bool {
         })
 }
 
-/// Where the value's tokens stand in the reply, if the reply states it in the same pieces.
+/// Where the value's tokens stand in the reply, if the reply states it in the same pieces and as
+/// whole words (a run that is the start or the middle of a longer word is passed over).
 fn value_span(
     x: &[u32],
     reply: &Range<usize>,
@@ -222,10 +239,13 @@ fn value_span(
             if needle.is_empty() || needle.len() > reply.len() {
                 return None;
             }
-            x[reply.clone()]
-                .windows(needle.len())
-                .position(|w| w == needle.as_slice())
-                .map(|p| reply.start + p..reply.start + p + needle.len())
+            (reply.start..=reply.end - needle.len())
+                .find(|&p| {
+                    let end = p + needle.len();
+                    let around = p.saturating_sub(1).max(reply.start)..(end + 1).min(reply.end);
+                    x[p..end] == needle[..] && holds(&(codec.decode)(&x[around]), value)
+                })
+                .map(|p| p..p + needle.len())
         })
 }
 
@@ -242,7 +262,8 @@ struct Copied {
 
 impl Copied {
     /// Rules, in order: copy key 1 inside the turn, copy key 2 inside the turn, copy key 1 over
-    /// everything before the reply (today's read, with no turn admitted).
+    /// everything from the document's start (`lo`) up to the token being read, the reply's own
+    /// earlier tokens included (today's causal read, with no turn admitted).
     fn add(&mut self, x: &[u32], turn: &Range<usize>, lo: usize, span: Option<&Range<usize>>) {
         self.n += 1;
         let Some(span) = span else {
@@ -375,6 +396,7 @@ pub fn turn_census(
     let stop = &stops[registered_list];
 
     let (mut general, mut abstain) = (0usize, 0usize);
+    let (mut general_prior, mut abstain_prior) = (0usize, 0usize);
     let per_list = || vec![0usize; tops.len()];
     let (mut general_labelled, mut abstain_labelled) = (per_list(), per_list());
     let (mut clause_shares, mut clause_pick, mut turn_pick) = (per_list(), per_list(), per_list());
@@ -384,7 +406,7 @@ pub fn turn_census(
     let (mut stated, mut in_asked, mut in_model, mut nowhere, mut label_latest) = (0, 0, 0, 0, 0);
     let (mut ext_model, mut ext_asked) = (0usize, 0usize);
     let (mut by_label, mut by_holder) = (Copied::default(), Copied::default());
-    let mut forms: HashMap<u32, (usize, usize, usize)> = HashMap::new();
+    let mut forms: HashMap<u32, [usize; 5]> = HashMap::new();
     let (mut rival, mut rival_later, mut no_subject) = (0usize, 0usize, 0usize);
     let (mut equal, mut equal_later, mut holes_of) = (0usize, 0usize, 0usize);
     let mut within = [0usize; 3];
@@ -404,18 +426,21 @@ pub fn turn_census(
                 .map(|s| label(x, doc, reply, s, &prior))
                 .collect();
             let registered = labels[registered_list];
-            let line = doc_lines[reply].as_ref().map(|range| {
-                let line = (codec.decode)(&lined.0[range.clone()]);
-                let line = line
-                    .trim()
-                    .strip_prefix("Memory:")
-                    .unwrap_or(line.trim())
-                    .trim();
-                line.strip_suffix('.').unwrap_or(line).to_owned()
-            });
+            let line = match doc_lines[reply].as_ref() {
+                None => None,
+                Some(range) => {
+                    let line = (codec.decode)(&lined.0[range.clone()]);
+                    let Some(rest) = line.trim().strip_prefix("Memory:") else {
+                        return Err(format!("a system line that is not a memory line: {line:?}"));
+                    };
+                    let rest = rest.trim();
+                    Some(rest.strip_suffix('.').unwrap_or(rest).to_owned())
+                }
+            };
             let value = match line.as_deref() {
                 None => {
                     general += 1;
+                    general_prior += usize::from(!prior.is_empty());
                     for (count, found) in general_labelled.iter_mut().zip(&labels) {
                         *count += usize::from(found.is_some());
                     }
@@ -423,6 +448,7 @@ pub fn turn_census(
                 }
                 Some("none") => {
                     abstain += 1;
+                    abstain_prior += usize::from(!prior.is_empty());
                     for (count, found) in abstain_labelled.iter_mut().zip(&labels) {
                         *count += usize::from(found.is_some());
                     }
@@ -532,15 +558,20 @@ pub fn turn_census(
             by_label.add(x, &doc[turn].content, lo, span.as_ref());
             let copied = by_label.all[0] > before;
             if let Some(span) = &span {
+                // A reply repeats the statement's wording at the value when the token before the
+                // value is the same in the reply and in the turn.
+                let said = &doc[turn].content;
+                let same = value_span(x, said, value, codec).is_some_and(|home| {
+                    home.start > said.start && x[home.start - 1] == x[span.start - 1]
+                });
+                let first = names_next(x, said.clone(), span.start - 1, false);
                 let form = forms.entry(x[span.start - 1]).or_default();
-                form.0 += 1;
-                form.1 += usize::from(copied);
-                form.2 += usize::from(names_next(
-                    x,
-                    doc[turn].content.clone(),
-                    span.start - 1,
-                    false,
-                ));
+                for (count, add) in form
+                    .iter_mut()
+                    .zip([true, copied, first, same, same && copied])
+                {
+                    *count += usize::from(add);
+                }
             }
             if !copied {
                 show_it(2, &mut examples);
@@ -587,7 +618,7 @@ pub fn turn_census(
     }
 
     let mut out = vec![format!(
-        "turn-census panel documents={} general={general} abstain={abstain} value={values} punctuation_ids={} train_tokens={}",
+        "turn-census panel documents={} general={general} abstain={abstain} value={values} punctuation_ids={} train_tokens={} general_with_a_prior_user_turn={general_prior} abstain_with_a_prior_user_turn={abstain_prior}",
         docs.len(),
         punct.len(),
         train.0.len()
@@ -631,11 +662,11 @@ pub fn turn_census(
     ));
     out.push(by_label.line("label"));
     out.push(by_holder.line("latest-holder"));
-    let mut forms: Vec<(u32, (usize, usize, usize))> = forms.into_iter().collect();
-    forms.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then(a.0.cmp(&b.0)));
-    for (before, (n, all, first)) in forms.into_iter().take(12) {
+    let mut forms: Vec<(u32, [usize; 5])> = forms.into_iter().collect();
+    forms.sort_by(|a, b| b.1[0].cmp(&a.1[0]).then(a.0.cmp(&b.0)));
+    for (before, [n, all, first, same, same_all]) in forms.into_iter().take(12) {
         out.push(format!(
-            "turn-census form token_before_value={:?} n={n} k1_all={all} k1_first={first}",
+            "turn-census form token_before_value={:?} n={n} k1_all={all} k1_first={first} turn_has_same_token_before={same} k1_all_of_those={same_all}",
             (codec.decode)(&[before])
         ));
     }
@@ -752,6 +783,40 @@ mod tests {
         assert_eq!(words(&tokens[docs[0][3].content.clone()]), "it's maya .");
         mask[docs[0][0].content.start] = 1;
         assert!(documents(&tokens, &mask, &marks()).is_err());
+        // A mask set on a role marker, on a separator or on the start mark is refused too.
+        mask[docs[0][0].content.start] = 0;
+        assert!(documents(&tokens, &mask, &marks()).is_ok());
+        for at in [0, docs[0][1].content.start - 1, docs[0][1].content.end + 1] {
+            mask[at] = 1;
+            assert!(documents(&tokens, &mask, &marks()).is_err(), "token {at}");
+            mask[at] = 0;
+        }
+    }
+
+    #[test]
+    fn a_value_inside_a_longer_word_is_passed_over() {
+        let piece = |id: &u32| match id {
+            100 => " 47",
+            101 => "47",
+            102 => "00",
+            103 => ".",
+            _ => " is",
+        };
+        let decode = |ids: &[u32]| ids.iter().map(piece).collect::<String>();
+        let encode = |text: &str| vec![if text.starts_with(' ') { 100 } else { 101 }];
+        let codec = Codec {
+            decode: &decode,
+            encode: &encode,
+        };
+        assert_eq!(
+            value_span(&[104, 100, 103], &(0..3), "47", &codec),
+            Some(1..2)
+        );
+        assert_eq!(value_span(&[104, 100, 102], &(0..3), "47", &codec), None);
+        assert_eq!(
+            value_span(&[104, 100, 102, 100, 103], &(0..5), "47", &codec),
+            Some(3..4)
+        );
     }
 
     #[test]
@@ -777,6 +842,19 @@ mod tests {
         let (other, other_mask) = corpus(&["User|my friend is ok .", PLAIN[1], PLAIN[2], PLAIN[3]]);
         let o = documents(&other, &other_mask, &marks()).expect("other");
         assert!(pair_lines(&other, &o, &lined, &l).is_err());
+        // A system line anywhere but directly before a reply is refused: before a user turn, two
+        // before one reply, and one left over at the end.
+        let line = "System|Memory : maya .";
+        let misplaced: [&[&str]; 3] = [
+            &[PLAIN[0], PLAIN[1], line, PLAIN[2], PLAIN[3]],
+            &[PLAIN[0], PLAIN[1], PLAIN[2], line, line, PLAIN[3]],
+            &[PLAIN[0], PLAIN[1], PLAIN[2], PLAIN[3], line],
+        ];
+        for turns in misplaced {
+            let (bad, bad_mask) = corpus(turns);
+            let b = documents(&bad, &bad_mask, &marks()).expect("a well formed corpus");
+            assert!(pair_lines(&plain, &p, &bad, &b).is_err(), "{turns:?}");
+        }
     }
 
     #[test]
@@ -864,6 +942,30 @@ mod tests {
             "{out:#?}"
         );
         assert!(has("value_contiguous=1 clauses 1=1 2=0"), "{out:#?}");
+        // "it's maya" against "is maya": the reply does not repeat the statement's token.
+        assert!(
+            has("n=1 k1_all=0 k1_first=0 turn_has_same_token_before=0 k1_all_of_those=0"),
+            "{out:#?}"
+        );
+        assert!(
+            has("general_with_a_prior_user_turn=0 abstain_with_a_prior_user_turn=0"),
+            "{out:#?}"
+        );
+        // A system line that is not a memory line is refused, never read as a value.
+        let (stray, stray_mask) = corpus(&[PLAIN[0], PLAIN[1], PLAIN[2], "System|ok .", PLAIN[3]]);
+        let refused = turn_census(
+            (&plain, &plain_mask),
+            (&plain, &plain_mask),
+            (&stray, &stray_mask),
+            &marks(),
+            &codec,
+            &Stops {
+                tops: &[0],
+                registered: 0,
+            },
+            1,
+        );
+        assert!(refused.is_err());
     }
 
     #[test]
