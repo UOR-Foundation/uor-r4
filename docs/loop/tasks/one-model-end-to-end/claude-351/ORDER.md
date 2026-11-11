@@ -50,10 +50,24 @@ Stage 1 left these to the build. Each is stated here before any code, and none c
 | G6 | `uor-harness ratchet d23`, `d25`, `d32`: no additions. | the three commands |
 | G7 | A one-page sheet for stage 3 with a FIT from a reader who is not its author. | the sheet and the reader's verdict |
 
+## Amendments made during the build (11 Nov, claude's own decision review; logged for Casey, who can reverse them)
+
+Each is a fact the build met, the change it forces, and why no bar moves.
+
+1. **The one program lives in `crates/uor-r4-integer/src/fbs_snapshot.rs`.** The integer crate has two builds that share no engine code: the serving build (`--features serving-wasm`, the `stack` engine) and the default build the float trainer links. `fbs_snapshot.rs` is the one module both compile, and it is in the item's `scope:` line. So the register (`PlaceState`), the turns (`PlaceTurns`), the pick (`place_pick`) and the artifact's record (`PlaceMarks`, `PlaceImage`) are there, and `stack` re-exports them. This is "One register, one program" made literal: the trainer and the serve call the same compiled functions.
+2. **"One table for roles and the stop" is a record and one table.** Role markers are several tokens long ("User:" after a newline), so a class per token cannot name a turn. The artifact's header carries the marker token runs (`PlaceMarks`: begin, end, separator, the three role markers) and one section, `hamming.d{depth}.place`, carries three bits per token: stops a read, arms the register, opens the read. The serve still reads everything from the token stream alone.
+3. **G3 has no open-gain check.** The decision "Both gains are counts" makes the arm gain and the open gain saturating counts with no gradient. G3's list named "the open gain" in error. G3 checks the three differentiable parts: the two-half question's row, the pull aimed at the labelled place, and the mix with the register's source.
+4. **G1 is read on the dynamic program, and it is exact.** The census counts each reply row against the register as the reply's start left it; the program's register also steps and stops. Run token by token over the panel with the census's own finds, the program gives D3's line exactly (426, 30, 2, 5; 425 of 426; 413 of 562), no reply's register had left the true place at its value-start row, and all 425 opened values were read whole, none short and none long. The output with the program's lines removed hashes to claude-350's `census.out`.
+5. **G2 and G3 split at the GPU.** The vendored candle CPU backend refuses every tensor operation (D24, D29), so the trainer's forward and its gradients cannot run on the laptop, and this unit has no pod. The repo's standing form for such checks is a `#[cfg(feature = "cuda")]` test run on a pod.
+   - **G2a, on the laptop:** the register, the open rows and the offered token come from the same compiled program in the trainer and the serve, so they agree when its inputs agree. The tests are: the packed codes the trainer hands the program equal the codes of the exported artifact for every token and head; and the integer mix at an open row equals the float form `n + w(c − n)` within half a step.
+   - **G2b and G3, on the pod:** the trainer's forward against the served artifact row by row, and the three finite-difference checks, are written here as `cuda` tests and compile under the stub. They run as stage 3's first step, before any training, and a failure there stops stage 3. **This unit does not run them and does not claim them.**
+6. **Files in scope gain `crates/uor-r4-integer/src/fbs_snapshot.rs`**, already in the item's `scope:` line.
+
 ## Not established by this unit
 
 - Nothing is trained. No gate shows that a trained model takes the register's token, that the question rows learn their targets, or that the gains settle. Only stage 3 can.
 - G1 drives the register with the census's exact finds, not a model's. It checks the program, not the find.
+- The trainer's forward and its gradients are not run here (amendment 5): G2b and G3 are written and compiled, and run on the pod as stage 3's first step.
 - The 126 recall replies the find cannot reach stay out of reach.
 
 ## Cancel probe (run first)
@@ -70,6 +84,7 @@ Written by hand, as claude-347's to claude-350's were: claude-346 (PR #3913, a d
 - `docs/loop/tasks/one-model-end-to-end/claude-351/**`
 - `crates/uor-r4-float-train/src/flock_read_hamming.rs`, `geometric_stack_native.rs`, `in_space_long.rs`, `fbs_export.rs`, `turn_census.rs`, `bin/train-in-space.rs`
 - `crates/uor-r4-integer/src/stack/hamming.rs`, `mod.rs`, `session.rs`, `format.rs`, `synthetic.rs`, `tests.rs`, and `generation.rs`
+- `crates/uor-r4-integer/src/fbs_snapshot.rs` (amendment 1)
 - `docs/research/notebook/**` (one row a result)
 - A new source file only if the item's `scope:` line gains its path in the same commit.
 
