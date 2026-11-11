@@ -133,11 +133,13 @@ impl StudioServer {
     }
 }
 
-struct ParsedRequest {
+struct RequestHead {
     method: String,
     path: String,
     headers: Vec<(String, String)>,
-    body: Vec<u8>,
+    buffered: Vec<u8>,
+    content_length: Option<usize>,
+    clean_path: String,
 }
 
 struct RequestFailure {
@@ -168,22 +170,42 @@ fn serve_connection(
     let _ = stream.set_read_timeout(Some(Duration::from_millis(REQUEST_READ_TIMEOUT_MS)));
     let _ = stream.set_write_timeout(Some(Duration::from_millis(STREAM_WRITE_TIMEOUT_MS)));
 
-    let request = match read_request(&mut stream) {
-        Ok(request) => request,
+    let head = match read_request_head(&mut stream) {
+        Ok(head) => head,
         Err(failure) => {
             let _ = write_json_error(&mut stream, failure.status, failure.code, &failure.message);
             return Ok(());
         }
     };
-    let clean_path = request.path.split('?').next().unwrap_or("/");
+    let RequestHead {
+        method,
+        path,
+        headers,
+        buffered,
+        content_length,
+        clean_path,
+    } = head;
 
     if clean_path == HOST_RESULTS_PATH {
-        if request.method != "GET" {
+        if method != "GET" {
             return write_json_error(
                 &mut stream,
                 405,
                 "invalid_arguments",
                 "the host result stream is GET-only",
+            );
+        }
+        // The host routes authorize before any declared body is read, so an
+        // unauthenticated local process cannot force a large allocation.
+        if let Err(failure) = authorize(&headers, bound_host, expected_token) {
+            return write_json_error(&mut stream, failure.status, failure.code, &failure.message);
+        }
+        if has_query_parameter(&path, "token") {
+            return write_json_error(
+                &mut stream,
+                403,
+                "host_denied",
+                "tokens are accepted only in the X-UOR-Desktop-Token header",
             );
         }
         return serve_results(
@@ -192,12 +214,12 @@ fn serve_connection(
             shutdown,
             bound_host,
             expected_token,
-            &request.path,
-            &request.headers,
+            &path,
+            &headers,
         );
     }
     if clean_path == HOST_INTENTS_PATH {
-        if request.method != "POST" {
+        if method != "POST" {
             return write_json_error(
                 &mut stream,
                 405,
@@ -205,143 +227,83 @@ fn serve_connection(
                 "host intents are POST-only",
             );
         }
+        if let Err(failure) = authorize(&headers, bound_host, expected_token) {
+            return write_json_error(&mut stream, failure.status, failure.code, &failure.message);
+        }
+        if has_query_parameter(&path, "token") {
+            return write_json_error(
+                &mut stream,
+                403,
+                "host_denied",
+                "tokens are accepted only in the X-UOR-Desktop-Token header",
+            );
+        }
+        if !json_content_type(&headers) {
+            return write_json_error(
+                &mut stream,
+                415,
+                "invalid_arguments",
+                "host intent POST requires application/json",
+            );
+        }
+        let body = match read_declared_body(
+            &mut stream,
+            buffered,
+            content_length,
+            MAX_INTENT_BODY_BYTES,
+            true,
+        ) {
+            Ok(body) => body,
+            Err(failure) => {
+                return write_json_error(
+                    &mut stream,
+                    failure.status,
+                    failure.code,
+                    &failure.message,
+                )
+            }
+        };
         return serve_intent(
             stream,
             host,
             bound_host,
             expected_token,
-            &request.path,
-            &request.headers,
-            request.body,
+            &path,
+            &headers,
+            body,
         );
     }
 
-    let (status, content_type, body) = {
+    let body = match read_declared_body(
+        &mut stream,
+        buffered,
+        content_length,
+        MAX_OTHER_BODY_BYTES,
+        false,
+    ) {
+        Ok(body) => body,
+        Err(failure) => {
+            return write_json_error(&mut stream, failure.status, failure.code, &failure.message)
+        }
+    };
+    let (status, content_type, response) = {
         let mut guard = lock_host(&host);
         crate::handle_studio_http_request_with_host(
             &mut guard,
             studio_root,
             bound_host,
             expected_token,
-            &request.method,
-            &request.path,
-            &request.headers,
-            &request.body,
+            &method,
+            &path,
+            &headers,
+            &body,
         )
     };
-    write_http_response(&mut stream, status, content_type, &[], &body)
+    write_http_response(&mut stream, status, content_type, &[], &response)
         .map_err(|error| error.to_string())
 }
 
-fn read_request(stream: &mut TcpStream) -> Result<ParsedRequest, RequestFailure> {
-    let (head, mut buffered) = read_request_head(stream)?;
-    let (method, path, headers) = parse_request_head(&head)?;
-
-    if let Some(encoding) = find_header(&headers, "transfer-encoding") {
-        if !encoding.eq_ignore_ascii_case("identity") {
-            return Err(RequestFailure::new(
-                411,
-                "invalid_arguments",
-                "chunked request bodies are not served on the loopback host",
-            ));
-        }
-    }
-    let content_lengths: Vec<&str> = headers
-        .iter()
-        .filter(|(name, _)| name.eq_ignore_ascii_case("content-length"))
-        .map(|(_, value)| value.trim())
-        .collect();
-    if content_lengths.len() > 1 {
-        return Err(RequestFailure::new(
-            400,
-            "invalid_arguments",
-            "duplicate Content-Length headers are refused",
-        ));
-    }
-    let content_length = match content_lengths.first() {
-        None => None,
-        Some(value) => Some(value.parse::<usize>().map_err(|_| {
-            RequestFailure::new(
-                400,
-                "invalid_arguments",
-                "Content-Length must be a non-negative integer",
-            )
-        })?),
-    };
-    let clean_path = path.split('?').next().unwrap_or("/");
-    let cap = if clean_path == HOST_INTENTS_PATH {
-        MAX_INTENT_BODY_BYTES
-    } else {
-        MAX_OTHER_BODY_BYTES
-    };
-    let Some(length) = content_length else {
-        if method == "POST" && clean_path == HOST_INTENTS_PATH {
-            return Err(RequestFailure::new(
-                411,
-                "invalid_arguments",
-                "host intent POST requires Content-Length",
-            ));
-        }
-        return Ok(ParsedRequest {
-            method,
-            path,
-            headers,
-            body: Vec::new(),
-        });
-    };
-    if length > cap {
-        return Err(RequestFailure::new(
-            413,
-            "limit_exceeded",
-            "request body exceeds the loopback host limit",
-        ));
-    }
-    buffered.reserve(length.saturating_sub(buffered.len()));
-    while buffered.len() < length {
-        let mut chunk = [0u8; 16 * 1024];
-        match stream.read(&mut chunk) {
-            Ok(0) => {
-                return Err(RequestFailure::new(
-                    400,
-                    "invalid_arguments",
-                    "request body ended before Content-Length",
-                ))
-            }
-            Ok(read) => buffered.extend_from_slice(&chunk[..read]),
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                return Err(RequestFailure::new(
-                    400,
-                    "invalid_arguments",
-                    "request body read timed out",
-                ))
-            }
-            Err(error) if error.kind() == io::ErrorKind::TimedOut => {
-                return Err(RequestFailure::new(
-                    400,
-                    "invalid_arguments",
-                    "request body read timed out",
-                ))
-            }
-            Err(_) => {
-                return Err(RequestFailure::new(
-                    400,
-                    "invalid_arguments",
-                    "request body could not be read",
-                ))
-            }
-        }
-    }
-    buffered.truncate(length);
-    Ok(ParsedRequest {
-        method,
-        path,
-        headers,
-        body: buffered,
-    })
-}
-
-fn read_request_head(stream: &mut TcpStream) -> Result<(Vec<u8>, Vec<u8>), RequestFailure> {
+fn read_head_bytes(stream: &mut TcpStream) -> Result<(Vec<u8>, Vec<u8>), RequestFailure> {
     let mut buffer = Vec::new();
     loop {
         if let Some(position) = find_subslice(&buffer, b"\r\n\r\n") {
@@ -389,6 +351,125 @@ fn read_request_head(stream: &mut TcpStream) -> Result<(Vec<u8>, Vec<u8>), Reque
             }
         }
     }
+}
+
+fn read_request_head(stream: &mut TcpStream) -> Result<RequestHead, RequestFailure> {
+    let (head, buffered) = read_head_bytes(stream)?;
+    let (method, path, headers) = parse_request_head(&head)?;
+
+    // Every Transfer-Encoding header must be identity. Checking only the first
+    // would let `identity` followed by `chunked` through.
+    let encodings: Vec<&str> = headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("transfer-encoding"))
+        .map(|(_, value)| value.trim())
+        .collect();
+    if encodings
+        .iter()
+        .any(|encoding| !encoding.eq_ignore_ascii_case("identity"))
+    {
+        return Err(RequestFailure::new(
+            411,
+            "invalid_arguments",
+            "Transfer-Encoding must be identity on every header",
+        ));
+    }
+
+    let content_lengths: Vec<&str> = headers
+        .iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+        .map(|(_, value)| value.trim())
+        .collect();
+    if content_lengths.len() > 1 {
+        return Err(RequestFailure::new(
+            400,
+            "invalid_arguments",
+            "duplicate Content-Length headers are refused",
+        ));
+    }
+    let content_length = match content_lengths.first() {
+        None => None,
+        Some(value) => Some(value.parse::<usize>().map_err(|_| {
+            RequestFailure::new(
+                400,
+                "invalid_arguments",
+                "Content-Length must be a non-negative integer",
+            )
+        })?),
+    };
+    let clean_path = path.split('?').next().unwrap_or("/").to_string();
+    Ok(RequestHead {
+        method,
+        path,
+        headers,
+        buffered,
+        content_length,
+        clean_path,
+    })
+}
+
+fn read_declared_body(
+    stream: &mut TcpStream,
+    mut buffered: Vec<u8>,
+    content_length: Option<usize>,
+    cap: usize,
+    require_length: bool,
+) -> Result<Vec<u8>, RequestFailure> {
+    let Some(length) = content_length else {
+        if require_length {
+            return Err(RequestFailure::new(
+                411,
+                "invalid_arguments",
+                "host intent POST requires Content-Length",
+            ));
+        }
+        return Ok(Vec::new());
+    };
+    if length > cap {
+        return Err(RequestFailure::new(
+            413,
+            "limit_exceeded",
+            "request body exceeds the loopback host limit",
+        ));
+    }
+    buffered.reserve(length.saturating_sub(buffered.len()));
+    while buffered.len() < length {
+        let mut chunk = [0u8; 16 * 1024];
+        match stream.read(&mut chunk) {
+            Ok(0) => {
+                return Err(RequestFailure::new(
+                    400,
+                    "invalid_arguments",
+                    "request body ended before Content-Length",
+                ))
+            }
+            Ok(read) => buffered.extend_from_slice(&chunk[..read]),
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                return Err(RequestFailure::new(
+                    400,
+                    "invalid_arguments",
+                    "request body read timed out",
+                ))
+            }
+            Err(error) if error.kind() == io::ErrorKind::TimedOut => {
+                return Err(RequestFailure::new(
+                    400,
+                    "invalid_arguments",
+                    "request body read timed out",
+                ))
+            }
+            Err(_) => {
+                return Err(RequestFailure::new(
+                    400,
+                    "invalid_arguments",
+                    "request body could not be read",
+                ))
+            }
+        }
+    }
+    buffered.truncate(length);
+    Ok(buffered)
 }
 
 type ParsedHead = (String, String, Vec<(String, String)>);
@@ -454,35 +535,42 @@ fn serve_results(
         Ok(cursor) => cursor,
         Err(message) => return write_json_error(&mut stream, 400, "invalid_arguments", &message),
     };
+    let requested_cursor = cursor
+        .as_deref()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(0);
 
-    let (latest, backlog, subscription_id, receiver) = {
+    let (backlog, subscription_id, receiver) = {
         let mut guard = lock_host(&host);
         match guard.poll_results(cursor.as_deref()) {
-            Ok((latest, backlog)) => {
+            Ok((_latest, backlog)) => {
                 let (sender, receiver) = mpsc::channel::<HostToolResult>();
                 let (subscription_id, _) = guard
                     .subscribe_with_id(Box::new(move |result| {
                         let _ = sender.send(result.clone());
                     }))
                     .map_err(|error| error.to_string())?;
-                (latest, backlog, subscription_id, receiver)
+                (backlog, subscription_id, receiver)
             }
             Err(error) => {
                 return write_json_error(
                     &mut stream,
                     cursor_error_status(&error),
-                    static_error_code(&error),
+                    crate::agent_host::error_code(&error),
                     &error,
                 );
             }
         }
     };
 
-    if write_stream_headers(&mut stream, latest).is_err() {
+    // The header advertises only the cursor the client asked for. Advancing it
+    // to `latest` here would let a disconnect before backlog replay skip
+    // unprocessed results on resume.
+    if write_stream_headers(&mut stream, requested_cursor).is_err() {
         lock_host(&host).unsubscribe(subscription_id);
         return Ok(());
     }
-    let mut last_written = latest;
+    let mut last_written = requested_cursor;
     for result in backlog {
         if write_result_line(&mut stream, &result).is_err() {
             lock_host(&host).unsubscribe(subscription_id);
@@ -536,14 +624,7 @@ fn serve_intent(
             "tokens are accepted only in the X-UOR-Desktop-Token header",
         );
     }
-    let json_content = find_header(headers, "content-type").is_some_and(|value| {
-        value
-            .split(';')
-            .next()
-            .unwrap_or("")
-            .trim()
-            .eq_ignore_ascii_case("application/json")
-    });
+    let json_content = json_content_type(headers);
     if !json_content {
         return write_json_error(
             &mut stream,
@@ -564,7 +645,12 @@ fn serve_intent(
         }
     };
     if let Err(error) = AgentHost::validate_intent(&intent) {
-        return write_json_error(&mut stream, 400, static_error_code(&error), &error);
+        return write_json_error(
+            &mut stream,
+            400,
+            crate::agent_host::error_code(&error),
+            &error,
+        );
     }
     let intent_id = intent
         .get("intent_id")
@@ -663,6 +749,17 @@ fn find_header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a st
         .map(|(_, value)| value.trim())
 }
 
+fn json_content_type(headers: &[(String, String)]) -> bool {
+    find_header(headers, "content-type").is_some_and(|value| {
+        value
+            .split(';')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .eq_ignore_ascii_case("application/json")
+    })
+}
+
 fn constant_time_eq(left: &str, right: &str) -> bool {
     let left = left.as_bytes();
     let right = right.as_bytes();
@@ -712,24 +809,6 @@ fn cursor_error_status(error: &str) -> u16 {
     }
 }
 
-fn static_error_code(error: &str) -> &'static str {
-    let prefix = error.split(':').next().unwrap_or("internal");
-    match prefix {
-        "invalid_arguments" => "invalid_arguments",
-        "approval_forbidden" => "approval_forbidden",
-        "approval_expired" => "approval_expired",
-        "approval_digest_mismatch" => "approval_digest_mismatch",
-        "cross_task_event" => "cross_task_event",
-        "out_of_order" => "out_of_order",
-        "stale_generation" => "stale_generation",
-        "limit_exceeded" => "limit_exceeded",
-        "host_denied" => "host_denied",
-        "host_unavailable" => "host_unavailable",
-        "cursor_expired" => "cursor_expired",
-        _ => "internal",
-    }
-}
-
 fn result_sequence(result: &HostToolResult) -> u64 {
     result
         .cursor
@@ -765,9 +844,9 @@ fn write_result_line(stream: &mut TcpStream, result: &HostToolResult) -> io::Res
     stream.flush()
 }
 
-fn write_stream_headers(stream: &mut TcpStream, latest_cursor: u64) -> io::Result<()> {
+fn write_stream_headers(stream: &mut TcpStream, cursor: u64) -> io::Result<()> {
     let headers = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: {NDJSON_CONTENT_TYPE}\r\nCache-Control: no-store\r\nConnection: close\r\nX-UOR-Host-Cursor: {latest_cursor}\r\n\r\n"
+        "HTTP/1.1 200 OK\r\nContent-Type: {NDJSON_CONTENT_TYPE}\r\nCache-Control: no-store\r\nConnection: close\r\nX-UOR-Host-Cursor: {cursor}\r\n\r\n"
     );
     stream.write_all(headers.as_bytes())?;
     stream.flush()

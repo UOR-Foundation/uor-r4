@@ -262,8 +262,9 @@ fn internal_failure(message: impl Into<String>) -> HostFailure {
     HostFailure::new("internal", message)
 }
 
-fn static_failure_code(code: &str) -> &'static str {
-    match code {
+/// Canonical error-code prefix shared by the host and its HTTP transport.
+pub fn error_code(error: &str) -> &'static str {
+    match error.split(':').next().unwrap_or("").trim() {
         "invalid_arguments" => "invalid_arguments",
         "approval_forbidden" => "approval_forbidden",
         "approval_expired" => "approval_expired",
@@ -839,10 +840,11 @@ impl AgentHost {
         match self.invoke(mcp, intent_value) {
             Ok(result) => Ok(result),
             Err(error) => {
-                let (code, message) = match error.split_once(": ") {
-                    Some((code, message)) => (static_failure_code(code), message.to_string()),
-                    None => ("internal", error),
-                };
+                let code = error_code(&error);
+                let message = error
+                    .split_once(": ")
+                    .map(|(_, message)| message.to_string())
+                    .unwrap_or_else(|| error.clone());
                 Ok(self.finish(
                     parsed,
                     "error",

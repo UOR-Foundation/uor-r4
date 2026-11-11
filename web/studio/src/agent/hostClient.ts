@@ -123,6 +123,7 @@ export interface HostSubscribeOptions {
     cursor?: string | null;
     onResync?: (reason: 'cursor_expired') => void;
     onError?: (error: AgentClientError) => void;
+    onEnd?: () => void;
 }
 
 export interface HostTransportCapabilities extends HostCapabilities {
@@ -577,6 +578,7 @@ interface PendingEntry {
     resolve: (result: HostToolResult) => void;
     reject: (error: AgentClientError) => void;
     settled: boolean;
+    accepted: boolean;
     timer: unknown;
     explicitTimeout: boolean;
     removeAbort: (() => void) | null;
@@ -586,6 +588,7 @@ interface StreamListenerEntry {
     listener: (result: HostToolResult) => void;
     onError?: (error: AgentClientError) => void;
     onResync?: (reason: 'cursor_expired') => void;
+    onEnd?: () => void;
 }
 
 const DEFAULT_PENDING_TIMEOUT_MS = 30_000;
@@ -605,6 +608,7 @@ export class HostClient {
     private readonly pendingTimeoutMs: number;
     private subscription: HostSubscription | null = null;
     private subscriptionGeneration = 0;
+    private streamDead = false;
     private closed = false;
     private intentCounter = 0;
 
@@ -798,7 +802,19 @@ export class HostClient {
     }
 
     private markHostAccepted(entry: PendingEntry): void {
-        if (entry.settled || entry.explicitTimeout) return;
+        if (entry.settled) return;
+        if (this.streamDead) {
+            this.rejectPending(
+                entry,
+                new AgentClientError(
+                    'transport_closed',
+                    'host result stream ended before the result arrived',
+                ),
+            );
+            return;
+        }
+        entry.accepted = true;
+        if (entry.explicitTimeout) return;
         if (entry.timer !== null) {
             this.timers.clearTimeout(entry.timer);
             entry.timer = null;
@@ -836,6 +852,7 @@ export class HostClient {
             ...(options.onResync === undefined
                 ? {}
                 : { onResync: options.onResync }),
+            ...(options.onEnd === undefined ? {} : { onEnd: options.onEnd }),
         };
         this.streamListeners.add(entry);
         let closed = false;
@@ -923,6 +940,7 @@ export class HostClient {
             resolve,
             reject,
             settled: false,
+            accepted: false,
             timer: null,
             explicitTimeout: options.timeoutMs !== undefined,
             removeAbort: null,
@@ -984,6 +1002,10 @@ export class HostClient {
                     if (generation !== this.subscriptionGeneration) return;
                     this.failStream(error);
                 },
+                onEnd: () => {
+                    if (generation !== this.subscriptionGeneration) return;
+                    this.endStream();
+                },
             },
         );
         if (generation !== this.subscriptionGeneration || this.closed) {
@@ -991,6 +1013,36 @@ export class HostClient {
             return;
         }
         this.subscription = subscription;
+        this.streamDead = false;
+    }
+
+    private endStream(): void {
+        this.subscriptionGeneration += 1;
+        const subscription = this.subscription;
+        this.subscription = null;
+        this.streamDead = true;
+        try {
+            subscription?.close();
+        } catch {
+            // A transport close failure must not block pending cleanup.
+        }
+        for (const entry of [...this.pending.values()]) {
+            if (!entry.accepted) continue;
+            this.rejectPending(
+                entry,
+                new AgentClientError(
+                    'transport_closed',
+                    'host result stream ended before the result arrived',
+                ),
+            );
+        }
+        for (const listener of this.streamListeners) {
+            try {
+                listener.onEnd?.();
+            } catch {
+                // A consumer cannot break the transport lifecycle.
+            }
+        }
     }
 
     private failStream(
@@ -1000,6 +1052,7 @@ export class HostClient {
         this.subscriptionGeneration += 1;
         const subscription = this.subscription;
         this.subscription = null;
+        this.streamDead = false;
         try {
             subscription?.close();
         } catch {

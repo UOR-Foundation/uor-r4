@@ -16,7 +16,8 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Value};
 
 use uor_r4_desktop_client::agent_host::{
-    AgentHost, UnavailableMcpDispatch, HOST_RESULT_SCHEMA, MAX_HOST_RESULTS,
+    AgentHost, UnavailableMcpDispatch, HOST_RESULT_SCHEMA, MAX_HOST_ARGUMENT_BYTES,
+    MAX_HOST_RESULTS, MAX_HOST_SUBSCRIBERS,
 };
 use uor_r4_desktop_client::agent_server::{StudioServer, HOST_INTENTS_PATH, HOST_RESULTS_PATH};
 use uor_r4_desktop_client::{generate_launch_token, sha256_bytes, DesktopBackend, PinRegistry};
@@ -260,6 +261,29 @@ impl Conn {
             }
         }
     }
+
+    fn closed_within(&mut self, timeout: Duration) -> bool {
+        if !self.buffered.is_empty() {
+            return false;
+        }
+        self.stream
+            .set_read_timeout(Some(timeout))
+            .expect("set close timeout");
+        let mut byte = [0u8; 1];
+        match self.stream.read(&mut byte) {
+            Ok(0) => true,
+            Ok(_) => false,
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                false
+            }
+            Err(_) => true,
+        }
+    }
 }
 
 fn request(
@@ -328,6 +352,14 @@ fn post_intent(lab: &Lab, intent: &Value, content_type: Option<&str>) -> HttpRes
 }
 
 fn open_results(lab: &Lab, query: &str, origin: Option<&str>) -> Conn {
+    open_results_with_headers(lab, query, origin).0
+}
+
+fn open_results_with_headers(
+    lab: &Lab,
+    query: &str,
+    origin: Option<&str>,
+) -> (Conn, Vec<(String, String)>) {
     let mut conn = Conn::connect(&lab.base);
     let mut raw = format!(
         "GET {HOST_RESULTS_PATH}{query} HTTP/1.1\r\nHost: {}\r\nX-UOR-Desktop-Token: {}\r\nAccept: application/x-ndjson\r\n",
@@ -349,7 +381,7 @@ fn open_results(lab: &Lab, query: &str, origin: Option<&str>) -> Conn {
         content_type.starts_with("application/x-ndjson"),
         "results stream content type: {content_type}"
     );
-    conn
+    (conn, headers)
 }
 
 fn read_result(conn: &mut Conn, timeout: Duration) -> Value {
@@ -847,4 +879,179 @@ fn loopback_rejects_duplicate_authority_headers() {
     ));
     duplicate_length.send_bytes(&body);
     assert_eq!(duplicate_length.read_headers(Duration::from_secs(2)).0, 400);
+}
+
+#[test]
+fn loopback_rejects_non_identity_transfer_encoding() {
+    let lab = Lab::start("te-duplicate", |_, _| {});
+    let intent = data_intent("hti_data_000000000121", "file.tree", json!({"path": "src"}));
+    let body = serde_json::to_vec(&intent).expect("intent body");
+    let mut conn = Conn::connect(&lab.base);
+    conn.send(&format!(
+        "POST {HOST_INTENTS_PATH} HTTP/1.1\r\nHost: {0}\r\nOrigin: http://{0}\r\nContent-Type: application/json\r\nX-UOR-Desktop-Token: {1}\r\nTransfer-Encoding: identity\r\nTransfer-Encoding: chunked\r\nContent-Length: {2}\r\nConnection: close\r\n\r\n",
+        lab.base,
+        lab.token,
+        body.len()
+    ));
+    conn.send_bytes(&body);
+    assert_eq!(
+        conn.read_headers(Duration::from_secs(2)).0,
+        411,
+        "every Transfer-Encoding header must be identity"
+    );
+}
+
+#[test]
+fn loopback_intent_framing_is_bounded() {
+    let lab = Lab::start("framing", |_, _| {});
+
+    let mut chunked = Conn::connect(&lab.base);
+    chunked.send(&format!(
+        "POST {HOST_INTENTS_PATH} HTTP/1.1\r\nHost: {0}\r\nOrigin: http://{0}\r\nContent-Type: application/json\r\nX-UOR-Desktop-Token: {1}\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n",
+        lab.base, lab.token
+    ));
+    assert_eq!(chunked.read_headers(Duration::from_secs(2)).0, 411);
+
+    let mut oversized = Conn::connect(&lab.base);
+    oversized.send(&format!(
+        "POST {HOST_INTENTS_PATH} HTTP/1.1\r\nHost: {0}\r\nOrigin: http://{0}\r\nContent-Type: application/json\r\nX-UOR-Desktop-Token: {1}\r\nContent-Length: {2}\r\nConnection: close\r\n\r\n",
+        lab.base,
+        lab.token,
+        MAX_HOST_ARGUMENT_BYTES + 1_000_000
+    ));
+    assert_eq!(oversized.read_headers(Duration::from_secs(2)).0, 413);
+}
+
+#[test]
+fn loopback_authorizes_host_routes_before_reading_bodies() {
+    let lab = Lab::start("pre-auth", |_, _| {});
+    let huge = 19 * 1024 * 1024;
+
+    let mut intent = Conn::connect(&lab.base);
+    intent.send(&format!(
+        "POST {HOST_INTENTS_PATH} HTTP/1.1\r\nHost: {0}\r\nOrigin: http://{0}\r\nContent-Type: application/json\r\nContent-Length: {huge}\r\nConnection: close\r\n\r\n",
+        lab.base
+    ));
+    assert_eq!(
+        intent.read_headers(Duration::from_millis(1_500)).0,
+        403,
+        "an unauthenticated intent must be refused before its body is read"
+    );
+
+    let mut results = Conn::connect(&lab.base);
+    results.send(&format!(
+        "GET {HOST_RESULTS_PATH} HTTP/1.1\r\nHost: {0}\r\nContent-Length: {huge}\r\nConnection: close\r\n\r\n",
+        lab.base
+    ));
+    assert_eq!(
+        results.read_headers(Duration::from_millis(1_500)).0,
+        403,
+        "an unauthenticated result request must be refused before its body is read"
+    );
+}
+
+#[test]
+fn loopback_stream_resume_after_mid_backlog_disconnect() {
+    let lab = Lab::start("resume", |_, _| {});
+    for index in 0..2 {
+        let result = invoke_direct(
+            &lab,
+            data_intent(
+                &format!("hti_data_00000000013{index}"),
+                "file.tree",
+                json!({"path": "src"}),
+            ),
+        );
+        assert_eq!(result["status"], "ok");
+    }
+
+    let (mut first, headers) = open_results_with_headers(&lab, "?cursor=0", None);
+    let header_cursor = headers
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case("x-uor-host-cursor"))
+        .map(|(_, value)| value.as_str())
+        .unwrap_or_default();
+    assert_eq!(
+        header_cursor, "0",
+        "the stream must not advertise a cursor beyond unprocessed replay"
+    );
+    let first_result = read_result(&mut first, Duration::from_secs(3));
+    assert_eq!(first_result["cursor"], "1");
+    drop(first);
+
+    let (mut second, headers) = open_results_with_headers(&lab, "?cursor=1", None);
+    let header_cursor = headers
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case("x-uor-host-cursor"))
+        .map(|(_, value)| value.as_str())
+        .unwrap_or_default();
+    assert_eq!(header_cursor, "1");
+    let resumed = read_result(&mut second, Duration::from_secs(3));
+    assert_eq!(resumed["cursor"], "2");
+    assert_eq!(
+        resumed["intent_id"], "hti_data_000000000131",
+        "the resumed stream replays the unprocessed result exactly once"
+    );
+    assert!(second.read_line(Duration::from_millis(300)).is_none());
+}
+
+#[test]
+fn loopback_rejects_wrong_or_missing_host() {
+    let lab = Lab::start("host-guard", |_, _| {});
+
+    let mut wrong = Conn::connect(&lab.base);
+    wrong.send(&format!(
+        "GET {HOST_RESULTS_PATH} HTTP/1.1\r\nHost: evil.invalid\r\nX-UOR-Desktop-Token: {}\r\nConnection: close\r\n\r\n",
+        lab.token
+    ));
+    assert_eq!(wrong.read_headers(Duration::from_secs(2)).0, 403);
+
+    let mut missing = Conn::connect(&lab.base);
+    missing.send(&format!(
+        "GET {HOST_RESULTS_PATH} HTTP/1.1\r\nX-UOR-Desktop-Token: {}\r\nConnection: close\r\n\r\n",
+        lab.token
+    ));
+    assert_eq!(missing.read_headers(Duration::from_secs(2)).0, 403);
+}
+
+#[test]
+fn loopback_rejects_url_token_even_with_a_valid_header() {
+    let lab = Lab::start("url-token", |_, _| {});
+    let response = get(
+        &lab,
+        &format!("{HOST_RESULTS_PATH}?cursor=0&token={}", lab.token),
+        None,
+    );
+    assert_eq!(response.status, 403, "the token is header-only");
+}
+
+#[test]
+fn loopback_rejects_duplicate_origin() {
+    let lab = Lab::start("origin-duplicate", |_, _| {});
+    let origin = lab.url("");
+    let mut conn = Conn::connect(&lab.base);
+    conn.send(&format!(
+        "GET {HOST_RESULTS_PATH} HTTP/1.1\r\nHost: {0}\r\nX-UOR-Desktop-Token: {1}\r\nOrigin: {2}\r\nOrigin: {2}\r\nConnection: close\r\n\r\n",
+        lab.base,
+        lab.token,
+        origin.trim_end_matches('/')
+    ));
+    assert_eq!(conn.read_headers(Duration::from_secs(2)).0, 403);
+}
+
+#[test]
+fn evicted_result_stream_closes_without_hanging() {
+    let lab = Lab::start("eviction", |_, _| {});
+    let mut streams: Vec<Conn> = Vec::new();
+    for _ in 0..(MAX_HOST_SUBSCRIBERS + 1) {
+        streams.push(open_results(&lab, "", None));
+    }
+    assert!(
+        streams[0].closed_within(Duration::from_secs(2)),
+        "the evicted stream must terminate, not wait indefinitely"
+    );
+    assert!(
+        !streams[MAX_HOST_SUBSCRIBERS].closed_within(Duration::from_millis(200)),
+        "the newest subscriber remains open"
+    );
 }

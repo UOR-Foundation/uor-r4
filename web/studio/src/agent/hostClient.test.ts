@@ -2011,7 +2011,11 @@ describe('HostClient fix-2 ownership and recovery', () => {
         });
         const first = client.execute(firstIntent);
         void first.catch(() => undefined);
-        await flush();
+        await until(
+            () => transport.subscriptions.length === 1,
+            'first stream subscription',
+            2_000,
+        );
         expect(transport.subscriptions).toHaveLength(1);
         transport.subscriptions[0]!.options.onError?.(
             new AgentClientError('internal', 'stream failed'),
@@ -2023,7 +2027,7 @@ describe('HostClient fix-2 ownership and recovery', () => {
         await until(
             () => transport.subscriptions.length === 2,
             'stream resubscribe',
-            500,
+            2_000,
         );
         let settled = false;
         void second.then(
@@ -2438,9 +2442,19 @@ describe('HostClient fix-3 disposal and hardening', () => {
         });
         const pending = client.execute(await validIntent());
         void pending.catch(() => undefined);
-        await expect(disposition(pending)).resolves.toBe(
-            'rejected:host_unavailable',
-        );
+        const outcome = await Promise.race([
+            pending.then(
+                () => 'resolved',
+                (error: unknown) =>
+                    error instanceof AgentClientError
+                        ? `rejected:${error.code}`
+                        : 'rejected:unknown',
+            ),
+            new Promise<string>((resolve) =>
+                globalThis.setTimeout(() => resolve('pending'), 2_000),
+            ),
+        ]);
+        expect(outcome).toBe('rejected:host_unavailable');
         client.close();
     });
 
@@ -2925,9 +2939,17 @@ describe('HostClient Task 18 loopback and hostile transport', () => {
         const client = new HostClient({ transport, timers: scheduler });
         const pending = client.execute(await validIntent());
         void pending.catch(() => undefined);
-        await expect(disposition(pending)).resolves.toMatch(
-            /^rejected:(internal|invalid_event)$/,
-        );
+        const outcome = await Promise.race([
+            pending.then(
+                () => 'resolved',
+                (error: unknown) =>
+                    error instanceof AgentClientError ? error.code : 'unknown',
+            ),
+            new Promise<string>((resolve) =>
+                globalThis.setTimeout(() => resolve('pending'), 1_000),
+            ),
+        ]);
+        expect(outcome).toMatch(/^(internal|invalid_event)$/);
         expect(scheduler.pending).toBe(0);
         client.close();
     });
@@ -2974,14 +2996,119 @@ describe('HostClient Task 18 loopback and hostile transport', () => {
         const intent = await validIntent();
         const pending = client.execute(intent);
         void pending.catch(() => undefined);
-        await until(() => reads >= 1, 'accepted hostile transport', 500);
-        await flush();
+        await until(() => listeners.length === 1, 'hostile subscription', 2_000);
+        await until(
+            () => scheduler.pending === 0,
+            'accepted hostile transport',
+            2_000,
+        );
         expect(reads).toBe(1);
-        expect(scheduler.pending).toBe(0);
         listeners[0]!(await validResult(intent));
         await expect(pending).resolves.toMatchObject({
             intent_id: intent.intent_id,
         });
+        client.close();
+    });
+
+    test('loopback_clean_stream_end_fails_pending_and_resubscribes', async () => {
+        const scheduler = new ManualScheduler();
+        let gets = 0;
+        const intent = await validIntent({
+            intent_id: 'hti_0123456789abcdef_000000000106',
+        });
+        const secondIntent = await validIntent({
+            intent_id: 'hti_0123456789abcdef_000000000107',
+        });
+        const fetchImpl = (async (
+            input: RequestInfo | URL,
+        ): Promise<Response> => {
+            if (String(input).includes('/v1/studio/host/intents')) {
+                return new Response(JSON.stringify({ accepted: true }), {
+                    status: 202,
+                    headers: { 'content-type': 'application/json' },
+                });
+            }
+            gets += 1;
+            return new Response(
+                new ReadableStream<Uint8Array>({
+                    start(controller) {
+                        // The host closed the subscription (for example, an
+                        // evicted subscriber) after acceptance.
+                        controller.close();
+                    },
+                }),
+                {
+                    status: 200,
+                    headers: { 'content-type': 'application/x-ndjson' },
+                },
+            );
+        }) as typeof fetch;
+        const client = new HostClient({
+            transport: new LoopbackHostTransport({
+                token: 'launch-token',
+                baseUrl: 'http://127.0.0.1:4173',
+                fetch: fetchImpl,
+            }),
+            timers: scheduler,
+            pendingTimeoutMs: 30_000,
+        });
+        const pending = client.execute(intent);
+        void pending.catch(() => undefined);
+        const outcome = await Promise.race([
+            pending.then(
+                () => 'resolved',
+                (error: unknown) =>
+                    error instanceof AgentClientError ? error.code : 'unknown',
+            ),
+            new Promise<string>((resolve) =>
+                globalThis.setTimeout(() => resolve('pending'), 1_000),
+            ),
+        ]);
+        expect(outcome).toBe('transport_closed');
+        expect(scheduler.pending).toBe(0);
+        const second = client.execute(secondIntent);
+        void second.catch(() => undefined);
+        await until(() => gets === 2, 'clean-end resubscribe', 2_000);
+        client.close();
+    });
+
+    test('default_timeout_still_rejects_before_acceptance', async () => {
+        const scheduler = new ManualScheduler();
+        const transport: HostTransport = {
+            kind: 'bridge',
+            supportsStream: true,
+            async capabilities() {
+                return {
+                    kind: 'bridge',
+                    hostAvailable: true,
+                    streaming: 'channel',
+                    ...ALL_FALSE,
+                };
+            },
+            invoke() {
+                return new Promise<never>(() => undefined);
+            },
+            subscribe: () => ({
+                close: () => undefined,
+                cursor: () => null,
+            }),
+            async approve(input) {
+                return {
+                    approvalId: input.approvalId,
+                    decision: input.decision,
+                };
+            },
+        };
+        const client = new HostClient({
+            transport,
+            timers: scheduler,
+            pendingTimeoutMs: 10,
+        });
+        const pending = client.execute(await validIntent());
+        void pending.catch(() => undefined);
+        await until(() => scheduler.pending === 1, 'default timer', 2_000);
+        expect(scheduler.runNext()).toBe(true);
+        await expect(pending).rejects.toMatchObject({ code: 'transport_closed' });
         client.close();
     });
 

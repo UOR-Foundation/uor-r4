@@ -71,6 +71,14 @@ function notifyResync(options: HostSubscribeOptions): void {
     }
 }
 
+function notifyEnd(options: HostSubscribeOptions): void {
+    try {
+        options.onEnd?.();
+    } catch {
+        // A subscriber cannot break the transport lifecycle.
+    }
+}
+
 
 function falseCapabilities(
     kind: HostTransportKind,
@@ -680,7 +688,16 @@ export class LoopbackHostTransport implements HostTransport {
                 : null;
         let closed = false;
         const cursor = options.cursor ?? this.cursor;
-        void this.consume(fetchImpl, listener, cursor, controller).catch(
+        void this.consume(fetchImpl, listener, cursor, controller).then(
+            () => {
+                if (closed) return;
+                // A host stream that ends cleanly is a dead subscription, not
+                // a reason to wait forever: an evicted subscriber or a closed
+                // host must fail accepted pending work and allow a verified
+                // resync. A direct-result invoke in flight is left to settle
+                // from its own response.
+                notifyEnd(options);
+            },
             (error: unknown) => {
                 if (closed) return;
                 const clientError = toClientError(error);
