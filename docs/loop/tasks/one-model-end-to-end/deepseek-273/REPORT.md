@@ -3,12 +3,12 @@
 Lab: deepseek. Item:
 [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md)
 (#3407). Order: [ORDER.md](./ORDER.md). Base code: `7a450a88f`; launch code:
-`439bcca13f190f91d8701cf279ccd23fad77c8b4`; contract implementation source:
+`0e3f66a1e27f1d67f36b3457b9d3ede832a4a8a6`; contract implementation source:
 `4add144ebdc9087e47fe3fa830fb21116278644e`. All invoked-script hashes and
 the exact reviewed execution-head procedure are in
 [`launch-pins.env`](./launch-pins.env).
 
-**Status:** pre-run, pending fresh-context review 9. No GPU job has started.
+**Status:** pre-run, pending fresh-context review 10. No GPU job has started.
 
 ## What did not work
 
@@ -44,7 +44,12 @@ An eighth review then found that an active GPU run could cross the budget
 without an extension record, the pre-watcher budget omitted staging and lacked
 an inter-process lock, the contract implementation source was stale, and
 pre-watcher network calls could hang unmonitored. Those findings are repaired
-in the current registration.
+in the current registration. A ninth review then found that healthy extension
+still depended on an idle GPU, budget-result writes were outside the launcher
+lock, unknown pods could be marked KEEP, pre-watcher hangs remained, job
+failure provenance was incomplete, and the Markdown renderer dropped
+timeout-only command details. Those findings are repaired in the current
+registration.
 
 ## What changed
 
@@ -100,11 +105,11 @@ kept the correction bounded and checked against the registered evidence path.
 
 ## Still open
 
-Review 9, the GPU smoke, bound export, held-out scenario reads, row
+Review 10, the GPU smoke, bound export, held-out scenario reads, row
 classification, final cost and post-run exact-head review remain. This file
 will be replaced with the completed report before merge.
 
 ## Plain summary
 
-The registration and its control instrument are now ready for review 9. No
+The registration and its control instrument are now ready for review 10. No
 model result has been claimed.
