@@ -3,6 +3,10 @@
 Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md)
 (#3407). Base: `7a450a88f`.
 
+The table-baseline scorer and control implementation are at
+`894869f262973d64c6d44661fa71afaa7ebe9241`. The reviewed execution pin and all
+runnable-script hashes are frozen in `launch-pins.env` at the head of the run.
+
 ## Goal
 
 Train the current geometric FBS/Hamming model on the aligned scenario TRAIN for
