@@ -20,7 +20,7 @@ Arm r's recipe and copy rule, unchanged, with one read added in front of the cop
 
 | Step | What happens | Existing part | New |
 |---|---|---|---|
-| Turn code | Each user turn gets one sign code: the sum of its tokens' table points, each turned lane by lane by a learned unit quaternion, each with a learned weight for its token that starts at 1 | shared table; the Hamming read's lane rotation and `pack_signs`; a learned gain per token, as `--hamming-hold` has | the sum over a turn |
+| Turn code | Each turn, of either speaker, gets one sign code: the sum of its tokens' table points, each turned lane by lane by a learned unit quaternion, each with a learned weight for its token that starts at 1 | shared table; the Hamming read's lane rotation and `pack_signs`; a learned gain per token, as `--hamming-hold` has | the sum over a turn |
 | Ask | At a reply, the code of the turn being answered, through a second rotation | the type heads' second rotation | the same sum |
 | Choose | Hamming distance by popcount. The nearest turn inside a learned margin is admitted; if none is inside, none is | margin weights `max(0, m − d)/m`; `choose_sorted_from` | one choice a reply, not one a row |
 | Copy | The copy heads (latest exact match, arm r's rule) look only inside the admitted turn, and read nothing when no turn is admitted | `--hamming-copy-latest 1` | the restriction |
@@ -29,14 +29,21 @@ Arm r's recipe and copy rule, unchanged, with one read added in front of the cop
 
 What it replaces: the sieve and the `System: Memory:` line at serving, and the line in TRAIN (`recall=off`). What it is: a learned form of the sieve's shared-word count, in the Hamming read's arithmetic. What it is not: a read of the trunk's state, which is dominated by the last few tokens and "never learned where to look" (`flock_read_hamming.rs`, module text).
 
+**Known risks, stated before the counts.**
+- A reply of the form "It's VALUE." repeats no word of the statement before the value, so the latest exact match inside the right turn may still miss the value's first token. Stage 1's ceiling is split by reply form to size this; the repairs on hand are a reply that repeats the statement's words, or a pointer to the value inside the turn.
+- TRAIN's conversations hold about 4 turns and the 18-turn script 18, so the served read chooses among more turns than it was trained on. The code of a turn does not depend on how far back the turn is, which is the reason to pick by turn and not by the trunk's state.
+- The reply's first word still comes from the turn memory, whose keys are exact wording. Reworded questions are read, not fixed, by this arm.
+- The turn memory's rule for leaving a key to the copy read (`--turn-memory-leave-copied`) must be recounted under the admitted turn.
+- Serving needs one new header record in the artifact. Existing records do not change.
+
 It should also stop a known fault: today any "… is" in a general reply is filled with what last followed " is" in the conversation ("The opposite of hard is Maya."). With no turn admitted the copy heads read nothing.
 
 ## Stages
 
 1. **This unit, laptop only, no pod: three counts** on arm r's conversations without lines (TRAIN `conversations=60000 seed=13 recall=off`, panel `conversations=1000 seed=14 recall=off`), added to the trainer's existing census (`train-in-space --copy-key-oracle`):
-   - **Labels.** For each reply, the turn in which the latest exact match finds its tokens, and how many replies have one.
-   - **Ceiling.** With that turn admitted, the share of recall replies' value tokens the copy read names right, beside the share with no restriction (today).
-   - **Floor.** The share of replies for which an untrained code (plain table points, no rotation, weights 1) already picks the labelled turn, and the same on recall replies only.
+   - **Labels.** For each reply and each turn before it (either speaker, the turn being answered included): how many of the reply's tokens the latest exact match names right when it looks only inside that turn. The label is the turn with the most, if it names at least two (ties to the later turn); otherwise none. Reported: replies with a label; on recall replies (found by pairing with the same conversations written `recall=reply`), how often the labelled turn holds the line's value; and how many labelled turns lie whole inside a 192-token training window.
+   - **Ceiling.** With the labelled turn admitted, the share of recall replies whose value the copy read names right, split by the reply's form ("It's VALUE." against a reply that repeats the statement's words), beside the same share with no restriction (today).
+   - **Floor.** The share of replies for which an untrained code (plain table points, no rotation, weights 1) already picks the labelled turn, on all replies and on recall replies, by the number of turns to choose from.
 2. **Next unit, if stage 1 says go: build and register.** Trainer, exporter, session, tests with negative gates; the one-page sheet with bars taken from stage 1's counts; a fresh-context FIT. Laptop only.
 3. **Then one pod, when the owner says run:** arm s at seed 2 (arm r took 50 minutes and $0.78 on one 5090). Controls on the same rows: arm s served with admission off (the no-memory control, L-010), the oracle turn on the float panel (the ceiling), and arm r with its line as the reference. Seeds 1 and 3 only after a row-1 reading.
 4. **Wording.** The reworded 18-turn script and question templates held out of TRAIN. Read at stage 3 with no bar; its own step after.
