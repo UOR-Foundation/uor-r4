@@ -68,6 +68,7 @@ Written by hand, as claude-347's to claude-351's were: claude-346 (PR #3913, a d
 - `docs/loop/tasks/one-model-end-to-end/claude-352/**`
 - `docs/labs/one-model-end-to-end/instrument/**` (the reader's register print and its test)
 - `crates/uor-r4-integer/src/bin/uor-chat.rs` (only if the scripts' printed register needs it)
+- `crates/uor-r4-integer/src/stack/chat.rs` and `crates/uor-r4-integer/src/stack/tests.rs` (added 11 Nov, before any reading: the chat hides its session, so the print `--print-place` needs one accessor for the register's pairs of the last reply, and its test; print-only, no reply changes)
 - `docs/research/notebook/**` (one row a result)
 
 ## Inputs
