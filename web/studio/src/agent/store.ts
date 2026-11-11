@@ -1745,7 +1745,8 @@ export class AgentTaskStore {
             if (sequence >= MAX_EVENTS_PER_RUN) {
                 throw new AgentStoreError('limit_exceeded', 'run event limit is reached');
             }
-            const now = input.created_at_ms ?? this.clock();
+            const fenceNow = this.clock();
+            const now = input.created_at_ms ?? fenceNow;
             const eventId = `evt_${run.run_id}_${generation}_${sequence
                 .toString()
                 .padStart(12, '0')}`;
@@ -1794,7 +1795,7 @@ export class AgentTaskStore {
             );
             try {
                 const leases = transaction.objectStore('leases');
-                await this.checkImportFence(leases, now);
+                await this.checkImportFence(leases, fenceNow);
                 const lease = (await requestResult(leases.get(run.task_id))) as
                     | LeaseRecord
                     | undefined;
@@ -1802,7 +1803,7 @@ export class AgentTaskStore {
                     requireStoredLease(lease);
                     if (
                         lease.writer_id !== this.writerId &&
-                        now - lease.heartbeat_at_ms <= LEASE_STALE_MS
+                        fenceNow - lease.heartbeat_at_ms <= LEASE_STALE_MS
                     ) {
                         throw new AgentStoreError(
                             'stale_generation',
@@ -2190,6 +2191,16 @@ export class AgentTaskStore {
             await gate;
         }
         const event = input.event;
+        if (event.type === 'diff.comment') {
+            return {
+                status: 'rejected',
+                code: 'invalid_event',
+                message: 'diff.comment is local-only; use the dedicated comment append path',
+                event_id: event.event_id,
+                digest: null,
+                storage: null,
+            };
+        }
         if (input.now_ms !== undefined && !isNonNegativeInteger(input.now_ms)) {
             return {
                 status: 'rejected',

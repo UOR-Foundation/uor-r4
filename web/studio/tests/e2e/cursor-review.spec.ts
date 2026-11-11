@@ -115,8 +115,9 @@ async function addCommentDirect(
         body: string;
         headDigest: string;
         scope: 'last_turn' | 'branch';
+        createdAtMs?: number;
     },
-): Promise<{ comment_id: string; body: string; head_digest: string }> {
+): Promise<{ comment_id: string; body: string; head_digest: string; created_at_ms?: number }> {
     return page.evaluate(async (payload) => {
         const api = (window as unknown as {
             __studioTest?: {
@@ -144,6 +145,7 @@ async function addCommentOutcome(
         body: string;
         headDigest: string;
         scope: 'last_turn' | 'branch';
+        createdAtMs?: number;
     },
 ): Promise<{ ok: boolean; code?: string; message?: string }> {
     return page.evaluate(async (payload) => {
@@ -169,7 +171,7 @@ async function addCommentOutcome(
 async function readCommentsDirect(
     page: Page,
     taskId: string,
-): Promise<Array<{ comment_id: string; path: string; line: number; body: string; head_digest: string }>> {
+): Promise<Array<{ comment_id: string; path: string; line: number; body: string; head_digest: string; created_at_ms: number }>> {
     return page.evaluate(async (id) => {
         const api = (window as unknown as {
             __studioTest?: {
@@ -180,6 +182,7 @@ async function readCommentsDirect(
                         line: number;
                         body: string;
                         head_digest: string;
+                        created_at_ms: number;
                     }>>;
                 } | null;
             };
@@ -190,12 +193,66 @@ async function readCommentsDirect(
     }, taskId);
 }
 
+async function appendRemoteComment(
+    page: Page,
+    input: {
+        taskId: string;
+        runId: string;
+        body: unknown;
+        path?: string;
+        line?: number;
+        headDigest?: string;
+    },
+): Promise<Outcome & { status?: string }> {
+    return page.evaluate(async (payload) => {
+        const api = (window as unknown as {
+            __studioTest?: {
+                clientForTest?: () => {
+                    store: {
+                        getRunCursor(taskId: string, runId: string): {
+                            generation: number;
+                            lastSequence: number;
+                        } | null;
+                    };
+                    ingestWireEvent(text: string): Promise<Outcome & { status?: string }>;
+                } | null;
+            };
+        }).__studioTest;
+        const client = api?.clientForTest?.();
+        if (!client) return { ok: false, code: 'runtime_unavailable', message: 'client missing' };
+        const cursor = client.store.getRunCursor(payload.taskId, payload.runId);
+        if (cursor === null) return { ok: false, code: 'run_not_found', message: 'cursor missing' };
+        const generation = cursor.generation;
+        const sequence = cursor.lastSequence + 1;
+        const data = {
+            body: payload.body,
+            comment_id: 'cmt_aaaaaaaaaaaaaaaa',
+            head_digest: payload.headDigest ?? 'remote:digest',
+            line: payload.line ?? 0,
+            path: payload.path ?? 'src/a.ts',
+        };
+        const event = {
+            data,
+            event_id: `evt_${payload.runId}_${generation}_${String(sequence).padStart(12, '0')}`,
+            generation,
+            project_id: 'prj_0000000000000001',
+            recorded_at_ms: 1_800_000_000_000,
+            run_id: payload.runId,
+            schema: 'uor-r4.studio.agent-event/1',
+            sequence,
+            task_id: payload.taskId,
+            type: 'diff.comment',
+        };
+        return client.ingestWireEvent(JSON.stringify(event));
+    }, input);
+}
+
 function exportedCommentEvents(text: string): Array<{
     task_id: string;
     run_id: string;
     generation: number;
     sequence: number;
-    record: { event_id: string; canonical: string; digest: string; prev_digest: string | null };
+    record: { event_id: string; canonical: string; digest: string; prev_digest: string | null; recorded_at_ms: number };
 }> {
     return text
         .split('\n')
@@ -207,9 +264,43 @@ function exportedCommentEvents(text: string): Array<{
             run_id: string;
             generation: number;
             sequence: number;
-            record: { event_id: string; canonical: string; digest: string; prev_digest: string | null };
+            record: { event_id: string; canonical: string; digest: string; prev_digest: string | null; recorded_at_ms: number };
         })
         .filter((line) => (JSON.parse(line.record.canonical) as { type?: string }).type === 'diff.comment');
+}
+
+function exportedEventCount(text: string): number {
+    return text
+        .split('\n')
+        .filter((line) => line.length > 0)
+        .map((line) => JSON.parse(line) as { kind?: string })
+        .filter((line) => line.kind === 'event').length;
+}
+
+async function runCursor(
+    page: Page,
+    taskId: string,
+    runId: string,
+): Promise<{ generation: number; lastSequence: number; lastEventId: string | null; lastDigest: string | null } | null> {
+    return page.evaluate(({ taskId: id, runId: rid }) => {
+        const api = (window as unknown as {
+            __studioTest?: {
+                clientForTest?: () => {
+                    store: {
+                        getRunCursor(taskId: string, runId: string): {
+                            generation: number;
+                            lastSequence: number;
+                            lastEventId: string | null;
+                            lastDigest: string | null;
+                        } | null;
+                    };
+                } | null;
+            };
+        }).__studioTest;
+        const client = api?.clientForTest?.();
+        if (!client) return null;
+        return client.store.getRunCursor(id, rid);
+    }, { taskId, runId });
 }
 
 test.describe('Task 21 changes review and local comments', () => {
@@ -376,6 +467,93 @@ test.describe('Task 21 changes review and local comments', () => {
 
         const reexported = await call<string>(page, 'exportNdjson');
         expect(exportedCommentEvents(reexported)).toHaveLength(1);
+    });
+
+    test('generic_ingress_rejects_diff_comment_without_mutation', async ({ page }) => {
+        await openStudio(page);
+        await call<{ phase: string }>(page, 'open');
+        const seeded = await call<FixtureSeed>(page, 'createTaskAndEvents', {
+            mode: 'message',
+            title: 'Remote comment ingress',
+        });
+        const beforeExport = await call<string>(page, 'exportNdjson');
+        const beforeCount = exportedEventCount(beforeExport);
+        const beforeCursor = await runCursor(page, seeded.taskId, seeded.runId);
+        expect(beforeCursor).not.toBeNull();
+
+        const remote = await appendRemoteComment(page, {
+            taskId: seeded.taskId,
+            runId: seeded.runId,
+            body: 'remote note',
+        });
+        expect(remote).toMatchObject({ status: 'rejected', code: 'invalid_event' });
+
+        const malformed = await appendRemoteComment(page, {
+            taskId: seeded.taskId,
+            runId: seeded.runId,
+            body: 42,
+        });
+        expect(malformed).toMatchObject({ status: 'rejected', code: 'invalid_event' });
+
+        const afterExport = await call<string>(page, 'exportNdjson');
+        expect(exportedEventCount(afterExport)).toBe(beforeCount);
+        expect(exportedCommentEvents(afterExport)).toHaveLength(0);
+        expect(await runCursor(page, seeded.taskId, seeded.runId)).toEqual(beforeCursor);
+        expect(await readCommentsDirect(page, seeded.taskId)).toHaveLength(0);
+
+        await page.reload();
+        await expect(page.locator('#studio-typed-root')).toHaveAttribute('data-active', 'true');
+        await expect.poll(async () => (await call<{ phase: string }>(page, 'open')).phase).toBe('ready');
+        const reloadedExport = await call<string>(page, 'exportNdjson');
+        expect(exportedEventCount(reloadedExport)).toBe(beforeCount);
+        expect(exportedCommentEvents(reloadedExport)).toHaveLength(0);
+        expect(await readCommentsDirect(page, seeded.taskId)).toHaveLength(0);
+    });
+
+    test('future_created_at_cannot_bypass_lease', async ({ page }) => {
+        await openStudio(page);
+        await call<{ phase: string }>(page, 'open');
+        const seeded = await call<FixtureSeed>(page, 'createTaskAndEvents', {
+            mode: 'message',
+            title: 'Future timestamp task',
+        });
+        expect((await call<Outcome>(page, 'appendChanges')).ok).toBe(true);
+        expect((await call<Outcome>(page, 'finishFixtureForTest')).ok).toBe(true);
+
+        const lease = await call<Outcome>(page, 'acquireLease', 'other-writer');
+        expect(lease.ok, JSON.stringify(lease)).toBe(true);
+        const future = 9_000_000_000_000;
+        const rejected = await addCommentOutcome(page, {
+            taskId: seeded.taskId,
+            path: 'src/a.ts',
+            line: 0,
+            body: 'future note',
+            headDigest: 'turn:3:fixture',
+            scope: 'last_turn',
+            createdAtMs: future,
+        });
+        expect(rejected).toMatchObject({ ok: false, code: 'stale_generation' });
+        expect(await readCommentsDirect(page, seeded.taskId)).toHaveLength(0);
+
+        const released = await call<Outcome>(page, 'releaseLease', 'other-writer');
+        expect(released.ok, JSON.stringify(released)).toBe(true);
+        const accepted = await addCommentDirect(page, {
+            taskId: seeded.taskId,
+            path: 'src/a.ts',
+            line: 0,
+            body: 'future note',
+            headDigest: 'turn:3:fixture',
+            scope: 'last_turn',
+            createdAtMs: future,
+        });
+        expect(accepted.body).toBe('future note');
+        const comments = await readCommentsDirect(page, seeded.taskId);
+        expect(comments).toHaveLength(1);
+        expect(comments[0]!.created_at_ms).toBe(future);
+        const exported = await call<string>(page, 'exportNdjson');
+        const events = exportedCommentEvents(exported);
+        expect(events).toHaveLength(1);
+        expect(events[0]!.record.recorded_at_ms).toBe(future);
     });
 
     test('static_browser_reviews_uploaded_file_locally', async ({ page }) => {
