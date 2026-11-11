@@ -2627,6 +2627,7 @@
         "commands": [
           {
             "args": [
+              "conformance/stack/preflight-check.sh",
               "BASE_SHA256",
               "preflight-development",
               "PREFLIGHT_DEVELOPMENT_SHA256",
@@ -2642,7 +2643,7 @@
               "preflight-fresh"
             ],
             "outputs": [],
-            "program": "conformance/stack/preflight-check.sh",
+            "program": "bash",
             "role": "verify",
             "timeout_seconds": 300
           },
@@ -2720,7 +2721,146 @@
             ],
             "program": "target/release/train-in-space",
             "role": "train",
-            "timeout_seconds": 7200
+            "timeout_seconds": 10800
+          },
+          {
+            "args": [
+              "--data-root",
+              "DATA_ROOT",
+              "--train-split",
+              "TRAIN_SPLIT",
+              "--train-sha256",
+              "TRAIN_SHA256",
+              "--train-mask-sha256",
+              "TRAIN_MASK_SHA256",
+              "--objective",
+              "cell",
+              "--retain-rates",
+              "1",
+              "--decay-mult",
+              "1",
+              "--lr",
+              "0.001",
+              "--lr-end",
+              "0",
+              "--train-as-served",
+              "1",
+              "--context",
+              "192",
+              "--width",
+              "256",
+              "--hamming-read",
+              "4",
+              "--batch",
+              "16",
+              "--turn-memory",
+              "8",
+              "--turn-memory-reply",
+              "1",
+              "--turn-memory-dropout",
+              "500",
+              "--samples",
+              "8",
+              "--reply-tokens",
+              "48",
+              "--steps",
+              "64",
+              "--eval-every",
+              "64",
+              "--hamming-copy-latest",
+              "1",
+              "--turn-memory-leave-copied",
+              "1",
+              "--seed",
+              "273",
+              "--out",
+              "SMOKE_OUT"
+            ],
+            "env": [],
+            "id": "smoke-train",
+            "inputs": [
+              "scenario-receipt",
+              "train-tokens",
+              "train-mask",
+              "train-manifest",
+              "train-scenarios",
+              "trainer-dev-tokens",
+              "trainer-dev-mask",
+              "tokenizer"
+            ],
+            "outputs": [
+              "SMOKE_CHECKPOINT"
+            ],
+            "program": "target/release/train-in-space",
+            "role": "train",
+            "timeout_seconds": 1800
+          },
+          {
+            "args": [
+              "--data-root",
+              "DATA_ROOT",
+              "--train-split",
+              "TRAIN_SPLIT",
+              "--train-sha256",
+              "TRAIN_SHA256",
+              "--train-mask-sha256",
+              "TRAIN_MASK_SHA256",
+              "--score-rows",
+              "SMOKE_CHECKPOINT",
+              "--out",
+              "SMOKE_SCORE_OUT",
+              "--context",
+              "192",
+              "--samples",
+              "8",
+              "--reply-tokens",
+              "48",
+              "--retain-rates",
+              "1",
+              "--seed",
+              "273"
+            ],
+            "env": [],
+            "id": "smoke-score",
+            "inputs": [
+              "scenario-receipt",
+              "train-tokens",
+              "train-mask",
+              "train-manifest",
+              "trainer-dev-tokens",
+              "trainer-dev-mask",
+              "tokenizer",
+              "SMOKE_CHECKPOINT"
+            ],
+            "outputs": [
+              "SMOKE_SCORE_OUT"
+            ],
+            "program": "target/release/train-in-space",
+            "role": "score",
+            "timeout_seconds": 1200
+          },
+          {
+            "args": [
+              "build",
+              "--offline",
+              "--release",
+              "--locked",
+              "-p",
+              "uor-r4-cpu-train",
+              "--bin",
+              "cpu-scenario-grade"
+            ],
+            "env": [
+              "CARGO_TARGET_DIR"
+            ],
+            "id": "build-scorer",
+            "inputs": [],
+            "outputs": [
+              "SCORE_TARGET_DIR/release/cpu-scenario-grade"
+            ],
+            "program": "cargo",
+            "role": "verify",
+            "timeout_seconds": 1800
           },
           {
             "args": [
@@ -2755,7 +2895,7 @@
             "outputs": [
               "SCORE_DIR/base-development.json"
             ],
-            "program": "cpu-scenario-grade",
+            "program": "local/deepseek/scenario-gpu-smoke-2026-11-11/local-target/release/cpu-scenario-grade",
             "role": "score",
             "timeout_seconds": 1800
           },
@@ -2787,12 +2927,12 @@
               "development-manifest",
               "development-scenarios",
               "tokenizer",
-              "step-001024.uorlut"
+              "ARTIFACT_OUT"
             ],
             "outputs": [
               "SCORE_DIR/model-development.json"
             ],
-            "program": "cpu-scenario-grade",
+            "program": "local/deepseek/scenario-gpu-smoke-2026-11-11/local-target/release/cpu-scenario-grade",
             "role": "score",
             "timeout_seconds": 1800
           },
@@ -2829,7 +2969,7 @@
             "outputs": [
               "SCORE_DIR/base-fresh.json"
             ],
-            "program": "cpu-scenario-grade",
+            "program": "local/deepseek/scenario-gpu-smoke-2026-11-11/local-target/release/cpu-scenario-grade",
             "role": "score",
             "timeout_seconds": 1800
           },
@@ -2861,12 +3001,12 @@
               "fresh-manifest",
               "fresh-scenarios",
               "tokenizer",
-              "step-001024.uorlut"
+              "ARTIFACT_OUT"
             ],
             "outputs": [
               "SCORE_DIR/model-fresh.json"
             ],
-            "program": "cpu-scenario-grade",
+            "program": "local/deepseek/scenario-gpu-smoke-2026-11-11/local-target/release/cpu-scenario-grade",
             "role": "score",
             "timeout_seconds": 1800
           },
@@ -3003,7 +3143,7 @@
               "turn_memory_reply.safetensors",
               "config.json",
               "tokenizer",
-              "step-001024.snapshot.json",
+              "SNAPSHOT_OUT",
               "fbs-deepseek-scenario-smoke.toml"
             ],
             "outputs": [
@@ -3011,7 +3151,7 @@
             ],
             "program": "target/release/fbs-export",
             "role": "export",
-            "timeout_seconds": 1800
+            "timeout_seconds": 900
           },
           {
             "args": [
@@ -3065,7 +3205,7 @@
             "id": "audit",
             "inputs": [
               "fbs-deepseek-scenario-smoke.toml",
-              "step-001024.uorlut",
+              "ARTIFACT_OUT",
               "tokenizer",
               "config.json",
               "model.safetensors",
@@ -3078,7 +3218,7 @@
             ],
             "program": "cargo",
             "role": "verify",
-            "timeout_seconds": 300
+            "timeout_seconds": 600
           }
         ],
         "decision": "docs/harness/prep/one-model-end-to-end-scenario-gpu-smoke-2026-11-11.md",
@@ -3702,9 +3842,9 @@
         "summary": "One fresh-start 1,024-step training of the current FBS/Hamming geometric path on the aligned scenario corpus, exported as a bound uor-r4.lut-stack/10 artifact and scored against the same-evaluator previous-token count table.",
         "title": "FBS aligned-scenario 1,024-step GPU smoke"
       },
-      "semantic_blake3": "528b0bcf87fe9b7a9ad1ad61683c02f9956230e95fe4fa4abb3cf585b25446bf",
+      "semantic_blake3": "54ea91987cd014198c4670f7387287638bc8419d14cd27a6b1d0745c2ed5f85b",
       "source": "conformance/stack/fbs-deepseek-scenario-smoke.toml",
-      "source_blake3": "3343b50720916b87fadf99a84f0b82dc4633b64974fd111675cce8f57f43c5fa"
+      "source_blake3": "583f72e8e8095e00e2cb2ce140a7e395a3e2d548d25affbd1b097e5eed891c72"
     }
   ],
   "schema": "uor-r4.stack-contract.generated/2",

@@ -336,8 +336,8 @@ non_claims = ["Cycle stopping does not recover content displaced by the cycle."]
 [[commands]]
 id = "preflight"
 role = "verify"
-program = "conformance/stack/preflight-check.sh"
-args = ["BASE_SHA256", "preflight-development", "PREFLIGHT_DEVELOPMENT_SHA256", "preflight-fresh", "PREFLIGHT_FRESH_SHA256"]
+program = "bash"
+args = ["conformance/stack/preflight-check.sh", "BASE_SHA256", "preflight-development", "PREFLIGHT_DEVELOPMENT_SHA256", "preflight-fresh", "PREFLIGHT_FRESH_SHA256"]
 env = []
 inputs = ["preflight-check.sh", "scenario-preflight-gate.jq", "preflight-development", "preflight-fresh"]
 outputs = []
@@ -351,12 +351,42 @@ args = ["--data-root", "DATA_ROOT", "--train-split", "TRAIN_SPLIT", "--train-sha
 env = []
 inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "train-scenarios", "trainer-dev-tokens", "trainer-dev-mask", "tokenizer"]
 outputs = ["model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors", "config.json"]
-timeout_seconds = 7200
+timeout_seconds = 10800
+
+[[commands]]
+id = "smoke-train"
+role = "train"
+program = "target/release/train-in-space"
+args = ["--data-root", "DATA_ROOT", "--train-split", "TRAIN_SPLIT", "--train-sha256", "TRAIN_SHA256", "--train-mask-sha256", "TRAIN_MASK_SHA256", "--objective", "cell", "--retain-rates", "1", "--decay-mult", "1", "--lr", "0.001", "--lr-end", "0", "--train-as-served", "1", "--context", "192", "--width", "256", "--hamming-read", "4", "--batch", "16", "--turn-memory", "8", "--turn-memory-reply", "1", "--turn-memory-dropout", "500", "--samples", "8", "--reply-tokens", "48", "--steps", "64", "--eval-every", "64", "--hamming-copy-latest", "1", "--turn-memory-leave-copied", "1", "--seed", "273", "--out", "SMOKE_OUT"]
+env = []
+inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "train-scenarios", "trainer-dev-tokens", "trainer-dev-mask", "tokenizer"]
+outputs = ["SMOKE_CHECKPOINT"]
+timeout_seconds = 1800
+
+[[commands]]
+id = "smoke-score"
+role = "score"
+program = "target/release/train-in-space"
+args = ["--data-root", "DATA_ROOT", "--train-split", "TRAIN_SPLIT", "--train-sha256", "TRAIN_SHA256", "--train-mask-sha256", "TRAIN_MASK_SHA256", "--score-rows", "SMOKE_CHECKPOINT", "--out", "SMOKE_SCORE_OUT", "--context", "192", "--samples", "8", "--reply-tokens", "48", "--retain-rates", "1", "--seed", "273"]
+env = []
+inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "trainer-dev-tokens", "trainer-dev-mask", "tokenizer", "SMOKE_CHECKPOINT"]
+outputs = ["SMOKE_SCORE_OUT"]
+timeout_seconds = 1200
+
+[[commands]]
+id = "build-scorer"
+role = "verify"
+program = "cargo"
+args = ["build", "--offline", "--release", "--locked", "-p", "uor-r4-cpu-train", "--bin", "cpu-scenario-grade"]
+env = ["CARGO_TARGET_DIR"]
+inputs = []
+outputs = ["SCORE_TARGET_DIR/release/cpu-scenario-grade"]
+timeout_seconds = 1800
 
 [[commands]]
 id = "score-base-development"
 role = "score"
-program = "cpu-scenario-grade"
+program = "local/deepseek/scenario-gpu-smoke-2026-11-11/local-target/release/cpu-scenario-grade"
 args = ["BASE_ARTIFACT", "CORPUS_ROOT", "TOKENIZER", "--split", "development", "--max-cases", "1024", "--reply-tokens", "64", "--table-baseline", "1", "--out", "SCORE_DIR/base-development.json"]
 env = []
 inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "development-tokens", "development-mask", "development-manifest", "development-scenarios", "tokenizer", "base-artifact"]
@@ -366,17 +396,17 @@ timeout_seconds = 1800
 [[commands]]
 id = "score-model-development"
 role = "score"
-program = "cpu-scenario-grade"
+program = "local/deepseek/scenario-gpu-smoke-2026-11-11/local-target/release/cpu-scenario-grade"
 args = ["ARTIFACT_OUT", "CORPUS_ROOT", "TOKENIZER", "--split", "development", "--max-cases", "1024", "--reply-tokens", "64", "--table-baseline", "1", "--out", "SCORE_DIR/model-development.json"]
 env = []
-inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "development-tokens", "development-mask", "development-manifest", "development-scenarios", "tokenizer", "step-001024.uorlut"]
+inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "development-tokens", "development-mask", "development-manifest", "development-scenarios", "tokenizer", "ARTIFACT_OUT"]
 outputs = ["SCORE_DIR/model-development.json"]
 timeout_seconds = 1800
 
 [[commands]]
 id = "score-base-fresh"
 role = "score"
-program = "cpu-scenario-grade"
+program = "local/deepseek/scenario-gpu-smoke-2026-11-11/local-target/release/cpu-scenario-grade"
 args = ["BASE_ARTIFACT", "CORPUS_ROOT", "TOKENIZER", "--split", "fresh", "--max-cases", "1024", "--reply-tokens", "64", "--table-baseline", "1", "--out", "SCORE_DIR/base-fresh.json"]
 env = []
 inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "fresh-tokens", "fresh-mask", "fresh-manifest", "fresh-scenarios", "tokenizer", "base-artifact"]
@@ -386,10 +416,10 @@ timeout_seconds = 1800
 [[commands]]
 id = "score-model-fresh"
 role = "score"
-program = "cpu-scenario-grade"
+program = "local/deepseek/scenario-gpu-smoke-2026-11-11/local-target/release/cpu-scenario-grade"
 args = ["ARTIFACT_OUT", "CORPUS_ROOT", "TOKENIZER", "--split", "fresh", "--max-cases", "1024", "--reply-tokens", "64", "--table-baseline", "1", "--out", "SCORE_DIR/model-fresh.json"]
 env = []
-inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "fresh-tokens", "fresh-mask", "fresh-manifest", "fresh-scenarios", "tokenizer", "step-001024.uorlut"]
+inputs = ["scenario-receipt", "train-tokens", "train-mask", "train-manifest", "fresh-tokens", "fresh-mask", "fresh-manifest", "fresh-scenarios", "tokenizer", "ARTIFACT_OUT"]
 outputs = ["SCORE_DIR/model-fresh.json"]
 timeout_seconds = 1800
 
@@ -419,9 +449,9 @@ role = "export"
 program = "target/release/fbs-export"
 args = ["--raw-gates", "--raw-transition", "--run-config", "config.json", "--stack-contract", "conformance/stack/fbs-deepseek-scenario-smoke.toml", "--stack-contract-semantic-blake3", "SEMANTIC_BLAKE3", "--tokenizer", "tokenizer.json", "SNAPSHOT_OUT", "ARTIFACT_OUT"]
 env = []
-inputs = ["model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors", "config.json", "tokenizer", "step-001024.snapshot.json", "fbs-deepseek-scenario-smoke.toml"]
+inputs = ["model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors", "config.json", "tokenizer", "SNAPSHOT_OUT", "fbs-deepseek-scenario-smoke.toml"]
 outputs = ["ARTIFACT_OUT"]
-timeout_seconds = 1800
+timeout_seconds = 900
 
 [[commands]]
 id = "serve"
@@ -439,9 +469,9 @@ role = "verify"
 program = "cargo"
 args = ["run", "--offline", "--release", "--locked", "-q", "-p", "xtask", "--", "stack-audit", "--contract", "conformance/stack/fbs-deepseek-scenario-smoke.toml", "--artifact", "ARTIFACT_OUT", "--tokenizer", "tokenizer.json", "--config", "config.json", "--checkpoint", "CHECKPOINT_DIR", "--out", "AUDIT_OUT"]
 env = []
-inputs = ["fbs-deepseek-scenario-smoke.toml", "step-001024.uorlut", "tokenizer", "config.json", "model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors"]
+inputs = ["fbs-deepseek-scenario-smoke.toml", "ARTIFACT_OUT", "tokenizer", "config.json", "model.safetensors", "hamming_read.safetensors", "turn_memory.safetensors", "turn_memory_reply.safetensors"]
 outputs = ["AUDIT_OUT"]
-timeout_seconds = 300
+timeout_seconds = 600
 
 [[readings]]
 id = "grounded-asked-value"

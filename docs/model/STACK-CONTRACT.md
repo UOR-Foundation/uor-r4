@@ -433,8 +433,8 @@ Schema: `uor-r4.lut-stack/6`
 
 One fresh-start 1,024-step training of the current FBS/Hamming geometric path on the aligned scenario corpus, exported as a bound uor-r4.lut-stack/10 artifact and scored against the same-evaluator previous-token count table.
 
-- Source: `conformance/stack/fbs-deepseek-scenario-smoke.toml` (BLAKE3 `3343b50720916b87fadf99a84f0b82dc4633b64974fd111675cce8f57f43c5fa`)
-- Semantic hash: `528b0bcf87fe9b7a9ad1ad61683c02f9956230e95fe4fa4abb3cf585b25446bf`
+- Source: `conformance/stack/fbs-deepseek-scenario-smoke.toml` (BLAKE3 `583f72e8e8095e00e2cb2ce140a7e395a3e2d548d25affbd1b097e5eed891c72`)
+- Semantic hash: `54ea91987cd014198c4670f7387287638bc8419d14cd27a6b1d0745c2ed5f85b`
 - Lane: `fbs`
 - State: `experimental`
 - Revision: 1
@@ -536,28 +536,34 @@ Schema: `uor-r4.lut-stack/10`
 
 ### Commands
 
-- **preflight (`verify`)**: `conformance/stack/preflight-check.sh BASE_SHA256 preflight-development PREFLIGHT_DEVELOPMENT_SHA256 preflight-fresh PREFLIGHT_FRESH_SHA256`
+- **preflight (`verify`)**: `bash conformance/stack/preflight-check.sh BASE_SHA256 preflight-development PREFLIGHT_DEVELOPMENT_SHA256 preflight-fresh PREFLIGHT_FRESH_SHA256`
   - env --; inputs `preflight-check.sh`<br>`scenario-preflight-gate.jq`<br>`preflight-development`<br>`preflight-fresh`; outputs --; timeout 300s
 - **train (`train`)**: `target/release/train-in-space --data-root DATA_ROOT --train-split TRAIN_SPLIT --train-sha256 TRAIN_SHA256 --train-mask-sha256 TRAIN_MASK_SHA256 --objective cell --retain-rates 1 --decay-mult 1 --lr 0.001 --lr-end 0 --train-as-served 1 --context 192 --width 256 --hamming-read 4 --batch 16 --turn-memory 8 --turn-memory-reply 1 --turn-memory-dropout 500 --samples 6 --reply-tokens 48 --steps 1024 --eval-every 256 --hamming-copy-latest 1 --turn-memory-leave-copied 1 --seed 273 --out TRAIN_OUT`
-  - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`train-scenarios`<br>`trainer-dev-tokens`<br>`trainer-dev-mask`<br>`tokenizer`; outputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`; timeout 7200s
-- **score-base-development (`score`)**: `cpu-scenario-grade BASE_ARTIFACT CORPUS_ROOT TOKENIZER --split development --max-cases 1024 --reply-tokens 64 --table-baseline 1 --out SCORE_DIR/base-development.json`
+  - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`train-scenarios`<br>`trainer-dev-tokens`<br>`trainer-dev-mask`<br>`tokenizer`; outputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`; timeout 10800s
+- **smoke-train (`train`)**: `target/release/train-in-space --data-root DATA_ROOT --train-split TRAIN_SPLIT --train-sha256 TRAIN_SHA256 --train-mask-sha256 TRAIN_MASK_SHA256 --objective cell --retain-rates 1 --decay-mult 1 --lr 0.001 --lr-end 0 --train-as-served 1 --context 192 --width 256 --hamming-read 4 --batch 16 --turn-memory 8 --turn-memory-reply 1 --turn-memory-dropout 500 --samples 8 --reply-tokens 48 --steps 64 --eval-every 64 --hamming-copy-latest 1 --turn-memory-leave-copied 1 --seed 273 --out SMOKE_OUT`
+  - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`train-scenarios`<br>`trainer-dev-tokens`<br>`trainer-dev-mask`<br>`tokenizer`; outputs `SMOKE_CHECKPOINT`; timeout 1800s
+- **smoke-score (`score`)**: `target/release/train-in-space --data-root DATA_ROOT --train-split TRAIN_SPLIT --train-sha256 TRAIN_SHA256 --train-mask-sha256 TRAIN_MASK_SHA256 --score-rows SMOKE_CHECKPOINT --out SMOKE_SCORE_OUT --context 192 --samples 8 --reply-tokens 48 --retain-rates 1 --seed 273`
+  - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`trainer-dev-tokens`<br>`trainer-dev-mask`<br>`tokenizer`<br>`SMOKE_CHECKPOINT`; outputs `SMOKE_SCORE_OUT`; timeout 1200s
+- **build-scorer (`verify`)**: `cargo build --offline --release --locked -p uor-r4-cpu-train --bin cpu-scenario-grade`
+  - env `CARGO_TARGET_DIR`; inputs --; outputs `SCORE_TARGET_DIR/release/cpu-scenario-grade`; timeout 1800s
+- **score-base-development (`score`)**: `local/deepseek/scenario-gpu-smoke-2026-11-11/local-target/release/cpu-scenario-grade BASE_ARTIFACT CORPUS_ROOT TOKENIZER --split development --max-cases 1024 --reply-tokens 64 --table-baseline 1 --out SCORE_DIR/base-development.json`
   - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`development-tokens`<br>`development-mask`<br>`development-manifest`<br>`development-scenarios`<br>`tokenizer`<br>`base-artifact`; outputs `SCORE_DIR/base-development.json`; timeout 1800s
-- **score-model-development (`score`)**: `cpu-scenario-grade ARTIFACT_OUT CORPUS_ROOT TOKENIZER --split development --max-cases 1024 --reply-tokens 64 --table-baseline 1 --out SCORE_DIR/model-development.json`
-  - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`development-tokens`<br>`development-mask`<br>`development-manifest`<br>`development-scenarios`<br>`tokenizer`<br>`step-001024.uorlut`; outputs `SCORE_DIR/model-development.json`; timeout 1800s
-- **score-base-fresh (`score`)**: `cpu-scenario-grade BASE_ARTIFACT CORPUS_ROOT TOKENIZER --split fresh --max-cases 1024 --reply-tokens 64 --table-baseline 1 --out SCORE_DIR/base-fresh.json`
+- **score-model-development (`score`)**: `local/deepseek/scenario-gpu-smoke-2026-11-11/local-target/release/cpu-scenario-grade ARTIFACT_OUT CORPUS_ROOT TOKENIZER --split development --max-cases 1024 --reply-tokens 64 --table-baseline 1 --out SCORE_DIR/model-development.json`
+  - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`development-tokens`<br>`development-mask`<br>`development-manifest`<br>`development-scenarios`<br>`tokenizer`<br>`ARTIFACT_OUT`; outputs `SCORE_DIR/model-development.json`; timeout 1800s
+- **score-base-fresh (`score`)**: `local/deepseek/scenario-gpu-smoke-2026-11-11/local-target/release/cpu-scenario-grade BASE_ARTIFACT CORPUS_ROOT TOKENIZER --split fresh --max-cases 1024 --reply-tokens 64 --table-baseline 1 --out SCORE_DIR/base-fresh.json`
   - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`fresh-tokens`<br>`fresh-mask`<br>`fresh-manifest`<br>`fresh-scenarios`<br>`tokenizer`<br>`base-artifact`; outputs `SCORE_DIR/base-fresh.json`; timeout 1800s
-- **score-model-fresh (`score`)**: `cpu-scenario-grade ARTIFACT_OUT CORPUS_ROOT TOKENIZER --split fresh --max-cases 1024 --reply-tokens 64 --table-baseline 1 --out SCORE_DIR/model-fresh.json`
-  - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`fresh-tokens`<br>`fresh-mask`<br>`fresh-manifest`<br>`fresh-scenarios`<br>`tokenizer`<br>`step-001024.uorlut`; outputs `SCORE_DIR/model-fresh.json`; timeout 1800s
+- **score-model-fresh (`score`)**: `local/deepseek/scenario-gpu-smoke-2026-11-11/local-target/release/cpu-scenario-grade ARTIFACT_OUT CORPUS_ROOT TOKENIZER --split fresh --max-cases 1024 --reply-tokens 64 --table-baseline 1 --out SCORE_DIR/model-fresh.json`
+  - env --; inputs `scenario-receipt`<br>`train-tokens`<br>`train-mask`<br>`train-manifest`<br>`fresh-tokens`<br>`fresh-mask`<br>`fresh-manifest`<br>`fresh-scenarios`<br>`tokenizer`<br>`ARTIFACT_OUT`; outputs `SCORE_DIR/model-fresh.json`; timeout 1800s
 - **classify (`verify`)**: `jq -n -f conformance/stack/scenario-decision.jq --arg run_id RUN_ID --arg source_head REVIEWED_HEAD --arg code_pin CODE_PIN --arg implementation_source IMPLEMENTATION_SOURCE --arg job_sha256 JOB_SHA256 --arg launcher_sha256 LAUNCHER_SHA256 --arg watcher_sha256 WATCHER_SHA256 --arg scorer_sha256 SCORER_SHA256 --arg review_sha256 REVIEW_SHA256 --arg input_manifest_sha256 INPUT_MANIFEST_SHA256 --arg bundle_sha256 BUNDLE_SHA256 --arg base_artifact_sha256 BASE_SHA256 --arg scenario_receipt_sha256 SCENARIO_RECEIPT_SHA256 --arg preflight_development_sha256 PREFLIGHT_DEVELOPMENT_SHA256 --arg preflight_fresh_sha256 PREFLIGHT_FRESH_SHA256 --arg contract_semantic_blake3 CONTRACT_SEMANTIC_BLAKE3 --arg artifact_sha256 MODEL_ARTIFACT_SHA256 --slurpfile base-development SCORE_DIR/base-development.json --slurpfile model-development SCORE_DIR/model-development.json --slurpfile base-fresh SCORE_DIR/base-fresh.json --slurpfile model-fresh SCORE_DIR/model-fresh.json`
   - env --; inputs `scenario-decision.jq`<br>`scenario-receipt`<br>`preflight-development`<br>`preflight-fresh`<br>`SCORE_DIR/base-development.json`<br>`SCORE_DIR/model-development.json`<br>`SCORE_DIR/base-fresh.json`<br>`SCORE_DIR/model-fresh.json`; outputs `SCORE_DIR/decision.json`; timeout 300s
 - **snapshot (`export`)**: `target/release/fbs-snapshot CHECKPOINT_DIR SNAPSHOT_OUT`
   - env --; inputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`; outputs `SNAPSHOT_OUT`; timeout 1800s
 - **export (`export`)**: `target/release/fbs-export --raw-gates --raw-transition --run-config config.json --stack-contract conformance/stack/fbs-deepseek-scenario-smoke.toml --stack-contract-semantic-blake3 SEMANTIC_BLAKE3 --tokenizer tokenizer.json SNAPSHOT_OUT ARTIFACT_OUT`
-  - env --; inputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`<br>`tokenizer`<br>`step-001024.snapshot.json`<br>`fbs-deepseek-scenario-smoke.toml`; outputs `ARTIFACT_OUT`; timeout 1800s
+  - env --; inputs `model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`<br>`config.json`<br>`tokenizer`<br>`SNAPSHOT_OUT`<br>`fbs-deepseek-scenario-smoke.toml`; outputs `ARTIFACT_OUT`; timeout 900s
 - **serve (`serve`)**: `uor-chat --stack step-001024.uorlut --tokenizer tokenizer.json --protocol 2 --max-tokens 64`
   - env --; inputs `step-001024.uorlut`<br>`tokenizer`; outputs `chat.json`; timeout 300s
 - **audit (`verify`)**: `cargo run --offline --release --locked -q -p xtask -- stack-audit --contract conformance/stack/fbs-deepseek-scenario-smoke.toml --artifact ARTIFACT_OUT --tokenizer tokenizer.json --config config.json --checkpoint CHECKPOINT_DIR --out AUDIT_OUT`
-  - env --; inputs `fbs-deepseek-scenario-smoke.toml`<br>`step-001024.uorlut`<br>`tokenizer`<br>`config.json`<br>`model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`; outputs `AUDIT_OUT`; timeout 300s
+  - env --; inputs `fbs-deepseek-scenario-smoke.toml`<br>`ARTIFACT_OUT`<br>`tokenizer`<br>`config.json`<br>`model.safetensors`<br>`hamming_read.safetensors`<br>`turn_memory.safetensors`<br>`turn_memory_reply.safetensors`; outputs `AUDIT_OUT`; timeout 600s
 
 ### Non-claims
 
