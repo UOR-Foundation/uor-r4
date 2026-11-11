@@ -3,12 +3,12 @@
 Lab: deepseek. Item:
 [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md)
 (#3407). Order: [ORDER.md](./ORDER.md). Base code: `7a450a88f`; launch code:
-`4add144ebdc9087e47fe3fa830fb21116278644e`; contract implementation source:
-`894869f262973d64c6d44661fa71afaa7ebe9241`. All invoked-script hashes and
+`439bcca13f190f91d8701cf279ccd23fad77c8b4`; contract implementation source:
+`4add144ebdc9087e47fe3fa830fb21116278644e`. All invoked-script hashes and
 the exact reviewed execution-head procedure are in
 [`launch-pins.env`](./launch-pins.env).
 
-**Status:** pre-run, pending fresh-context review 8. No GPU job has started.
+**Status:** pre-run, pending fresh-context review 9. No GPU job has started.
 
 ## What did not work
 
@@ -39,7 +39,11 @@ run directory, both entry points defaulted to the failed review-6 receipt,
 pre-watcher and watcher failure exits did not consistently persist both budget
 and pending-stop records first, the remote claim was still overwrite-capable,
 the command graph omitted smoke paths and had mismatched timeouts, and a score
-seal failure could retain a classified decision. Those findings are repaired
+seal failure could retain a classified decision. Those findings were repaired.
+An eighth review then found that an active GPU run could cross the budget
+without an extension record, the pre-watcher budget omitted staging and lacked
+an inter-process lock, the contract implementation source was stale, and
+pre-watcher network calls could hang unmonitored. Those findings are repaired
 in the current registration.
 
 ## What changed
@@ -96,11 +100,11 @@ kept the correction bounded and checked against the registered evidence path.
 
 ## Still open
 
-Review 8, the GPU smoke, bound export, held-out scenario reads, row
+Review 9, the GPU smoke, bound export, held-out scenario reads, row
 classification, final cost and post-run exact-head review remain. This file
 will be replaced with the completed report before merge.
 
 ## Plain summary
 
-The registration and its control instrument are now ready for review 8. No
+The registration and its control instrument are now ready for review 9. No
 model result has been claimed.

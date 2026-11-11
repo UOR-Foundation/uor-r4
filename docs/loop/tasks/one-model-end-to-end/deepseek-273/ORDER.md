@@ -3,7 +3,7 @@
 Lab: deepseek. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md)
 (#3407). Base: `7a450a88f`.
 
-Scorer/control source: `894869f262973d64c6d44661fa71afaa7ebe9241`; execution
+Scorer/control source: `4add144ebdc9087e47fe3fa830fb21116278644e`; execution
 pin and script hashes: `launch-pins.env`.
 
 ## Goal
