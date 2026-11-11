@@ -8,8 +8,8 @@ Lab: deepseek. Item:
 the exact reviewed execution-head procedure are in
 [`launch-pins.env`](./launch-pins.env).
 
-**Status:** pre-run, pending fresh-context review 12. No GPU model job has
-started.
+**Status:** pre-run, pending fresh-context review 13. One GPU training job ran,
+but stopped on an instrument assertion before export or held-out scoring.
 
 ## What did not work
 
@@ -66,6 +66,16 @@ destroyed the pod; its measured cost was `$0.043007`. The reviewed launcher
 now fetches that one pin object with a 120-second bound and compares the exact
 code/config trees. The laptop still proves pin ancestry before the pod exists.
 Total failed-launch cost is `$0.084763`; no model process has run.
+
+The third launch passed source, input, GPU-test, smoke and 1,024-step training
+checks. It then stopped at `verify-config` because the assertion required an
+explicit run-config `context` key, while the trainer intentionally omits that
+key for its 192 default; the sealed model config records `context: 192` and
+every other asserted field matched. The failed job sealed all 83 files,
+including the 1,024-step checkpoint, and the watcher destroyed the pod. The run
+cost `$0.164052`; total spend is `$0.248815`. This is an instrument failure,
+not a model result. The fixed predicate accepts the trainer's recorded default
+and still requires `context: 192` in the model config.
 
 ## What changed
 
@@ -127,7 +137,7 @@ kept the correction bounded and checked against the registered evidence path.
 
 ## Still open
 
-Review 12, the GPU smoke, bound export, held-out scenario reads, row
+Review 13, a successful bound export, held-out scenario reads, row
 classification, final cost and post-run exact-head review remain. This file
 will be replaced with the completed report before merge.
 

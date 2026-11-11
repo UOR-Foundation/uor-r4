@@ -5,7 +5,7 @@ Lab: deepseek. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to
 configuration probe after the aligned scenario readout: the current
 FBS/Hamming model has not been trained on the aligned TRAIN.
 
-TEST FITNESS: pending fresh-context non-author review 12.
+TEST FITNESS: pending fresh-context non-author review 13.
 
 PRE-RUN REVIEW: pending.
 
@@ -53,7 +53,7 @@ while retaining the wrong-memory and no-memory abstention controls?
   must be a clean, pushed descendant whose `crates`, `conformance`, `scripts`,
   `xtask`, `Cargo.toml` and `Cargo.lock` trees are byte-identical to that pin.
   The exact reviewed execution head is frozen in the review receipt at
-  `local/deepseek/scenario-gpu-smoke-2026-11-11/fresh-review-12.md`; the launcher
+  `local/deepseek/scenario-gpu-smoke-2026-11-11/fresh-review-13.md`; the launcher
   requires `TEST FITNESS: FIT`, `PRE-RUN REVIEW: GO` and a matching
   `REVIEWED HEAD: <sha>` line from that receipt.
   [`launch-pins.env`](../../loop/tasks/one-model-end-to-end/deepseek-273/launch-pins.env)
@@ -145,7 +145,7 @@ The exact execution path is:
 
 - after the final input/pin commit, read the exact
   `REVIEWED HEAD:` value from
-  `local/deepseek/scenario-gpu-smoke-2026-11-11/fresh-review-12.md`, set
+  `local/deepseek/scenario-gpu-smoke-2026-11-11/fresh-review-13.md`, set
   `RUN_HEAD` to it, then run
   `uor-pod up --lab deepseek --session deepseek-scenario-gpu-smoke
   --purpose "aligned-corpus geometric smoke" --hours 3 --count 1 --gpu 5090
@@ -299,9 +299,11 @@ zero.
   `40518eae6d71d1482b238f3dd650e4858ef4f1434e485943ae360eb7821bb421`.
   The artifact, snapshot and checkpoint SHA-256s are recorded.
 - **I-c:** `config.json` names objective `cell`, width 256, four Hamming reads,
-  context 192, batch 16, no micro-batch, 1,024 steps, seed 273,
-  `train_as_served: true`, `hamming_copy_latest: true` and
-  `turn_memory_leave_copied: true`; the job asserts every field. The sealed
+  batch 16, no micro-batch, 1,024 steps, seed 273, `train_as_served: true`,
+  `hamming_copy_latest: true` and `turn_memory_leave_copied: true`; context
+  192 is the trainer default and may be omitted from the run config, while the
+  model config must name it. The job asserts every field and both context
+  forms. The sealed
   corpus manifests carry their own 256-token storage context, checked against
   the pinned preflight reports; the trained model and artifact context remain
   192.
@@ -332,7 +334,7 @@ miss cannot retire a mechanism.
 - Status at preflight: **0 running pods**, **$0/h**, no live lease; the Vast
   listing showed 14 verified RTX 5090 offers, cheapest `$0.563/h`. This check is
   repeated immediately before `uor-pod up`; the captured review-time output is
-  `local/deepseek/scenario-gpu-smoke-2026-11-11/pod-status-before-review-12.txt`.
+  `local/deepseek/scenario-gpu-smoke-2026-11-11/pod-status-before-review-13.txt`.
 - One Vast RTX 5090 pod at no more than `$1.60/h`, one GPU only, leased for
   three hours and renewed by the watcher while the job moves.
 - Expected: about 10 minutes of build/tests, 5 minutes of smoke, 20 to
