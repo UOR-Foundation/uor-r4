@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { AgentClient } from './client.js';
+import { AgentClient, AgentClientError } from './client.js';
 import { canonicalJson } from './generated/agentCanonical.js';
 import type { AgentTaskStore } from './store.js';
 import { AgentStoreError } from './storeTypes.js';
@@ -18,6 +18,17 @@ import {
     type AgentEvent,
     type RunState,
 } from './generated/agentContract.js';
+import {
+    HOST_RESULT_SCHEMA,
+    HostClient,
+    sha256Canonical,
+    type HostSubscription,
+    type HostToolIntent,
+    type HostToolResult,
+    type HostTransport,
+    type HostTransportCapabilities,
+} from './hostClient.js';
+import { StaticHostTransport } from './transports.js';
 import { ReplayModelPort } from './modelPort.js';
 import type { ModelPort, ModelRequest, ModelStreamEvent } from './modelPort.js';
 import {
@@ -491,9 +502,16 @@ function makeRuntime(
         store,
         taskStore: taskStore as unknown as AgentTaskStore,
         modelPort: model,
-        toolExecutor:
-            executor ??
-            (async () => ({ status: 'ok', output: {} }) as RuntimeToolResult),
+        ...(overrides.hostClient != null && executor === undefined
+            ? {}
+            : {
+                  toolExecutor:
+                      executor ??
+                      (async () => ({
+                          status: 'ok',
+                          output: {},
+                      }) as RuntimeToolResult),
+              }),
         now: clock.now,
         timers: clock,
         writerId: 'writer-runtime-test',
@@ -4096,6 +4114,483 @@ describe('AgentRuntime Task 13 fix round 2 ingested terminal delivery', () => {
             ).toEqual(['after cursor expiry resync']);
             model.streams.forEach((stream) => stream.end());
         } finally {
+            await runtime.dispose();
+        }
+    });
+});
+
+class RecordingHostTransport implements HostTransport {
+    readonly kind = 'bridge' as const;
+    readonly supportsStream = false;
+    readonly intents: HostToolIntent[] = [];
+    readonly approvals: Array<{
+        approvalId: string;
+        decision: 'approved' | 'denied';
+    }> = [];
+    readonly hostApprovalId = 'apr_5c2e8a1f9b7d3e40';
+    readonly hostExpiresAtMs = 1_800_000_120_000;
+    approvalsCapability = true;
+    approveFailure: AgentClientError | null = null;
+    preflightExecutes = false;
+    executionFailure: { code: AgentErrorCode; message: string } | null = null;
+
+    async capabilities(): Promise<HostTransportCapabilities> {
+        return {
+            kind: 'bridge',
+            hostAvailable: true,
+            streaming: 'none',
+            tree: false,
+            changes: false,
+            readArtifact: false,
+            terminal: false,
+            git: false,
+            mcp: false,
+            approvals: this.approvalsCapability,
+        };
+    }
+
+    async invoke(intent: HostToolIntent): Promise<HostToolResult> {
+        this.intents.push(intent);
+        if (intent.approval_id === undefined) {
+            if (this.preflightExecutes) {
+                return await hostResult(intent, 'ok', { written: true });
+            }
+            return await hostResult(
+                intent,
+                'error',
+                {
+                    approval_required: true,
+                    approval_id: this.hostApprovalId,
+                    expires_at_ms: this.hostExpiresAtMs,
+                    approved: false,
+                },
+                'approval_forbidden',
+                'host approval is required; approve it in the local companion',
+            );
+        }
+        if (this.executionFailure !== null) {
+            return await hostResult(
+                intent,
+                'error',
+                {},
+                this.executionFailure.code,
+                this.executionFailure.message,
+                `hmac-sha256:${'a'.repeat(64)}`,
+            );
+        }
+        return await hostResult(
+            intent,
+            'ok',
+            { written: true },
+            undefined,
+            undefined,
+            `hmac-sha256:${'a'.repeat(64)}`,
+        );
+    }
+
+    async approve(input: {
+        approvalId: string;
+        decision: 'approved' | 'denied';
+    }): Promise<{ approvalId: string; decision: 'approved' | 'denied' }> {
+        this.approvals.push(input);
+        if (this.approveFailure !== null) throw this.approveFailure;
+        return { approvalId: input.approvalId, decision: input.decision };
+    }
+
+    subscribe(): HostSubscription {
+        return { close: () => undefined, cursor: () => null };
+    }
+}
+
+async function hostResult(
+    intent: HostToolIntent,
+    status: 'ok' | 'error' | 'cancelled',
+    output: Record<string, unknown>,
+    code?: string,
+    message?: string,
+    receipt?: string,
+): Promise<HostToolResult> {
+    const canonical = canonicalJson(output);
+    return {
+        schema: HOST_RESULT_SCHEMA,
+        intent_id: intent.intent_id,
+        task_id: intent.task_id,
+        run_id: intent.run_id,
+        generation: intent.generation,
+        tool_call_id: intent.tool_call_id,
+        request_scope: intent.request_scope ?? 'task',
+        status,
+        output,
+        output_digest: await sha256Canonical(output),
+        output_preview: canonical.slice(0, 512),
+        ...(code === undefined ? {} : { code }),
+        ...(message === undefined ? {} : { message }),
+        ...(receipt === undefined ? {} : { approval_receipt: receipt }),
+        occurred_at_ms: 1_800_000_000_000,
+    };
+}
+
+function pushHostWrite(stream: {
+    push(event: {
+        type: 'tool-call';
+        toolCallId: string;
+        tool: string;
+        arguments: Record<string, unknown>;
+    }): void;
+}): void {
+    stream.push({
+        type: 'tool-call',
+        toolCallId: 'tool_host_write',
+        tool: 'file.write',
+        arguments: {
+            grant_id: 'gr_9a3c5e7b1d2f4a60',
+            path: 'note.txt',
+            content: 'one',
+        },
+    });
+}
+
+describe('AgentRuntime host approval handshake', () => {
+    test('host_approval_preflight_adopts_host_issued_identity', async () => {
+        const transport = new RecordingHostTransport();
+        const hostClient = new HostClient({ transport });
+        const { runtime, store, model } = makeRuntime({
+            hostClient,
+            requiresApproval: (tool) => tool === 'file.write',
+        });
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(runtime, model);
+            pushHostWrite(stream);
+            await until(
+                () =>
+                    runView(store, task.taskId, run.runId).approvals.length === 1,
+                'host approval required',
+            );
+            const view = runView(store, task.taskId, run.runId);
+            const approval = view.approvals[0]!;
+            expect(approval.approvalId).toBe(transport.hostApprovalId);
+            expect(approval.expiresAtMs).toBe(transport.hostExpiresAtMs);
+            expect(eventTypes(view)).not.toContain('tool.started');
+            expect(
+                eventTypes(view).filter(
+                    (type) => type === 'tool.approval_required',
+                ),
+            ).toHaveLength(1);
+
+            expect(transport.intents).toHaveLength(1);
+            const preflight = transport.intents[0]!;
+            expect(preflight.approval_id).toBeUndefined();
+            expect(preflight.task_id).toBe(task.taskId);
+            expect(preflight.run_id).toBe(run.runId);
+            expect(preflight.generation).toBe(run.generation);
+            expect(preflight.tool_call_id).toBe('tool_host_write');
+            expect(preflight.tool).toBe('file.write');
+
+            const approvalEvent = view.events.find(
+                (event) => event.type === 'tool.approval_required',
+            )!;
+            expect(approvalEvent.data).toMatchObject({
+                approval_id: transport.hostApprovalId,
+                expires_at_ms: transport.hostExpiresAtMs,
+                tool_call_id: 'tool_host_write',
+                tool: 'file.write',
+            });
+            expect(
+                transport.intents.some(
+                    (intent) => intent.approval_id !== undefined,
+                ),
+            ).toBe(false);
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('host_approval_resolution_uses_exact_payload_and_executes_once', async () => {
+        const transport = new RecordingHostTransport();
+        const hostClient = new HostClient({ transport });
+        const { runtime, store, model } = makeRuntime({
+            hostClient,
+            requiresApproval: (tool) => tool === 'file.write',
+        });
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(runtime, model);
+            pushHostWrite(stream);
+            await until(
+                () =>
+                    runView(store, task.taskId, run.runId).approvals.length === 1,
+                'host approval required',
+            );
+            const approval =
+                runView(store, task.taskId, run.runId).approvals[0]!;
+            const receipt = await runtime.resolveApproval({
+                approvalId: approval.approvalId,
+                decision: 'approved',
+            });
+            expect(receipt).toEqual({
+                approvalId: transport.hostApprovalId,
+                decision: 'approved',
+            });
+            expect(transport.approvals).toEqual([
+                {
+                    approvalId: transport.hostApprovalId,
+                    decision: 'approved',
+                },
+            ]);
+
+            await until(
+                () => transport.intents.length === 2,
+                'one host execution',
+            );
+            const execution = transport.intents[1]!;
+            expect(execution.approval_id).toBe(transport.hostApprovalId);
+            expect(execution.task_id).toBe(task.taskId);
+            expect(execution.run_id).toBe(run.runId);
+            expect(execution.generation).toBe(run.generation);
+            expect(execution.tool_call_id).toBe('tool_host_write');
+
+            await until(
+                () =>
+                    eventTypes(runView(store, task.taskId, run.runId)).includes(
+                        'tool.completed',
+                    ),
+                'host tool completion',
+            );
+            const view = runView(store, task.taskId, run.runId);
+            expect(view.approvals).toHaveLength(1);
+            expect(view.approvals[0]?.decision).toBe('approved');
+            expect(
+                eventTypes(view).filter((type) => type === 'tool.started'),
+            ).toHaveLength(1);
+            expect(
+                eventTypes(view).filter((type) => type === 'tool.completed'),
+            ).toHaveLength(1);
+            await flush(20);
+            expect(transport.intents).toHaveLength(2);
+            await expect(
+                runtime.resolveApproval({
+                    approvalId: transport.hostApprovalId,
+                    decision: 'approved',
+                }),
+            ).rejects.toMatchObject({ code: 'approval_forbidden' });
+            expect(transport.approvals).toHaveLength(1);
+            expect(transport.intents).toHaveLength(2);
+
+            model.streams[1]!.end();
+            await until(
+                () =>
+                    runView(store, task.taskId, run.runId).state === 'finished',
+                'finished after host approval',
+            );
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('host_approval_resolution_failure_does_not_execute', async () => {
+        const transport = new RecordingHostTransport();
+        transport.approveFailure = new AgentClientError(
+            'approval_forbidden',
+            'host refused the page decision',
+        );
+        const hostClient = new HostClient({ transport });
+        const { runtime, store, model } = makeRuntime({
+            hostClient,
+            requiresApproval: (tool) => tool === 'file.write',
+        });
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(runtime, model);
+            pushHostWrite(stream);
+            await until(
+                () =>
+                    runView(store, task.taskId, run.runId).approvals.length === 1,
+                'host approval required',
+            );
+            await expect(
+                runtime.resolveApproval({
+                    approvalId: transport.hostApprovalId,
+                    decision: 'approved',
+                }),
+            ).rejects.toMatchObject({ code: 'approval_forbidden' });
+            await flush(20);
+            const view = runView(store, task.taskId, run.runId);
+            expect(view.approvals).toHaveLength(1);
+            expect(transport.intents).toHaveLength(1);
+            expect(eventTypes(view)).not.toContain('tool.started');
+            expect(eventTypes(view)).not.toContain('tool.approval_resolved');
+            expect(eventTypes(view)).not.toContain('tool.completed');
+            expect(
+                transport.intents.some(
+                    (intent) => intent.approval_id !== undefined,
+                ),
+            ).toBe(false);
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('host_approval_denied_resolves_without_execution', async () => {
+        const transport = new RecordingHostTransport();
+        const hostClient = new HostClient({ transport });
+        const { runtime, store, model } = makeRuntime({
+            hostClient,
+            requiresApproval: (tool) => tool === 'file.write',
+        });
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(runtime, model);
+            pushHostWrite(stream);
+            await until(
+                () =>
+                    runView(store, task.taskId, run.runId).approvals.length === 1,
+                'host approval required',
+            );
+            await runtime.resolveApproval({
+                approvalId: transport.hostApprovalId,
+                decision: 'denied',
+            });
+            expect(transport.approvals).toEqual([
+                {
+                    approvalId: transport.hostApprovalId,
+                    decision: 'denied',
+                },
+            ]);
+            await until(
+                () =>
+                    eventTypes(runView(store, task.taskId, run.runId)).includes(
+                        'tool.failed',
+                    ),
+                'denied host tool',
+            );
+            const view = runView(store, task.taskId, run.runId);
+            expect(eventTypes(view)).not.toContain('tool.started');
+            expect(
+                view.events.find((event) => event.type === 'tool.failed')!
+                    .data,
+            ).toMatchObject({ code: 'approval_denied' });
+            expect(transport.intents).toHaveLength(1);
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('host_approval_cross_task_refusal_is_explicit_and_not_completed', async () => {
+        const transport = new RecordingHostTransport();
+        transport.executionFailure = {
+            code: 'cross_task_event',
+            message: 'the approval belongs to a different task',
+        };
+        const hostClient = new HostClient({ transport });
+        const { runtime, store, model } = makeRuntime({
+            hostClient,
+            requiresApproval: (tool) => tool === 'file.write',
+        });
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(runtime, model);
+            pushHostWrite(stream);
+            await until(
+                () =>
+                    runView(store, task.taskId, run.runId).approvals.length === 1,
+                'host approval required',
+            );
+            await runtime.resolveApproval({
+                approvalId: transport.hostApprovalId,
+                decision: 'approved',
+            });
+            await until(
+                () =>
+                    eventTypes(runView(store, task.taskId, run.runId)).includes(
+                        'tool.failed',
+                    ),
+                'cross-task host refusal',
+            );
+            const view = runView(store, task.taskId, run.runId);
+            expect(eventTypes(view)).not.toContain('tool.completed');
+            expect(
+                view.events.find((event) => event.type === 'tool.failed')!
+                    .data,
+            ).toMatchObject({ code: 'cross_task_event' });
+            expect(transport.intents).toHaveLength(2);
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('host_preflight_that_executes_is_refused_without_second_dispatch', async () => {
+        const transport = new RecordingHostTransport();
+        transport.preflightExecutes = true;
+        const hostClient = new HostClient({ transport });
+        const { runtime, store, model } = makeRuntime({
+            hostClient,
+            requiresApproval: (tool) => tool === 'file.write',
+        });
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(runtime, model);
+            pushHostWrite(stream);
+            await until(
+                () =>
+                    runView(store, task.taskId, run.runId).state === 'failed',
+                'preflight execution refusal',
+            );
+            const view = runView(store, task.taskId, run.runId);
+            expect(transport.intents).toHaveLength(1);
+            expect(eventTypes(view)).not.toContain('tool.started');
+            expect(view.error?.code).toBe('approval_forbidden');
+        } finally {
+            model.streams.forEach((stream) => stream.end());
+            await runtime.dispose();
+        }
+    });
+
+    test('static_host_without_approval_capability_keeps_local_approval_flow', async () => {
+        const hostClient = new HostClient({
+            transport: new StaticHostTransport(),
+        });
+        const { runtime, store, model } = makeRuntime({
+            hostClient,
+            requiresApproval: (tool) => tool === 'file.write',
+        });
+        await runtime.open();
+        try {
+            const { task, run, stream } = await startOne(runtime, model);
+            pushHostWrite(stream);
+            await until(
+                () =>
+                    runView(store, task.taskId, run.runId).approvals.length === 1,
+                'local approval required',
+            );
+            const approval =
+                runView(store, task.taskId, run.runId).approvals[0]!;
+            expect(approval.approvalId).toMatch(/^appr_/);
+            expect(approval.approvalId).not.toBe('apr_5c2e8a1f9b7d3e40');
+            await runtime.resolveApproval({
+                approvalId: approval.approvalId,
+                decision: 'denied',
+            });
+            await until(
+                () =>
+                    eventTypes(runView(store, task.taskId, run.runId)).includes(
+                        'tool.failed',
+                    ),
+                'local denied tool',
+            );
+            const view = runView(store, task.taskId, run.runId);
+            expect(eventTypes(view)).not.toContain('tool.started');
+            expect(
+                view.events.find((event) => event.type === 'tool.failed')!
+                    .data,
+            ).toMatchObject({ code: 'approval_denied' });
+        } finally {
+            model.streams.forEach((stream) => stream.end());
             await runtime.dispose();
         }
     });

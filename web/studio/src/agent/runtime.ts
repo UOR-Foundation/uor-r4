@@ -47,6 +47,7 @@ import type { AgentTaskStore } from './store.js';
 import {
     AgentClientError,
     AgentStoreError,
+    isAgentErrorCode,
     isPlainObject,
     LEASE_STALE_MS,
     toClientError,
@@ -237,6 +238,7 @@ interface ApprovalRecord {
     requestDigest: string;
     expiresAtMs: number;
     arguments: Record<string, unknown>;
+    hostApproval: boolean;
 }
 
 interface InFlightTool {
@@ -956,6 +958,28 @@ export class AgentRuntime {
                 'approval_forbidden',
                 'approval is not pending',
             );
+        }
+        if (initial.hostApproval) {
+            const hostClient = this.hostClientInstance;
+            if (hostClient === null) {
+                throw new AgentClientError(
+                    'host_unavailable',
+                    'the host approval can no longer be resolved',
+                );
+            }
+            const receipt = await hostClient.approve({
+                approvalId: initial.approvalId,
+                decision: input.decision,
+            });
+            if (
+                receipt.approvalId !== initial.approvalId ||
+                receipt.decision !== input.decision
+            ) {
+                throw new AgentClientError(
+                    'approval_forbidden',
+                    'the host approval receipt does not match the page decision',
+                );
+            }
         }
         await this.withTask(initial.taskId, async () => {
             const record = this.findApproval(input.approvalId);
@@ -2029,6 +2053,63 @@ export class AgentRuntime {
         };
     }
 
+    /**
+     * Ask the host for its own approval identity without executing the tool.
+     *
+     * The host returns an explicit approval-required result and creates no
+     * effect. A host without approval capability keeps the local approval flow.
+     */
+    private async preflightHostApproval(
+        input: RuntimeToolIntent,
+    ): Promise<{ approvalId: string; expiresAtMs: number } | null> {
+        const hostClient = this.hostClientInstance;
+        if (hostClient === null) return null;
+        let capabilities: HostCapabilities;
+        try {
+            capabilities = await hostClient.capabilities();
+        } catch (error) {
+            const clientError = toClientError(error);
+            if (clientError.code === 'host_unavailable') return null;
+            throw clientError;
+        }
+        if (capabilities.approvals !== true) return null;
+        const intent = await hostClient.createIntent({
+            taskId: input.taskId,
+            runId: input.runId,
+            generation: input.generation,
+            toolCallId: input.toolCallId,
+            tool: input.tool,
+            arguments: input.arguments,
+        });
+        const result = await hostClient.execute(intent);
+        if (result.status === 'ok') {
+            throw new AgentClientError(
+                'approval_forbidden',
+                'the host executed an intent that requires approval',
+            );
+        }
+        const output = isPlainObject(result.output) ? result.output : {};
+        const approvalId = output.approval_id;
+        const expiresAtMs = output.expires_at_ms;
+        if (
+            result.code !== 'approval_forbidden' ||
+            output.approval_required !== true ||
+            typeof approvalId !== 'string' ||
+            approvalId.length === 0 ||
+            !Number.isSafeInteger(expiresAtMs) ||
+            (expiresAtMs as number) <= this.now()
+        ) {
+            throw new AgentClientError(
+                isAgentErrorCode(result.code)
+                    ? result.code
+                    : 'approval_forbidden',
+                result.message ??
+                    'the host did not issue an approval request',
+            );
+        }
+        return { approvalId, expiresAtMs: expiresAtMs as number };
+    }
+
     private async handleToolCall(
         current: RunControl,
         toolCall: {
@@ -2067,7 +2148,6 @@ export class AgentRuntime {
                 | Promise<'approved' | 'denied' | 'cancelled'>
                 | null = null;
             if (this.requiresApproval(toolCall.tool, args)) {
-                approvalId = this.ids.approvalId();
                 const requestDigest = await sha256Canonical({
                     task_id: current.taskId,
                     run_id: current.runId,
@@ -2076,7 +2156,19 @@ export class AgentRuntime {
                     tool: toolCall.tool,
                     arguments: args,
                 });
-                const expiresAtMs = this.now() + this.approvalTtlMs;
+                const hostApproval = await this.preflightHostApproval({
+                    taskId: current.taskId,
+                    runId: current.runId,
+                    generation: current.generation,
+                    toolCallId: toolCall.toolCallId,
+                    tool: toolCall.tool,
+                    arguments: args,
+                });
+                if (current.terminal || current.cancelRequested) return null;
+                approvalId = hostApproval?.approvalId ?? this.ids.approvalId();
+                const expiresAtMs =
+                    hostApproval?.expiresAtMs ??
+                    this.now() + this.approvalTtlMs;
                 const record: ApprovalRecord = {
                     approvalId,
                     taskId: current.taskId,
@@ -2088,6 +2180,7 @@ export class AgentRuntime {
                     requestDigest,
                     expiresAtMs,
                     arguments: args,
+                    hostApproval: hostApproval !== null,
                 };
                 current.approvals.set(approvalId, record);
                 await this.append(current, 'tool.approval_required', {
