@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import type { AgentClient, TreeEntry } from '../agent/client.js';
+import { sha256Bytes } from '../agent/hostClient.js';
 import type { StudioSettings } from '../adapters/workflow.js';
 import { saveActiveFile, saveActiveFileCopy } from '../adapters/fileSave.js';
 import type { OperationGate } from '../adapters/operations.js';
@@ -6,6 +8,11 @@ import { syncWorkspaceSummary } from '../adapters/workflow.js';
 import type { WorkspaceApi, WorkspaceSummary } from '../adapters/workflow.js';
 import type { LifecycleStore } from '../state/lifecycle.js';
 import { useLifecycle } from '../state/useLifecycle.js';
+import { EditorPane, fileTooLargeMessage } from './EditorPane.js';
+import { EditorTabs } from './EditorTabs.js';
+import { FileTree, type FileTreeMeta } from './FileTree.js';
+import type { FileNode } from './types.js';
+import { MAX_DOCUMENT_BYTES } from './ComposerAttachments.js';
 import { Icon } from './ui/Icon.js';
 
 interface WorkspaceEditorProps {
@@ -15,20 +22,68 @@ interface WorkspaceEditorProps {
     onError(message: string, operation: string): void;
     onSuccess(operation: string): void;
     settings?: StudioSettings;
+    agentClient?: AgentClient | null;
 }
 
 const defaultSettings: StudioSettings = { theme: 'dark', reduceMotion: false, fontSize: 13, tabSize: 4, wordWrap: false };
+const emptyMeta: FileTreeMeta = { truncated: false, symlinksSkipped: 0, readErrors: 0 };
 
-export function WorkspaceEditor({ store, files, operations, onError, onSuccess, settings = defaultSettings }: WorkspaceEditorProps) {
+interface TreeState {
+    phase: 'loading' | 'ready' | 'error';
+    nodes: FileNode[];
+    meta: FileTreeMeta;
+    error: string | null;
+}
+
+function fileNodes(entries: TreeEntry[]): FileNode[] {
+    return entries.map((entry) => ({
+        path: entry.path,
+        name: entry.path.split('/').pop() || entry.path,
+        kind: entry.kind,
+        ...(entry.sizeBytes === undefined ? {} : { sizeBytes: entry.sizeBytes }),
+    }));
+}
+
+export function WorkspaceEditor({ store, files, operations, onError, onSuccess, settings = defaultSettings, agentClient = null }: WorkspaceEditorProps) {
     const state = useLifecycle(store);
     const mounted = useRef(true);
+    const treeVersion = useRef(0);
+    const treeKey = useRef('');
+    const searchRef = useRef<HTMLInputElement>(null);
+    const localUploads = useRef(false);
     const [, setRevision] = useState(0);
+    const [tree, setTree] = useState<TreeState>({ phase: 'loading', nodes: [], meta: emptyMeta, error: null });
     const refresh = () => setRevision((value) => value + 1);
     const report = (error: unknown, operation: string) => { if (mounted.current) onError(error instanceof Error ? error.message : String(error), operation); };
     const succeed = (operation: string) => { if (mounted.current) onSuccess(operation); };
 
     function sync(summary: WorkspaceSummary) {
         syncWorkspaceSummary(store, summary);
+    }
+
+    async function loadTree() {
+        if (agentClient === null) {
+            if (mounted.current) setTree({ phase: 'ready', nodes: [], meta: emptyMeta, error: null });
+            return;
+        }
+        treeVersion.current += 1;
+        const version = treeVersion.current;
+        setTree((current) => ({ ...current, phase: 'loading', error: null }));
+        try {
+            const capabilities = await agentClient.hostCapabilities();
+            localUploads.current = !capabilities.tree;
+            const page = capabilities.tree ? await agentClient.treePage({ source: 'host' }) : await agentClient.treePage();
+            if (!mounted.current || treeVersion.current !== version) return;
+            setTree({
+                phase: 'ready',
+                nodes: fileNodes(page.entries),
+                meta: { truncated: page.truncated, symlinksSkipped: page.symlinksSkipped, readErrors: page.readErrors },
+                error: null,
+            });
+        } catch (error) {
+            if (!mounted.current || treeVersion.current !== version) return;
+            setTree({ phase: 'error', nodes: [], meta: emptyMeta, error: error instanceof Error ? error.message : String(error) });
+        }
     }
 
     useEffect(() => {
@@ -50,12 +105,47 @@ export function WorkspaceEditor({ store, files, operations, onError, onSuccess, 
         };
     }, [files, store]);
 
-    function perform(action: () => Promise<unknown>, operation: string) {
+    useEffect(() => {
+        const summary = files.treeSummary();
+        treeKey.current = `${summary.mode}:${summary.rootName}:${summary.fileCount}`;
+        void loadTree();
+        const reload = (event: Event) => {
+            const detail = (event as CustomEvent<WorkspaceSummary | undefined>).detail;
+            const key = detail === undefined
+                ? ''
+                : `${detail.mode}:${detail.rootName}:${detail.fileCount}`;
+            if (key === treeKey.current) return;
+            treeKey.current = key;
+            void loadTree();
+        };
+        document.addEventListener('uor-files-changed', reload);
+        document.addEventListener('uor-workspace-changed', reload);
+        return () => {
+            document.removeEventListener('uor-files-changed', reload);
+            document.removeEventListener('uor-workspace-changed', reload);
+        };
+    }, [agentClient]);
+
+    function perform(action: () => Promise<unknown>, operation: string, after?: () => void) {
         void operations.run(operation, action(), (completed) => {
             sync(files.treeSummary());
             refresh();
             succeed(completed);
+            after?.();
         }, report);
+    }
+
+    async function rememberUploaded(path: string) {
+        if (agentClient === null || !localUploads.current || !mounted.current) return;
+        const file = files.activeFile();
+        if (file === null || file.path !== path) return;
+        try {
+            const bytes = new TextEncoder().encode(file.content);
+            agentClient.registerLocalFile({ path, mediaType: 'text/plain', bytes, digest: await sha256Bytes(bytes) });
+            await loadTree();
+        } catch {
+            return;
+        }
     }
 
     function immediate(action: () => unknown, operation: string) {
@@ -82,6 +172,15 @@ export function WorkspaceEditor({ store, files, operations, onError, onSuccess, 
         refresh();
     }
 
+    function openPath(path: string) {
+        const node = tree.nodes.find((candidate) => candidate.path === path);
+        if (node?.kind === 'file' && node.sizeBytes !== undefined && node.sizeBytes > MAX_DOCUMENT_BYTES) {
+            onError(fileTooLargeMessage(node.name, node.sizeBytes), `file:open:${path}`);
+            return;
+        }
+        perform(() => files.openFile(path), `workspace:open:${path}`, () => { void rememberUploaded(path); });
+    }
+
     const summary = files.treeSummary();
     const active = files.activeFile();
     const canSave = store.canSave();
@@ -96,19 +195,32 @@ export function WorkspaceEditor({ store, files, operations, onError, onSuccess, 
             </div></header>
             <p class="editor-status">File: {state.file.phase}{state.file.path ? ` · ${state.file.path}` : ' · No file open'}</p>
             {state.file.error && <p role="alert" class="workbench-alert">{state.file.error}</p>}
-            {summary.tabs.length > 0 ? <ul class="editor-tabs" aria-label="Open editor tabs">{summary.tabs.map((tab) => <li><button type="button" aria-current={summary.activePath === tab.path ? 'page' : undefined} onClick={() => void perform(() => files.openFile(tab.path), `workspace:open:${tab.path}`)}>{`Open ${tab.path}`}</button><button type="button" aria-label={`Close ${tab.path}`} onClick={() => immediate(() => files.closeTab(tab.path), `workspace:close:${tab.path}`)}><Icon name="close" /><span class="visually-hidden">{`Close ${tab.path}`}</span></button>{tab.dirty && <span>Unsaved</span>}</li>)}</ul> : <p class="editor-status">Open a file to start editing, or use the demo workspace.</p>}
-            <div class="code-frame"><div class="code-gutter" aria-hidden="true">{Array.from({ length: Math.max(1, (active?.content || '').split('\n').length) }, (_, index) => <div>{index + 1}</div>)}</div><label class="code-input"><span class="visually-hidden">Editor</span><textarea aria-label="File contents" placeholder={active ? undefined : 'Open a file to start editing, or choose Open demo.'} disabled={!active || state.file.phase === 'saving'} style={{ fontSize: `${settings.fontSize}px` }} wrap={settings.wordWrap ? 'soft' : 'off'} value={active?.content ?? ''} onKeyDown={(event) => {
-                if (event.key !== 'Tab' || !active) return;
-                event.preventDefault();
-                const input = event.currentTarget;
-                const padding = ' '.repeat(settings.tabSize);
-                const start = input.selectionStart;
-                const end = input.selectionEnd;
-                files.setActiveContent(`${input.value.slice(0, start)}${padding}${input.value.slice(end)}`);
-                store.dispatch({ type: 'file/dirty' });
-                input.setSelectionRange(start + padding.length, start + padding.length);
-                refresh();
-            }} onInput={(event) => { if (!active) return; files.setActiveContent(event.currentTarget.value); store.dispatch({ type: 'file/dirty' }); refresh(); }} /></label></div>
+            <FileTree
+                nodes={tree.nodes}
+                meta={tree.meta}
+                activePath={summary.activePath}
+                phase={tree.phase}
+                error={tree.error}
+                onOpen={openPath}
+                searchRef={searchRef}
+            />
+            <EditorTabs
+                tabs={summary.tabs}
+                activePath={summary.activePath}
+                onSelect={openPath}
+                onClose={(path) => immediate(() => files.closeTab(path), `workspace:close:${path}`)}
+                onFocusFallback={() => searchRef.current?.focus()}
+            />
+            <EditorPane
+                active={active}
+                phase={state.file.phase}
+                settings={settings}
+                onContentChange={(content) => {
+                    files.setActiveContent(content);
+                    store.dispatch({ type: 'file/dirty' });
+                    refresh();
+                }}
+            />
             <footer class="workspace-footer"><button type="button" disabled={!canSave} onClick={() => void save()}><Icon name="save" />Save</button><button type="button" disabled={!canSave} onClick={saveCopy}>Save as</button></footer>
         </section>
     );

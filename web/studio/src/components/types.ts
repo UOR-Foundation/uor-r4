@@ -1,5 +1,12 @@
 export type StudioSection = 'agent' | 'workspace' | 'changes' | 'terminal' | 'models' | 'guide' | 'browser';
 
+export interface FileNode {
+    path: string;
+    name: string;
+    kind: 'file' | 'directory';
+    sizeBytes?: number;
+}
+
 export interface ShellStatus {
     source: string;
     artifact: string;

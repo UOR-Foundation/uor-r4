@@ -191,6 +191,13 @@ export interface TreeEntry {
     sizeBytes?: number;
 }
 
+export interface TreePage {
+    entries: TreeEntry[];
+    truncated: boolean;
+    symlinksSkipped: number;
+    readErrors: number;
+}
+
 export interface ChangesSnapshotInput {
     taskId: string;
     runId?: string;
@@ -690,9 +697,18 @@ export class AgentClient {
     }
 
     async tree(input: TreeInput = {}): Promise<TreeEntry[]> {
+        return (await this.treePage(input)).entries;
+    }
+
+    async treePage(input: TreeInput = {}): Promise<TreePage> {
         const source = input.source ?? 'local';
         if (source === 'local') {
-            return this.localTree(input.path);
+            return {
+                entries: this.localTree(input.path),
+                truncated: false,
+                symlinksSkipped: 0,
+                readErrors: 0,
+            };
         }
         const result = await this.hostClient.execute({
             tool: 'file.tree',
@@ -708,7 +724,7 @@ export class AgentClient {
                 ? {}
                 : { generation: input.generation }),
         });
-        return hostTreeEntries(result);
+        return hostTreePage(result);
     }
 
     async changesSnapshot(
@@ -1137,6 +1153,44 @@ function hostTreeEntries(result: HostToolResult): TreeEntry[] {
             sizeBytes: value.size_bytes,
         };
     });
+}
+
+function hostTreePage(result: HostToolResult): TreePage {
+    const entries = hostTreeEntries(result);
+    if (!isPlainObject(result.output)) {
+        return invalidHostData('host file tree result has no page object');
+    }
+    return {
+        entries,
+        truncated:
+            hostTreeFlag(result.output.truncated) ??
+            entries.length >= MAX_HOST_TREE_ENTRIES,
+        symlinksSkipped: hostTreeCount(
+            result.output.symlinks_skipped,
+            'symlinks_skipped',
+        ),
+        readErrors: hostTreeCount(result.output.read_errors, 'read_errors'),
+    };
+}
+
+function hostTreeFlag(value: unknown): boolean | undefined {
+    if (value === undefined) return undefined;
+    if (typeof value !== 'boolean') {
+        return invalidHostData('host file tree truncated flag is malformed');
+    }
+    return value;
+}
+
+function hostTreeCount(value: unknown, field: string): number {
+    if (value === undefined) return 0;
+    if (
+        typeof value !== 'number' ||
+        !Number.isSafeInteger(value) ||
+        value < 0
+    ) {
+        return invalidHostData(`host file tree ${field} count is malformed`);
+    }
+    return value;
 }
 
 function hostChangesSnapshot(

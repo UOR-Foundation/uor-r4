@@ -212,6 +212,59 @@ describe('AgentClient companion data routing', () => {
         expect(transport.intents[0]!.arguments).toEqual({ path: 'src' });
     });
 
+    test('tree_page_surfaces_truncation_symlinks_and_read_errors', async () => {
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, {
+                grant_id: 'gr_abcd1234',
+                path: 'src',
+                entries: [
+                    { path: 'src/a.ts', kind: 'file', size_bytes: 5 },
+                ],
+                truncated: true,
+                symlinks_skipped: 2,
+                read_errors: 1,
+            }),
+        );
+        const client = clientWith(transport);
+
+        await expect(client.treePage({ source: 'host', path: 'src' })).resolves.toEqual({
+            entries: [{ path: 'src/a.ts', kind: 'file', sizeBytes: 5 }],
+            truncated: true,
+            symlinksSkipped: 2,
+            readErrors: 1,
+        });
+        await expect(client.tree({ source: 'host', path: 'src' })).resolves.toEqual([
+            { path: 'src/a.ts', kind: 'file', sizeBytes: 5 },
+        ]);
+    });
+
+    test('tree_page_treats_a_full_listing_without_metadata_as_capped', async () => {
+        const entries = Array.from({ length: MAX_HOST_TREE_ENTRIES }, (_, index) => ({
+            path: `src/${index}.ts`,
+            kind: 'file',
+        }));
+        const transport = new RecordingHostTransport(async (intent) => resultFor(intent, { entries }));
+        const client = clientWith(transport);
+
+        const page = await client.treePage({ source: 'host' });
+        expect(page.entries).toHaveLength(MAX_HOST_TREE_ENTRIES);
+        expect(page.truncated).toBe(true);
+        expect(page.symlinksSkipped).toBe(0);
+        expect(page.readErrors).toBe(0);
+    });
+
+    test('tree_page_rejects_malformed_page_metadata', async () => {
+        const transport = new RecordingHostTransport(async (intent) =>
+            resultFor(intent, { entries: [], truncated: 'yes' }),
+        );
+        const client = clientWith(transport);
+
+        await expect(client.treePage({ source: 'host' })).rejects.toMatchObject({
+            code: 'invalid_event',
+        });
+        await expect(client.treePage({ source: 'host' })).rejects.toThrow('truncated flag is malformed');
+    });
+
     test('branch_changes_use_host_but_last_turn_never_does', async () => {
         const headDigest = `sha256:${'a'.repeat(64)}`;
         const transport = new RecordingHostTransport(async (intent) =>

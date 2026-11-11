@@ -165,7 +165,7 @@ describe('WorkspaceEditor', () => {
         fileApi.summary.mode = 'directory';
         fileApi.summary.rootName = 'project';
         fileApi.summary.activePath = 'a.md';
-        fileApi.summary.tabs = [{ path: 'a.md', dirty: true }];
+        fileApi.summary.tabs = [{ path: 'a.md', dirty: false }];
         fileApi.setActive({ path: 'a.md', name: 'a.md', content: 'alpha', mode: 'directory' });
         act(() => { emit(fileApi); });
         button('Save as').click();
