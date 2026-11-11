@@ -384,10 +384,10 @@ fn replay_reply(
                 .read_step(token)
                 .map_err(|e| format!("untraced prompt id {at}: {e}"))?;
         } else {
-            pick = session
+            let (selected, _) = session
                 .serve_step(token)
-                .map_err(|e| format!("untraced prompt id {at}: {e}"))?
-                .0;
+                .map_err(|e| format!("untraced prompt id {at}: {e}"))?;
+            pick = selected;
         }
     }
     let mut ids = Vec::with_capacity(max_tokens);
@@ -396,10 +396,10 @@ fn replay_reply(
         if pick == EOS || ids.len() == max_tokens {
             return Ok(ids);
         }
-        pick = session
+        let (selected, _) = session
             .serve_step(pick)
-            .map_err(|e| format!("untraced reply id {}: {e}", ids.len()))?
-            .0;
+            .map_err(|e| format!("untraced reply id {}: {e}", ids.len()))?;
+        pick = selected;
     }
 }
 
@@ -795,7 +795,8 @@ mod tests {
             }
             session.mark_reply_start();
             session.set_hamming_trace(true);
-            pick = session.serve_step(token).expect("serve prompt").0;
+            let (selected, _) = session.serve_step(token).expect("serve prompt");
+            pick = selected;
         }
         let mut traced = Vec::new();
         loop {
@@ -818,7 +819,8 @@ mod tests {
             if pick == EOS || traced.len() == 4 {
                 break;
             }
-            pick = session.serve_step(pick).expect("serve reply").0;
+            let (selected, _) = session.serve_step(pick).expect("serve reply");
+            pick = selected;
         }
         assert_eq!(traced, untraced);
     }
