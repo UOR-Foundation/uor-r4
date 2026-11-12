@@ -69,3 +69,16 @@ Written by hand, as claude-347's to claude-356's were: claude-346 (PR #3913, a d
 
 - claude-356's kit, both panels and reply files, and claude-352's four stage 3 artifacts, on the laptop: `local/claude/claude-356/`, `local/claude/claude-352/`.
 - The plan Casey read: `local/claude/claude-357/PLAN.md` (not committed).
+
+## Addendum, 12 Nov 2026 (claude's own decision review; logged for Casey, who can reverse it)
+
+**Decision 5 was wrong, and what was built in its place.** Decision 5 said turn memory's leave rule acts only at reply openings and would stay untouched. Read before any trainer line was written, as decision 5 required: with `--turn-memory-reply 1`, which stage 3's recipe carries, the leave rule also acts at every later reply row (stage 3 logged `reply keys left to the copy read 160416 of 327257`). Left at the latest rule, a later reply row where the latest match names the target and the longer match does not would lose its key from the reply table while the copy read named another token: nobody would supply the target. That is the kind of fault arm rk fell to.
+
+- **Built instead:** with the flag on, the leave rule asks the copy read by the run's rule (`copy_names_ruled`): the longer match first at later reply rows, the latest match at an opening row. With the flag off it is the old rule, unchanged. A laptop test compares it with a position-by-position spelling over every six-token window of three tokens.
+- **Consequence for the run:** the flag changes two things in training, the copy read's choice and the keys the reply table holds. The sheet says so and gives the run a guard on the logged count (I-k).
+
+Three smaller departures from the plan:
+
+- **The scoring pass checks each `--panel` split for the marker,** as the trainer checks TRAIN and DEV at start. The pinned fresh-v2 split is not checked.
+- **A resumed run (`--init-from`) is refused when its checkpoint's marker differs from the run's.**
+- **The exporter does not compare the checkpoint's rule with the config's,** which the plan named: the snapshot does not carry the rule. The trainer's refusal above and the sheet's row check cover it.
