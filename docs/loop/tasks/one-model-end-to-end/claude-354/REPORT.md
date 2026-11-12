@@ -44,7 +44,7 @@ Neither side is right in any of the seven. Most differing replies are like these
 
 ## Measurements
 
-Laptop only. The reader is built from `de0881fa2`; `row-picks` SHA-256 `1a9a30d1274bde9ab3f633b917310d53c76dbbc82b572ee588558682a1421305`. The panel is claude-352's no-line panel (tokens SHA-256 `b8ad9fe4…5fe4`, the SHA the pod's score names), read at the 192 window the pod scored at. The trained models' numbers are the pod's saved files; the float column of table 1 equals the pod's own receipts (34,625 for the control, 33,543 for arm r).
+Laptop only. The reader is built from `02efc82b0`; `row-picks` SHA-256 `570c3306f033a7b22edfa54e7809bc55eac0c4feb2974986dce8e7077cae8a7d`. The panel is claude-352's no-line panel (tokens SHA-256 `b8ad9fe4…5fe4`, the SHA the pod's score names), read at the 192 window the pod scored at. The trained models' numbers are the pod's saved files; the float column of table 1 equals the pod's own receipts (34,625 for the control, 33,543 for arm r).
 
 **1. Row by row, with the true text before each row (40,719 rows a model).**
 
@@ -123,11 +123,13 @@ The trained model is right on 377 of these rows and the laptop copy on 281: the 
 | Check | Result |
 |---|---|
 | `cargo test --locked --release --bin row-picks --features integer-reader` (instrument crate) | 5 passed, 0 failed |
-| `cargo build --locked --release --bin row-picks --features integer-reader`, tree clean at `de0881fa2` | built; the SHA-256 above |
+| `cargo build --locked --release --bin row-picks --features integer-reader`, tree clean at `02efc82b0` | built; the SHA-256 above |
 | the ten row runs: positions and targets against the pod's files | equal on every run (the program refuses otherwise) |
 | the nine reply runs: the reader's token against the saved laptop reply's | equal on every differing reply (the program refuses otherwise) |
 | the float column of table 1 against the pod's score receipts | equal where a receipt is on the laptop (control 34,625; arm r 33,543) |
 | the program's breakdown against the kit's first count of the same files | equal |
+| a second full run (19 runs, 57 files) by the build at the head against the first, made before a rename of one identifier | equal byte for byte |
+| `uor-harness ratchet d32` | no additions (31 of 31) |
 
 Not run: anything on a pod, any float pass, the integer crate's tests (its code is not changed). The two tying checks under table 3, the memory-off column of table 3 and the stated-value counts are counts by the laptop kit (`jq` files under `local/claude/claude-354/` and `local/claude/export-repair/`), not by committed code. `uor-harness loop pr-check` runs after this commit and its result is in the review record on the PR.
 
