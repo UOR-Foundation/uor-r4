@@ -1,4 +1,9 @@
 import { MVM_LIMITS } from './protocol.js';
+import {
+    assertVirtualGitHashes,
+    validateVirtualGitSnapshot,
+    type VirtualGitSnapshot,
+} from './virtualGit.js';
 
 export interface StoredCowSector {
     id: number;
@@ -22,6 +27,7 @@ export interface MvmSnapshotInput {
     files: Record<string, { text: string; revision: number }>;
     sectors: StoredCowSector[];
     cow?: MvmPersistedCowView;
+    git?: VirtualGitSnapshot;
 }
 
 export interface MvmSnapshot extends MvmSnapshotInput {
@@ -103,6 +109,8 @@ async function sha256(bytes: Uint8Array): Promise<string> {
 async function digestInput(input: MvmSnapshotInput): Promise<string> {
     const files = Object.entries(input.files).sort(([a], [b]) => a.localeCompare(b));
     const sectors = [...input.sectors].sort((a, b) => a.id - b.id);
+    const git = input.git === undefined ? null : validateVirtualGitSnapshot(input.git);
+    if (git !== null) await assertVirtualGitHashes(git);
     const header = JSON.stringify({
         version: input.version,
         snapshotId: input.snapshotId,
@@ -111,6 +119,7 @@ async function digestInput(input: MvmSnapshotInput): Promise<string> {
         files,
         sectors: await Promise.all(sectors.map(async (sector) => ({ id: sector.id, digest: await sha256(sector.bytes) }))),
         cow: input.cow,
+        ...(git === null ? {} : { git }),
     });
     return sha256(new TextEncoder().encode(header));
 }
@@ -158,6 +167,7 @@ function validateInput(input: MvmSnapshotInput): void {
             previousCow = sector.id;
         }
     }
+    if (input.git !== undefined) validateVirtualGitSnapshot(input.git);
     for (const forbidden of ['history', 'commands', 'token', 'githubToken', 'authorization']) {
         if (forbidden in input) throw new Error(`forbidden persistence field: ${forbidden}`);
     }

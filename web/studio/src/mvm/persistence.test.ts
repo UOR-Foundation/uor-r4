@@ -7,6 +7,7 @@ import {
     snapshotMetadata,
     type MvmSnapshotInput,
 } from './persistence.js';
+import { sha256Text, virtualCommitHash, type VirtualGitSnapshot } from './virtualGit.js';
 
 const DIGEST_A = `sha256:${'a'.repeat(64)}`;
 
@@ -18,6 +19,28 @@ function snapshot(): MvmSnapshotInput {
         cowDigest: DIGEST_A,
         files: { 'src/a.c': { text: 'int main(void){return 0;}', revision: 3 } },
         sectors: [],
+    };
+}
+
+async function validGitSnapshot(): Promise<VirtualGitSnapshot> {
+    const text = 'int main(void){return 0;}';
+    const blob = await sha256Text(text);
+    const body = {
+        parents: [],
+        message: 'initial',
+        author: 'Test <test@invalid>',
+        timestamp: '2026-01-02T03:04:05.000Z',
+        tree: { '/workspace/src/a.c': blob },
+    };
+    const hash = await virtualCommitHash(body);
+    return {
+        version: 1,
+        initialized: true,
+        currentBranch: 'main',
+        branches: { main: hash },
+        commits: { [hash]: { hash, ...body } },
+        staged: {},
+        blobs: { [blob]: text },
     };
 }
 
@@ -36,6 +59,27 @@ describe('MVM persistence', () => {
         const restored = await second.load({ snapshotId: saved.snapshotId, digest: saved.digest });
         expect(restored.files['src/a.c']).toEqual({ text: 'int main(void){return 0;}', revision: 3 });
         expect(restored.digest).toBe(saved.digest);
+    });
+
+    it('legacy_snapshot_without_git_keeps_its_original_digest', async () => {
+        const backend = storage();
+        const value = snapshot();
+        const header = JSON.stringify({
+            version: value.version,
+            snapshotId: value.snapshotId,
+            cwd: value.cwd,
+            cowDigest: value.cowDigest,
+            files: Object.entries(value.files),
+            sectors: [],
+            cow: value.cow,
+        });
+        const digestBytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(header));
+        const digest = `sha256:${[...new Uint8Array(digestBytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+        backend.seed('tab-a', { ...value, digest });
+        const persistence = new MvmPersistence(backend, 'tab-a');
+        const restored = await persistence.load();
+        expect(restored.digest).toBe(digest);
+        expect(restored.git).toBeUndefined();
     });
 
     it('mvm_corrupt_quota_partial_and_unknown_version_are_refused', async () => {
@@ -85,6 +129,32 @@ describe('MVM persistence', () => {
         const restored = await persistence.load(metadata);
         expect(restored.sectors).toHaveLength(256);
         expect(restored.sectors[255].bytes).toHaveLength(65_536);
+    });
+
+    it('git_state_round_trip_and_corrupt_history_are_verified', async () => {
+        const backend = storage();
+        const persistence = new MvmPersistence(backend, 'tab-a');
+        const value = snapshot();
+        value.git = await validGitSnapshot();
+        const saved = await persistence.save(value);
+        const restored = await persistence.load(snapshotMetadata(saved));
+        expect(restored.git?.currentBranch).toBe('main');
+        expect(Object.keys(restored.git?.commits ?? {})).toHaveLength(1);
+
+        const corrupt = snapshot();
+        corrupt.git = await validGitSnapshot();
+        const hash = corrupt.git.branches.main!;
+        corrupt.git.commits[hash]!.parents = [`sha256:${'f'.repeat(64)}`];
+        const writes = backend.writeCount;
+        await expect(persistence.save(corrupt)).rejects.toThrow(/parent|history/i);
+        expect(backend.writeCount).toBe(writes);
+
+        const badBlob = snapshot();
+        badBlob.git = await validGitSnapshot();
+        const blob = badBlob.git.commits[hash]!.tree['/workspace/src/a.c']!;
+        badBlob.git.blobs[blob] = 'tampered';
+        await expect(persistence.save(badBlob)).rejects.toThrow(/blob|hash|digest/i);
+        expect(backend.writeCount).toBe(writes);
     });
 
     it('mvm_history_and_credentials_are_not_persisted', async () => {

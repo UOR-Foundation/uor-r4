@@ -70,3 +70,34 @@ test('mvm responsive boundaries, IME and RTL preserve the workbench', async ({ p
     await expect(page.locator('[data-pane="terminal"]')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+
+test('mvm virtual git persists local staging and refuses unavailable rust tools', async ({ page }) => {
+    await page.goto('/?typed=1&studioTest=1');
+    await page.waitForFunction(() => window.__studioMvmTest !== undefined);
+    await page.evaluate(() => window.__studioMvmTest!.write('/workspace/fix.txt', 'before\n'));
+    const output = page.locator('[data-testid="mvm-terminal"] pre');
+    const run = async (cmd: string, expected?: string) => {
+        const input = page.locator(command);
+        await expect(input).toBeEnabled();
+        await input.fill(cmd);
+        await input.press('Enter');
+        if (expected) await expect(output).toContainText(expected);
+    };
+
+    await run('git init');
+    await run('git add /workspace/fix.txt');
+    await run('git commit -m "initial fixture"', 'local staging initial fixture');
+    await page.evaluate(() => window.__studioMvmTest!.write('/workspace/fix.txt', 'after\n'));
+    await run('git diff', '-before');
+    await expect(output).toContainText('+after');
+    await run('git add /workspace/fix.txt');
+    await run('git commit -m "repair fixture"', 'local staging repair fixture');
+
+    await page.reload();
+    await run('git log --oneline', 'local staging initial fixture');
+    await expect(output).toContainText('local staging repair fixture');
+    await run('git status', 'working tree clean');
+    await run('cargo check', 'no genuine guest Rust toolchain');
+    await run('rustc --version', 'no genuine guest Rust toolchain');
+});
