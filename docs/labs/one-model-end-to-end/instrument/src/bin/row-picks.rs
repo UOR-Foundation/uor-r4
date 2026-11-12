@@ -243,10 +243,10 @@ fn replies(path: &str) -> Result<Vec<Vec<u32>>> {
 
 /// The step at which the reader's reply first leaves the float pass's, the float reply read up
 /// to and including its first end-of-reply id; `None` where neither leaves the other.
-fn first_leave(float: &[u32], integer: &[u32]) -> Option<usize> {
-    let end = float.iter().position(|&id| id == EOS).map_or(float.len(), |at| at + 1);
-    let float = &float[..end];
-    (0..float.len().min(integer.len())).find(|&step| float[step] != integer[step])
+fn first_leave(trained: &[u32], integer: &[u32]) -> Option<usize> {
+    let end = trained.iter().position(|&id| id == EOS).map_or(trained.len(), |at| at + 1);
+    let trained = &trained[..end];
+    (0..trained.len().min(integer.len())).find(|&step| trained[step] != integer[step])
 }
 
 fn zero_or_one(value: &str, name: &str) -> Result<bool> {
@@ -267,12 +267,12 @@ fn leaves(args: &[String]) -> Result<Value> {
     let samples = fs::read(&samples_path).map_err(|e| format!("{samples_path}: {e}"))?;
     let rows: Vec<Value> =
         serde_json::from_slice(&samples).map_err(|e| format!("{samples_path}: {e}"))?;
-    let (float, integer) = (replies(&float_path)?, replies(&integer_path)?);
-    if float.len() != rows.len() || integer.len() != rows.len() {
+    let (trained, integer) = (replies(&float_path)?, replies(&integer_path)?);
+    if trained.len() != rows.len() || integer.len() != rows.len() {
         return Err(format!(
             "{} rows, {} float replies, {} integer replies",
             rows.len(),
-            float.len(),
+            trained.len(),
             integer.len()
         ));
     }
@@ -286,7 +286,7 @@ fn leaves(args: &[String]) -> Result<Value> {
     };
     let mut left = Vec::new();
     for (index, row) in rows.iter().enumerate() {
-        let Some(step) = first_leave(&float[index], &integer[index]) else {
+        let Some(step) = first_leave(&trained[index], &integer[index]) else {
             continue;
         };
         let prompt = u32s(row.get("prompt"), &format!("row {index}'s prompt"))?;
@@ -312,7 +312,7 @@ fn leaves(args: &[String]) -> Result<Value> {
                     .map_err(|e| format!("row {index}, id {at}: {e}"))?;
             }
         }
-        let (ours, theirs) = (integer[index][step], float[index][step]);
+        let (ours, theirs) = (integer[index][step], trained[index][step]);
         if pick != ours {
             return Err(format!(
                 "row {index}, step {step}: the reader chose {pick}, the saved reply holds {ours}: not this artifact's replies"
@@ -407,7 +407,7 @@ fn run(args: Vec<String>) -> Result<Value> {
         Some(table) if model.shape().head_nearest() => table,
         _ => return Err("row-picks needs an artifact with a writer table and the nearest head".to_owned()),
     };
-    let float = float_path
+    let trained = float_path
         .as_deref()
         .map(|path| -> Result<(Vec<u64>, Vec<u64>, Vec<u64>, String)> {
             let bytes = fs::read(path).map_err(|e| format!("{path}: {e}"))?;
@@ -460,7 +460,7 @@ fn run(args: Vec<String>) -> Result<Value> {
                 return Err(format!("position {at}: the reader chose {pick}, the table's nearest is {scan}"));
             }
             let mut differs = false;
-            if let Some((_, _, float_nearest, _)) = &float {
+            if let Some((_, _, float_nearest, _)) = &trained {
                 let theirs = float_nearest.get(positions.len()).copied().unwrap_or(u64::MAX);
                 if theirs != u64::from(pick) {
                     if theirs >= (table.len() / query.len()) as u64 {
@@ -491,7 +491,7 @@ fn run(args: Vec<String>) -> Result<Value> {
             copied.push(u8::from(copies(&tokens, &mask, window.start, position)));
         }
     }
-    if let Some((float_positions, float_targets, _, _)) = &float {
+    if let Some((float_positions, float_targets, _, _)) = &trained {
         if *float_positions != positions || *float_targets != targets {
             return Err(format!(
                 "--float-rows: its rows are not this panel's at context {context}: {} rows against {}",
@@ -503,7 +503,7 @@ fn run(args: Vec<String>) -> Result<Value> {
     let hits = nearest.iter().zip(&targets).filter(|(n, t)| n == t).count();
     let flagged = |values: Vec<u64>| -> Vec<(u64, bool)> { values.into_iter().zip(flags.iter().copied()).collect() };
     // With `--float-rows`: the rows and the differing rows of each band.
-    let breakdown = float.as_ref().map(|_| {
+    let breakdown = trained.as_ref().map(|_| {
         json!({
             "differ_by_rank": bands(&ranks, &RANK_EDGES),
             "by_margin": bands(&flagged(margins.clone()), &MARGIN_EDGES),
@@ -527,9 +527,9 @@ fn run(args: Vec<String>) -> Result<Value> {
         "windows": cut.len(),
         "rows": positions.len(),
         "nearest_hits": hits,
-        "float_rows_sha256": float.as_ref().map(|(_, _, _, sha)| sha.clone()),
-        "float_nearest_hits": float.as_ref().map(|(_, t, n, _)| n.iter().zip(t).filter(|(n, t)| n == t).count()),
-        "differ_from_float": float.as_ref().map(|_| differ.len()),
+        "float_rows_sha256": trained.as_ref().map(|(_, _, _, sha)| sha.clone()),
+        "float_nearest_hits": trained.as_ref().map(|(_, t, n, _)| n.iter().zip(t).filter(|(n, t)| n == t).count()),
+        "differ_from_float": trained.as_ref().map(|_| differ.len()),
     });
     let mut body = receipt.clone();
     for (name, value) in [
