@@ -42,8 +42,8 @@ Lab: claude. Order: [ORDER.md](ORDER.md). References #2904.
 - `cargo test --release --locked -p uor-r4-harness --test loop_prcheck`: 50 passed under the
   base checker.
 - `rustfmt --edition 2021 --check` on changed Rust files and `git diff --check`: pass.
-- `UOR_LAB=claude local/harness-target/release/uor-harness loop pr-check --local`: pending the
-  commit for which it checks.
+- `UOR_LAB=claude local/harness-target/release/uor-harness loop pr-check --local`: **PASS**.
+  The only advisory is the pre-existing missing FILEMAP entries.
 
 ## Skills used
 
