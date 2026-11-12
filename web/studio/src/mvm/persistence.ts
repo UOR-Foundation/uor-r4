@@ -31,6 +31,7 @@ export interface MvmSnapshot extends MvmSnapshotInput {
 export interface SnapshotStorage {
     get(key: string): Promise<unknown>;
     put(key: string, value: unknown): Promise<void>;
+    delete(key: string): Promise<void>;
 }
 
 export class MemorySnapshotStorage implements SnapshotStorage {
@@ -51,6 +52,10 @@ export class MemorySnapshotStorage implements SnapshotStorage {
         }
         this.values.set(key, clone(value));
         this.writeCount += 1;
+    }
+
+    async delete(key: string): Promise<void> {
+        this.values.delete(key);
     }
 
     seed(key: string, value: unknown): void {
@@ -194,6 +199,10 @@ export class MvmPersistence<S extends SnapshotStorage = SnapshotStorage> {
         if (raw === undefined) return null;
         return this.load();
     }
+
+    async clear(): Promise<void> {
+        await this.storage.delete(this.key);
+    }
 }
 
 export function snapshotMetadata(snapshot: MvmSnapshot): { snapshotId: string; digest: string } {
@@ -307,6 +316,11 @@ export async function createIdbSnapshotStorage(factory: IDBFactory): Promise<Sna
         async put(key: string, value: unknown): Promise<void> {
             const transaction = db.transaction('sandboxes', 'readwrite');
             await requestResult(transaction.objectStore('sandboxes').put(value, key));
+            await transactionDone(transaction);
+        },
+        async delete(key: string): Promise<void> {
+            const transaction = db.transaction('sandboxes', 'readwrite');
+            await requestResult(transaction.objectStore('sandboxes').delete(key));
             await transactionDone(transaction);
         },
     };

@@ -97,4 +97,23 @@ describe('MvmClient protocol and lifecycle', () => {
         expect(worker).not.toContain('register_host_secret');
         expect(worker).not.toContain('proxy_vsock_egress');
     });
+
+    it('mvm_file_mutations_notify_workspace_subscribers', async () => {
+        const { client } = makeClient({ exec: { exitCode: 0, stdout: 'ok', stderr: '' } });
+        const listener = vi.fn();
+        const unsubscribe = client.onFilesChanged(listener);
+        await client.read('/workspace/a.c');
+        expect(listener).not.toHaveBeenCalled();
+        await client.write('/workspace/a.c', 'int main(void){return 0;}');
+        expect(listener).toHaveBeenCalledTimes(1);
+        await client.exec('cc /workspace/a.c -o /workspace/a');
+        expect(listener).toHaveBeenCalledTimes(2);
+        await client.restore({ snapshotId: `sha256:${'a'.repeat(64)}`, digest: `sha256:${'b'.repeat(64)}` });
+        expect(listener).toHaveBeenCalledTimes(3);
+        await client.reset();
+        expect(listener).toHaveBeenCalledTimes(4);
+        unsubscribe();
+        await client.write('/workspace/a.c', 'changed');
+        expect(listener).toHaveBeenCalledTimes(4);
+    });
 });

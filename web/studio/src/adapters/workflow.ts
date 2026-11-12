@@ -7,6 +7,7 @@ export interface StudioFile {
     content: string;
     mode: string;
     rootPath?: string;
+    revision?: number;
 }
 
 export interface WorkspaceTab {
@@ -28,7 +29,7 @@ export interface WorkspaceSummary {
 export interface WorkspaceApi {
     openFolder(): Promise<void>;
     importFiles(reason?: string): void;
-    openDemo(): void;
+    openDemo(): void | Promise<void>;
     openFile(path: string, rootPath?: string): Promise<void>;
     newFile(): void;
     closeTab(path: string, rootPath?: string): void;

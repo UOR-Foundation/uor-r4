@@ -11,7 +11,7 @@ export const MVM_LIMITS = Object.freeze({
     maxHistoryEntries: 200,
 });
 
-export const MVM_KINDS = ['init', 'status', 'exec', 'read', 'write', 'snapshot', 'restore', 'compile', 'vsock', 'dispose'] as const;
+export const MVM_KINDS = ['init', 'status', 'exec', 'read', 'write', 'list', 'snapshot', 'restore', 'compile', 'vsock', 'reset', 'dispose'] as const;
 export type MvmKind = (typeof MVM_KINDS)[number];
 
 export interface MvmRequest {

@@ -61,6 +61,7 @@ export class MvmClient {
     private disposed = false;
     private readonly pending = new Map<number, PendingRequest>();
     private readonly commandHistory: MvmHistoryEntry[] = [];
+    private readonly fileListeners = new Set<() => void>();
 
     constructor(options: MvmClientOptions = {}) {
         this.workerFactory = options.workerFactory ?? defaultWorkerFactory;
@@ -70,6 +71,15 @@ export class MvmClient {
 
     history(): MvmHistoryEntry[] {
         return this.commandHistory.map((entry) => ({ ...entry }));
+    }
+
+    onFilesChanged(listener: () => void): () => void {
+        this.fileListeners.add(listener);
+        return () => { this.fileListeners.delete(listener); };
+    }
+
+    private notifyFilesChanged(): void {
+        for (const listener of this.fileListeners) listener();
     }
 
     async status(): Promise<Record<string, unknown>> {
@@ -83,15 +93,29 @@ export class MvmClient {
         const result = await this.send('exec', { cmd, cwd }) as MvmExecResult;
         this.commandHistory.push({ cmd, cwd, persisted: false });
         if (this.commandHistory.length > MVM_LIMITS.maxHistoryEntries) this.commandHistory.shift();
+        this.notifyFilesChanged();
         return result;
     }
 
-    async read(path: string): Promise<{ text: string }> {
-        return this.send('read', { path }) as Promise<{ text: string }>;
+    async read(path: string): Promise<{ text: string; revision: number }> {
+        return this.send('read', { path }) as Promise<{ text: string; revision: number }>;
     }
 
-    async write(path: string, text: string): Promise<unknown> {
-        return this.send('write', { path, text });
+    async write(path: string, text: string, baseRevision?: number): Promise<unknown> {
+        const result = await this.send('write', { path, text, ...(baseRevision === undefined ? {} : { baseRevision }) });
+        this.notifyFilesChanged();
+        return result;
+    }
+
+    async list(prefix = '/workspace'): Promise<Array<{ path: string; kind: 'file'; sizeBytes: number }>> {
+        return this.send('list', { prefix }) as Promise<Array<{ path: string; kind: 'file'; sizeBytes: number }>>;
+    }
+
+    async reset(): Promise<void> {
+        await this.send('reset', {});
+        this.commandHistory.length = 0;
+        this.nextId = 1;
+        this.notifyFilesChanged();
     }
 
     async snapshot(): Promise<{ snapshotId: string; digest: string }> {
@@ -99,7 +123,9 @@ export class MvmClient {
     }
 
     async restore(snapshot: { snapshotId: string; digest: string }): Promise<unknown> {
-        return this.send('restore', snapshot);
+        const result = await this.send('restore', snapshot);
+        this.notifyFilesChanged();
+        return result;
     }
 
     async compile(source: string): Promise<unknown> {

@@ -292,3 +292,21 @@ fn mvm_persistent_cow_json_roundtrip_preserves_digest() {
     restored.import_persistent_cow(&snapshot);
     assert_eq!(restored.cow_state_sha256(), expected_digest);
 }
+
+#[test]
+fn mvm_guest_file_listing_includes_source_and_compiled_elf() {
+    let mut vm = MvmSandbox::boot_default().expect("boot");
+    let source = "#include <stdio.h>\nint main(void){return 0;}\n";
+    vm.write_guest_file("/workspace/src/main.c", source.as_bytes())
+        .expect("write source");
+    let elf = compile_c_to_rv64_elf(source).expect("compile ELF");
+    vm.write_guest_file("/workspace/main", &elf)
+        .expect("write ELF");
+    let entries = vm.list_guest_files("/workspace");
+    assert!(entries
+        .iter()
+        .any(|entry| entry.path == "/workspace/src/main.c" && entry.size_bytes == source.len()));
+    assert!(entries
+        .iter()
+        .any(|entry| entry.path == "/workspace/main" && entry.size_bytes == elf.len()));
+}

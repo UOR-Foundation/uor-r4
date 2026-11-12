@@ -14,9 +14,8 @@ declare global {
     }
 }
 
-export function installMvmTestApi(): void {
+export function installMvmTestApi(client = new MvmClient()): void {
     if (window.__studioMvmTest !== undefined) return;
-    const client = new MvmClient();
     window.__studioMvmTest = {
         status: () => client.status() as Promise<{ architecture: string; guestCid: number; cowStateSha256: string }>,
         exec: (cmd, cwd) => client.exec(cmd, cwd),

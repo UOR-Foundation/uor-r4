@@ -21,6 +21,9 @@ export function uorMvmLoadSnapshot(key, snapshotId, digest) {
 export function uorMvmLoadCurrentSnapshot(key) {
     return globalThis.__uorMvmHost.loadCurrentSnapshot(key);
 }
+export function uorMvmClearSnapshot(key) {
+    return globalThis.__uorMvmHost.clearSnapshot(key);
+}
 ")]
 extern "C" {
     #[wasm_bindgen(js_name = uorMvmSaveSnapshot)]
@@ -29,6 +32,8 @@ extern "C" {
     fn load_snapshot(key: &str, snapshot_id: &str, digest: &str) -> Promise;
     #[wasm_bindgen(js_name = uorMvmLoadCurrentSnapshot)]
     fn load_current_snapshot(key: &str) -> Promise;
+    #[wasm_bindgen(js_name = uorMvmClearSnapshot)]
+    fn clear_snapshot(key: &str) -> Promise;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -322,6 +327,18 @@ fn execute(payload: &Value) -> Result<Value, String> {
     }))
 }
 
+fn list_files(payload: &Value) -> Result<Value, String> {
+    let prefix = payload
+        .get("prefix")
+        .and_then(Value::as_str)
+        .unwrap_or("/workspace");
+    let files = with_vm(|vm| Ok(vm.list_guest_files(prefix)))?;
+    Ok(json!(files
+        .into_iter()
+        .map(|file| json!({"path": file.path, "kind": "file", "sizeBytes": file.size_bytes}))
+        .collect::<Vec<_>>()))
+}
+
 fn read_file(payload: &Value) -> Result<Value, String> {
     let path = payload
         .get("path")
@@ -464,6 +481,7 @@ pub fn mvm_dispatch(request_json: &str) -> Promise {
         "status" => resolved(id, status()),
         "exec" => persist_result(id, key, execute(&payload)),
         "read" => resolved(id, read_file(&payload)),
+        "list" => resolved(id, list_files(&payload)),
         "write" => persist_result(id, key, write_file(&payload)),
         "snapshot" => {
             let promise = match persist_current(key) {
@@ -499,6 +517,14 @@ pub fn mvm_dispatch(request_json: &str) -> Promise {
         }
         "compile" => resolved(id, compile(&payload)),
         "vsock" => resolved(id, vsock(&payload)),
+        "reset" => {
+            VM.with(|slot| *slot.borrow_mut() = None);
+            REVISIONS.with(|revisions| revisions.borrow_mut().clear());
+            CWD.with(|cwd| *cwd.borrow_mut() = "/workspace".to_string());
+            then(clear_snapshot(key), move |_| {
+                response(id, true, json!({"reset": true}))
+            })
+        }
         "dispose" => {
             VM.with(|slot| *slot.borrow_mut() = None);
             REVISIONS.with(|revisions| revisions.borrow_mut().clear());

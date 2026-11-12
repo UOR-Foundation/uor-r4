@@ -1,0 +1,36 @@
+.lex-workbench { display: flex; flex-direction: column; gap: .5rem; min-block-size: 0; block-size: 100%; }
+.lex-workbench-toolbar { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.lex-workbench-toolbar button { min-block-size: 36px; }
+.lex-workbench-grid { display: grid; grid-template-columns: minmax(170px, .24fr) minmax(0, 1fr) minmax(290px, .38fr); grid-template-rows: minmax(0, 1fr) auto; flex: 1; gap: .5rem; min-block-size: 0; }
+.lex-pane { min-inline-size: 0; min-block-size: 0; overflow: auto; border: 1px solid var(--harness-border); border-radius: 10px; background: var(--harness-panel); }
+.lex-pane-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: .5rem; padding: .65rem .75rem .35rem; color: var(--harness-muted); }
+.lex-pane-heading h2 { margin: 0; color: var(--harness-text); font-size: .95rem; }
+.lex-pane-heading p { margin: .2rem 0 0; font-size: .78rem; }
+.lex-editor { overflow: hidden; }
+.lex-editor .workspace-editor { block-size: 100%; overflow: auto; }
+.lex-assistant { overflow: auto; }
+.mvm-file-explorer { overflow: auto; }
+.mvm-file-explorer .file-tree { border: 0; }
+.lex-terminal { display: flex; flex-direction: column; grid-column: 1 / -1; max-block-size: 42vh; }
+.mvm-terminal { display: flex; flex: 1; flex-direction: column; min-block-size: 0; }
+.mvm-terminal-output { flex: 1; min-block-size: 8rem; max-block-size: 24vh; margin: 0 .65rem; padding: .65rem; overflow: auto; border: 1px solid var(--harness-border); border-radius: 7px; background: var(--harness-code); color: var(--harness-text); font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mvm-terminal-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto auto; gap: .4rem; align-items: end; padding: .55rem .65rem; }
+.mvm-terminal-form label { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.mvm-terminal-form input { min-block-size: 36px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.mvm-terminal-form button { min-block-size: 36px; }
+.mvm-terminal-cwd { margin: 0 .65rem .55rem; color: var(--harness-muted); font-size: .75rem; }
+.mvm-terminal .workbench-alert { margin: .4rem .65rem; }
+@media (max-width: 1023px) {
+    .lex-workbench-grid { grid-template-columns: minmax(0, 1fr); }
+    [data-pane="explorer"][data-open="false"], [data-pane="assistant"][data-open="false"] { display: none; }
+    .lex-editor { grid-column: 1; }
+    .lex-assistant { grid-column: 1; }
+    .lex-terminal { grid-column: 1; max-block-size: 48vh; }
+    .mvm-terminal-form { grid-template-columns: minmax(0, 1fr) auto auto; }
+    .mvm-terminal-form input { grid-column: 1 / -1; }
+    .mvm-terminal-form button { min-block-size: 42px; }
+}
+@media (max-width: 520px) {
+    .mvm-terminal-form { grid-template-columns: 1fr 1fr; }
+    .mvm-terminal-form button:last-child { grid-column: 1 / -1; }
+}

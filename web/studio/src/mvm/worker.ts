@@ -18,6 +18,7 @@ declare global {
         saveSnapshot(key: string, state: MvmSnapshotInput): Promise<HostSnapshot>;
         loadSnapshot(key: string, snapshotId: string, digest: string): Promise<unknown>;
         loadCurrentSnapshot(key: string): Promise<unknown>;
+        clearSnapshot(key: string): Promise<void>;
     };
 }
 
@@ -66,6 +67,9 @@ globalThis.__uorMvmHost = {
     async loadCurrentSnapshot(key) {
         return (await persistence(key)).loadOrNull();
     },
+    async clearSnapshot(key) {
+        await (await persistence(key)).clear();
+    },
 };
 
 async function ensureWasm(): Promise<void> {
@@ -96,6 +100,11 @@ self.addEventListener('message', (event: MessageEvent) => {
             const persistent = request.payload.persistent === true;
             await ensureInitialized(key, persistent);
             const result = await mvm_dispatch(encoded);
+            if (request.kind === 'reset') {
+                initializedKey = null;
+                persistenceByKey.delete(key);
+                persistentByKey.delete(key);
+            }
             self.postMessage(result);
         } catch (error) {
             self.postMessage(JSON.stringify({

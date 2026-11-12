@@ -1,6 +1,7 @@
 @import './styles/tokens.css';
 @import './styles/shell.css';
 @import './styles/responsive.css';
+@import './styles/lexworkbench.css';
 :root { color-scheme: dark; }
 :root[data-theme="light"] { color-scheme: light; }
 .harness-shell {

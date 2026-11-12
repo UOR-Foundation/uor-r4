@@ -85,3 +85,28 @@ impl MvmSandbox {
         self.next_pid = snapshot.next_pid;
     }
 }
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MvmGuestFileInfo {
+    pub path: String,
+    pub size_bytes: usize,
+}
+
+impl MvmSandbox {
+    pub fn list_guest_files(&self, prefix: &str) -> Vec<MvmGuestFileInfo> {
+        self.inodes
+            .iter()
+            .filter_map(|(path, inode)| {
+                if !path.starts_with(prefix) {
+                    return None;
+                }
+                let size_bytes = match &inode.kind {
+                    InodeKind::Regular { byte_len, .. } => *byte_len,
+                    InodeKind::Symlink { target } => target.len(),
+                };
+                Some(MvmGuestFileInfo { path: path.clone(), size_bytes })
+            })
+            .collect()
+    }
+}

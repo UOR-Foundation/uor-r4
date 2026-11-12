@@ -19,6 +19,7 @@ import {
     type TauriCoreLike,
 } from './agent/transports.js';
 import { createAgentStore, type AgentStore } from './state/agent.js';
+import { MvmClient } from './mvm/client.js';
 
 interface LegacyAppWindow extends Window {
     __studioApp?: { worker: Worker | null };
@@ -199,6 +200,7 @@ export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?:
     const adapter = createModelSourceAdapter(store, ModelSources, worker);
     const forwardMessage = (event: MessageEvent) => adapter.handleWorkerMessage(event.data);
     worker.addEventListener('message', forwardMessage);
+    const mvmClient = new MvmClient();
     render(h(StudioApp, {
         store,
         adapter,
@@ -207,11 +209,12 @@ export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?:
         sessions: apis.sessions,
         ui: apis.ui,
         agentClient: owner.client,
+        mvmClient,
     }), root);
     if (testApi !== null) {
         testApi.installStudioTestApi(owner);
         const mvmTestApi = await import('./mvm/testApi.js');
-        mvmTestApi.installMvmTestApi();
+        mvmTestApi.installMvmTestApi(mvmClient);
     }
     const previousSkipHref = retargetSkipLink('#harness-main');
     root.dataset.active = 'true';

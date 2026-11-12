@@ -12,6 +12,7 @@ import { EditorPane, fileTooLargeMessage } from './EditorPane.js';
 import { EditorTabs } from './EditorTabs.js';
 import { FileTree, type FileTreeMeta } from './FileTree.js';
 import type { FileNode } from './types.js';
+import type { MvmFileSource } from '../mvm/workspaceAdapter.js';
 import { MAX_DOCUMENT_BYTES } from './ComposerAttachments.js';
 import { Icon } from './ui/Icon.js';
 
@@ -23,6 +24,11 @@ interface WorkspaceEditorProps {
     onSuccess(operation: string): void;
     settings?: StudioSettings;
     agentClient?: AgentClient | null;
+    fileSource?: MvmFileSource | null;
+    showFileTree?: boolean;
+    showHeader?: boolean;
+    showActions?: boolean;
+    showSaveAs?: boolean;
 }
 
 const defaultSettings: StudioSettings = { theme: 'dark', reduceMotion: false, fontSize: 13, tabSize: 4, wordWrap: false };
@@ -44,7 +50,7 @@ function fileNodes(entries: TreeEntry[]): FileNode[] {
     }));
 }
 
-export function WorkspaceEditor({ store, files, operations, onError, onSuccess, settings = defaultSettings, agentClient = null }: WorkspaceEditorProps) {
+export function WorkspaceEditor({ store, files, operations, onError, onSuccess, settings = defaultSettings, agentClient = null, fileSource = null, showFileTree = true, showHeader = true, showActions = showHeader, showSaveAs = true }: WorkspaceEditorProps) {
     const state = useLifecycle(store);
     const mounted = useRef(true);
     const treeVersion = useRef(0);
@@ -65,6 +71,20 @@ export function WorkspaceEditor({ store, files, operations, onError, onSuccess, 
     }
 
     async function loadTree(requestedGrantId?: string) {
+        if (fileSource !== null) {
+            treeVersion.current += 1;
+            const version = treeVersion.current;
+            setTree((current) => ({ ...current, phase: 'loading', error: null }));
+            try {
+                const result = await fileSource.list();
+                if (!mounted.current || treeVersion.current !== version) return;
+                setTree({ phase: 'ready', nodes: result.nodes, meta: result.meta, error: null });
+            } catch (error) {
+                if (!mounted.current || treeVersion.current !== version) return;
+                setTree({ phase: 'error', nodes: [], meta: emptyMeta, error: error instanceof Error ? error.message : String(error) });
+            }
+            return;
+        }
         if (agentClient === null) {
             if (mounted.current) setTree({ phase: 'ready', nodes: [], meta: emptyMeta, error: null });
             return;
@@ -180,7 +200,7 @@ export function WorkspaceEditor({ store, files, operations, onError, onSuccess, 
             document.removeEventListener('uor-files-changed', reload);
             document.removeEventListener('uor-workspace-changed', reload);
         };
-    }, [agentClient]);
+    }, [agentClient, fileSource]);
 
     function perform(action: () => Promise<unknown>, operation: string) {
         void operations.run(operation, action(), (completed) => {
@@ -258,12 +278,12 @@ export function WorkspaceEditor({ store, files, operations, onError, onSuccess, 
 
     return (
         <section aria-label="Workspace editor" class="workspace-editor">
-            <header class="workspace-heading"><div><h1>Workspace</h1><p>{summary.rootName || 'No folder open'}</p></div><div class="workspace-actions">
+            {(showHeader || showActions) && <header class="workspace-heading">{showHeader && <div><h1>Workspace</h1><p>{summary.rootName || 'No folder open'}</p></div>}<div class="workspace-actions">
                 <button type="button" onClick={() => void perform(files.openFolder, 'workspace:open-folder')}><Icon name="folder" />Open folder</button>
                 <button type="button" onClick={() => immediate(files.importFiles, 'workspace:import-files')}>Import files</button>
-                <button type="button" onClick={() => immediate(files.openDemo, 'workspace:demo')}>Open demo</button>
+                <button type="button" onClick={() => void perform(() => Promise.resolve(files.openDemo()), 'workspace:demo')}>Open demo</button>
                 <button type="button" onClick={() => immediate(files.newFile, 'workspace:new-file')}><Icon name="plus" />New file</button>
-            </div></header>
+            </div></header>}
             <p class="editor-status">File: {state.file.phase}{state.file.path ? ` · ${state.file.path}` : ' · No file open'}</p>
             {state.file.error && <p role="alert" class="workbench-alert">{state.file.error}</p>}
             {grants.length > 1 && <div class="workspace-grant">
@@ -285,7 +305,7 @@ export function WorkspaceEditor({ store, files, operations, onError, onSuccess, 
                 {grantId === '' && <p class="workspace-grant-prompt">Choose an approved folder before browsing host files.</p>}
             </div>}
             {grants.length === 1 && <p class="workspace-grant-single">Approved folder: {grants[0]!.path}</p>}
-            <FileTree
+            {showFileTree && <FileTree
                 nodes={tree.nodes}
                 meta={tree.meta}
                 activePath={summary.activePath}
@@ -293,7 +313,7 @@ export function WorkspaceEditor({ store, files, operations, onError, onSuccess, 
                 error={tree.error}
                 onOpen={openPath}
                 searchRef={searchRef}
-            />
+            />}
             <EditorTabs
                 tabs={summary.tabs}
                 activePath={summary.activePath}
@@ -311,7 +331,7 @@ export function WorkspaceEditor({ store, files, operations, onError, onSuccess, 
                     refresh();
                 }}
             />
-            <footer class="workspace-footer"><button type="button" disabled={!canSave} onClick={() => void save()}><Icon name="save" />Save</button><button type="button" disabled={!canSave} onClick={saveCopy}>Save as</button></footer>
+            <footer class="workspace-footer"><button type="button" disabled={!canSave} onClick={() => void save()}><Icon name="save" />Save</button>{showSaveAs && <button type="button" disabled={!canSave} onClick={saveCopy}>Save as</button>}</footer>
         </section>
     );
 }
