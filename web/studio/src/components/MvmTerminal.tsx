@@ -31,7 +31,7 @@ export function MvmTerminal({ client }: MvmTerminalProps) {
     const [output, setOutput] = useState('');
     const [running, setRunning] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [composing, setComposing] = useState(false);
+    const composing = useRef(false);
     const [unavailable, setUnavailable] = useState(false);
 
     function append(text: string): void {
@@ -122,7 +122,7 @@ export function MvmTerminal({ client }: MvmTerminalProps) {
         <header class="lex-pane-heading"><div><h2>MVM terminal</h2><p role="status" aria-live="polite">{status}</p></div><span>RV64IMAC</span></header>
         <pre role="log" aria-live="polite" class="mvm-terminal-output">{output}</pre>
         {error && <p role="alert" class="workbench-alert">{error}</p>}
-        <form class="mvm-terminal-form" onSubmit={(event) => { event.preventDefault(); void run(command); }}>
+        <form class="mvm-terminal-form" onSubmit={(event) => { event.preventDefault(); if (!composing.current) void run(command); }}>
             <label for="mvm-command">Command</label>
             <input
                 id="mvm-command"
@@ -131,8 +131,8 @@ export function MvmTerminal({ client }: MvmTerminalProps) {
                 disabled={running || unavailable}
                 placeholder="mvm status"
                 onInput={(event) => setCommand(event.currentTarget.value)}
-                onCompositionStart={() => setComposing(true)}
-                onCompositionEnd={() => setComposing(false)}
+                onCompositionStart={() => { composing.current = true; }}
+                onCompositionEnd={() => { composing.current = false; }}
                 onKeyDown={(event) => {
                     if (event.key === 'ArrowUp') {
                         event.preventDefault();
@@ -141,7 +141,7 @@ export function MvmTerminal({ client }: MvmTerminalProps) {
                     } else if (event.key === 'ArrowDown') {
                         event.preventDefault();
                         setCommand('');
-                    } else if (event.key === 'Enter' && !composing) {
+                    } else if (event.key === 'Enter' && !composing.current && !event.isComposing && event.keyCode !== 229) {
                         event.preventDefault();
                         void run(command);
                     }

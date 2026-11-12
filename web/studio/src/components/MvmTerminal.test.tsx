@@ -72,11 +72,26 @@ describe('MvmTerminal', () => {
         const command = input();
         command.value = 'pwd';
         act(() => { command.dispatchEvent(new Event('input', { bubbles: true })); });
-        act(() => { command.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })); });
-        act(() => { command.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
+        act(() => {
+            command.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+            command.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        });
+        expect(client.exec).not.toHaveBeenCalled();
+        act(() => { host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); });
         expect(client.exec).not.toHaveBeenCalled();
         act(() => { command.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true })); });
         act(() => { command.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); });
         await vi.waitFor(() => expect(client.exec).toHaveBeenCalledWith('pwd', '/workspace'));
+    });
+
+    it('mvm_terminal_native_ime_keycode_does_not_submit', () => {
+        const client = mount();
+        const command = input();
+        command.value = 'pwd';
+        act(() => { command.dispatchEvent(new Event('input', { bubbles: true })); });
+        const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+        Object.defineProperties(event, { keyCode: { value: 229 }, isComposing: { value: false } });
+        act(() => { input().dispatchEvent(event); });
+        expect(client.exec).not.toHaveBeenCalled();
     });
 });
