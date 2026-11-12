@@ -1222,7 +1222,8 @@ mod tests {
         let kit = root.join("places.json");
         let placed_out = root.join("placed.jsonl");
         let plain_out = root.join("plain.jsonl");
-        fs::write(&stack, place_artifacts().1).expect("artifact");
+        let (_, artifact) = place_artifacts();
+        fs::write(&stack, artifact).expect("artifact");
         // Each prompt is the conversation up to a reply row, at corpus positions from 1000:
         // the reply start (the register set, not open), the open row, and the row after the
         // stop; then the reply start again at another corpus place, with no kit label.
