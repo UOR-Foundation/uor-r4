@@ -665,6 +665,20 @@ mod copy_rule_tests {
         let (longest, _) = pair(CopyRule::LongestExact);
         assert_eq!(longest.choose_ruled(0, &tokens), vec![(3, 0)]);
         assert_eq!(longest.mean(&tokens, &table), row(2, FULL));
+        // A pair match at 2 has no token before its key: it is the latest exact match, no more.
+        assert_eq!(longest.choose_ruled(0, &[1, 3, 0, 1, 3]), vec![(2, 0)]);
+    }
+
+    /// The longer test is by the head's code, not by the token: once tokens 2 and 3 share a
+    /// code, the 3 before the key at 2 matches the 2 before the row's token.
+    #[test]
+    fn the_longer_match_is_by_the_heads_code() {
+        let tokens = [3, 1, 0, 0, 1, 3, 2, 1];
+        let (mut longest, table) = heads(16, CopyRule::LongestExact);
+        assert_eq!(longest.choose_ruled(0, &tokens), vec![(5, 0)]);
+        longest.codes[3] = longest.codes[2];
+        assert_eq!(longest.choose_ruled(0, &tokens), vec![(2, 0)]);
+        assert_eq!(longest.mean(&tokens, &table), row(0, FULL));
     }
 
     /// A replay that forces no code is the served read under every rule, and a forced query is
@@ -694,7 +708,7 @@ mod copy_rule_tests {
 
     #[test]
     fn a_row_with_no_earlier_position_reads_nothing() {
-        for rule in [CopyRule::LatestExact, CopyRule::LatestNearest] {
+        for rule in [CopyRule::LatestExact, CopyRule::LatestNearest, CopyRule::LongestExact] {
             let (latest, table) = heads(16, rule);
             assert_eq!(latest.mean(&[1], &table), None);
             assert_eq!(latest.mean(&[1, 1], &table), None);
