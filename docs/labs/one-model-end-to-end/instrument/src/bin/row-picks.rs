@@ -17,16 +17,21 @@
 //!   back, never past the document's first token.
 //! - `--mark-replies 1` marks each reply's start as the chat does (the turn memory moves); `0`
 //!   never marks one, the float pass's `no-memory` label.
+//! - A row is `carried` where its reply opened before its window's first token. A session cannot
+//!   be told of such a start, while the float pass still reads its reply table there, by a key
+//!   cut at the window. With `--mark-replies 1` these rows are written but not compared: of the
+//!   receipt's counts only `rows`, `carried` and `carried_differ` hold them.
 //! - `--float-rows` is the float pass's `rows-*.json`. Its `positions` and `targets` must equal
 //!   this program's, or nothing is written: the windows would not be the same rows.
 //!
 //! `ROWS.json` holds, a scored row: `positions`, `targets`, `nearest` (the reader's choice),
 //! `margins` (the L1 distance of the second nearest table row less the nearest's), `steps` (how
-//! many reply tokens stand before the row: 0 at a reply's first token) and `copies` (1 where the
-//! target follows the same token earlier in the window's prompt text). With `--float-rows`,
-//! `differ` lists each row whose choice is not the float pass's: the float's token, its rank
-//! under the reader's query and how much farther it is than the reader's choice. The output file
-//! must not exist. A receipt is printed on stdout.
+//! many reply tokens stand before the row: 0 at a reply's first token), `copies` (1 where the
+//! target follows the same token earlier in the window's prompt text) and `carried`. With
+//! `--float-rows`, `differ` lists each row whose choice is not the float pass's: the float's
+//! token, its rank under the reader's query, how much farther it is than the reader's choice,
+//! and whether the row is carried. The output file must not exist. A receipt is printed on
+//! stdout.
 //!
 //! A second mode reads the token at which a decoded reply first leaves the float pass's:
 //!
@@ -39,7 +44,8 @@
 //!   `raw-id-replies` files, one `{"i", "ids"}` line a row. A float reply is read up to and
 //!   including its first end-of-reply id.
 //! - For each row whose two replies differ, the prompt and the ids both replies share are fed
-//!   again. The reader's choice must be the saved integer reply's next id, or nothing is written.
+//!   again. The reader's choice must be the saved integer reply's next id and the table's
+//!   nearest row, or nothing is written.
 //! - `LEFT.json` holds a row: the step, both ids, the float id's rank under the reader's query,
 //!   how much farther it is than the reader's choice, and the reader's margin there.
 
@@ -147,6 +153,19 @@ fn copies(tokens: &[u32], mask: &[u8], start: usize, position: usize) -> bool {
     (start..(position - 1).saturating_sub(1)).any(|j| {
         tokens[j] == previous && tokens[j + 1] == target && mask[j] == 0 && mask[j + 1] == 0
     })
+}
+
+/// What a session is told before the input at `at` is stepped, as the chat feeds a turn: nothing
+/// inside a reply (`None`); at a prompt token the mark is cleared, and set again where the next
+/// token opens a reply (`Some(true)`).
+fn turn(mask: &[u8], at: usize) -> Option<bool> {
+    (mask[at] == 0).then(|| mask[at + 1] == 1)
+}
+
+/// Whether the reply holding `position` opened before the window's first token at `start`: no
+/// prompt token stands between them, so [`turn`] marks no start for the row.
+fn carried(mask: &[u8], start: usize, position: usize) -> bool {
+    (start..position).all(|at| mask[at] == 1)
 }
 
 /// How many of `rows` fall in each band, and how many of those are flagged. A row is its value
@@ -324,7 +343,12 @@ fn leaves(args: &[String]) -> Result<Value> {
         if theirs as usize >= table.len() / query.len() {
             return Err(format!("row {index}: float id {theirs} is outside the table"));
         }
-        let (_, best, second) = two_nearest(table, query);
+        let (scan, best, second) = two_nearest(table, query);
+        if scan != pick {
+            return Err(format!(
+                "row {index}, step {step}: the reader chose {pick}, the table's nearest is {scan}"
+            ));
+        }
         let (rank, own) = rank_of(table, query, theirs);
         left.push(json!({
             "i": index,
@@ -424,8 +448,9 @@ fn run(args: Vec<String>) -> Result<Value> {
     let cut = windows(&tokens, &mask, context, BOS);
     let (mut positions, mut targets, mut nearest) = (Vec::new(), Vec::new(), Vec::new());
     let (mut margins, mut steps, mut copied, mut differ) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
-    // A row's flag: whether its choice is not the float pass's. `ranks` holds the differing rows.
-    let (mut flags, mut ranks) = (Vec::new(), Vec::new());
+    // A row's flag: whether its choice is not the float pass's. `kept` is whether the row is
+    // compared, `late` whether it is carried; `ranks` holds the compared differing rows.
+    let (mut flags, mut kept, mut late, mut ranks) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
     let (mut integer_right, mut float_right) = (0usize, 0usize);
     for window in &cut {
         let mut session = model.session();
@@ -434,12 +459,12 @@ fn run(args: Vec<String>) -> Result<Value> {
         for offset in 0..window.inputs {
             let at = window.start + offset;
             let position = at + 1;
-            if mark && mask[at] == 0 {
-                // As the chat feeds a turn: the mark is cleared over the prompt and set before
-                // its last token.
-                session.clear_reply_start();
-                if mask[position] == 1 {
-                    session.mark_reply_start();
+            if mark {
+                if let Some(opens) = turn(&mask, at) {
+                    session.clear_reply_start();
+                    if opens {
+                        session.mark_reply_start();
+                    }
                 }
             }
             if scored.peek() != Some(&position) {
@@ -459,6 +484,9 @@ fn run(args: Vec<String>) -> Result<Value> {
             if scan != pick {
                 return Err(format!("position {at}: the reader chose {pick}, the table's nearest is {scan}"));
             }
+            let is_carried = carried(&mask, window.start, position);
+            // A carried row of a marked run is read with no reply start: not the float's row.
+            let compared = !(mark && is_carried);
             let mut differs = false;
             if let Some((_, _, float_nearest, _)) = &trained {
                 let theirs = float_nearest.get(positions.len()).copied().unwrap_or(u64::MAX);
@@ -475,14 +503,19 @@ fn run(args: Vec<String>) -> Result<Value> {
                         "rank": rank,
                         "gap": own - best,
                         "margin": second - best,
+                        "carried": u8::from(is_carried),
                     }));
                     differs = true;
-                    ranks.push((rank as u64, true));
-                    integer_right += usize::from(pick == tokens[position]);
-                    float_right += usize::from(theirs == u64::from(tokens[position]));
+                    if compared {
+                        ranks.push((rank as u64, true));
+                        integer_right += usize::from(pick == tokens[position]);
+                        float_right += usize::from(theirs == u64::from(tokens[position]));
+                    }
                 }
             }
             flags.push(differs);
+            kept.push(compared);
+            late.push(u8::from(is_carried));
             positions.push(position as u64);
             targets.push(u64::from(tokens[position]));
             nearest.push(u64::from(pick));
@@ -491,17 +524,41 @@ fn run(args: Vec<String>) -> Result<Value> {
             copied.push(u8::from(copies(&tokens, &mask, window.start, position)));
         }
     }
-    if let Some((float_positions, float_targets, _, _)) = &trained {
-        if *float_positions != positions || *float_targets != targets {
+    if let Some((float_positions, float_targets, float_nearest, _)) = &trained {
+        if *float_positions != positions || *float_targets != targets || float_nearest.len() != positions.len() {
             return Err(format!(
-                "--float-rows: its rows are not this panel's at context {context}: {} rows against {}",
+                "--float-rows: its rows are not this panel's at context {context}: {} rows and {} choices against {}",
                 float_positions.len(),
+                float_nearest.len(),
                 positions.len()
             ));
         }
     }
-    let hits = nearest.iter().zip(&targets).filter(|(n, t)| n == t).count();
-    let flagged = |values: Vec<u64>| -> Vec<(u64, bool)> { values.into_iter().zip(flags.iter().copied()).collect() };
+    // Every count below is over the compared rows.
+    let right = |choices: &[u64]| -> usize {
+        choices
+            .iter()
+            .zip(&targets)
+            .zip(&kept)
+            .filter(|((choice, target), &compared)| compared && choice == target)
+            .count()
+    };
+    let flagged = |values: Vec<u64>| -> Vec<(u64, bool)> {
+        values
+            .into_iter()
+            .zip(flags.iter().copied())
+            .zip(&kept)
+            .filter(|(_, &compared)| compared)
+            .map(|(row, _)| row)
+            .collect()
+    };
+    let of_differ = |name: &str| -> Vec<u64> {
+        differ
+            .iter()
+            .filter(|row| !(mark && row["carried"] == 1))
+            .filter_map(|row| row[name].as_u64())
+            .collect()
+    };
     // With `--float-rows`: the rows and the differing rows of each band.
     let breakdown = trained.as_ref().map(|_| {
         json!({
@@ -511,9 +568,9 @@ fn run(args: Vec<String>) -> Result<Value> {
             "by_copy": bands(&flagged(copied.iter().map(|&c| u64::from(c)).collect()), &[0, 1]),
             "differ_integer_right": integer_right,
             "differ_float_right": float_right,
-            "differ_gap_median": median(differ.iter().filter_map(|row| row["gap"].as_u64()).collect()),
-            "differ_margin_median": median(differ.iter().filter_map(|row| row["margin"].as_u64()).collect()),
-            "margin_median": median(margins.clone()),
+            "differ_gap_median": median(of_differ("gap")),
+            "differ_margin_median": median(of_differ("margin")),
+            "margin_median": median(flagged(margins.clone()).into_iter().map(|(margin, _)| margin).collect()),
         })
     });
     let receipt = json!({
@@ -525,11 +582,19 @@ fn run(args: Vec<String>) -> Result<Value> {
         "context": context,
         "mark_replies": mark,
         "windows": cut.len(),
+        "turn_memory": model
+            .turn_memory_table_lengths()
+            .map(|(opening, reply)| json!({"opening": opening, "reply": reply})),
         "rows": positions.len(),
-        "nearest_hits": hits,
+        "carried": late.iter().filter(|&&c| c == 1).count(),
+        "compared": kept.iter().filter(|&&compared| compared).count(),
+        "nearest_hits": right(&nearest),
         "float_rows_sha256": trained.as_ref().map(|(_, _, _, sha)| sha.clone()),
-        "float_nearest_hits": trained.as_ref().map(|(_, t, n, _)| n.iter().zip(t).filter(|(n, t)| n == t).count()),
-        "differ_from_float": trained.as_ref().map(|_| differ.len()),
+        "float_nearest_hits": trained.as_ref().map(|(_, _, choices, _)| right(choices)),
+        "differ_from_float": trained.as_ref().map(|_| ranks.len()),
+        "carried_differ": trained
+            .as_ref()
+            .map(|_| differ.iter().filter(|row| row["carried"] == 1).count()),
     });
     let mut body = receipt.clone();
     for (name, value) in [
@@ -539,6 +604,7 @@ fn run(args: Vec<String>) -> Result<Value> {
         ("margins", json!(margins)),
         ("steps", json!(steps)),
         ("copies", json!(copied)),
+        ("carried", json!(late)),
         ("differ", json!(differ)),
     ] {
         body[name] = value;
@@ -557,13 +623,13 @@ fn run(args: Vec<String>) -> Result<Value> {
 mod tests {
     use super::*;
 
-    /// Two documents at context 4: a short one in one window, and one of nine tokens whose last
-    /// block slides back to read a full window.
+    /// Two documents at context 4: a short one in one window, and one of six targets whose last
+    /// block, two targets long, slides back to read a full window.
     #[test]
     fn the_windows_are_the_float_passs() {
-        // Document 1 is the first four tokens, document 2 the nine after them.
-        let tokens = [0, 5, 6, 7, 0, 5, 6, 7, 8, 9, 5, 6, 7];
-        let mask = [0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1];
+        // Document 1 is the first four tokens, document 2 the seven after them.
+        let tokens = [0, 5, 6, 7, 0, 5, 6, 7, 8, 9, 5];
+        let mask = [0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1];
         let cut = windows(&tokens, &mask, 4, 0);
         assert_eq!(
             cut,
@@ -571,12 +637,13 @@ mod tests {
                 Window { start: 0, inputs: 3, scored: vec![2, 3] },
                 // The first four targets, read from the document's first token.
                 Window { start: 4, inputs: 4, scored: vec![7, 8] },
-                // The last four targets: the block ends at position twelve, so it is read from position eight.
-                Window { start: 8, inputs: 4, scored: vec![11, 12] },
+                // The last two targets: read from four tokens before the last, not from the
+                // block's own first.
+                Window { start: 6, inputs: 4, scored: vec![9, 10] },
             ]
         );
         // A block with no scored target is left out.
-        let quiet = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1];
+        let quiet = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1];
         assert_eq!(windows(&tokens, &quiet, 4, 0).len(), 1);
     }
 
@@ -590,6 +657,41 @@ mod tests {
         assert!(copies(&tokens, &mask, 0, 5));
         // Position 6's target 7 follows no earlier 6 in the prompt.
         assert!(!copies(&tokens, &mask, 0, 6));
+        // A token doubled at the prompt's end is no copy: the pair read ends before the row's
+        // own input.
+        assert!(!copies(&[0, 5, 5, 5], &[0, 0, 0, 1], 0, 3));
+    }
+
+    /// A reply cut by a block: the rows of its second block are carried, and they are the rows
+    /// no mark reaches.
+    #[test]
+    fn a_row_is_carried_where_no_reply_start_lies_in_its_window() {
+        let tokens = [0, 5, 6, 7, 8, 9, 5, 6];
+        let mask = [0, 0, 1, 1, 1, 1, 0, 1];
+        // At context 2 the second window is read from position 2, inside the reply.
+        let cut = windows(&tokens, &mask, 2, 0);
+        assert_eq!(cut[1], Window { start: 2, inputs: 2, scored: vec![3, 4] });
+        assert!(!carried(&mask, 0, 2));
+        assert!(carried(&mask, 2, 3) && carried(&mask, 2, 4));
+        // What the session is told before each input: nothing inside a reply.
+        assert_eq!(
+            (0..7).map(|at| turn(&mask, at)).collect::<Vec<_>>(),
+            vec![Some(false), Some(true), None, None, None, None, Some(true)]
+        );
+        // A reply row is carried exactly where the marks leave the session unmarked.
+        for start in 0..mask.len() {
+            for position in start + 1..mask.len() {
+                let mut marked = false;
+                for at in start..position {
+                    if let Some(opens) = turn(&mask, at) {
+                        marked = opens;
+                    }
+                }
+                if mask[position] == 1 {
+                    assert_eq!(carried(&mask, start, position), !marked, "{start} to {position}");
+                }
+            }
+        }
     }
 
     #[test]
