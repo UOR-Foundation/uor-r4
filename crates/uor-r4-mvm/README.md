@@ -20,10 +20,11 @@ The module ends at line 45,938. `r4_compositional_gllm` begins at line 45,940 an
 ## UOR modifications
 
 - `mvm_cc.rs` is byte-identical to upstream. `spiralcore_vsock.rs` contains only the exact 188-line module above.
-- `mvm.rs` has exactly two adaptations: `crate::lexlean_generated::r4_spiralcore_vsock` becomes `crate::spiralcore_vsock::r4_spiralcore_vsock`, and `include_bytes!("mvm_initramfs.bin")` becomes `crate::mvm_initramfs::MVM_INITRAMFS`. The provenance test reverses only those strings and reproduces the upstream hash.
+- `mvm.rs` has three declared adaptations: `crate::lexlean_generated::r4_spiralcore_vsock` becomes `crate::spiralcore_vsock::r4_spiralcore_vsock`; `include_bytes!("mvm_initramfs.bin")` becomes `crate::mvm_initramfs::MVM_INITRAMFS`; and `include!("mvm_persistence.rs")` adds complete CoW export/import. The provenance test reverses only those strings and reproduces the upstream hash.
 - `mvm_initramfs.rs` is generated from the pinned binary into a Rust byte slice, so no compiled initramfs binary is committed. Its bytes and SHA-256 are tested.
 - Vendored modules are `#[rustfmt::skip]` so package formatting cannot change upstream hashes; new tests and adapter code remain rustfmt-checked.
 - `lib.rs` exposes the native engine/compiler and safe module re-exports. No page-callable host-secret, proxy-egress or raw-CoW import API is exposed by this native crate's Studio worker boundary.
+- `mvm_persistence.rs` preserves inode modes/kinds, directories, sectors, allocation counters and process counters. WASM snapshots serialize maps as plain objects and CoW goes directly from the worker to IndexedDB; only snapshot IDs/digests cross the JSON protocol.
 - Cargo/rustc are not emulated by an AST evaluator. Without a genuine guest Rust toolchain they must report unavailable. C compilation and execution must emit genuine `EM_RISCV` output and exact nontrivial results.
 
 Native and browser-WASM acceptance are verified separately; this provenance record alone is not a capability claim.

@@ -8,6 +8,8 @@ mod mvm_cc;
 mod mvm_initramfs;
 #[rustfmt::skip]
 mod spiralcore_vsock;
+#[cfg(target_arch = "wasm32")]
+mod wasm;
 
 pub use mvm::*;
 pub use mvm_cc::{compile_c_to_rv64_elf, CCompileError};

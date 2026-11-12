@@ -7,9 +7,10 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:visual": "playwright test tests/e2e/visual.spec.ts tests/e2e/shell.spec.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "./build_mvm_wasm.sh && tsc --noEmit",
     "contract:agent": "node ../../scripts/studio/generate-agent-contract.mjs",
-    "build": "vite build && node src/stage-dist.mjs"
+    "build:mvm": "./build_mvm_wasm.sh",
+    "build": "./build_mvm_wasm.sh && vite build && node src/stage-dist.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "0.11.0",

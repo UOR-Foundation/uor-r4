@@ -44,7 +44,7 @@ fn readme_pins_upstream_commit_and_hashes() {
 }
 
 #[test]
-fn mvm_adaptations_are_only_the_declared_two_paths() {
+fn mvm_adaptations_are_only_the_declared_paths() {
     let adapted = String::from_utf8(source("mvm.rs")).expect("mvm.rs UTF-8");
     let upstream = adapted
         .replace(
@@ -54,7 +54,8 @@ fn mvm_adaptations_are_only_the_declared_two_paths() {
         .replace(
             "crate::mvm_initramfs::MVM_INITRAMFS",
             "include_bytes!(\"mvm_initramfs.bin\")",
-        );
+        )
+        .replace("\n\ninclude!(\"mvm_persistence.rs\");\n", "\n");
     assert_eq!(sha(upstream.as_bytes()), MVM_SHA);
 }
 

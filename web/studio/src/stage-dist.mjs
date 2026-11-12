@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { writeStudioCatalog } from '../../../scripts/studio/catalog.mjs';
 
@@ -12,6 +12,11 @@ if (!existsSync(artifacts)) {
 mkdirSync(destination, { recursive: true });
 for (const name of ['uor_r4_integer.js', 'uor_r4_integer_bg.wasm', 'synthetic-stack.lut', 'tokenizer.json']) {
     copyFileSync(new URL(`../pkg/${name}`, import.meta.url), new URL(`../dist/pkg/${name}`, import.meta.url));
+}
+const mvmAssets = readdirSync(new URL('../dist/assets/', import.meta.url))
+    .filter((name) => /^uor_r4_mvm_bg-.*\.wasm$/.test(name));
+if (process.env.VITE_STUDIO_TEST === '1' && mvmAssets.length !== 1) {
+    throw new Error(`Expected one hashed MVM WASM asset in the test-enabled build, found ${mvmAssets.length}`);
 }
 
 const migrationRuntime = new URL('../assets/js/lifecycle_persistence.js', import.meta.url);

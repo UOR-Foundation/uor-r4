@@ -208,7 +208,11 @@ export async function mountTypedStudio(root: HTMLElement, options: { timeoutMs?:
         ui: apis.ui,
         agentClient: owner.client,
     }), root);
-    if (testApi !== null) testApi.installStudioTestApi(owner);
+    if (testApi !== null) {
+        testApi.installStudioTestApi(owner);
+        const mvmTestApi = await import('./mvm/testApi.js');
+        mvmTestApi.installMvmTestApi();
+    }
     const previousSkipHref = retargetSkipLink('#harness-main');
     root.dataset.active = 'true';
     return {

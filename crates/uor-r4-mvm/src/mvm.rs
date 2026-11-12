@@ -2600,3 +2600,5 @@ fn expand_rv64c(c: u16) -> Result<u32, MvmError> {
         ))),
     }
 }
+
+include!("mvm_persistence.rs");

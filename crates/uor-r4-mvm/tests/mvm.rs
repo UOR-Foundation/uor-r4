@@ -244,3 +244,51 @@ fn mvm_invalid_elf_cid_domain_and_secret_are_refused() {
         .build_vsock_packet(4, 4096, 0, 0, &vec![0; 65_537])
         .is_err());
 }
+
+#[test]
+fn mvm_persistent_cow_roundtrip_preserves_inodes_and_digest() {
+    let mut vm = MvmSandbox::boot_default().expect("boot");
+    let source = "#include <stdio.h>\nint main(void) { printf(\"PERSIST=%d\\n\", 9); return 0; }\n";
+    vm.write_guest_file("/workspace/src/persist.c", source.as_bytes())
+        .expect("write source");
+    let outcome = vm
+        .exec_command(
+            "cc /workspace/src/persist.c -o /workspace/persist",
+            "/workspace",
+        )
+        .expect("compile persistent executable");
+    assert_eq!(outcome.exit_code, 0, "{}", outcome.stderr);
+
+    let expected_digest = vm.cow_state_sha256();
+    let snapshot = vm.export_persistent_cow();
+    let mut restored = MvmSandbox::boot_default().expect("restore boot");
+    restored.import_persistent_cow(&snapshot);
+
+    assert_eq!(restored.cow_state_sha256(), expected_digest);
+    assert_eq!(
+        restored
+            .read_guest_file("/workspace/src/persist.c")
+            .as_deref(),
+        Some(source.as_bytes())
+    );
+    let executable = restored
+        .read_guest_file("/workspace/persist")
+        .expect("restored executable");
+    assert_eq!(&executable[..4], b"\x7fELF");
+    assert_eq!(u16::from_le_bytes([executable[18], executable[19]]), 243);
+}
+
+#[test]
+fn mvm_persistent_cow_json_roundtrip_preserves_digest() {
+    let mut vm = MvmSandbox::boot_default().expect("boot");
+    vm.write_guest_file("/workspace/a.txt", b"alpha")
+        .expect("write alpha");
+    vm.write_guest_file("/workspace/b.txt", b"beta")
+        .expect("write beta");
+    let expected_digest = vm.cow_state_sha256();
+    let encoded = serde_json::to_string(&vm.export_persistent_cow()).expect("serialize CoW");
+    let snapshot = serde_json::from_str(&encoded).expect("deserialize CoW");
+    let mut restored = MvmSandbox::boot_default().expect("restore boot");
+    restored.import_persistent_cow(&snapshot);
+    assert_eq!(restored.cow_state_sha256(), expected_digest);
+}
