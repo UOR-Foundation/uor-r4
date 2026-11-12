@@ -65,7 +65,7 @@ No model was measured. These are the build's own checks.
 
 The four artifacts with the field are the run's comparison models; their SHA-256 are in the sheet.
 
-**3. The header field served as the artifact's own rule** (a description, no bar). Those four artifacts read with no `--copy-rule`, against claude-356's caller-set files: p-s2 and p-s3 byte-identical; n-s2 and p-s1 differ in one reply each (point 6 above).
+**3. The header field served as the artifact's own rule** (a description, no bar). Those four artifacts read with no `--copy-rule`, against claude-356's caller-set files: p-s2 and p-s3 byte-identical; n-s2 and p-s1 differ in one reply each (point 10 above).
 
 **4. The marker against the reply mask, counted on the laptop.** TRAIN without a line: 215,017 reply openings, each behind the pair 714, 28, and the pair occurs nowhere else. The ORDER's counts stand for the DEV split (1,226) and the two panels.
 
@@ -103,16 +103,16 @@ A model read by one rule and served by the other differs on 609 to 707 more rows
 
 ## Checks run at the head
 
-Run on the laptop (macOS, CPU only) with the code at `183bfabd0507e9837827ef1e5eb01810f20ab694`. The commits after it change the sheet, the set-aside patch and this report only.
+Run on the laptop (macOS, CPU only) at `8a1f935c743d21550bc29787cf1cb977c23f462c`, with one of the last commit's four docs files uncommitted in the tree. Its `crates/` are those of `183bfabd0507e9837827ef1e5eb01810f20ab694`, the last commit that changes code; the commits after it change the sheet, the set-aside patch and this report only. The logs stay on the laptop under `local/claude/claude-357/`: `final2-357.log` (this table), `neg-357.log` and `r2-357.log` (measurement 5), `calib-357.log` (7), and `evid-357.log` (the counts of measurements 3, 4, 6 and 7, `prep-check`, and the patch check).
 
 | Check | Result |
 |---|---|
 | `cargo test --locked --release -p uor-r4-integer --features serving-wasm --lib --no-fail-fast` | 552 passed, 0 failed, 1 ignored |
 | `cargo test --locked -p uor-r4-float-train --lib --bin train-in-space --no-fail-fast` | 385 and 12 passed, 0 failed |
 | `raw-id-replies` tests (instrument, release) | 13 passed |
-| `cargo check --locked -p uor-r4-float-train --features packet-parity --all-targets`, stub compiler | compiles, the two pod-only tests included |
+| `cargo clippy --locked -p uor-r4-float-train --features packet-parity --all-targets`, stub compiler | exit 0: compiles, the two pod-only tests included |
 | `cargo check --locked -p uor-r4-integer`, `-p uor-r4-training` | both compile |
-| `cargo clippy` on the float crate (stub compiler) and the integer crate, `--all-targets` | no line on a line this branch changed; the integer run exits non-zero on point 8's file |
+| `cargo clippy` on the float crate (stub compiler) and the integer crate, `--all-targets` | no line on a line this branch changed; the integer run exits non-zero on point 12's file |
 | `uor-harness ratchet d23`, `d25`, `d32` | all exit 0, no site added |
 | `uor-harness prep-check` | reads the sheet as FIT |
 | the set-aside patch of the sheet's I-g, applied to the head | applies; the float crate's `cuda` build with it compiles under the stub compiler; taken back out |
@@ -131,6 +131,8 @@ None beyond the project loop.
 | Round 2 | `183bfabd0` | APPROVE, no finding | nothing to take |
 | The sheet, first fitness read | at `619f9bc97` | NOT FIT, two blocking points | all six points |
 | The sheet, second fitness read | at `8a1f935c7` | FIT, four non-blocking notes | all four |
+| The sheet's change after that read, and the set-aside patch | at `d7bc13025` | APPROVE | nothing to take; two low items in the PR's review record |
+| This report's figures against the logs | at `d7bc13025` | CHANGES: the figures it could check all match; five had no log named, two cross-references pointed at the wrong point, one check was labelled `cargo check` where `cargo clippy` ran | all taken: the counts rerun into `evid-357.log`, the references and the label corrected |
 
 Both fitness reads are in the sheet word for word.
 
