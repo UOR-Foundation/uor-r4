@@ -135,9 +135,12 @@ At 192, 113 of the 562 prompts do not hold the stated value; no model, float or 
 | `cargo test --release --locked --features integer-reader --bin raw-id-replies` | 11 passed |
 | `cargo test --release --locked -p uor-r4-float-train --lib prompts` | 4 passed |
 | `cargo test --release --locked -p uor-r4-float-train --lib the_last_opening_starts` | 1 passed |
+| `cargo test --release --locked -p uor-r4-integer --features serving-wasm --lib stack_chat_records_the_place_register` | 1 passed |
 | `uor-harness ratchet d23`, `d25`, `d32` | no additions (4451 of 4451; 0; 31 of 31) |
 | the builder at 192 against the pod's samples | 1,108 of 1,108 rows equal |
 | I-w on the references at 256 | 562 of 562 right |
+
+The two float trainer rows did not compile on their first run at this head ("multiple different versions of crate `serde_core`"). The instrument crate is its own workspace and locks serde 1.0.229; the main workspace locks 1.0.228; I had built both into one target folder, and the trainer's test linked the other workspace's copy of `uor-r4-integer`. After `cargo clean --release -p uor-r4-integer` in that folder both rows pass. No source changed.
 
 Not run on the laptop: the float trainer's GPU tests (they ran on the pod as I-g) and any float pass.
 
