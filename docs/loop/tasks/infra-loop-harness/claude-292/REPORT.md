@@ -30,8 +30,8 @@ Lab: claude. Order: [ORDER.md](ORDER.md). References #2904.
 
 ## Measurements
 
-- Final branch size, excluding this task folder: 9 files, +32/−36 = 68 changed lines.
-  Additions are source 15, tests 5, and documentation/state 12.
+- Final branch size, excluding this task folder: 9 files, +34/−38 = 72 changed lines.
+  Additions are source 15, tests 5, and documentation/state 14.
 - `jq` reports exactly `antigravity, claude, codex, deepseek, kimi`; Codex fields are
   `OpenAI|Codex|codex exec|3`.
 

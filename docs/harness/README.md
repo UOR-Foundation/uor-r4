@@ -412,7 +412,7 @@ the tool fails loudly rather than guessing.
 
 ## Working in a multi-lab project
 
-Three labs work this repository, plus this one. Each runs its own copy of the CLI, and **nothing here is a
+Four other labs work this repository, plus this one. Each runs its own copy of the CLI, and **nothing here is a
 socket or a daemon** — GitHub is the bus and `main` is the truth. What the harness adds is the
 part GitHub alone does not give: a committed record of who holds what, and what each lab is
 doing between merges.
@@ -520,7 +520,7 @@ why it is now one file per lab per month. `multilab migrate-ledger` moves any ol
 receipts across without losing a line.
 
 **Why claims moved into the committed tree.** They used to live in a gitignored
-`.harness/claims.json`, which is right for one checkout and useless for four: a claim nobody else
+`.harness/claims.json`, which is right for one checkout and useless across concurrent labs: a claim nobody else
 can read cannot prevent the collision it exists to prevent. **The shared tier is read through git**
 — `git show origin/main:docs/harness/claims.json` — and not from the shared checkout's working copy:
 that checkout is frozen by R10 and falls behind, and reading it reported a released claim as held
