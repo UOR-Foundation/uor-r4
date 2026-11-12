@@ -3425,7 +3425,7 @@ fn choose_sorted_asking(
         let room = if longer.is_some() { 2 * time } else { time };
         if !tie_keys_exact(width, room) {
             return Err(invalid(format!(
-                "the read's tie keys for {width} coordinates over {time} positions pass 2^24"
+                "the read's tie keys for {width} coordinates over {room} key positions ({time} rows) pass 2^24"
             )));
         }
         // The tie key orders equal distances by position, earliest first; reversed, latest first.
@@ -4783,7 +4783,7 @@ mod tests {
                 None => assert!(!exact(best), "pattern {pattern:b}"),
             }
         }
-        // The keys stay exact `f32`s at the largest head and window served.
+        // The keys stay exact `f32`s for a 64-coordinate head over 2,048 rows, the doubled room included.
         assert!(tie_keys_exact(64, 2 * 2048));
     }
 

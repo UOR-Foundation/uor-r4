@@ -391,7 +391,7 @@ fn run() -> Result<(), String> {
             .map_err(|e| format!("{config}: {e}"))?
             .get("hamming_copy_longest")
         {
-            None => None,
+            None | Some(serde_json::Value::Null) => None,
             Some(marker) => Some(
                 serde_json::from_value::<[u32; 2]>(marker.clone())
                     .map_err(|e| format!("{config}: hamming_copy_longest: {e}"))?,

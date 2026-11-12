@@ -4650,6 +4650,11 @@ fn the_reply_marker_finds_the_opening_row_without_a_mark() {
         let here = super::set_hamming_copy_longest_uorlut01(&latest, [tokens[last - 1], tokens[last]])
             .expect("the marker is set");
         assert_eq!(last_row(&here, None, false), marked, "depth {depth}: the marker names the opening row");
+        assert_eq!(
+            last_row(&here, Some(CopyRule::LongestExact), false),
+            longest,
+            "depth {depth}: a caller's rule stands over the artifact's own"
+        );
         let nowhere = super::set_hamming_copy_longest_uorlut01(&latest, [0, 0]).expect("the marker is set");
         assert_eq!(
             last_row(&nowhere, None, true),

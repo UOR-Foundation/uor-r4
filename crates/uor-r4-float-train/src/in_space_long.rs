@@ -9512,7 +9512,11 @@ pub fn score_rows(
         let (tokens, mask, sha) = load_unpinned_uort(dir)?;
         // claude-357: a checkpoint under the longest rule finds reply openings by its marker.
         if let Some(marker) = panel_marker {
-            check_reply_marker(name, &tokens, &mask, marker)?;
+            let openings = check_reply_marker(name, &tokens, &mask, marker)?;
+            println!(
+                "[longest] the checkpoint reads by the marker {},{}: {name} has it before every reply opening and nowhere else: {openings}",
+                marker[0], marker[1]
+            );
         }
         // claude-287: the rule's cut, and the context its windows and decodes run at.
         let (runs_at, windows) = match past_window {
@@ -23762,9 +23766,34 @@ mod tests {
         assert!(refused(two_token).unwrap().contains("one-token copy keys"));
         let (reads, _) = start_hamming(&on, &Device::Cpu).unwrap().expect("a read");
         assert_eq!(reads.copy_longest(), Some([714, 28]));
-        let off = LongConfig { hamming_copy_longest: None, ..on };
+        let off = LongConfig { hamming_copy_longest: None, ..on.clone() };
         let (plain_reads, _) = start_hamming(&off, &Device::Cpu).unwrap().expect("a read");
         assert_eq!(plain_reads.copy_longest(), None);
+        // A resumed run's marker must be its checkpoint's, both ways and by value.
+        let other = LongConfig { hamming_copy_longest: Some([714, 29]), ..on.clone() };
+        crate::flock_read_hamming::set_hamming_reads(None);
+        let dir = std::env::temp_dir().join(format!(
+            "longest-checkpoint-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        for (saved, run, fits) in [
+            (&reads, &on, true),
+            (&plain_reads, &off, true),
+            (&reads, &off, false),
+            (&plain_reads, &on, false),
+            (&reads, &other, false),
+        ] {
+            std::fs::create_dir(&dir).unwrap();
+            saved.save(&dir).unwrap();
+            let got = checkpoint_hamming(run, &dir, &Device::Cpu).map(|r| r.map(|(r, _)| r.copy_longest()));
+            std::fs::remove_dir_all(&dir).unwrap();
+            match got {
+                Ok(marker) => assert!(fits && marker == Some(run.hamming_copy_longest), "{marker:?}"),
+                Err(e) => assert!(!fits && e.to_string().contains("longest-rule marker"), "{e}"),
+            }
+        }
+        crate::flock_read_hamming::set_hamming_reads(None);
     }
 
     /// claude-334: `−aS` drops the stream read's ask (type) class alone and keeps the hold on;
