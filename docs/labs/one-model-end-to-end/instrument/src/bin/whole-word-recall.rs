@@ -349,7 +349,21 @@ fn run_with_args(args: &[String]) -> Result<Value> {
         .map_err(|e| format!("{e} ({kit_path}, {tokens_path}, {samples_path}, {replies_path})"))?;
 
     write_rows(&out_path, &scored.rows)?;
-    let receipt = json!({
+    receipt(
+        &scored,
+        &[
+            ("kit_tokens_sha256", tokens_bytes.as_slice()),
+            ("tokenizer_sha256", tokenizer_bytes.as_slice()),
+            ("samples_sha256", samples_bytes.as_slice()),
+            ("replies_sha256", replies_bytes.as_slice()),
+        ],
+    )
+}
+
+/// The reading's receipt: its counts and each input's hash under its name. When the corpus's
+/// own replies are not all right by the rule, the receipt comes back inside the error.
+fn receipt(scored: &Scored, inputs: &[(&str, &[u8])]) -> Result<Value> {
+    let mut receipt = json!({
         "recall": scored.recall,
         "right": scored.right,
         "holds_the_value": scored.value_held,
@@ -357,12 +371,11 @@ fn run_with_args(args: &[String]) -> Result<Value> {
         "exact": scored.exact,
         "exact_and_not_right": scored.exact_not_right,
         "references_right": scored.references_right,
-        "kit_tokens_sha256": sha256_hex(&tokens_bytes),
-        "tokenizer_sha256": sha256_hex(&tokenizer_bytes),
-        "samples_sha256": sha256_hex(&samples_bytes),
-        "replies_sha256": sha256_hex(&replies_bytes),
     });
-    references_hold(&scored).map_err(|e| format!("{receipt}\n{e}"))?;
+    for (name, bytes) in inputs {
+        receipt[*name] = json!(sha256_hex(bytes));
+    }
+    references_hold(scored).map_err(|e| format!("{receipt}\n{e}"))?;
     Ok(receipt)
 }
 
@@ -495,6 +508,7 @@ mod tests {
         assert!(!holds("You grew up in lisbon", "Lisbon"));
         assert!(!holds("the Lisbonian", "Lisbon"));
         assert!(!holds("anything", ""));
+        assert!(!holds(".", "") && !holds(" x", ""), "an empty value is no word, even between marks");
         // A whole-word occurrence that overlaps an earlier, not whole, one is still found.
         assert!(holds("ba a a", "a a"));
         // A letter of more than one byte beside the value is a letter; a dash is not.
@@ -534,6 +548,10 @@ mod tests {
         repeated[10] = "--kit";
         assert!(checked_args(&args(&repeated)).is_err());
         assert!(checked_args(&args(&good[..10])).is_err());
+        // A seventh pair beside the six.
+        let mut seven = good.to_vec();
+        seven.extend(["--extra", "x"]);
+        assert!(checked_args(&args(&seven)).is_err());
     }
 
     /// The whole reading on a small panel, then each binding broken in turn. Nothing is
@@ -554,6 +572,9 @@ mod tests {
         assert_eq!(scored.rows[1]["i"], 2);
         assert_eq!(scored.rows[1]["reply"], " It is 47 in Lisbon.");
         assert!(references_hold(&scored).is_ok());
+        let written = receipt(&scored, &[("kit_tokens_sha256", bytes.as_slice())]).expect("a receipt");
+        assert_eq!((&written["right"], &written["references_right"]), (&json!(1), &json!(3)));
+        assert_eq!(written["kit_tokens_sha256"], json!(sha256_hex(&bytes)));
 
         let refused = |kit: &Value, bytes: &[u8], rows: &[Value], text: &str, word: &str| {
             let err = score(kit, bytes, rows, text, &decode).expect_err(word);
@@ -578,6 +599,8 @@ mod tests {
         refused(&kit, &bytes, &rows, &short, "3 replies for 4 rows");
         refused(&kit, &bytes, &rows, &(text.clone() + text.lines().next().expect("a row")), "twice");
         refused(&kit, &bytes, &rows, &text.replace("\"i\":3", "\"i\":7"), "by its number");
+        // One reply more than the rows, under the next number.
+        refused(&kit, &bytes, &rows, &(text.clone() + "{\"i\":4,\"ids\":[]}\n"), "5 replies for 4 rows");
         // One recall reply given twice in place of another: the count is right, the set is not.
         let (twice, twice_text) = rows_and_replies(&tokens, &[3, 3, 15], &REPLIES);
         refused(&kit, &bytes, &twice, &twice_text, "repeats the recall reply at 3");
@@ -597,6 +620,9 @@ mod tests {
         assert_eq!((scored.rows.len(), scored.recall, scored.references_right), (1, 1, 0));
         assert_eq!(scored.rows[0]["reference_right"], false);
         assert!(references_hold(&scored).is_err_and(|e| e.contains("0 of 1")));
+        // The run ends on the receipt, which carries the refusal after the counts.
+        let refused = receipt(&scored, &[]).expect_err("the references are not all right");
+        assert!(refused.contains("\"references_right\":0") && refused.contains("0 of 1"), "{refused}");
     }
 
     #[test]
