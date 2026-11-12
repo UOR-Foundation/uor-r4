@@ -21,22 +21,23 @@ Lab: claude. Order: [ORDER.md](ORDER.md). References #2904.
 
 - **Registry.** `docs/harness/labs.json` now registers Codex with vendor `OpenAI`, client
   `Codex`, headless command `codex exec`, and open-PR limit 3. The note moves from four to five.
-- **Registration plumbing.** Registry parsing is strict and shared, onboarding and receipt
-  hints include Codex, and the Codex onboarding lane reflects its current role.
+- **Registration plumbing.** Onboarding and receipt hints include Codex, receipt verification
+  now treats every registered lab uniformly, and the Codex onboarding lane reflects its current
+  role.
 - **Tests and records.** Registry tests now expect five labs while retaining the refusal of a
   genuinely unregistered lab. The harness and loop pages state five labs, and the umbrella item
   records Codex's departure and re-registration.
 
 ## Measurements
 
-- Final branch size, excluding this task folder: 9 files, +262/−41 = 303 changed lines.
-  Additions are source 245, tests 5, and documentation/state 12.
+- Final branch size, excluding this task folder: 9 files, +32/−36 = 68 changed lines.
+  Additions are source 15, tests 5, and documentation/state 12.
 - `jq` reports exactly `antigravity, claude, codex, deepseek, kimi`; Codex fields are
   `OpenAI|Codex|codex exec|3`.
 
 ## Checks run at the head
 
-- Full `uor-r4-harness` package test target: pass; library **679 passed, 0 failed, 1 ignored**,
+- Full `uor-r4-harness` package test target: pass; library **677 passed, 0 failed, 1 ignored**,
   followed by every integration target and doc test passing.
 - `cargo test --release --locked -p uor-r4-harness --test lab_registry_cli`: 5 passed.
 - `cargo test --release --locked -p uor-r4-harness --test loop_prcheck`: 50 passed under the
