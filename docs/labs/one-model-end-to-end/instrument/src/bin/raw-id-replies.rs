@@ -515,7 +515,10 @@ fn flag(args: &[String], name: &str) -> Option<String> {
 /// - `bytes` is the corpus file the kit was written from: a `UORT` file, a 64-byte header and
 ///   then the ids, two little-endian bytes each.
 /// - Its SHA-256 must be `kit_sha256`, the hash the kit names.
-/// - Each row's `reference` must be the file's ids from the row's `position` on.
+/// - Each row's `reference` must be the file's ids from the row's `position` on, at least one.
+/// - Each row's `prompt` must be the file's ids that end at the row's `position`: the true
+///   place is read as a row of the prompt, so a prompt with an id more or less at its front
+///   would move every true place by one.
 ///
 /// A kit labels by corpus position alone, so a kit written from another corpus, or rows cut
 /// from another corpus, would give places for other text and no error.
@@ -523,6 +526,21 @@ fn check_kit_tokens(bytes: &[u8], path: &str, kit_sha256: &str, rows: &[Value]) 
     if sha256_hex(bytes) != kit_sha256 {
         return Err(format!("{path}: its SHA-256 is not the kit's tokens_sha256: the kit was written from another corpus"));
     }
+    if bytes.len() < 64 || !bytes.starts_with(b"UORT") {
+        return Err(format!("{path}: not a UORT corpus file"));
+    }
+    // The corpus id at a position; none past the file's end or past what a position can be.
+    let id_at = |position: usize| {
+        let at = position.checked_mul(2)?.checked_add(64)?;
+        let pair = bytes.get(at..at.checked_add(2)?)?;
+        Some(u64::from(u16::from_le_bytes([pair[0], pair[1]])))
+    };
+    let equals = |start: usize, ids: &[Value]| {
+        ids.iter().enumerate().all(|(j, id)| {
+            let corpus = start.checked_add(j).and_then(id_at);
+            corpus.is_some() && corpus == id.as_u64()
+        })
+    };
     for (i, row) in rows.iter().enumerate() {
         let position = row
             .get("position")
@@ -533,12 +551,16 @@ fn check_kit_tokens(bytes: &[u8], path: &str, kit_sha256: &str, rows: &[Value]) 
             .get("reference")
             .and_then(Value::as_array)
             .ok_or_else(|| format!("row {i}: --kit-tokens needs a reference on every row"))?;
-        for (j, id) in reference.iter().enumerate() {
-            let at = 64 + 2 * (position + j);
-            let corpus = bytes.get(at..at + 2).map(|b| u64::from(u16::from_le_bytes([b[0], b[1]])));
-            if corpus.is_none() || corpus != id.as_u64() {
-                return Err(format!("{path}: row {i}'s reference is not the corpus at position {position}: the rows are not this corpus's"));
-            }
+        if reference.is_empty() || !equals(position, reference) {
+            return Err(format!("{path}: row {i}'s reference is not the corpus at position {position}: the rows are not this corpus's"));
+        }
+        let prompt = row
+            .get("prompt")
+            .and_then(Value::as_array)
+            .ok_or_else(|| format!("row {i}: --kit-tokens needs a prompt on every row"))?;
+        let start = position.checked_sub(prompt.len());
+        if !start.is_some_and(|start| equals(start, prompt)) {
+            return Err(format!("{path}: row {i}'s prompt is not the corpus up to position {position}: its true place would be read against other text"));
         }
     }
     Ok(())
@@ -1124,8 +1146,9 @@ mod tests {
     /// A hand-built artifact with a place read, built as the integer crate's `place_trunk` builds
     /// it through the public API: a synthetic trunk with copy reads at depths 1 and 3, an ask
     /// table whose `PLACE_ASK` row finds the token after `PLACE_BEFORE`, and the classes stop
-    /// (`PLACE_DOT`), arm (`PLACE_ASK`) and open (`PLACE_OPENS`).
-    fn place_artifact() -> Vec<u8> {
+    /// (`PLACE_DOT`), arm (`PLACE_ASK`) and open (`PLACE_OPENS`). Returned with the artifact it
+    /// was built on, which asks and has no place read.
+    fn place_artifacts() -> (Vec<u8>, Vec<u8>) {
         use uor_r4_integer::stack::synthetic::{
             synthetic_fbs_trunk_with, FbsSynth, FBS_SYNTH_NON_SQUARE,
         };
@@ -1179,7 +1202,8 @@ mod tests {
         class[PLACE_ASK as usize] = PLACE_ARM;
         class[PLACE_OPENS as usize] = PLACE_OPEN;
         let place = PlaceImage::checked(marks, class, vocab).expect("the classes");
-        add_hamming_place_uorlut01(&asked, &place).expect("the place read is added")
+        let placed = add_hamming_place_uorlut01(&asked, &place).expect("the place read is added");
+        (asked, placed)
     }
 
     /// claude-352, check I-l: `--place-rows 1` prints the register after each step that chose a
@@ -1198,7 +1222,7 @@ mod tests {
         let kit = root.join("places.json");
         let placed_out = root.join("placed.jsonl");
         let plain_out = root.join("plain.jsonl");
-        fs::write(&stack, place_artifact()).expect("artifact");
+        fs::write(&stack, place_artifacts().1).expect("artifact");
         // Each prompt is the conversation up to a reply row, at corpus positions from 1000:
         // the reply start (the register set, not open), the open row, and the row after the
         // stop; then the reply start again at another corpus place, with no kit label.
@@ -1336,13 +1360,31 @@ mod tests {
     #[test]
     fn the_kit_tokens_bind_the_kit_and_the_rows_to_one_corpus() {
         // A UORT file: a 64-byte header, then ids 10, 11, 12, 13 at positions 0 to 3.
-        let mut corpus = vec![0u8; 64];
+        let mut corpus = b"UORT".to_vec();
+        corpus.resize(64, 0);
         for id in [10u16, 11, 12, 13] {
             corpus.extend(id.to_le_bytes());
         }
         let sha = sha256_hex(&corpus);
         let rows = vec![json!({"position": 1, "prompt": [10], "reference": [11, 12]})];
         assert!(check_kit_tokens(&corpus, "tokens", &sha, &rows).is_ok());
+        let refused = |row: Value, word: &str| {
+            let error = check_kit_tokens(&corpus, "tokens", &sha, &[row]).unwrap_err();
+            assert!(error.contains(word), "{error}");
+        };
+        // A prompt with an id more at its front, a prompt of other ids, and no prompt.
+        refused(json!({"position": 1, "prompt": [9, 10], "reference": [11]}), "row 0's prompt is not");
+        refused(json!({"position": 2, "prompt": [10, 12], "reference": [12]}), "row 0's prompt is not");
+        refused(json!({"position": 1, "reference": [11]}), "needs a prompt");
+        // A reference of no ids binds nothing, at any position.
+        refused(json!({"position": 1, "prompt": [10], "reference": []}), "row 0's reference is not");
+        // A position past what the file can hold is refused, not wrapped around.
+        refused(json!({"position": u64::MAX, "prompt": [10], "reference": [10]}), "row 0's reference is not");
+        // A file with the kit's hash and no `UORT` header.
+        let mut bare_file = corpus.clone();
+        bare_file[0] = b'X';
+        let error = check_kit_tokens(&bare_file, "tokens", &sha256_hex(&bare_file), &rows).unwrap_err();
+        assert!(error.contains("not a UORT corpus file"), "{error}");
         let error = check_kit_tokens(&corpus, "tokens", "00", &rows).unwrap_err();
         assert!(error.contains("another corpus"), "{error}");
         let moved = vec![json!({"position": 2, "prompt": [10], "reference": [11, 12]})];
@@ -1352,5 +1394,82 @@ mod tests {
         assert!(check_kit_tokens(&corpus, "tokens", &sha, &past).is_err(), "a reference past the file's end");
         let bare = vec![json!({"prompt": [10]})];
         assert!(check_kit_tokens(&corpus, "tokens", &sha, &bare).is_err(), "a row with no position");
+    }
+
+    /// claude-352, review round 1: `--kit-tokens` on the whole run. The receipt says the kit's
+    /// corpus was checked only when it was, and the check changes no reply row. A corpus the
+    /// kit was not written from, `--kit-tokens` without its kit, and `--place-rows 1` on an
+    /// artifact without a place read are each refused by name, before a row is written.
+    #[test]
+    fn the_kit_tokens_are_checked_through_the_run() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("uor-kit-tokens-{}-{nonce}", std::process::id()));
+        fs::create_dir_all(&root).expect("temp directory");
+        let file = |name: &str, bytes: &[u8]| {
+            let path = root.join(name);
+            fs::write(&path, bytes).expect("a file of the test");
+            path.display().to_string()
+        };
+        let (asked, placed) = place_artifacts();
+        let (stack, bare_stack) = (file("placed.uorlut", &placed), file("asked.uorlut", &asked));
+        // A corpus of 1,100 ids with the conversation from position 1000.
+        let mut ids = vec![0u16; 1100];
+        for (k, &id) in PLACE_TALK.iter().enumerate() {
+            ids[1000 + k] = u16::try_from(id).expect("an id of the test");
+        }
+        let mut corpus = b"UORT".to_vec();
+        corpus.resize(64, 0);
+        for id in &ids {
+            corpus.extend(id.to_le_bytes());
+        }
+        let tokens = file("tokens.u16", &corpus);
+        let mut other = corpus.clone();
+        *other.last_mut().expect("bytes") ^= 1;
+        let other_tokens = file("other.u16", &other);
+        let rows = json!([{
+            "prompt": PLACE_TALK[..18].to_vec(),
+            "position": 1018,
+            "reference": [ids[1018], ids[1019]],
+        }]);
+        let samples = file("samples.json", &serde_json::to_vec(&rows).expect("rows"));
+        let kit_json = json!({
+            "tokens_sha256": sha256_hex(&corpus),
+            "marks": {},
+            "stop": [PLACE_DOT],
+            "places": [[1018, 1004, 1018, 2]],
+        });
+        let kit = file("places.json", &serde_json::to_vec(&kit_json).expect("kit"));
+        let run = |name: &str, stack: &str, extra: &[&str]| {
+            let out = root.join(name).display().to_string();
+            let fixed = [
+                "--stack", stack, "--samples", samples.as_str(), "--out", out.as_str(),
+                "--mark-reply", "0", "--max-tokens", "3",
+            ];
+            run_with_args(fixed.iter().chain(extra).map(|arg| (*arg).to_owned()))
+        };
+        let place = ["--place-rows", "1", "--places", kit.as_str()];
+        let [rows_name, on, kit_name, kit_path] = place;
+        let bound = [rows_name, on, kit_name, kit_path, "--kit-tokens", tokens.as_str()];
+        let other_bound = [rows_name, on, kit_name, kit_path, "--kit-tokens", other_tokens.as_str()];
+        let unchecked = run("unchecked.jsonl", &stack, &place).expect("the kit alone");
+        let checked = run("checked.jsonl", &stack, &bound).expect("the kit and its corpus");
+        let rows_of = |name: &str| fs::read(root.join(name)).expect("reply rows");
+        let same = rows_of("unchecked.jsonl") == rows_of("checked.jsonl");
+        let another = run("another.jsonl", &stack, &other_bound).unwrap_err();
+        let written = root.join("another.jsonl").exists();
+        let no_kit = run("no-kit.jsonl", &stack, &["--kit-tokens", tokens.as_str()]).unwrap_err();
+        let no_place = run("no-place.jsonl", &bare_stack, &place).unwrap_err();
+        let _ = fs::remove_dir_all(&root);
+        assert_eq!(unchecked["place_rows"]["kit_tokens_checked"], false);
+        assert_eq!(checked["place_rows"]["kit_tokens_checked"], true);
+        assert!(same, "the check changes no reply row");
+        assert!(another.contains("another corpus"), "{another}");
+        assert!(!written, "a refused run writes no rows");
+        assert!(no_kit.contains("--kit-tokens needs --places"), "{no_kit}");
+        assert!(no_place.contains("needs an artifact with a place read"), "{no_place}");
     }
 }

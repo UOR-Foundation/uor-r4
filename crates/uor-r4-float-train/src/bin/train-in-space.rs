@@ -980,11 +980,7 @@ fn main() -> Result<()> {
             "--past-window applies to --score-rows only".to_owned(),
         ));
     }
-    if last_opening.is_some() && score.is_none() && !panel_prompts_on {
-        return Err(FloatTrainError::Invalid(
-            "--sample-opening applies to --score-rows and --panel-prompts only".to_owned(),
-        ));
-    }
+    prompt_cut_applies(config.context, last_opening, score.is_some(), panel_prompts_on, runs.is_some())?;
     if !panel_queries.is_empty() && score.is_none() && !census_on {
         return Err(FloatTrainError::Invalid(
             "--panel-queries applies to --score-rows and --census only".to_owned(),
@@ -1896,6 +1892,32 @@ fn context_applies(context: usize, training: bool, grad_norms: bool, scoring: bo
     Ok(())
 }
 
+/// claude-352: `--panel-prompts` writes the prompts `--score-rows` decodes, so it takes that
+/// mode's `--context` and `--sample-opening`, and `--sample-opening` applies to those two modes
+/// only. With `--runs DIR` each prompt is also named by a run decoded at the sheet's window and
+/// first opening, so there another window or the last opening is refused by name.
+fn prompt_cut_applies(
+    context: usize,
+    last_opening: Option<bool>,
+    scoring: bool,
+    panel_prompts: bool,
+    runs: bool,
+) -> Result<()> {
+    if last_opening.is_some() && !scoring && !panel_prompts {
+        return Err(FloatTrainError::Invalid(
+            "--sample-opening applies to --score-rows and --panel-prompts only".to_owned(),
+        ));
+    }
+    let sheet = uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT;
+    if panel_prompts && runs && (context != sheet || last_opening == Some(true)) {
+        return Err(FloatTrainError::Invalid(
+            "--panel-prompts --runs DIR names each prompt by a run decoded at the sheet's window and first opening: --context and --sample-opening last do not apply"
+                .to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 /// `--time-without-quantizers 1` (float-kernel-fusion, claude-283) times a training run trained as
 /// served over a profile window of 2 pairs or more. Training evaluates when a step's number reaches
 /// a multiple of `--eval-every` and at `--steps`, and an evaluation's served forward gets that
@@ -2035,6 +2057,23 @@ mod tests {
         assert!(context_applies(2048, false, false, true).is_ok(), "claude-274: scoring at a window");
         assert!(context_applies(2048, false, false, false).is_err());
         assert!(context_applies(sheet + 1, false, false, false).is_err());
+    }
+
+    /// claude-352: the prompt builder takes the scorer's window and opening. The opening alone,
+    /// and either of them beside a served run, is refused by name.
+    #[test]
+    fn the_prompt_builder_takes_the_scorers_window_and_opening() {
+        let sheet = uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT;
+        assert!(prompt_cut_applies(sheet, None, false, false, false).is_ok());
+        assert!(prompt_cut_applies(256, Some(true), false, true, false).is_ok(), "the 256 retake's prompts");
+        assert!(prompt_cut_applies(256, Some(true), true, false, false).is_ok(), "scoring");
+        assert!(prompt_cut_applies(sheet, Some(false), false, true, true).is_ok(), "the sheet's cut, named by a run");
+        let alone = prompt_cut_applies(sheet, Some(false), false, false, false).unwrap_err().to_string();
+        assert!(alone.contains("--sample-opening applies"), "{alone}");
+        for (context, opening) in [(256, None), (sheet, Some(true))] {
+            let named = prompt_cut_applies(context, opening, false, true, true).unwrap_err().to_string();
+            assert!(named.contains("--panel-prompts --runs DIR"), "{named}");
+        }
     }
 
     #[test]

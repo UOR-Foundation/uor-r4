@@ -1610,6 +1610,61 @@ fn stack_chat_records_the_place_register_per_reply_id() -> ChatTest {
     Ok(())
 }
 
+/// A byte-level tokenizer of `vocab` entries, for an artifact wider than the specials and the
+/// bytes: each entry past those 259 is one merge of `A` with another byte.
+fn merged_tokenizer_json(vocab: usize) -> Vec<u8> {
+    let table = alphabet();
+    let specials = ["<|bos|>", "<|eos|>", "<|unk|>"];
+    let mut entries = serde_json::Map::new();
+    for (id, surface) in specials.iter().enumerate() {
+        entries.insert((*surface).to_owned(), json!(id));
+    }
+    for (byte, surface) in table.iter().enumerate() {
+        entries.insert(surface.to_string(), json!(byte + 3));
+    }
+    let mut merges = Vec::new();
+    for (extra, surface) in table.iter().take(vocab - 259).enumerate() {
+        merges.push(format!("{} {surface}", table[65]));
+        entries.insert(format!("{}{surface}", table[65]), json!(extra + 259));
+    }
+    let added: Vec<Value> =
+        specials.iter().enumerate().map(|(id, surface)| json!({"id": id, "content": surface})).collect();
+    serde_json::to_vec(&json!({
+        "pre_tokenizer": {"type": "ByteLevel", "add_prefix_space": false},
+        "added_tokens": added,
+        "model": {"type": "BPE", "vocab": entries, "merges": merges},
+    }))
+    .expect("tokenizer json")
+}
+
+/// claude-352: on an artifact with a place read, the pair recorded for a reply id is the register
+/// a second session shows after the step that chose it: the history's last step for the first
+/// id, the step onto the id before it for every other. The history ends on `PLACE_OPENS`, an
+/// open row, and the next step moves the register whatever the reply says, so a pair recorded
+/// one step late is not this one.
+#[test]
+fn stack_chat_reply_places_are_the_register_at_each_choice() -> ChatTest {
+    let (_, placed, _) = place_trunk();
+    let model = IntegerStackModel::parse(&placed)?;
+    let json = merged_tokenizer_json(model.shape().vocab);
+    let mut chat = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    let history = &PLACE_TALK[..19];
+    let reply = chat.reply_history(history, 3)?;
+    let mut session = model.session();
+    for &token in history {
+        session.step_native(token)?;
+    }
+    let mut want = vec![session.last_place()];
+    for &id in &reply.ids[..reply.ids.len() - 1] {
+        session.step_native(id)?;
+        want.push(session.last_place());
+    }
+    assert_eq!(chat.last_reply_places(), want);
+    assert_eq!(want[0], (Some(4), Some(4)), "the open row");
+    assert!(want.len() > 1 && want[1] != want[0], "the next step moves the register: {want:?}");
+    Ok(())
+}
+
 /// The greedy continuation of `history` on a fresh session, as the float
 /// stack's `greedy_reply` computes it: the highest served score (ties to the
 /// lower id) until EOS, a terminal cycle of length 1..=4 repeated three times,

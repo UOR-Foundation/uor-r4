@@ -355,7 +355,7 @@ fn print_usage() {
         "      --memory-sieve          Derive System: Memory from prior user turns in the REPL"
     );
     eprintln!(
-        "      --print-place           print the place read's register after each --stack reply"
+        "      --print-place           print the place read's register after each --stack reply:\n                              in the REPL on stdout under the reply; with --say or --script on\n                              stderr, so stdout stays the replies' JSON"
     );
     eprintln!(
         "  -t, --temperature <FLOAT>   Sampling temperature (0.0 = greedy, >0.0 = categorical)"
