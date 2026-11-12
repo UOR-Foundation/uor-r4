@@ -263,7 +263,7 @@
 //! as used, and refuses a run in which one was not taken; that split's memory-pass rows are the
 //! forced forward's. Refused, before any forward: a position that is not traced and R's refusals.
 //!
-//! `train-in-space --data-root DIR --panel-prompts 1 --out DIR [--panel NAME=DIR ...] [--runs DIR] --samples 1536 --reply-tokens 64`
+//! `train-in-space --data-root DIR --panel-prompts 1 --out DIR [--panel NAME=DIR ...] [--runs DIR] --samples 1536 --reply-tokens 64 [--context N] [--sample-opening first|last]`
 //! (point-key-integer, claude-224) writes, with no model, the prompts a `--score-rows` run decodes on
 //! DEV and each panel (`prompts-{split}.json`), for `fbs-toks --replies`. With `--runs` (claude-220's
 //! `out`), it also writes each seed's prompts with its float served names, refusing a served sample
@@ -944,7 +944,7 @@ fn main() -> Result<()> {
         decode.is_some(),
         score.is_some(),
     )?;
-    context_applies(config.context, modes[7] && recall == 0, grad_norms, score.is_some())?;
+    context_applies(config.context, modes[7] && recall == 0, grad_norms, score.is_some() || panel_prompts_on)?;
     time_without_quantizers_applies(
         time_quantizers,
         modes[7] && recall == 0,
@@ -980,9 +980,9 @@ fn main() -> Result<()> {
             "--past-window applies to --score-rows only".to_owned(),
         ));
     }
-    if last_opening.is_some() && score.is_none() {
+    if last_opening.is_some() && score.is_none() && !panel_prompts_on {
         return Err(FloatTrainError::Invalid(
-            "--sample-opening applies to --score-rows only".to_owned(),
+            "--sample-opening applies to --score-rows and --panel-prompts only".to_owned(),
         ));
     }
     if !panel_queries.is_empty() && score.is_none() && !census_on {
@@ -1192,7 +1192,17 @@ fn main() -> Result<()> {
     if panel_prompts_on {
         let out = out
             .ok_or_else(|| FloatTrainError::Invalid("--panel-prompts needs --out DIR".to_owned()))?;
-        for (file, rows) in panel_prompts(&data_root, &extra_panels, config.samples, config.reply_tokens, runs.as_deref(), &out)? {
+        let prompts = panel_prompts(
+            &data_root,
+            &extra_panels,
+            config.samples,
+            config.reply_tokens,
+            config.context,
+            last_opening.unwrap_or(false),
+            runs.as_deref(),
+            &out,
+        )?;
+        for (file, rows) in prompts {
             println!("{}", serde_json::json!({ "file": file, "rows": rows }));
         }
         return Ok(());
@@ -1871,14 +1881,15 @@ fn served_forward_applies(
 
 /// `--context` sets the window training cuts TRAIN at and builds its model to read (claude-273),
 /// `--grad-norms 1` reads TRAIN the same way, and `--score-rows` cuts its panels at it
-/// (claude-274). Every other mode, `--recall` among them, reads 192-token windows, so another
+/// (claude-274), as `--panel-prompts` does for the prompts it writes (claude-352; `scoring` is
+/// true for either). Every other mode, `--recall` among them, reads 192-token windows, so another
 /// window there would be ignored: it is refused.
 fn context_applies(context: usize, training: bool, grad_norms: bool, scoring: bool) -> Result<()> {
     if context != uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT
         && !(training || grad_norms || scoring)
     {
         return Err(FloatTrainError::Invalid(
-            "--context applies to training with --out, --grad-norms 1 and --score-rows only"
+            "--context applies to training with --out, --grad-norms 1, --score-rows and --panel-prompts only"
                 .to_owned(),
         ));
     }

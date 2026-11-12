@@ -41,15 +41,21 @@
 //! length)). A reply the kit does not label gets `null` for both; a place before the prompt's
 //! first token gets `"true_place": null` and `"true_place_outside": true`. The receipt gains
 //! `place_rows`: the rows with a `position`, those with a true place, those whose place is
-//! outside the prompt, and the kit's hash and the corpus hash it names. The kit's corpus hash
-//! is not checked here: the reader has no corpus.
+//! outside the prompt, and the kit's hash and the corpus hash it names. Without `--kit-tokens`
+//! the kit's corpus hash is recorded and not checked (`"kit_tokens_checked": false`): the
+//! reader has no corpus. `--kit-tokens TOKENS.u16` (needs `--places`) gives it the corpus: the
+//! file's SHA-256 must be the hash the kit names, and each row's `reference` must be the file's
+//! ids at the row's `position`, or the run is refused before anything is written.
+//!
+//! Every argument is a `--name value` pair; a name with no value is refused.
 //!
 //! It is an instrument: it trains nothing, changes no artifact and moves no bar.
 //!
 //! ```text
 //! raw-id-replies --stack ART.uorlut --samples ROWS.json --out REPLIES.jsonl \
 //!   --mark-reply 0|1 [--max-tokens 48] [--count-visits 0|1] [--time-steps 0|1] \
-//!   [--trace-control 0|1 --trace-out TRACE.jsonl] [--place-rows 0|1 [--places KIT.json]]
+//!   [--trace-control 0|1 --trace-out TRACE.jsonl] \
+//!   [--place-rows 0|1 [--places KIT.json [--kit-tokens TOKENS.u16]]]
 //! ```
 //!
 //! `ROWS.json` is a JSON array of objects with a `prompt` array of token ids (a float score's
@@ -71,7 +77,7 @@ use uor_r4_integer::stack::{
 
 const SCHEMA: &str = "uor-r4.raw-id-replies/1";
 const EOS: u32 = 1;
-const USAGE: &str = "usage: raw-id-replies --stack FILE --samples FILE --out FILE --mark-reply 0|1 [--max-tokens N] [--count-visits 0|1] [--time-steps 0|1] [--trace-control 0|1 --trace-out FILE] [--place-rows 0|1 [--places FILE]]";
+const USAGE: &str = "usage: raw-id-replies --stack FILE --samples FILE --out FILE --mark-reply 0|1 [--max-tokens N] [--count-visits 0|1] [--time-steps 0|1] [--trace-control 0|1 --trace-out FILE] [--place-rows 0|1 [--places FILE [--kit-tokens FILE]]]";
 /// How many values the early-stopping scan reads between two looks at its bound.
 const BLOCK: usize = 16;
 
@@ -505,6 +511,39 @@ fn flag(args: &[String], name: &str) -> Option<String> {
         .cloned()
 }
 
+/// `--kit-tokens` (claude-352): binds the kit, its corpus and the rows.
+/// - `bytes` is the corpus file the kit was written from: a `UORT` file, a 64-byte header and
+///   then the ids, two little-endian bytes each.
+/// - Its SHA-256 must be `kit_sha256`, the hash the kit names.
+/// - Each row's `reference` must be the file's ids from the row's `position` on.
+///
+/// A kit labels by corpus position alone, so a kit written from another corpus, or rows cut
+/// from another corpus, would give places for other text and no error.
+fn check_kit_tokens(bytes: &[u8], path: &str, kit_sha256: &str, rows: &[Value]) -> Result<()> {
+    if sha256_hex(bytes) != kit_sha256 {
+        return Err(format!("{path}: its SHA-256 is not the kit's tokens_sha256: the kit was written from another corpus"));
+    }
+    for (i, row) in rows.iter().enumerate() {
+        let position = row
+            .get("position")
+            .and_then(Value::as_u64)
+            .and_then(|p| usize::try_from(p).ok())
+            .ok_or_else(|| format!("row {i}: --kit-tokens needs a position on every row"))?;
+        let reference = row
+            .get("reference")
+            .and_then(Value::as_array)
+            .ok_or_else(|| format!("row {i}: --kit-tokens needs a reference on every row"))?;
+        for (j, id) in reference.iter().enumerate() {
+            let at = 64 + 2 * (position + j);
+            let corpus = bytes.get(at..at + 2).map(|b| u64::from(u16::from_le_bytes([b[0], b[1]])));
+            if corpus.is_none() || corpus != id.as_u64() {
+                return Err(format!("{path}: row {i}'s reference is not the corpus at position {position}: the rows are not this corpus's"));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
@@ -533,6 +572,11 @@ fn run() -> Result<()> {
 
 fn run_with_args(args: impl Iterator<Item = String>) -> Result<Value> {
     let args: Vec<String> = args.collect();
+    // A name with no value would read as the flag left out: `--place-rows` last ran without
+    // the register and said nothing (claude-352's review).
+    if let Some(odd) = args.chunks(2).find(|pair| pair.len() != 2 || !pair[0].starts_with("--")) {
+        return Err(format!("{}: every argument is a `--name value` pair\n{USAGE}", odd[0]));
+    }
     let need = |name: &str| flag(&args, name).ok_or_else(|| format!("missing {name}\n{USAGE}"));
     let stack_path = need("--stack")?;
     let samples_path = need("--samples")?;
@@ -581,6 +625,10 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<Value> {
     if places_path.is_some() && !place_rows {
         return Err("--places needs --place-rows 1".to_owned());
     }
+    let kit_tokens_path = flag(&args, "--kit-tokens");
+    if kit_tokens_path.is_some() && places_path.is_none() {
+        return Err("--kit-tokens needs --places".to_owned());
+    }
 
     let artifact = fs::read(&stack_path).map_err(|e| format!("{stack_path}: {e}"))?;
     let samples = fs::read(&samples_path).map_err(|e| format!("{samples_path}: {e}"))?;
@@ -607,6 +655,10 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<Value> {
     let mut place_tally = PlaceTally::default();
     let rows: Vec<Value> =
         serde_json::from_slice(&samples).map_err(|e| format!("{samples_path}: {e}"))?;
+    if let (Some(path), Some(labels)) = (kit_tokens_path.as_deref(), &labels) {
+        let bytes = fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+        check_kit_tokens(&bytes, path, &labels.tokens_sha256, &rows)?;
+    }
     let mut out = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -835,6 +887,7 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<Value> {
             "true_place_outside": place_tally.outside,
             "places_sha256": labels.sha256,
             "kit_tokens_sha256": labels.tokens_sha256,
+            "kit_tokens_checked": kit_tokens_path.is_some(),
         });
     }
     Ok(receipt)
@@ -1264,5 +1317,40 @@ mod tests {
         assert!(place_labels(twice, "kit").is_err(), "one label a reply");
         let unknown = br#"{"tokens_sha256":"00","marks":{},"stop":[],"places":[],"gain":1}"#;
         assert!(place_labels(unknown, "kit").is_err(), "the kit's own shape");
+    }
+
+    /// claude-352's review: a name with no value read as the flag left out, so `--place-rows`
+    /// as the last argument ran without the register and said nothing.
+    #[test]
+    fn a_name_without_its_value_is_refused() {
+        let args = ["--stack", "a", "--samples", "b", "--out", "c", "--mark-reply", "0", "--place-rows"];
+        let error = run_with_args(args.iter().map(|arg| (*arg).to_owned())).unwrap_err();
+        assert!(error.contains("--place-rows: every argument is a `--name value` pair"), "{error}");
+        let stray = ["--stack", "a", "b", "--samples"];
+        let error = run_with_args(stray.iter().map(|arg| (*arg).to_owned())).unwrap_err();
+        assert!(error.contains("b: every argument"), "{error}");
+    }
+
+    /// claude-352's review: `--kit-tokens` refuses a kit written from another corpus and rows
+    /// that are not this corpus's, and passes the corpus the kit names.
+    #[test]
+    fn the_kit_tokens_bind_the_kit_and_the_rows_to_one_corpus() {
+        // A UORT file: a 64-byte header, then ids 10, 11, 12, 13 at positions 0 to 3.
+        let mut corpus = vec![0u8; 64];
+        for id in [10u16, 11, 12, 13] {
+            corpus.extend(id.to_le_bytes());
+        }
+        let sha = sha256_hex(&corpus);
+        let rows = vec![json!({"position": 1, "prompt": [10], "reference": [11, 12]})];
+        assert!(check_kit_tokens(&corpus, "tokens", &sha, &rows).is_ok());
+        let error = check_kit_tokens(&corpus, "tokens", "00", &rows).unwrap_err();
+        assert!(error.contains("another corpus"), "{error}");
+        let moved = vec![json!({"position": 2, "prompt": [10], "reference": [11, 12]})];
+        let error = check_kit_tokens(&corpus, "tokens", &sha, &moved).unwrap_err();
+        assert!(error.contains("row 0's reference is not the corpus at position 2"), "{error}");
+        let past = vec![json!({"position": 3, "prompt": [10], "reference": [13, 14]})];
+        assert!(check_kit_tokens(&corpus, "tokens", &sha, &past).is_err(), "a reference past the file's end");
+        let bare = vec![json!({"prompt": [10]})];
+        assert!(check_kit_tokens(&corpus, "tokens", &sha, &bare).is_err(), "a row with no position");
     }
 }
