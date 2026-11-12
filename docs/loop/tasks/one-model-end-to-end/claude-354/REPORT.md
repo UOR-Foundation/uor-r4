@@ -35,13 +35,13 @@ Neither side is right in any of the seven. Most differing replies are like these
 - **Where the two differ, the trained model is right more often than the copy:** on 377 rows against 281 with the turn memory on (the place read's seed 3: 95 against 47), and on 1,543 against 1,087 with it off.
 - **The control loses stated values on the laptop and the place read does not** (79 to 69, against 183 to 183, 210 to 209 and 173 to 170). The control's loss is 14 replies lost and 4 gained; that lean is not explained beyond table 4.
 - **Near a tie, the kinds of row do not differ at one rate** (table 5): first tokens on 10% to 30% of such rows, later tokens on 36% to 54%. Not explained.
-- **The first review found a gap in the program.** Rows of a reply that opened before their window would have been read with no reply start on the laptop, while the trained model's pass reads its reply table there. The program now counts such rows and keeps them out of the comparison. This panel has none at the 192 window, so no number changed.
+- **The first review found a gap in the program.** Rows of a reply that opened before their window, or at its first token, would have been read with no reply start on the laptop, while the trained model's pass reads its reply table there. The program now counts such rows and keeps them out of the comparison. This panel has none at the 192 window, so no number changed.
 - claude-352's registered reading stays NOT_RUN. No bar or status is changed.
 
 ## What changed
 
 - A new laptop program, [`row-picks`](../../../../labs/one-model-end-to-end/instrument/src/bin/row-picks.rs), in the item's instrument crate. It reads integer artifacts only.
-  - **Rows:** it cuts a panel into the windows the float scoring pass cuts, steps the laptop reader through each with the true text before every row, and writes the reader's choice at every scored row beside the pod's saved choice (`rows-p-memory.json`, `rows-p-no-memory.json`). It refuses to write unless its row positions and targets equal the pod's file. A row whose reply opened before its window is labelled `carried` and kept out of the counts of a run that marks reply starts: the laptop session cannot be told of such a start.
+  - **Rows:** it cuts a panel into the windows the float scoring pass cuts, steps the laptop reader through each with the true text before every row, and writes the reader's choice at every scored row beside the pod's saved choice (`rows-p-memory.json`, `rows-p-no-memory.json`). It refuses to write unless its row positions and targets equal the pod's file. A row whose reply opened before its window, or at its first token, is labelled `carried` and kept out of the counts of a run that marks reply starts: the laptop session cannot be told of such a start.
   - **Replies:** for each decoded reply that is not the trained model's, it feeds the prompt and the tokens both replies share, checks that the reader's next token is the saved laptop reply's and the table's nearest row, and writes the rank and the gap of the trained model's token.
 - No change to the reader (`crates/uor-r4-integer`), to any artifact, or to the float side.
 
@@ -66,7 +66,7 @@ All five artifacts carry both turn-memory tables (13,195 opening keys and 166,84
 | Place read (p-s3) | off | 1,888 | 4.6% | 32,683 | 32,555 |
 | Arm r (r-s2) | off | 983 | 2.4% | 30,281 | 30,223 |
 
-With the memory off the first token of a reply is the weak row: 630 to 713 of the 3,586 first tokens differ on the stage 3 models (283 on arm r), against 31 to 34 (90 on arm r) with it on. The turn memory decides the first token; without it the model is near a tie there. So the turn memory hides differences and does not cause them.
+With the memory off the first token of a reply is the weak row: 630 to 713 of the 3,586 first tokens differ on the stage 3 models (283 on arm r), against 31 to 34 (90 on arm r) with it on. The turn memory decides the first token; without it the model is near a tie there. So the turn memory hides differences at the first token. Whether it causes any is read under table 3: on the 46 to 204 replies a model that can be compared, it could have a part in 0 to 7.
 
 **2. The differing rows are the rows where the reader's first two choices are nearly tied** (turn memory on). Each cell is rows chosen differently of rows in the band; the band is how far the reader's first choice leads its second.
 
@@ -131,15 +131,15 @@ The trained model is right on 377 of these rows and the laptop copy on 281: a ne
 | Place read (p-s3) | 30 of 301 | 163 of 351 | 227 of 477 | 33 of 132 | 2 of 3,285 | 49 of 10,395 | 126 of 25,910 | 33 of 10,424 |
 | Arm r (r-s2) | 88 of 290 | 144 of 323 | 85 of 236 | 10 of 29 | 2 of 3,296 | 32 of 10,423 | 73 of 26,151 | 3 of 10,527 |
 
-With a lead of 4,000 or more, under 1% of the rows of every kind differ. Arm r's 90 differing first tokens are near ties too (88 of them). Under 4,000 the rate is not the same for every kind: first tokens differ on 10% to 30% of such rows, second to fourth tokens on 45% to 53%, later tokens on 36% to 54%, copied rows on 22% to 41%. Why is not known.
+The copied rows are also counted in the three columns by token place. With a lead of 4,000 or more, under 1% of the rows of every kind differ. Arm r's 90 differing first tokens are near ties too (88 of them). Under 4,000 the rate is not the same for every kind: first tokens differ on 10% to 30% of such rows, second to fourth tokens on 45% to 53%, later tokens on 36% to 54%, copied rows on 22% to 41%. Why is not known.
 
 **What this rules out.**
 
 - A wrong window, a cut row or a shifted row: the rows equal the pod's, 40,719 of 40,719 on ten runs.
 - A reply start the laptop was not told of: no scored row of this panel is carried.
 - The turn memory, as far as it can be compared: table 3's second table, on the 46 to 204 comparable replies a model.
-- A fault at rows that are not near a tie, in any kind of row: table 5's right half.
-- A fault of the place read alone: the control and arm r, which have none, differ as much.
+- A fault touching 1% or more of the rows that are not near a tie, in any kind of row: table 5's right half. The rows that still differ there (0 to 177 a kind a model) and the far cases stay open.
+- A fault of the place read alone: the control and arm r, which have none, differ nearly as much (504 and 424 rows against 520 to 670).
 
 **What it does not rule out.** A small systematic error in the reader that only tips near ties: it would look like tables 2 and 5. The uneven rates of table 5's left half are a reason to keep that open.
 
@@ -165,7 +165,7 @@ Not run: anything on a pod, any float pass, the integer crate's tests (its code 
 
 ## Skills used
 
-None beyond the project loop. Two fresh reviewers, subagents of this session, read the program and this report apart. Both asked for changes in the first round: the program's carried rows and three test gaps, and wording here that said more than was measured. No number changed.
+None beyond the project loop. Two fresh reviewers, subagents of this session, read the program and this report apart. Both asked for changes in the first round: the program's carried rows and three test gaps, and wording here that said more than was measured. No number changed. Two more fresh reviewers read the changes and approved with notes; the wording notes are applied here and the program's four low notes are under Still open.
 
 ## Still open
 
@@ -173,10 +173,15 @@ None beyond the project loop. Two fresh reviewers, subagents of this session, re
 - **The control's lean** (14 stated values lost, 4 gained) and its 98 replies beyond what the rates give.
 - **The far cases:** 17 to 82 differing rows a model where the trained model's token is beyond the reader's twentieth choice. A read keeping another position would look like this; it needs the float trace above.
 - **Rounding or a small systematic error:** not told apart here, and the uneven near-tie rates of table 5 are not explained. The same trace would say.
-- **Windows that start inside a reply:** this panel has none at 192. A panel or window that has them needs a session that can be told of a reply start before its first token; until then the program sets those rows aside.
+- **Windows whose first token is a reply token:** this panel has none at 192. A panel or window that has them needs a session that can be told of a reply start before its first token; until then the program sets those rows aside.
+- **Four low notes of the second code review, not applied,** so that the program is as reviewed and as run (`1666dbc12`). None changes a count.
+  - No test drives the run loop's own marking calls; the tests pin `turn` and `carried`, which the loop uses.
+  - The program's header says a carried reply opened before its window; the code also counts one that opens at the window's first token, as it should.
+  - The header names no receipt field (`compared` and `turn_memory` are new).
+  - A choices array shorter than its rows in the trained model's file stops the run with a message about ids, not about lengths. Nothing is written either way.
 - **A float reading at the 256 window** does not exist (carried from claude-353).
 - claude-352's open items on the place read itself are untouched.
 
 ## Plain summary
 
-No fault was found in the laptop reader. Token by token the laptop copies choose what their trained models choose on about 99 rows in 100, and over all rows they are right nearly as often. Where the two differ, the reader was nearly undecided between two tokens. That is what the laptop's integer rounding would do, but the rounding was not measured, a few dozen rows a model are not explained that way, and on the differing rows the trained model is right somewhat more often (377 rows against 281). Because a reply is many tokens long, about one reply in four ends up worded differently, usually where both replies were already poor. Nothing in the laptop reader was changed. The laptop numbers of claude-353 stand as readings of the models: at the full window the place read says the stated value on 238, 269 and 223 of 562 and the control on 76. On this evidence, what stands between this and a model worth talking to is mainly the trained model's own replies, not the copy.
+No fault was found in the laptop reader. Token by token the laptop copies choose what their trained models choose on about 99 rows in 100, and over all rows they are right nearly as often. Where the two differ, the reader was nearly undecided between two tokens. That is what the laptop's integer rounding would do, but the rounding was not measured, a small systematic error in the reader would look the same, a few dozen rows a model are not explained either way, and on the differing rows the trained model is right somewhat more often (377 rows against 281). Because a reply is many tokens long, about one reply in four ends up worded differently, usually where both replies were already poor. Nothing in the laptop reader was changed. The laptop numbers of claude-353 stand as readings of the models: at the full window the place read says the stated value on 238, 269 and 223 of 562 and the control on 76. On this evidence, what stands between this and a model worth talking to is mainly the trained model's own replies, not the copy.
