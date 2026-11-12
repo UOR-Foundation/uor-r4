@@ -35,9 +35,187 @@ pub struct Lab {
     pub role: Option<String>,
 }
 
+fn default_schema() -> u32 {
+    1
+}
+
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct LabsFile {
+    #[serde(default = "default_schema")]
+    schema: u32,
+    #[serde(default, rename = "note")]
+    _note: String,
     labs: BTreeMap<String, Lab>,
+}
+
+fn skip_json_space(bytes: &[u8], mut i: usize) -> usize {
+    while bytes
+        .get(i)
+        .is_some_and(|b| matches!(*b, b' ' | b'\n' | b'\r' | b'\t'))
+    {
+        i += 1;
+    }
+    i
+}
+
+fn json_string_end(bytes: &[u8], start: usize) -> Result<usize, String> {
+    if bytes.get(start) != Some(&b'"') {
+        return Err(format!("expected a JSON string at byte {start}"));
+    }
+    let mut i = start + 1;
+    while let Some(byte) = bytes.get(i) {
+        match byte {
+            b'\\' => i += 2,
+            b'"' => return Ok(i + 1),
+            _ => i += 1,
+        }
+    }
+    Err(format!("unterminated JSON string at byte {start}"))
+}
+
+fn json_container_end(bytes: &[u8], start: usize) -> Result<usize, String> {
+    let mut stack = Vec::new();
+    match bytes.get(start) {
+        Some(b'{') => stack.push(b'}'),
+        Some(b'[') => stack.push(b']'),
+        _ => return Err(format!("expected a JSON container at byte {start}")),
+    }
+    let mut i = start + 1;
+    while let Some(byte) = bytes.get(i) {
+        match byte {
+            b'"' => i = json_string_end(bytes, i)?,
+            b'{' => {
+                stack.push(b'}');
+                i += 1;
+            }
+            b'[' => {
+                stack.push(b']');
+                i += 1;
+            }
+            b'}' | b']' => {
+                if stack.pop() != Some(*byte) {
+                    return Err(format!("mismatched JSON container at byte {i}"));
+                }
+                i += 1;
+                if stack.is_empty() {
+                    return Ok(i);
+                }
+            }
+            _ => i += 1,
+        }
+    }
+    Err(format!("unterminated JSON container at byte {start}"))
+}
+
+fn json_value_end(bytes: &[u8], start: usize) -> Result<usize, String> {
+    let Some(&first) = bytes.get(start) else {
+        return Err(format!("expected a JSON value at byte {start}"));
+    };
+    match first {
+        b'"' => json_string_end(bytes, start),
+        b'{' | b'[' => json_container_end(bytes, start),
+        b'-' | b'0'..=b'9' => {
+            let mut i = start + 1;
+            while bytes
+                .get(i)
+                .is_some_and(|b| matches!(*b, b'0'..=b'9' | b'.' | b'e' | b'E' | b'+' | b'-'))
+            {
+                i += 1;
+            }
+            Ok(i)
+        }
+        b't' if bytes.get(start..start + 4).is_some_and(|v| v == b"true") => Ok(start + 4),
+        b'f' if bytes.get(start..start + 5).is_some_and(|v| v == b"false") => Ok(start + 5),
+        b'n' if bytes.get(start..start + 4).is_some_and(|v| v == b"null") => Ok(start + 4),
+        _ => Err(format!("expected a JSON value at byte {start}")),
+    }
+}
+
+fn raw_json_array_values(text: &str) -> Result<Vec<&str>, String> {
+    let bytes = text.as_bytes();
+    let mut i = skip_json_space(bytes, 0);
+    if bytes.get(i) != Some(&b'[') {
+        return Err("expected one JSON array".into());
+    }
+    i += 1;
+    let mut values = Vec::new();
+    loop {
+        i = skip_json_space(bytes, i);
+        if bytes.get(i) == Some(&b']') {
+            i = skip_json_space(bytes, i + 1);
+            if i == bytes.len() {
+                return Ok(values);
+            }
+            return Err("characters follow the JSON array".into());
+        }
+        let value_end = json_value_end(bytes, i)?;
+        values.push(&text[i..value_end]);
+        i = skip_json_space(bytes, value_end);
+        match bytes.get(i) {
+            Some(b',') => i += 1,
+            Some(b']') => {}
+            _ => return Err(format!("expected `,` or `]` after array item {i}")),
+        }
+    }
+}
+
+fn validate_json_value(value: &str) -> Result<(), String> {
+    match value.as_bytes().first() {
+        Some(b'{') => {
+            raw_json_object_members(value)?;
+        }
+        Some(b'[') => {
+            for item in raw_json_array_values(value)? {
+                validate_json_value(item)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// The immediate members of a JSON object, preserving each value's exact source text.
+/// Duplicate keys are refused after JSON-string decoding, so `x` and `\u0078` collide.
+pub(crate) fn raw_json_object_members(text: &str) -> Result<BTreeMap<String, &str>, String> {
+    let bytes = text.as_bytes();
+    let mut i = skip_json_space(bytes, 0);
+    if bytes.get(i) != Some(&b'{') {
+        return Err("expected one JSON object".into());
+    }
+    i += 1;
+    let mut members = BTreeMap::new();
+    loop {
+        i = skip_json_space(bytes, i);
+        if bytes.get(i) == Some(&b'}') {
+            i = skip_json_space(bytes, i + 1);
+            if i == bytes.len() {
+                return Ok(members);
+            }
+            return Err("characters follow the JSON object".into());
+        }
+        let key_start = i;
+        let key_end = json_string_end(bytes, key_start)?;
+        let key: String = serde_json::from_str(&text[key_start..key_end])
+            .map_err(|e| format!("cannot decode a JSON object key: {e}"))?;
+        i = skip_json_space(bytes, key_end);
+        if bytes.get(i) != Some(&b':') {
+            return Err(format!("expected `:` after JSON key {key:?}"));
+        }
+        let value_start = skip_json_space(bytes, i + 1);
+        let value_end = json_value_end(bytes, value_start)?;
+        let value = &text[value_start..value_end];
+        validate_json_value(value)?;
+        if members.insert(key.clone(), value).is_some() {
+            return Err(format!("JSON object repeats key {key:?}"));
+        }
+        i = skip_json_space(bytes, value_end);
+        match bytes.get(i) {
+            Some(b',') => i += 1,
+            Some(b'}') => {}
+            _ => return Err(format!("expected `,` or `}}` after JSON key {key:?}")),
+        }
+    }
 }
 
 fn registry_in(root: &Path) -> PathBuf {
@@ -71,10 +249,21 @@ pub fn load_labs(repo: &Path) -> Result<BTreeMap<String, Lab>, String> {
     let path = labs_path(repo);
     let text = std::fs::read_to_string(&path)
         .map_err(|e| format!("cannot read the lab registry {}: {e}", path.display()))?;
-    let doc: LabsFile = serde_json::from_str(&text)
-        .map_err(|e| format!("the lab registry {} is malformed: {e}", path.display()))?;
+    parse_labs(&text).map_err(|e| format!("the lab registry {} is malformed: {e}", path.display()))
+}
+
+fn validate_labs(doc: LabsFile) -> Result<BTreeMap<String, Lab>, String> {
+    if doc.schema != 1 {
+        return Err(format!("schema {} is not supported", doc.schema));
+    }
     if doc.labs.is_empty() {
-        return Err(format!("the lab registry {} lists no labs", path.display()));
+        return Err("it lists no labs".to_string());
+    }
+    for lab in doc.labs.keys() {
+        let slug = crate::state::slug(lab);
+        if lab != &slug {
+            return Err(format!("entry {lab:?} is not its canonical slug {slug:?}"));
+        }
     }
     Ok(doc.labs)
 }
@@ -82,12 +271,10 @@ pub fn load_labs(repo: &Path) -> Result<BTreeMap<String, Lab>, String> {
 /// The labs in registry `text` (the same checks as [`load_labs`], for text read from elsewhere,
 /// such as `git show origin/main:docs/harness/labs.json`).
 pub(crate) fn parse_labs(text: &str) -> Result<BTreeMap<String, Lab>, String> {
+    raw_json_object_members(text).map_err(|e| format!("the lab registry is malformed: {e}"))?;
     let doc: LabsFile =
         serde_json::from_str(text).map_err(|e| format!("the lab registry is malformed: {e}"))?;
-    if doc.labs.is_empty() {
-        return Err("the lab registry lists no labs".to_string());
-    }
-    Ok(doc.labs)
+    validate_labs(doc).map_err(|e| format!("the lab registry is malformed: {e}"))
 }
 
 /// Accept `name` only if the registry lists it.
@@ -128,7 +315,7 @@ pub fn resolve_lab(
 mod tests {
     use super::*;
 
-    const FOUR: [&str; 4] = ["antigravity", "claude", "deepseek", "kimi"];
+    const FIVE: [&str; 5] = ["antigravity", "claude", "codex", "deepseek", "kimi"];
 
     fn repo() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -145,16 +332,15 @@ mod tests {
     }
 
     /// The planted fault the loop ORDER requires: an unregistered lab is refused by the check and
-    /// by the resolver every recording command uses, and the refusal lists the four.
+    /// by the resolver every recording command uses, and the refusal lists the five.
     #[test]
     fn an_unregistered_lab_is_refused() {
         let err = check_lab(&repo(), "gemini").expect_err("gemini is not registered");
         assert!(err.contains("\"gemini\""), "{err}");
-        assert!(err.contains("antigravity, claude, deepseek, kimi"), "{err}");
-        // Codex left the loop on 26 Oct 2026 (claude-138): its name is refused like any other.
-        let err = check_lab(&repo(), "codex").expect_err("codex is not registered");
-        assert!(err.contains("\"codex\""), "{err}");
-        assert!(resolve_lab(&repo(), None, Some("codex".into())).is_err());
+        assert!(
+            err.contains("antigravity, claude, codex, deepseek, kimi"),
+            "{err}"
+        );
         let err = resolve_lab(&repo(), None, Some("gemini".into()))
             .expect_err("the resolver refuses it too");
         assert!(err.contains("\"gemini\""), "{err}");
@@ -162,8 +348,18 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_decoded_registry_keys_are_refused() {
+        let text = r#"{"schema":1,"labs":{
+            "codex":{"vendor":"OpenAI","client":"Codex","headless":"codex exec","open_pr_limit":3},
+            "\u0063odex":{"vendor":"Mallory","client":"Impostor","headless":"x","open_pr_limit":99}
+        }}"#;
+        let err = parse_labs(text).expect_err("the duplicate Codex key is refused");
+        assert!(err.contains("repeats key"), "{err}");
+    }
+
+    #[test]
     fn each_registered_lab_is_accepted() {
-        for lab in FOUR {
+        for lab in FIVE {
             check_lab(&repo(), lab).unwrap_or_else(|e| panic!("{lab}: {e}"));
             assert_eq!(
                 resolve_lab(&repo(), Some(lab.into()), None).as_deref(),
@@ -185,9 +381,9 @@ mod tests {
     }
 
     #[test]
-    fn the_real_registry_lists_exactly_the_four() {
+    fn the_real_registry_lists_exactly_the_five() {
         let labs = load_labs(&repo()).expect("labs.json loads");
-        assert_eq!(labs.keys().map(String::as_str).collect::<Vec<_>>(), FOUR);
+        assert_eq!(labs.keys().map(String::as_str).collect::<Vec<_>>(), FIVE);
         assert_eq!(labs["kimi"].role.as_deref(), Some("pm"));
         assert!(labs.values().filter(|l| l.role.is_some()).count() == 1);
     }
@@ -206,6 +402,34 @@ mod tests {
 
         let empty = with_registry(Some(r#"{"schema": 1, "labs": {}}"#));
         assert!(check_lab(empty.path(), "claude").is_err());
+
+        let unknown_top = with_registry(Some(
+            r#"{"schema":1,"unexpected":true,"labs":{"claude":{"vendor":"Anthropic","client":"Claude Code","headless":"claude -p","open_pr_limit":3}}}"#,
+        ));
+        let err = load_labs(unknown_top.path()).expect_err("unknown top-level fields are refused");
+        assert!(err.contains("unknown field"), "{err}");
+    }
+
+    #[test]
+    fn registry_keys_must_be_their_own_slug() {
+        for alias in ["Codex", "codex_", "codex-"] {
+            let text = serde_json::json!({
+                "schema": 1,
+                "labs": {
+                    "codex": {
+                        "vendor": "OpenAI", "client": "Codex", "headless": "codex exec",
+                        "open_pr_limit": 3
+                    },
+                    (alias): {
+                        "vendor": "Other", "client": "Other", "headless": "other",
+                        "open_pr_limit": 3
+                    }
+                }
+            })
+            .to_string();
+            let err = parse_labs(&text).expect_err("an aliased registry key is refused");
+            assert!(err.contains("canonical slug"), "{alias}: {err}");
+        }
     }
 
     /// Every owner path that is not a glob exists, so the list cannot name a file that moved.

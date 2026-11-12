@@ -141,7 +141,7 @@ pub fn check_client(client: &str) -> Result<String, String> {
 pub fn client_lane(client: &str) -> &'static str {
     match client {
         "claude" => "loop architecture, core gates and setup reviews (D52, D59)",
-        "codex" => "item validator, gates runner, policy check and review records (PRs 2, 4, 5, 6)",
+        "codex" => "builder and reviewer; current work from PLAN.md",
         "kimi" => "PM, rendered views, notes migration and render refresh (PRs 3, 8, 10)",
         "antigravity" => "client adapters: loop guard, install, onboard and copyright (PR 9)",
         "deepseek" => {
