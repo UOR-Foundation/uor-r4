@@ -56,7 +56,7 @@ One pod, four jobs one after another, in stage 3's order.
 | p-s1, p-s3 | stage 3's commands plus the flag | whether p-s2's difference repeats |
 
 - **Each retrained model is compared with stage 3's model of the same name,** exported with the header field. The two share the seed, the data, the 16,384 steps and the recipe. They are trained at two pins: stage 3's at `93e089ff256654e75a19641b7e2fbd2bc8e24524`, the retrained ones at claude-357's merge commit. **That they differ by the flag only rests on two things:**
-  - **The commits between the pins.** Two touch the trainer's crate, and none touches a crate it links (`uor-r4-training`, `uor-r4-core`, the lock file). `1966da68b` (claude-352) changed the `--panel-prompts` mode only: the prompt writer takes `--context` and `--sample-opening`. In a training run its two changed lines in `main` pass the same arguments as before. The other is claude-357's own change. With the flag off its three new paths do nothing: the leave rule returns the old function on its first line, the copy read's choice gets no extra key term, and the marker check returns at once.
+  - **The commits between the pins.** Three touch the trainer's crate, in two changes, and none touches a crate it links (`uor-r4-training`, `uor-r4-core`, the lock file). `1966da68b` (claude-352) changed the `--panel-prompts` mode only: the prompt writer takes `--context` and `--sample-opening`. In a training run its two changed lines in `main` pass the same arguments as before. The other two, `367e05e04` and `183bfabd0`, are claude-357's own change. With the flag off its three new paths do nothing: the leave rule returns the old function on its first line, the copy read's choice gets no extra key term, and the marker check returns at once.
   - **A flag-off smoke at the pin (I-n),** whose start-up lines must equal stage 3's.
 - Not run, and what that leaves unsaid: no arm with the copy read's rule on and the leave rule left as it was, so a result cannot say which of the two did what. No arm with the second token after a bare-space opening spared. No fourth seed. One control seed.
 
@@ -100,7 +100,7 @@ A Level reading closes nothing: see "Minimum test power" for what it can and can
 ## Instrument checks
 
 - **I-p:** a clean checkout at exactly the pin on the pod.
-- **I-g, the tensor code's first run:** before anything trains, `cargo test --release -p uor-r4-float-train --features cuda --lib -- longe leave_rule marker_check place` on the pod. The output must show `the_longest_choice_takes_the_longer_match_except_at_an_opening` and `the_longest_rule_reads_what_followed_the_longer_match_except_at_an_opening` as `ok`: both were written and type-checked in claude-357 and have never run. **A failed test, a test build that does not compile, or either of the two tests missing from the output is row 0 and stops the run before any training.** The two tests must also be able to fail on the pod: in a scratch copy of the checkout (the pinned checkout stays clean), the kit's one-line patch takes the longer-match term out of the choice in `choose_sorted_asking`, and both tests must then fail. A test that passes with the term out is row 0. The copy is deleted before anything trains.
+- **I-g, the tensor code's first run:** before anything trains, `cargo test --release -p uor-r4-float-train --features cuda --lib -- longe leave_rule marker_check place` on the pod. The output must show `the_longest_choice_takes_the_longer_match_except_at_an_opening` and `the_longest_rule_reads_what_followed_the_longer_match_except_at_an_opening` as `ok`: both were written and type-checked in claude-357 and have never run. **A failed test, a test build that does not compile, or either of the two tests missing from the output is row 0 and stops the run before any training.** The two tests must also be able to fail on the pod: in a scratch copy of the checkout (the pinned checkout stays clean), the one-line patch `docs/loop/tasks/one-model-end-to-end/claude-357/i-g-set-aside.patch` of the pinned checkout (SHA-256 `6d5536f61aee576fd4b218b48ffa6fa17bf1307214d0e536b9737c3a693de923`) takes the longer-match term out of the choice in `choose_sorted_asking`, and both tests must then fail. The patched copy must compile, as it does under the laptop's stub compiler; a copy that does not is row 0 too. A test that passes with the term out is row 0. The copy is deleted before anything trains.
 - **I-3:** TRAIN's, the scoring panel's and the kit's files match the hashes above before training.
 - **I-m, the marker:** each run's log holds the trainer's line `the longest rule's marker 714,28 stands before every reply opening and nowhere else: TRAIN 215017, DEV 1226`. The trainer refuses to start otherwise. Each scoring pass's log, the smoke's included, holds `[longest] the checkpoint reads by the marker 714,28: p has it before every reply opening and nowhere else: 3586`: the line is printed only when the checkpoint itself carries the marker, and the pass refuses a panel that fails the check. A scoring pass without the line is row 0.
 - **I-s:** a 64-step smoke of p and of n with the flag, on the same inputs. Each must train; p's folder must hold a `place.jsonl` line for the smoke's checkpoint and n's must hold none, as in stage 3.
@@ -123,7 +123,7 @@ A Level reading closes nothing: see "Minimum test power" for what it can and can
   | p-s3 | 40,719 | 597 | 1,206 | 32 |
   | n-s2 | 40,719 | 504 | 1,139 | 31 |
 
-  A model that reads by one rule and is served by the other differs on 609 to 707 more rows of 40,719, and on no more opening rows, where the two rules are one. So the check separates the two cases by several hundred rows. The first column equals claude-354's counts for the same four artifacts.
+  A model that reads by one rule and is served by the other differs on 609 to 707 more rows of 40,719, and on no more opening rows, where the two rules are one. So the check separates the two cases by several hundred rows. The first column equals claude-354's counts for the same four artifacts. The last column is `row-picks`' count at step 0, the first row of each reply.
 
 - **Seal:** each job's `run/` is sealed with a file list and SHA-256 sums, put in the store under `results/claude/one-model-end-to-end-copy-longest-2026-11-12/run/<job>/<try>/` and read back. A run is never written into an existing root (L-002).
 
@@ -140,14 +140,14 @@ A Level reading closes nothing: see "Minimum test power" for what it can and can
 
 ## Minimum test power
 
-- **Noise.** Stage 3's three p models, read with the rule on the seed 15 panel, gave 268, 304 and 270 of 560: a standard deviation of 20 replies between seeds of one recipe. It rests on three models, two degrees of freedom, so it is a loose figure. If training the same seed with one more flag keeps none of that seed's character, D has a standard deviation near 29 replies and M near 17, which is 0.029 of 578.
+- **Noise.** Stage 3's three p models, read with the rule on the seed 15 panel, gave 268, 304 and 270 of 560: a standard deviation of 20 replies between seeds of one recipe. It rests on three models, two degrees of freedom, so it is a loose figure. It was measured on the seed 15 panel, of 560, and is applied here to the seed 16 panel, of 578. It also takes no account of the pairing by seed, which would make D's spread smaller, so the power stated below is on the low side. If training the same seed with one more flag keeps none of that seed's character, D has a standard deviation near 29 replies and M near 17, which is 0.029 of 578.
 - **The bar against it.** +29 is about 1.7 standard deviations of M. With no true effect, M reaches +29 about 1 time in 20, before the two-seed bar is applied.
 - **What the run can show.** A large gain (+60 or more) reads Better nearly always, and harm of that size reads Worse. **A true gain of the predicted size reads Level more often than not:** by these figures M reaches the bar about 13 times in 100 at a true +10, about 1 time in 2 at +29, and about 74 times in 100 at +40, before the two-seed bar is applied. Level therefore says "under +29 on this panel at three seeds", not "no effect".
 - The control has one seed and is not a powered reading.
 
 ## Steps
 
-1. **On the laptop, before the pod:** claude-352's kit under new names, with the pin and the flag; the pinned builds; I-o and I-w at the pin; the four comparison artifacts at the hashes above.
+1. **On the laptop, before the pod:** claude-352's kit under new names, with the pin and the flag; the pinned builds; I-o and I-w at the pin; the four comparison artifacts at the hashes above; the set-aside patch of I-g at its hash.
 2. **On the pod, before anything trains:** I-p, I-g with its set-aside, and I-3. Then the three 64-step smokes (p and n with the flag, p without) with I-m, I-s, I-r, I-k, I-n and I-b, and the scoring pass's own arguments at full size on p's flag-on smoke checkpoint.
 3. **The four jobs of the Arms table,** each with its scoring pass and each sealed on exit.
 4. **The pod's four checks,** then the pod goes down.
@@ -211,4 +211,36 @@ What changed for each point:
 | 5 | Row 3: nothing closes; further training of the rule is a routing choice put to the owner. |
 | 6 | Cost: the expected figure at stage 3's rate and at the ceiling. |
 
-TEST FITNESS: PENDING - research, #3407, no fitness read yet (claude-357)
+### Second read, of the sheet at `8a1f935c743d21550bc29787cf1cb977c23f462c`: FIT
+
+Another fresh `delegate:reviewer` subagent, which had not seen the first read's session, with the sheet, the code at that commit, stage 3's logs and the calibration receipts:
+
+> FIT
+>
+> 1. Non-blocking. Arms, "The commits between the pins". The sheet says "Two touch the trainer's crate", but three commits in the range touch it: `1966da68b`, `367e05e04` and `183bfabd0`. The text then counts claude-357's two commits as one change ("The other is claude-357's own change"), so the claim itself holds. To clear it, write "three commits, two changes: 1966da68b, and claude-357's 367e05e04 and 183bfabd0".
+> 2. Non-blocking. Instrument checks, I-g. The negative gate depends on "the kit's one-line patch", and this read cannot see that patch at the pin. To clear it, name the patch's path and SHA-256 in Steps 1, so the pod applies a known patch to the scratch copy.
+> 3. Non-blocking. Minimum test power. The sd of 20 comes from the seed 15 panel (of 560) but is applied to the seed 16 panel (of 578). The null rate is about 1 in 25 one-sided (z = 1.76), which is close enough to "1 in 20". It also ignores the pairing by seed, which would likely make D's sd smaller. The direction is conservative, so the statement stays honest. To clear it, add one clause naming the panel difference.
+> 4. Non-blocking. Instrument checks, I-u. The calibration table's last column is the step-0 bucket of `row-picks`, while the sheet calls it "opening rows". To clear it, say so in a footnote.
+>
+> No blocking point remains. Every bar and check can fail. A flag that never reaches training now fails three independent checks: I-k (N = 160,416), I-u (sign) and I-m (scoring line). Each lands in row 0, and every row names a next step.
+>
+> First-read points:
+> 1. cleared (I-k equality is row 0; I-u calibrated and can fail; I-m scoring line; I-g set-aside)
+> 2. cleared (commit list plus I-n flag-off smoke against stage 3's eight [memory] lines and step 0 line)
+> 3. cleared (row 0 splits I-f/I-u by side)
+> 4. cleared (13/50/74 in 100, two degrees of freedom stated)
+> 5. cleared (row 3 closes nothing; owner routing)
+> 6. cleared ($3.60–$5.50 at $0.908/h, $9.60 at ceiling)
+>
+> Facts:
+> 1. Holds in substance. The range has three commits: 1966da68b, 367e05e04 and 183bfabd0. In train-in-space.rs, 1966da68b changes `context_applies(..., score.is_some() || panel_prompts_on)` and replaces the `--sample-opening` refusal with `prompt_cut_applies`. Both act the same in a training run (panel_prompts_on false, last_opening None). Its in_space_long.rs hunks touch only `PanelPrompt`, `split_prompts`, `panel_prompts` and tests. None of these runs during training. The sheet's "two commits" wording is loose (point 1).
+> 2. Holds. `copy_names_ruled` returns `copy_names_by` on `None`. `check_run_markers` returns `Ok(())` at once without the flag. `room = time` and no key term are added when `longer` is `None` (flock_read_hamming.rs:3425, 3440–3443).
+> 3. Holds. in_space_long.rs:1496 (reply keys), :9517 (checkpoint reads by the marker), :5834 (stands before every reply opening). Lines 5834 and 1496 carry the `[hamming]` and `[memory]` prefixes.
+> 4. Holds. Each log has 8 `[memory]` lines, identical between p-s2 and n-s2. The two step 0 lines are identical and equal the line I-n quotes.
+> 5. Holds. Plain 670/520/597/504, field 1351/1227/1206/1139, so the field export differs on 681/707/609/635 more rows (609–707). Step-0 counts are equal in both (34/34/32/31).
+> 6. Holds. sd 20.2, D 28.6, M 16.5. P(M ≥ 29) is 0.125 at +10, 0.50 at +29 and 0.75 at +40. The null rate is 0.04.
+> 7. Holds. 4–6 h at $0.908/h is $3.63–$5.45, quoted as $3.60–$5.50. At $1.60/h, 6 h is $9.60 and 10 h is $16.
+
+Its four notes were taken after the read, and no bar, reading or outcome row changed: the three commits are named in Arms; the set-aside patch is a file of the pinned checkout, named with its SHA-256 in I-g and in step 1; the panel difference and the pairing are named in Minimum test power; the calibration table's last column is named as step 0.
+
+TEST FITNESS: FIT - research, #3407, second read by a fresh non-author reviewer after a first NOT FIT (claude-357)
