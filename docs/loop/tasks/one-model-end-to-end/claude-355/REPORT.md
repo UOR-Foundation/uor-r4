@@ -178,7 +178,7 @@ None beyond the project loop. Review inside the unit: two fresh-context reviewer
 - **A retrain with the rule (stage 2 of the plan).** Not recommended on this result as the rule stands: what a model trained with the rule would do at a reply's opening is not known.
 - **No agreement between a trained model and its laptop copy is claimed under the new rule.** The copy reads differently from its trained model on purpose (ORDER, decision 3).
 - **`uor-chat --script` or `--say` with `--copy-rule` prints its notice line on standard output before the JSON record**, so the output is not one JSON record. It has done so since the flag was added (claude-345); it is not changed here.
-- **Untouched by this unit:** the value's first token (right on 308 to 315 of 562 with the true words before it), questions about things never told (turn 9 above), facts and sums (turn 2 above).
+- **Untouched by this unit:** the value's first token (right on 308 to 315 of 562 with the true words before it; counted for the plan before this unit, with `forced.jq` of the same kit, and not counted again here), questions about things never told (turn 9 above), facts and sums (turn 2 above).
 
 ## Plain summary
 
