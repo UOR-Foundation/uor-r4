@@ -1,7 +1,7 @@
 # ORDER: infra-loop-harness, claude-292 (bootstrap Codex registration)
 
 Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md)
-(#2904).
+(#2904). Setup row: 1 (the lab registry and its no-identity hint).
 
 ## Goal
 
