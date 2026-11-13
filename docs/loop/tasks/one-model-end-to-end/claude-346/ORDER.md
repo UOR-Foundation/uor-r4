@@ -39,7 +39,13 @@ No memory is the run without the flag, which writes the same `config.json` as be
 
 **Rules check** (CHARTER §3). Geometry only: the address is the E8 root system the project's cells already use. §3.2: no squashing function; the band's `max(0, ·)` is a clamp at zero. §3.3: no dense product of a state with a table, in training or serving: the read is 32 row lookups and adds. §3.6 excludes "a dense model disguised as lookup tables"; a row here is chosen by one block's nearest root and added whole, as the token table's row is chosen by a token. The first test's sheet carries this check to its FIT.
 
-**Not in scope.** Any GPU run (the next unit's sheet, FIT and pre-run review). The integer runtime's section for the rows and the exporter: `fbs_export` refuses a checkpoint holding `address_memory.safetensors` until then, so nothing is served by accident. The state-keyed margin read (T2). T0 (claude-345).
+**Amended on 13 Nov: the part's first training run moves into this unit.** This is a scope change, taken on the lab's own decision review and logged here for Casey, who can reverse it (CHARTER §5.1).
+- **What changes.** The run of [the address-memory sheet](../../../../harness/prep/one-model-end-to-end-address-memory-2026-11-13.md), with its FIT and its pre-run review, is in scope. It trains the part inside today's model on the model's own corpus at two seeds, and on OASST2, in place of the memorize set this ORDER's goal names.
+- **Why.** The part was built on 9 Nov and its GPU tests passed on 10 Nov. With the run left to "the next unit", the part then sat untrained for three days while this unit stayed a draft. The gap it fills, that almost nothing is learned between a state and the next, is the first of the seven gaps given to Casey on 13 Nov. Casey ruled the memorize test out as a track on 11 Nov ("T0 is not a track that will advance the project").
+- **What the review read.** The gap list of 13 Nov, `PLAN.md`'s owner direction, the 9 Nov design, claude-358's three seeds of the same recipe (188, 188 and 225 exact replies of 1,108), DeepSeek's memorize-set sheet for this part (not run here), and the GPU caps.
+- **What does not change.** Items 1 to 4 of Done when, and no bar: none existed for a run.
+
+**Not in scope.** ~~Any GPU run (the next unit's sheet, FIT and pre-run review).~~ (amended above). The integer runtime's section for the rows and the exporter: `fbs_export` refuses a checkpoint holding `address_memory.safetensors` until then, so nothing is served by accident. The state-keyed margin read (T2). T0 (claude-345).
 
 ## Cancel probe (run first)
 
@@ -57,6 +63,7 @@ No memory is the run without the flag, which writes the same `config.json` as be
 - `crates/uor-r4-float-train/src/geometric_stack_native.rs` (the hook, one cache test)
 - `crates/uor-r4-float-train/src/in_space_long.rs` and `crates/uor-r4-float-train/src/bin/train-in-space.rs` (the flag, the optimizer, the rounding, the save and load, the census)
 - `docs/roadmap/items/one-model-end-to-end.md` (the two new paths added to the item's `scope:`)
+- `docs/harness/prep/one-model-end-to-end-address-memory-2026-11-13.md` and the item's row in `docs/research/notebook/float-training.md` (added 13 Nov with the run)
 
 ## Done when
 
@@ -66,3 +73,4 @@ No memory is the run without the flag, which writes the same `config.json` as be
 Amended on 10 Nov, before any commit. Items 1 and 2 first read "tests that run on the laptop" for the reads and the gradients too. The vendored tensor library refuses every arithmetic op on the laptop (`cpu_backend::refuse_cpu`, D24/D29), so no tensor test can run here. The decode's closed form is therefore written a second time in plain Rust inside the tests and checked on the laptop against the search; the tensor code is held to that second form on the GPU.
 3. A run without the flag writes the same `config.json` and reads no new file.
 4. The REPORT gives the negatives first, with the tests run and the ones only a pod can run named.
+5. (Added 13 Nov.) The run's sheet has a fresh non-author FIT, every stage that ran is sealed in the store, and the REPORT gives each reading against the sheet's bars, with the replies word for word.
