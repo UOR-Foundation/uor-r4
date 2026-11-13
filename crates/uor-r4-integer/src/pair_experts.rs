@@ -418,6 +418,21 @@ impl PairExperts {
             .map(|at| at as u32)
     }
 
+    /// Whether the exact turn, as a token sequence, was counted with this reply.
+    pub fn turn_holds(&self, turn: &[u32], reply: &[u32]) -> bool {
+        let Some(reply) = self.reply_index(reply) else {
+            return false;
+        };
+        self.turns
+            .binary_search_by(|t| t.tokens.as_slice().cmp(turn))
+            .map_or(false, |at| {
+                self.turns[at]
+                    .counts
+                    .binary_search_by_key(&reply, |c| c.reply)
+                    .is_ok()
+            })
+    }
+
     /// The vocabulary the table was counted on.
     pub fn vocab(&self) -> u32 {
         self.vocab
@@ -865,6 +880,23 @@ mod tests {
                 score: 2_796_202
             })
         );
+    }
+
+    #[test]
+    fn a_turn_holds_only_the_replies_it_was_counted_with_in_its_own_order() {
+        let experts = table(&sample());
+        assert!(experts.turn_holds(&[0, 1, 2], A));
+        assert!(experts.turn_holds(&[0, 1], B));
+        // The same tokens in another order are another turn; another reply was not counted with
+        // it; a reply the table never saw is held by no turn.
+        assert!(!experts.turn_holds(&[2, 1, 0], A));
+        assert!(!experts.turn_holds(&[0, 1, 2], B));
+        assert!(!experts.turn_holds(&[0, 1], A));
+        assert!(!experts.turn_holds(&[0, 1, 2], &[7]));
+        // A table read back from its file holds the same.
+        let read = PairExperts::from_bytes(&experts.to_bytes()).unwrap();
+        assert!(read.turn_holds(&[1, 2, 3], A));
+        assert!(!read.turn_holds(&[1, 2, 3], B));
     }
 
     #[test]
