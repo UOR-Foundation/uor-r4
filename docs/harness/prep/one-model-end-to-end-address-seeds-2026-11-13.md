@@ -8,13 +8,14 @@ Served as integer artifacts on the laptop, do the models trained with the addres
 
 - **What exists.** claude-346 trained three address models at 16,384 steps: `e8-s2`, `e8-s3` and `token-s2`. In float they give more exact everyday replies than the same recipe without the table (of 520: 119 without; 142 and 177 for `e8`; 141 for `token`). Its bar on all 1,108 replies read "not called" (M +29.5 against +30), and its sheet names seed 1 of `e8` as the next run.
 - **What is missing.** Each arm needs three seeds beside the three saved models, and no address model has a snapshot, so none can be exported.
-- **This sheet covers two pod visits:** the three missing training jobs, and one short job that takes a snapshot of all six address checkpoints.
+- **This sheet covers two kinds of pod visit:** the three missing training jobs, and a short snapshot job for the six address checkpoints and `b-s2`. The snapshot job runs in two passes, each on its own short-lived pod: the four checkpoints already sealed, then the three new seeds when their lanes have sealed.
 
 ## Base artifact
 
 - **Recipe:** claude-358's p arm with `--address-memory ARM`, word for word as in [claude-346's sheet](one-model-end-to-end-address-memory-2026-11-13.md) (its Base artifact and Arms).
 - **Training pin:** `f941a33fd1a4eea751705d1cd6021af35452a4b7`, claude-346's pin, so the three new models are trained by the code that trained the three sealed ones.
-- **Snapshot pin:** a pushed commit of this unit's branch at which the ORDER's Done-when 1 tests pass. It is written into this sheet before the snapshot pod goes up; that amendment changes no question, arm, reading or bar.
+- **Snapshot pin:** `78705230ef176f325e890d901ce881893c1d6d9b`, this unit's branch with main merged in, pushed as the branch `claude/address-snapshot-pin`. The ORDER's Done-when 1 tests pass there on the laptop. Writing it here changes no question, arm, reading or bar.
+- **Found on the laptop on 13 Nov, before any address artifact was read:** `b-s2`'s sealed snapshot exports to p-s2's artifact byte for byte (SHA-256 `f4667934627e99d709533f30505058fdf07912ddf3cfc9ade6ded5f415e8c680`). At seed 2 the two pins train the same model, so `b-s2` is p-s2 and its served replies are p-s2's.
 - **Sealed address models** (claude-346, float scoring pass, replies equal to the wanted reply of 1,108): `e8-s2` 218 (`run/e8-s2/try-3`), `e8-s3` 254 (`run/e8-s3/try-3`), `token-s2` 219 (`run/token-s2/try-4`), under `results/claude/one-model-end-to-end-address-memory-2026-11-13/`.
 - **Two pins, and the check between them.** The saved p models were trained at claude-358's pin `f694d162d9b04d1226fd17c0a81825f00e9da007`; every address model is trained at `f941a33f…`. claude-346 ran the saved recipe with no address table at `f941a33f…` and seed 2 (`b-s2`, sealed at `run/b-s2/try-4`): 188 exact of 1,108 in float, claude-358's figure for p-s2. That check is one seed and in float. So `b-s2` gets a snapshot with the address checkpoints and is served beside p-s2 as a same-pin reading, with no bar.
 - **Compared with, not rerun:** claude-358's three saved models, as exported then.
@@ -47,7 +48,9 @@ Training, one job a pod, each after its pod's pre stage:
 | `token-s1` | b | `token` | 16,384 | 1 |
 | `token-s3` | c | `token` | 16,384 | 3 |
 
-The snapshot job (one pod, after the served form is built): for each of the six address checkpoints, `fbs-snapshot` at the snapshot pin writes the trunk snapshot with the rows beside it, and the served float readout with the rows set on the trunk; `b-s2`, which has no rows, gets the same snapshot without them. Nothing trains.
+The snapshot job (after the served form is built): for each of the six address checkpoints, `fbs-snapshot` at the snapshot pin writes the trunk snapshot, and beside it a rows file holding the table's rows in the whole steps the trainer's own scoring rounds them to. The snapshot names that file by arm, shape and SHA-256. `b-s2`, which has no rows, gets the same snapshot without them, compared byte for byte with the one its training job wrote at claude-346's pin. Nothing trains.
+
+**Changed from this sheet's first form (13 Nov).** It promised a served float readout "with the rows set on the trunk". The snapshot tool as built refuses a float readout for an address checkpoint: its readout path does not add the rows, so the readout would describe the trunk without its table. No float readout is taken. What the readout was for, the row check and the check that the rows are read, is done on the laptop from the picks each training run's own scoring pass sealed (Readings; Instrument checks, I-d).
 
 - **Rules check (§3).** As in claude-346's sheet: the `e8` address is the E8 root system the project's cells use; the read is 32 row lookups and adds a layer and token; no squashing function; no state is multiplied with a table. `token` is a learned table addressed by a fixed hash of the input token: it was the `e8` arm's control, and whether it may be served in a product is the owner's reading of §3.1.
 - Not run: a no-address job (claude-358's three are the pairs); the `sign` arm; a fourth seed.
@@ -58,7 +61,7 @@ The snapshot job (one pod, after the served form is built): for each of the six 
 
 - **G:** everyday replies of the seed-23 panel (not a repeat row, not a recall or never-told question) that are the reference or a reply TRAIN gives the same user turn word for word, and end.
 - **D** = G of an address model − G of the saved model of the same seed. **M** = the mean of D over an arm's three seeds.
-- **The row check:** the share of the snapshot's scored rows on which the artifact picks the token its own float model picks, beside the saved models' share (lowest 0.9860).
+- **The row check:** the share of the scored rows on which the artifact picks the token its own float model picks, beside the saved models' share (lowest 0.9860). The float picks are the ones the model's training run sealed from its scoring pass (`score/STAGE/rows-p-memory.json`), as claude-358's check reads them.
 - **Reported, no bar:** told values stated; never-told questions answered "not told"; replies that never end; the nine-turn conversation word for word; tokens a second with and without the rows; `b-s2`'s G beside p-s2's (the same recipe at the two pins).
 - **Where this runs, and the rule (CHARTER §3.6).** §3.6 allows serving the artifact on a client device and says "panel scoring, qualification and milestone evaluation of an exported artifact remain GPU research compute". These readings are the product served on the laptop with its replies read and counted by kind, as claude-356 to claude-365 did in merged units. They choose which models the line builds on next. They qualify nothing: no milestone claim, no qualification bar and no charter bar rests on them. Whether a count by kind of served replies is "panel scoring" under §3.6 is the owner's reading; it is named in the REPORT and put to the owner with a proposed wording. If the owner reads it so, the counts are redone on GPU compute before anything is built on them.
 
@@ -98,7 +101,9 @@ An arm with a Row 0 artifact has no word: the export or the reader is repaired f
 ## Instrument checks
 
 - **Training pods:** claude-346's pre stage, unchanged (I-p, I-g, I-3, I-s, I-n, I-z, I-a, I-r and the scoring pass's arguments). Each long job repeats I-n and I-a on its own log and files.
-- **Snapshot pod.** I-p: a clean checkout at the snapshot pin. I-g: the `e8_address` tests pass on the pod's GPU, with the test that the snapshot's rows are the trainer's own rounding. I-c: each checkpoint's files have the sums of its seal. I-d: a checkpoint's served readout taken with the rows set differs from one taken with the rows left out (the rows are read).
+- **Snapshot pod.** I-p: a clean checkout at the snapshot pin. I-g: every `e8_address` test passes on the pod's GPU, among them the three this unit adds (the tensor decode names the served cell; the token cells are the served hash; the served image holds the rounded rows), and the export's refusal test. I-c: each checkpoint's files have the sums of its seal, and its sealed run ended 0. I-n: each address snapshot's note matches its rows file (arm, 8-wide blocks, 240 cells, six layers, width 256, 23,592,988 bytes, SHA-256); `b-s2` has neither a note nor a rows file, and the job says whether its snapshot equals the one its training job wrote.
+- **I-d, changed (13 Nov): on the laptop, not the pod.** Each address artifact's row check is taken beside the same snapshot exported with all-zero rows of the same shape. If the trained rows are read, and at the cell and layer the trainer wrote them to, the artifact agrees with its float run's sealed picks at the saved models' level, and the all-zero export agrees on fewer rows. An artifact below the row check's floor is not read for G, D or M until the cause is found.
+- **Done on the laptop, 13 Nov, at real size.** `b-s2`'s sealed snapshot exported with an all-zero table of the recipe's shape (23.6 MB) gives the same 120 replies, id for id, as without it, served with the counted table. The exporter refuses a note without its rows, rows without a note, and a rows file with one byte changed. Reading a prompt goes from 3,392 to 2,977 tokens a second with the table, and writing a reply from 1,222 to 1,121, both timed at the same moment.
 - **Laptop.** The integer cell of a block equals the float trainer's on shared vectors, walls and ties included; the read adds the row the address names and no other; an artifact with no rows reads byte for byte as today. Each fails with its rule set aside.
 
 ## Risks the build leaves open
@@ -109,7 +114,9 @@ An arm with a Row 0 artifact has no word: the export or the reader is repaired f
 - The `token` arm fills its rows differently from `e8` and has no band, as claude-346's sheet says.
 - G counts a reply right only when TRAIN gives it for that turn word for word; a right reply in other words counts as wrong for every model alike.
 - **The counted table was set on the saved models.** claude-365 chose `asks-floors.json`'s floors while reading the saved models on the seed-22 panel. On told values and never-told questions, the two guard readings, that favours the saved models; an address model can lose a guard for that reason and not for its own.
-- **The pins differ** (Base artifact). The same-pin check is one seed in float; `b-s2` beside p-s2 is the served check.
+- **The pins differ** (Base artifact). At seed 2 they train the same model to the byte (found 13 Nov). Seeds 1 and 3 have no such check: no run of the saved recipe exists at claude-346's pin for them.
+- **Where the read sits in a layer is not pinned by a laptop test.** The laptop's tests pin the cell rule and that the named row and no other is added. Only the row check on trained models tests that the reader adds the rows at the point of the layer where the trainer does.
+- **The artifact's schema with a table, `uor-r4.lut-stack/11`, is a research schema.** It has no stack contract, and an artifact with a table is about 43 MB against 19.3 MB.
 
 ## Minimum test power
 
@@ -124,16 +131,16 @@ That is enough to choose which models the line builds on next, and not enough fo
 
 1. Launch pod a (`try-1`), watch it reach its chain, then pods b (`try-2`) and c (`try-3`). Each pod's watcher is armed before anything ships. `uor-pod status` is read first.
 2. Each pod runs pre, then its one job; each stage is sealed to `results/claude/one-model-end-to-end-address-seeds-2026-11-13/run/STAGE/TRY` and read back. A pod goes down when its chain ends with every job 0 and every seal 0 and the four checks pass.
-3. When the served form's tests pass, the snapshot pin and the snapshot job's kit are written here and take their own fresh read; then one pod takes the seven snapshots, sealed to `…/snap/MODEL/TRY`.
+3. The snapshot pin and the snapshot job's kit (`snapjob-366.sh`, `chainsnap-366.sh`, `sealsnap-366.sh`, `upsnap-366.sh`, and the watcher with its gate `gate-snap-366.sh`) take their own fresh read. Then pass 1: one pod, session `claude-366-s`, `try-4`, takes the snapshots of `e8-s2`, `e8-s3`, `token-s2` and `b-s2` from claude-346's seals. Each model is sealed to `…/snap/MODEL/try-4` and the job's record to `…/snap/record/try-4`, each read back; the pod goes down when the chain ends with the job 0 and every seal 0 and the four checks pass. Pass 2, when the three lanes have sealed: the same on a new pod, `try-5`, for `e8-s1`, `token-s1` and `token-s3`. One model's failure does not stop the others; it is recorded and that model is not read.
 4. On the laptop: export and the row check; the seed-23 panel is written and its SHA-256 committed and pushed; then the readings, the REPORT and the notebook row.
 
 ## Cost
 
-Three RTX 5090 pods, each refused above $1.60/h. A pod runs pre, about 57 minutes of training at the measured 0.21 s a step, and a scoring pass of up to 40 minutes: 1.7 to 2 hours. Then one pod for under an hour. $4 to $11 in all; claude-346 paid $2.97 and $3.29 for its two lanes. Three pods at once are at most $4.80/h, inside the caps of 4 pods and $8/h.
+Three RTX 5090 pods, each refused above $1.60/h. A pod runs pre, about 57 minutes of training at the measured 0.21 s a step, and a scoring pass of up to 40 minutes: 1.7 to 2 hours. Then the snapshot job: two passes of one pod each, under an hour a pass (a build, the tests, then for each checkpoint a fetch of about 80 MB and a seal of about 70 MB), each pod refused above $1.60/h. $4 to $13 in all; claude-346 paid $2.97 and $3.29 for its two lanes. Three training pods at once are at most $4.80/h; with the first snapshot pass beside them, four pods at most $6.40/h, inside the caps of 4 pods and $8/h. The three lanes as launched cost $3.14/h together.
 
 ## Compute and stop rule
 
-Vast through `scripts/pod/uor-pod`, sessions `claude-366-a`, `claude-366-b`, `claude-366-c`. A stall, spend or time notice is never a stop: a healthy run is extended and the notice is recorded. A failed pre stops its pod's job. A failed scoring pass is said and does not fail its job. No run writes into an existing root (L-002).
+Vast through `scripts/pod/uor-pod`, sessions `claude-366-a`, `claude-366-b`, `claude-366-c` for the lanes and `claude-366-s` for the snapshot job. A snapshot pod's watcher gives its time notice at 90 minutes and its spend notice at $3. A stall, spend or time notice is never a stop: a healthy run is extended and the notice is recorded. A failed pre stops its pod's job. A failed scoring pass is said and does not fail its job. No run writes into an existing root (L-002).
 
 ## FIT
 
