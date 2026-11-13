@@ -8998,6 +8998,15 @@ fn drawn_address(arm: super::AddressArm, width: usize, layers: usize, reach: i64
     super::AddressImage::checked(arm, 0x0123_4567_89AB_CDEF, width, rows).expect("a table of the stack's size")
 }
 
+/// A drawn address table whose rows are zero in every layer but `only`.
+fn one_layer_address(arm: super::AddressArm, width: usize, layers: usize, reach: i64, only: usize) -> super::AddressImage {
+    let drawn = drawn_address(arm, width, layers, reach);
+    let rows = (0..layers)
+        .map(|l| if l == only { drawn.layer(l).to_vec() } else { vec![0; drawn.layer(l).len()] })
+        .collect();
+    super::AddressImage::checked(arm, drawn.seed(), width, rows).expect("a table of the stack's size")
+}
+
 /// The tables and matrices of an artifact: every byte after its header.
 fn data_bytes(bytes: &[u8]) -> Vec<u8> {
     let declared = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
@@ -9049,6 +9058,8 @@ fn the_address_record_and_its_schema_come_together() {
     let image = drawn_address(super::AddressArm::E8, 64, 3, 9);
     let out = super::add_address_uorlut01(&plain, &image).expect("the table is added");
     assert!(IntegerStackModel::parse(&out).is_ok());
+    // A header rewritten with no edit is still served: a refusal below is the edit's own.
+    assert!(IntegerStackModel::parse(&with_header(&out, |_| {})).is_ok());
     let refused = |what: &str, edit: &dyn Fn(&mut Value)| {
         let bytes = with_header(&out, |h| edit(h));
         assert!(IntegerStackModel::parse(&bytes).is_err(), "{what} is refused");
@@ -9101,6 +9112,19 @@ fn the_served_step_adds_the_address_rows() {
             let model = IntegerStackModel::parse(&drawn).expect("served");
             assert!(model.fbs_trunk_image().is_none(), "{name}, {arm:?}: no trunk image");
             assert!(model.fbs_image().is_none(), "{name}, {arm:?}: no image");
+        }
+    }
+    // Every layer's rows are read: a table that is zero in all layers but one changes the steps,
+    // whichever layer that is, and no two layers' rows change them alike.
+    for arm in [super::AddressArm::E8, super::AddressArm::Token] {
+        let want = run(&with_read);
+        let mut seen = Vec::new();
+        for only in 0..3 {
+            let table = one_layer_address(arm, 64, 3, 20_000, only);
+            let got = run(&super::add_address_uorlut01(&with_read, &table).expect("added"));
+            assert_ne!(got, want, "{arm:?}: layer {only}'s rows alone change the steps");
+            assert!(!seen.contains(&got), "{arm:?}: layer {only}'s rows change the steps as no other layer's do");
+            seen.push(got);
         }
     }
     // The two arms read different rows of the same table.

@@ -102,10 +102,10 @@ use sha2::{Digest, Sha256};
 use uor_r4_float_train::e8_address::AddressMemory;
 use uor_r4_float_train::fbs_export::{
     check_checkpoint_reads, check_checkpoint_reads_carrying, check_readout_reads,
-    fbs_float_readout, fbs_float_readout_on, CHECKPOINT_ADDRESS,
-    fbs_float_readout_served, fbs_float_readout_served_on, fbs_hamming_snapshot_with_ask,
-    fbs_memory_snapshot, fbs_trunk_snapshot, round_hamming_as_exported, round_tables_as_exported,
-    run_rate_reading, write_rounded_copy, READOUT_SEQUENCES,
+    fbs_float_readout, fbs_float_readout_on, fbs_float_readout_served, fbs_float_readout_served_on,
+    fbs_hamming_snapshot_with_ask, fbs_memory_snapshot, fbs_trunk_snapshot,
+    round_hamming_as_exported, round_tables_as_exported, run_rate_reading, write_rounded_copy,
+    CHECKPOINT_ADDRESS, READOUT_SEQUENCES,
 };
 use uor_r4_float_train::flock_read_hamming::{
     set_hamming_reads, set_hamming_tie_rule, set_hamming_trace, take_hamming_trace, HammingReads,
@@ -787,8 +787,15 @@ fn main() -> Result<()> {
             serde_json::to_vec(&value)?
         }
     };
-    // The rows file is written first, so a snapshot that names rows always has them beside it.
+    // The rows file is written first, so a snapshot that names rows always has them beside it,
+    // and only where the snapshot itself can still be written: a snapshot refused because its
+    // file exists leaves no rows file behind.
     if let Some(address) = &address {
+        if Path::new(out).exists() {
+            return Err(FloatTrainError::Invalid(format!(
+                "{out}: the snapshot exists; it is not written over"
+            )));
+        }
         write(&format!("{out}.address-rows"), &address.to_bytes())?;
     }
     write(out, &json)?;

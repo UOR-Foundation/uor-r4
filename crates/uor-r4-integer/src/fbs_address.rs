@@ -12,8 +12,12 @@
 //! best root with two entries of +-1 scores `m1 + m2` and the best root of eight halves scores
 //! `S/2 - odd * m8`, where `odd` says the block has an odd number of minus signs. The first wins
 //! a tie. The trainer compares in 32-bit floats; the same compare here is `2 (m1 + m2) >= S -
-//! 2 odd m8` in whole numbers, so it is exact.
-
+//! 2 odd m8` in whole numbers. On the same block the two agree wherever the trainer's 32-bit
+//! sum of the eight magnitudes is itself exact, which holds while they sum to under 2^24 steps
+//! (256 in the stream's units); past that the trainer's sum rounds, and a block within that
+//! rounding of a tie can be named differently here. The trainer's stream is also not held to
+//! this reader's steps, so a block near a tie can differ for that reason too. The row check on
+//! a trained model measures what both cost.
 //!
 //! The module is shared by both builds of this crate: the float trainer's snapshot tool writes
 //! the rows file with it, and the served stack (`stack::address`) reads the table with it.
@@ -238,9 +242,16 @@ impl AddressImage {
         if width == 0 || width % ADDRESS_BLOCK != 0 || width > MAX_WIDTH || layers == 0 || layers > 64 {
             return Err(format!("an address rows file of width {width} and {layers} layers"));
         }
+        // The size is worked out with checked steps: on a 32-bit build (`serving-wasm`) a header
+        // inside the bounds above can still name more bytes than an index holds.
         let values = width / ADDRESS_BLOCK * ADDRESS_CELLS * width;
-        if bytes.len() != ROWS_HEADER + 2 * values * layers {
-            return Err(format!("an address rows file of {} bytes, not the {} its header names", bytes.len(), ROWS_HEADER + 2 * values * layers));
+        let named = values
+            .checked_mul(2)
+            .and_then(|bytes| bytes.checked_mul(layers))
+            .and_then(|bytes| bytes.checked_add(ROWS_HEADER))
+            .ok_or_else(|| format!("an address rows file of width {width} and {layers} layers is past this build's reach"))?;
+        if bytes.len() != named {
+            return Err(format!("an address rows file of {} bytes, not the {named} its header names", bytes.len()));
         }
         let rows = bytes[ROWS_HEADER..]
             .chunks_exact(2 * values)
@@ -266,7 +277,9 @@ impl AddressImage {
     /// The served read at `layer`: every block of the residual `x` names a cell, from `x` as it
     /// stands before any row is added, and the position's rows are then added to `x`, held
     /// inside 32 bits as the residual's own rounding holds it. `token` is the position's input
-    /// token. `sum` is scratch of at least `width` values.
+    /// token. `sum` is scratch of at least `width` values. `layer` is one of the table's layers
+    /// and `x` holds at least `width` values; the stack's reader checks both when it loads the
+    /// table, and the read panics on a caller that breaks either.
     pub fn read(&self, layer: usize, token: u32, x: &mut [i32], sum: &mut [i32]) {
         let width = self.width;
         let table = &self.rows[layer];
@@ -601,9 +614,19 @@ mod tests {
         other[0] ^= 1;
         assert!(AddressImage::from_bytes(&other).is_err());
         // The sign and collapse arms were trained as controls and have no served form.
-        let mut sign = bytes;
+        let mut sign = bytes.clone();
         sign[8] = 1;
         assert!(AddressImage::from_bytes(&sign).unwrap_err().contains("no served form"));
+        // An arm code no trainer writes, no layers, and a width that is not whole blocks.
+        let mut unknown = bytes.clone();
+        unknown[8] = 7;
+        assert!(AddressImage::from_bytes(&unknown).is_err());
+        let mut none = bytes.clone();
+        none[24..28].copy_from_slice(&0u32.to_le_bytes());
+        assert!(AddressImage::from_bytes(&none).is_err());
+        let mut ragged = bytes;
+        ragged[20..24].copy_from_slice(&12u32.to_le_bytes());
+        assert!(AddressImage::from_bytes(&ragged).is_err());
     }
 
     #[test]

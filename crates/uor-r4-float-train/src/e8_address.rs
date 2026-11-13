@@ -381,7 +381,9 @@ impl AddressMemory {
     /// The table as a served stack holds it (claude-366): every row in the whole steps
     /// [`Self::round_as_exported`] puts it on, taken by the same arithmetic, so the artifact's
     /// rows are the rows the served evaluation read. The memory itself is left as it is. Only
-    /// the `e8` and `token` arms have a served form.
+    /// the `e8` and `token` arms have a served form. The band is not carried: it shapes the
+    /// gradient at a wall and adds nothing to the value `apply` returns, so the served read has
+    /// none.
     pub fn image(&self) -> Result<uor_r4_integer::fbs_address::AddressImage> {
         use uor_r4_integer::fbs_address as served;
         let arm = match self.arm {
@@ -1769,7 +1771,10 @@ mod tests {
         let device = device();
         for (arm, served) in [
             (AddressArm::E8, uor_r4_integer::fbs_address::AddressArm::E8),
-            (AddressArm::Token, uor_r4_integer::fbs_address::AddressArm::Token),
+            (
+                AddressArm::Token,
+                uor_r4_integer::fbs_address::AddressArm::Token,
+            ),
         ] {
             let seed = 0x0366_0000_0000_0007u64;
             let memory = AddressMemory::new(arm, 2, 16, None, seed, &device).unwrap();
@@ -1801,16 +1806,26 @@ mod tests {
                     .unwrap()
                     .to_vec1::<f32>()
                     .unwrap();
-                assert_eq!(&unchanged, values, "{arm:?}: taking the image moved the memory");
+                assert_eq!(
+                    &unchanged, values,
+                    "{arm:?}: taking the image moved the memory"
+                );
                 for (n, value) in values.iter().enumerate() {
                     let scaled = f64::from(*value) * ROW_SCALE;
                     let want = (scaled + 0.5).floor().clamp(-ROW_STEPS, ROW_STEPS) as i16;
-                    assert_eq!(image.layer(layer)[n], want, "{arm:?} layer {layer} value {n}: {value}");
+                    assert_eq!(
+                        image.layer(layer)[n],
+                        want,
+                        "{arm:?} layer {layer} value {n}: {value}"
+                    );
                     halves += usize::from((scaled - scaled.floor() - 0.5).abs() < 1e-12);
                     held += usize::from(scaled.abs() > ROW_STEPS + 1.0);
                 }
             }
-            assert!(halves > 100 && held > 1_000, "{halves} half steps, {held} held values");
+            assert!(
+                halves > 100 && held > 1_000,
+                "{halves} half steps, {held} held values"
+            );
             memory.round_as_exported().unwrap();
             for layer in 0..2 {
                 let rounded = memory.rows[layer]
