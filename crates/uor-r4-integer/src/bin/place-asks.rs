@@ -5,13 +5,17 @@
 //! place-asks census --tokens PANEL/tokens.u16 --kit panel-places.json --asks asks.json [--show N]
 //! place-asks ablate --tokens TRAIN/tokens.u16 --kit train-places.json \
 //!                   --held PANEL/tokens.u16 --held-kit panel-places.json [--held .. --held-kit ..] \
-//!                   [--slots 1,2,3|none] [--question-last N]
+//!                   [--slots 1,2,3|none] [--question-last N] [--targets K] [--prior 0|1]
 //! ```
 //!
 //! `ablate` (claude-360) fits under a cut, which keeps the named frame offsets (1 to 5 before a
 //! place, nearest first; 6 to 8 the turn's last tokens, the last first) and the last N tokens
 //! of a question, and prints the census of each held split under the same cut. It writes no
-//! table: a table file never carries a cut.
+//! table: a table file never carries a cut. `--targets K` (claude-361) keeps, for each question
+//! token and offset, its K heaviest fitted frame tokens and no pair whose weight is not above
+//! zero: the count form of a trained question, which has one code a head for each token.
+//! `--prior 0` takes off every frame token what it weighs when the question does not hold it,
+//! so no candidate scores by its frame alone: a trained key has no such weight.
 //!
 //! A token file is the `UORT` format the trainer reads: a 64-byte header holding the token count
 //! and the vocabulary size, then the tokens as little-endian 16-bit integers. A kit is the place
@@ -106,6 +110,16 @@ fn cut(args: &[String]) -> Result<Cut, String> {
     if let Some(text) = value("--question-last") {
         cut.question_last = text?.parse().map_err(|_| "--question-last N".to_owned())?;
     }
+    if let Some(text) = value("--targets") {
+        cut.targets = text?.parse().map_err(|_| "--targets N".to_owned())?;
+    }
+    if let Some(text) = value("--prior") {
+        cut.prior = match text? {
+            "0" => false,
+            "1" => true,
+            _ => return Err("--prior 0|1".to_owned()),
+        };
+    }
     Ok(cut)
 }
 
@@ -146,9 +160,11 @@ fn run(args: &[String]) -> Result<(), String> {
             let (asks, _) = fit_cut(&tokens, &kit.marks, vocab, &kit.places, kit.tokens_sha256.clone(), cut)?;
             let index = AsksIndex::new(&asks)?.with_cut(cut);
             println!(
-                "asks-ablate slots={} question_last={} fitted_on={} shared={} pairs={} margin={} floor={} floor_other={} asking_floor={}",
+                "asks-ablate slots={} question_last={} targets={} prior={} fitted_on={} shared={} pairs={} margin={} floor={} floor_other={} asking_floor={}",
                 slots(cut),
                 cut.question_last,
+                cut.targets,
+                u8::from(cut.prior),
                 asks.tokens_sha256,
                 asks.shared.len(),
                 asks.pairs.len(),
@@ -233,10 +249,16 @@ mod tests {
     fn a_cut_is_read_from_its_flags_and_written_back_the_same() {
         let args = |text: &str| text.split(' ').map(str::to_owned).collect::<Vec<String>>();
         assert_eq!(cut(&args("ablate")), Ok(Cut::ALL));
-        assert_eq!(cut(&args("ablate --slots 1,6,8 --question-last 2")), Ok(Cut { slots: 0b1010_0001, question_last: 2 }));
-        assert_eq!(cut(&args("ablate --slots none")), Ok(Cut { slots: 0, question_last: 0 }));
-        assert_eq!(slots(Cut { slots: 0b1010_0001, question_last: 0 }), "1,6,8");
-        assert_eq!(slots(Cut { slots: 0, question_last: 0 }), "none");
+        assert_eq!(cut(&args("ablate --slots 1,6,8 --question-last 2")), Ok(Cut { slots: 0b1010_0001, question_last: 2, targets: 0, prior: true }));
+        assert_eq!(cut(&args("ablate --slots 2,3 --targets 1")), Ok(Cut { slots: 0b110, question_last: 0, targets: 1, prior: true }));
+        assert_eq!(cut(&args("ablate --prior 0")), Ok(Cut { prior: false, ..Cut::ALL }));
+        assert_eq!(cut(&args("ablate --prior 1")), Ok(Cut::ALL));
+        assert!(cut(&args("ablate --prior no")).is_err(), "the prior is 0 or 1");
+        assert!(cut(&args("ablate --targets")).is_err(), "a flag with no value");
+        assert!(cut(&args("ablate --targets one")).is_err(), "not a count");
+        assert_eq!(cut(&args("ablate --slots none")), Ok(Cut { slots: 0, question_last: 0, targets: 0, prior: true }));
+        assert_eq!(slots(Cut { slots: 0b1010_0001, question_last: 0, targets: 0, prior: true }), "1,6,8");
+        assert_eq!(slots(Cut { slots: 0, question_last: 0, targets: 0, prior: true }), "none");
         assert_eq!(slots(Cut::ALL), "1,2,3,4,5,6,7,8");
         for refused in ["ablate --slots 0", "ablate --slots 9", "ablate --slots 1,x", "ablate --slots", "ablate --slots none,6", "ablate --slots 1,1", "ablate --question-last x", "ablate --question-last"] {
             assert!(cut(&args(refused)).is_err(), "{refused}");
