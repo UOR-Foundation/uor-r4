@@ -1488,6 +1488,21 @@ mod tests {
         assert!(AsksIndex::new(&hand_table3(Vec::new(), vec![[VOCAB, SAY, COLON]])).is_err());
     }
 
+    #[test]
+    fn a_lead_in_is_counted_once_in_a_turn_at_its_first_place() {
+        // "<u> what say : what say : A B" answered "A B": the pair and the triple stand twice
+        // in the turn, and the rest after their first place is not the reply.
+        let mut x = Vec::new();
+        for d in 0..16u32 {
+            let (a, b) = (30 + d % 7, 40 + d % 3);
+            x.extend([BOS, USER, WHAT, SAY, COLON, WHAT, SAY, COLON, a, b, SEP, MODEL, a, b, EOS, SEP]);
+        }
+        let (pairs, triples, lines) = fit_repeat(&x, &marks(), VOCAB).expect("the count");
+        assert_eq!((pairs, triples), (Vec::new(), Vec::new()), "{lines:#?}");
+        // Counted at every place, each would be answered by the rest in 16 of 32 and be named.
+        assert!(!lines.iter().any(|line| line.contains("before=50 token=51")), "{lines:#?}");
+    }
+
     /// `repeats` documents whose user turn is "what say : A B" answered "A B", `strays` with
     /// the same turn answered "ok", and `others` whose turn is "16 say : A B" answered "ok".
     fn longer_corpus(repeats: usize, strays: usize, others: usize) -> Vec<u32> {
