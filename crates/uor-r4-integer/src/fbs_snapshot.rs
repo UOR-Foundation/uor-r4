@@ -5170,6 +5170,7 @@ mod place_asked_tests {
             not_told: vec![17, 18, EOS],
             forms: vec![vec![17, 18, EOS]],
             repeat: Vec::new(),
+            repeat3: Vec::new(),
         }
     }
 

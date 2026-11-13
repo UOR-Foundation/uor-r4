@@ -268,19 +268,20 @@ fn run(args: &[String]) -> Result<(), String> {
             if asks.tokens_sha256 != kit.tokens_sha256 {
                 return Err(format!("the asks were fitted on tokens {} and --tokens holds {}", asks.tokens_sha256, kit.tokens_sha256));
             }
-            if !asks.repeat.is_empty() {
-                return Err(format!("the asks already hold {} lead-in pairs", asks.repeat.len()));
+            if !asks.repeat.is_empty() || !asks.repeat3.is_empty() {
+                return Err(format!("the asks already hold {} lead-in pairs and {} triples", asks.repeat.len(), asks.repeat3.len()));
             }
-            let (pairs, lines) = fit_repeat(&tokens, &kit.marks, vocab)?;
+            let (pairs, triples, lines) = fit_repeat(&tokens, &kit.marks, vocab)?;
             for line in &lines {
                 println!("{line}");
             }
             asks.repeat = pairs;
+            asks.repeat3 = triples;
             AsksIndex::new(&asks)?;
             let text = serde_json::to_string(&asks).map_err(|e| e.to_string())?;
             let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&out).map_err(|e| format!("{}: {e}; a table is never written over", out.display()))?;
             file.write_all(text.as_bytes()).map_err(|e| format!("{}: {e}", out.display()))?;
-            println!("asks-repeat wrote {} pairs={} fitted_on={}", out.display(), asks.repeat.len(), asks.tokens_sha256);
+            println!("asks-repeat wrote {} pairs={} triples={} fitted_on={}", out.display(), asks.repeat.len(), asks.repeat3.len(), asks.tokens_sha256);
         }
         other => return Err(format!("unknown mode {other}: fit, census, ablate or repeat")),
     }

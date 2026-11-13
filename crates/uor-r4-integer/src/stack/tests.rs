@@ -8758,6 +8758,7 @@ fn place_asks(place: &super::PlaceImage, link: u32) -> crate::place_asks::PlaceA
         not_told: vec![41, 42, PLACE_EOS],
         forms: vec![vec![41, 42, PLACE_EOS]],
         repeat: Vec::new(),
+        repeat3: Vec::new(),
     }
 }
 
