@@ -256,7 +256,10 @@ impl<'m> StackChat<'m> {
     /// changes nothing unless [`IntegerStackModel::set_place_asks`] set the asks.
     ///
     /// While it is on, [`Self::reply_history_with`] emits nothing until the reply that stands
-    /// is known, then emits its ids in order.
+    /// is known, then emits its ids in order. The whole reply is in the history by then, so an
+    /// emission error does not stop the reply part-way as it does with this off. If the second
+    /// serve fails, its error is returned, the first reply is gone, and the history is what the
+    /// failed serve left.
     pub fn set_serve_again(&mut self, on: bool) {
         self.serve_again = on;
     }
