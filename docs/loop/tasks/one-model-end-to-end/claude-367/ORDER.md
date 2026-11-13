@@ -56,7 +56,7 @@ Written by hand, as claude-359 to claude-366 were: `uor-harness loop claim` refu
 
 ## Files in scope
 
-- `crates/uor-r4-integer/src/pair_experts.rs` (new: the counts, the file, the vote, the check), `crates/uor-r4-integer/src/lib.rs` (its registration)
+- `crates/uor-r4-integer/src/pair_experts.rs` (new: the counts, the file, the vote, the check), `crates/uor-r4-integer/src/native_geometry.rs` and `crates/uor-r4-integer/src/serving_root.rs` (its registration in the crate's two builds)
 - `crates/uor-r4-integer/src/stack/chat.rs`, `crates/uor-r4-integer/src/stack/tests.rs` (the check after a served reply and its tests)
 - `crates/uor-r4-integer/src/bin/place-asks.rs` (the `experts` mode), `crates/uor-r4-integer/src/bin/uor-chat.rs` (the flag)
 - `docs/labs/one-model-end-to-end/instrument/**` (the reply reader's flags)
