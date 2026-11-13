@@ -48,11 +48,17 @@ pub fn pair_rows() -> Option<PairRows> {
     ACTIVE.with(|cell| cell.borrow().clone())
 }
 
-/// The first `count` primes in order, with no check on their size.
+/// The first `count` primes in order, or fewer: generation stops once the last two multiply to
+/// `LIMIT` or more, since no pair address may reach it.
 fn first_primes(count: usize) -> Vec<u32> {
-    let mut primes: Vec<u32> = Vec::with_capacity(count);
+    let mut primes: Vec<u32> = Vec::new();
     let mut candidate = 2u32;
     while primes.len() < count {
+        if let [.., a, b] = primes[..] {
+            if u64::from(a) * u64::from(b) >= LIMIT {
+                break;
+            }
+        }
         let prime = primes
             .iter()
             .take_while(|&&p| u64::from(p) * u64::from(p) <= u64::from(candidate))
@@ -74,7 +80,14 @@ pub fn token_primes(vocab: usize) -> Result<Vec<u32>> {
         )));
     }
     let primes = first_primes(vocab);
-    let top = u64::from(primes[vocab - 1]) * u64::from(primes[vocab - 2]);
+    let last = primes.len();
+    let top = u64::from(primes[last - 1]) * u64::from(primes[last - 2]);
+    if last < vocab {
+        return Err(invalid(format!(
+            "pair rows hold a pair address in 31 bits; a vocabulary of {vocab} tokens has an \
+             address of at least {top}"
+        )));
+    }
     if top >= LIMIT {
         return Err(invalid(format!(
             "pair rows hold a pair address in 31 bits; a vocabulary of {vocab} tokens has the \
@@ -99,6 +112,14 @@ impl PairMarks {
         if self.user.is_empty() || self.assistant.is_empty() {
             return Err(invalid(
                 "pair rows want a user marker and an assistant header of at least one token",
+            ));
+        }
+        // A turn is found by the user marker first, so a marker that begins the other would
+        // hide every header.
+        if self.user.starts_with(&self.assistant) || self.assistant.starts_with(&self.user) {
+            return Err(invalid(
+                "pair rows want a user marker and an assistant header neither of which begins \
+                 the other",
             ));
         }
         Ok(())
@@ -536,11 +557,20 @@ impl PairRows {
         Ok(())
     }
 
-    /// The rows saved in `directory`, or none when the checkpoint has no pair rows.
+    /// The rows saved in `directory`, or none when the checkpoint has neither pair-rows file.
+    /// Refuses a checkpoint that holds only one of the two.
     pub fn load(directory: &Path, device: &Device) -> Result<Option<Self>> {
-        let path = directory.join(FILE);
-        if !path.exists() {
+        let (path, dict_path) = (directory.join(FILE), directory.join(DICT_FILE));
+        if !path.exists() && !dict_path.exists() {
             return Ok(None);
+        }
+        for name in [FILE, DICT_FILE] {
+            if !directory.join(name).exists() {
+                return Err(invalid(format!(
+                    "{}: half a pair-rows checkpoint, no {name}",
+                    directory.display()
+                )));
+            }
         }
         let dict = PairDictionary::from_bytes(&std::fs::read(directory.join(DICT_FILE))?)?;
         let tensors = candle_core::safetensors::load(&path, device)?;
@@ -900,8 +930,70 @@ mod tests {
         assert_eq!(pair.census().unwrap(), (0, 0.0));
         // One through the read: rows 0 and 3 are hit and move, rows 1 and 2 stay zero.
         let x = Tensor::from_vec(state(1, 16, 4), (1, 16, 4), &device).unwrap();
-        let grads = pair.apply(&x, &WINDOW_A).unwrap().sum_all().unwrap().backward().unwrap();
+        let grads = pair
+            .apply(&x, &WINDOW_A)
+            .unwrap()
+            .sum_all()
+            .unwrap()
+            .backward()
+            .unwrap();
         assert!(pair.step(&mut opt, &grads, 0.1).unwrap());
         assert_eq!(pair.census().unwrap().0, 2);
+    }
+
+    #[test]
+    fn a_damaged_vocabulary_is_refused_without_counting_its_primes() {
+        let start = std::time::Instant::now();
+        assert!(token_primes(u32::MAX as usize).is_err());
+        assert!(start.elapsed() < std::time::Duration::from_secs(2));
+        let mut bytes = dict().to_bytes();
+        bytes[8..12].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(PairDictionary::from_bytes(&bytes).is_err());
+    }
+
+    #[test]
+    fn marks_where_one_begins_the_other_are_refused() {
+        let check = |user: Vec<u32>, assistant: Vec<u32>| PairMarks { user, assistant }.check();
+        assert!(check(vec![1, 4], vec![1, 4]).is_err());
+        assert!(check(vec![1], vec![1, 4]).is_err());
+        assert!(check(vec![2, 3, 9], vec![2, 3]).is_err());
+        assert!(check(vec![1, 4], vec![4, 1]).is_ok());
+    }
+
+    #[test]
+    fn a_second_user_marker_before_the_header_starts_the_turn_again() {
+        // The turn is (7,8), row 3. Kept from the first marker it would also hold (5,6), (5,7)
+        // and (6,7), rows 0, 1, 2.
+        let ids = [1, 4, 5, 6, 1, 4, 7, 8, 2, 3, 10];
+        let plan = plan(&dict(), &marks(), &ids, 1, 11).unwrap();
+        assert_eq!(
+            (plan.hit_turn.clone(), plan.hit_row.clone()),
+            (vec![0], vec![3])
+        );
+        assert_eq!(turn_of(&plan), vec![N, N, N, N, N, N, N, N, N, 0, 0]);
+        assert_eq!(plan.open, vec![Some(0)]);
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn half_a_checkpoint_is_refused() {
+        let device = device();
+        let directory =
+            std::env::temp_dir().join(format!("uor-r4-pair-rows-{}-{:x}", std::process::id(), 371));
+        std::fs::create_dir_all(&directory).unwrap();
+        let pair = PairRows::new(dict(), marks(), 4, &device).unwrap();
+        let error = |directory: &Path| match PairRows::load(directory, &device) {
+            Err(error) => error.to_string(),
+            Ok(_) => panic!("half a checkpoint loaded"),
+        };
+        pair.save(&directory).unwrap();
+        std::fs::remove_file(directory.join(FILE)).unwrap();
+        assert!(error(&directory).contains(FILE));
+        pair.save(&directory).unwrap();
+        std::fs::remove_file(directory.join(DICT_FILE)).unwrap();
+        assert!(error(&directory).contains(DICT_FILE));
+        std::fs::remove_file(directory.join(FILE)).unwrap();
+        assert!(PairRows::load(&directory, &device).unwrap().is_none());
+        std::fs::remove_dir_all(&directory).unwrap();
     }
 }
