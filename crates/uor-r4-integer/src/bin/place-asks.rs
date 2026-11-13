@@ -14,7 +14,7 @@
 //! place-asks experts --tokens TRAIN/tokens.u16 --kit train-places.json --out pairs.uorpex
 //! place-asks experts-check --tokens TRAIN/tokens.u16 --kit train-places.json --experts pairs.uorpex \
 //!                   --asks asks.json --prompts samples.json --rows rows.tsv --hold-out 0|1 \
-//!                   --caps 300,2000 --keeps 1/2,1/4 [--out PREFIX]
+//!                   --caps 300,2000 --keeps 1/2,1/4 --floors 0,1500 [--out PREFIX]
 //! ```
 //!
 //! `experts` (claude-367) counts the pair experts' table on a split: each reply the place
@@ -30,7 +30,8 @@
 //! kind (general, recall, nevertold or repeat), the last user turn's ids, the reply's ids without
 //! its end mark, whether it ends (1 or 0) and the reference's ids. With one cap, one keep and
 //! `--out` it writes `PREFIX.jsonl`, each final reply's ids with the end mark when it ends, and
-//! `PREFIX.rows.tsv`, the rows with the final reply and a seventh column: the verdict.
+//! `PREFIX.rows.tsv`, the rows with the final reply and three more columns: the verdict, the
+//! reply's vote and the top vote (0 and 0 when the experts were not asked).
 //!
 //! `repeat` (claude-364) counts the lead-in pairs on the tokens a written table was fitted on:
 //! the pairs of neighbouring tokens in a user turn after which the rest of the turn is the
@@ -320,7 +321,17 @@ fn verdict_name(verdict: Verdict) -> &'static str {
         Verdict::LeftAlone => "alone",
         Verdict::Checked(Check::NoExpert) => "noexpert",
         Verdict::Checked(Check::Stands { .. }) => "stands",
+        Verdict::Checked(Check::Unsure { .. }) => "unsure",
         Verdict::Checked(Check::Replaced { .. }) => "replaced",
+    }
+}
+
+/// The reply's vote and the top vote of a checked row; 0 and 0 when the experts were not asked
+/// or the turn has none.
+fn votes_of(verdict: Verdict) -> (u64, u64) {
+    match verdict {
+        Verdict::Checked(Check::Stands { vote, top }) | Verdict::Checked(Check::Unsure { vote, top }) | Verdict::Checked(Check::Replaced { vote, top, .. }) => (vote, top),
+        _ => (0, 0),
     }
 }
 
@@ -342,13 +353,14 @@ struct Tally {
     alone: usize,
     noexpert: usize,
     stands: usize,
+    unsure: usize,
     replaced: usize,
     recall_replaced: usize,
     nevertold_replaced: usize,
     repeat_replaced: usize,
 }
 
-const GRID_HEADER: &str = "cap\tkeep\tgeneral\tgood_before\tgood_after\tnewly_good\tlost\tnoturn\talone\tnoexpert\tstands\treplaced\trecall_replaced\tnevertold_replaced\trepeat_replaced";
+const GRID_HEADER: &str = "cap\tkeep\tfloor\tgeneral\tgood_before\tgood_after\tnewly_good\tlost\tnoturn\talone\tnoexpert\tstands\tunsure\treplaced\trecall_replaced\tnevertold_replaced\trepeat_replaced";
 
 impl Tally {
     fn line(&self, setting: Setting) -> String {
@@ -362,13 +374,14 @@ impl Tally {
             self.alone,
             self.noexpert,
             self.stands,
+            self.unsure,
             self.replaced,
             self.recall_replaced,
             self.nevertold_replaced,
             self.repeat_replaced,
         ];
         let counts: Vec<String> = counts.iter().map(usize::to_string).collect();
-        format!("{}\t{}/{}\t{}", setting.cap, setting.keep.num, setting.keep.den, counts.join("\t"))
+        format!("{}\t{}/{}\t{}\t{}", setting.cap, setting.keep.num, setting.keep.den, setting.floor, counts.join("\t"))
     }
 }
 
@@ -403,6 +416,7 @@ fn replay(table: &PairExperts, asks: Option<&AsksIndex>, marks: &PlaceMarks, pro
                     "alone" => tally.alone += 1,
                     "noexpert" => tally.noexpert += 1,
                     "stands" => tally.stands += 1,
+                    "unsure" => tally.unsure += 1,
                     _ => tally.replaced += 1,
                 }
             }
@@ -427,13 +441,15 @@ fn outputs(rows: &[Row], outcomes: &[Outcome], eos: u32) -> (String, String) {
         jsonl.push_str(&format!("{{\"i\":{},\"ids\":[{}]}}\n", row.i, ids.join(",")));
         let ends = if outcome.ends { "1" } else { "0" };
         let c = &row.columns;
-        tsv.push_str(&format!("{}\t{}\t{}\t{reply}\t{ends}\t{}\t{}\n", c[0], c[1], c[2], c[5], verdict_name(outcome.verdict)));
+        let (vote, top) = votes_of(outcome.verdict);
+        tsv.push_str(&format!("{}\t{}\t{}\t{reply}\t{ends}\t{}\t{}\t{vote}\t{top}\n", c[0], c[1], c[2], c[5], verdict_name(outcome.verdict)));
     }
     (jsonl, tsv)
 }
 
-/// The grid of `experts-check`: `--caps`, `--keeps` and `--hold-out`.
-fn grid(args: &[String]) -> Result<(Vec<u32>, Vec<Ratio>, bool), String> {
+/// The grid of `experts-check`: `--caps`, `--keeps`, `--floors` and `--hold-out`. A floor is in
+/// thousandths of one expert's whole vote.
+fn grid(args: &[String]) -> Result<(Vec<u32>, Vec<Ratio>, Vec<u32>, bool), String> {
     let value = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).map(String::as_str).ok_or_else(|| format!("{name} takes a value"));
     let caps = value("--caps")?.split(',').map(|cap| cap.parse().map_err(|_| format!("--caps {cap}: not a count"))).collect::<Result<Vec<u32>, String>>()?;
     let keeps = value("--keeps")?
@@ -451,7 +467,8 @@ fn grid(args: &[String]) -> Result<(Vec<u32>, Vec<Ratio>, bool), String> {
         "1" => true,
         other => return Err(format!("--hold-out {other}: 0 or 1")),
     };
-    Ok((caps, keeps, hold_out))
+    let floors = value("--floors")?.split(',').map(|floor| floor.parse().map_err(|_| format!("--floors {floor}: not a count of thousandths"))).collect::<Result<Vec<u32>, String>>()?;
+    Ok((caps, keeps, floors, hold_out))
 }
 
 /// The file made from `path` with `suffix` added, refused when one is there.
@@ -700,11 +717,11 @@ fn run(args: &[String]) -> Result<(), String> {
             let text = std::fs::read_to_string(&rows_path).map_err(|e| format!("{}: {e}", rows_path.display()))?;
             let rows = text.lines().enumerate().map(|(n, line)| parse_row(line, n + 1)).collect::<Result<Vec<Row>, String>>().map_err(|e| format!("{}: {e}", rows_path.display()))?;
             check_rows(&rows, &prompts, &kit.marks).map_err(|e| format!("{}: {e}", rows_path.display()))?;
-            let (caps, keeps, hold_out) = grid(args)?;
+            let (caps, keeps, floors, hold_out) = grid(args)?;
             let out = match args.iter().position(|a| a == "--out") {
                 Some(_) => {
-                    if caps.len() != 1 || keeps.len() != 1 {
-                        return Err("--out writes one setting's replies: give one cap and one keep".to_owned());
+                    if caps.len() != 1 || keeps.len() != 1 || floors.len() != 1 {
+                        return Err("--out writes one setting's replies: give one cap, one keep and one floor".to_owned());
                     }
                     let prefix = flag(args, "--out")?;
                     Some((new_file(&prefix, ".jsonl")?, new_file(&prefix, ".rows.tsv")?))
@@ -714,13 +731,15 @@ fn run(args: &[String]) -> Result<(), String> {
             println!("{GRID_HEADER}");
             for &cap in &caps {
                 for &keep in &keeps {
-                    let setting = Setting { cap, keep, hold_out };
-                    let (tally, outcomes) = replay(&table, Some(&index), &kit.marks, &prompts, &rows, setting);
-                    println!("{}", tally.line(setting));
-                    if let Some((jsonl_path, tsv_path)) = &out {
-                        let (jsonl, tsv) = outputs(&rows, &outcomes, kit.marks.eos);
-                        write_new(jsonl_path, jsonl.as_bytes())?;
-                        write_new(tsv_path, tsv.as_bytes())?;
+                    for &floor in &floors {
+                        let setting = Setting { cap, keep, hold_out, floor };
+                        let (tally, outcomes) = replay(&table, Some(&index), &kit.marks, &prompts, &rows, setting);
+                        println!("{}", tally.line(setting));
+                        if let Some((jsonl_path, tsv_path)) = &out {
+                            let (jsonl, tsv) = outputs(&rows, &outcomes, kit.marks.eos);
+                            write_new(jsonl_path, jsonl.as_bytes())?;
+                            write_new(tsv_path, tsv.as_bytes())?;
+                        }
                     }
                 }
             }
@@ -863,7 +882,7 @@ mod tests {
         lines.iter().enumerate().map(|(n, line)| parse_row(line, n + 1).expect("row")).collect()
     }
 
-    const KEEP_HALF: Setting = Setting { cap: 100, keep: Ratio { num: 1, den: 2 }, hold_out: false };
+    const KEEP_HALF: Setting = Setting { cap: 100, keep: Ratio { num: 1, den: 2 }, hold_out: false, floor: 0 };
 
     #[test]
     fn the_replay_replaces_a_reply_the_turns_experts_do_not_hold_and_counts_it_newly_good() {
@@ -877,18 +896,18 @@ mod tests {
         ]);
         assert_eq!(check_rows(&rows, &prompts, &m), Ok(()));
         let (tally, outcomes) = replay(&table, None, &m, &prompts, &rows, KEEP_HALF);
-        let want = Tally { general: 3, good_before: 2, good_after: 3, newly_good: 1, lost: 0, noturn: 1, alone: 0, noexpert: 0, stands: 1, replaced: 1, recall_replaced: 1, nevertold_replaced: 0, repeat_replaced: 0 };
+        let want = Tally { general: 3, good_before: 2, good_after: 3, newly_good: 1, lost: 0, noturn: 1, alone: 0, noexpert: 0, stands: 1, unsure: 0, replaced: 1, recall_replaced: 1, nevertold_replaced: 0, repeat_replaced: 0 };
         assert_eq!(tally, want);
-        assert_eq!(tally.general, tally.noturn + tally.alone + tally.noexpert + tally.stands + tally.replaced);
+        assert_eq!(tally.general, tally.noturn + tally.alone + tally.noexpert + tally.stands + tally.unsure + tally.replaced);
         assert_eq!(tally.good_after + tally.lost, tally.good_before + tally.newly_good);
         assert_eq!((outcomes[0].reply.clone(), outcomes[0].ends), (vec![9], true));
         assert_eq!((outcomes[2].reply.clone(), outcomes[2].verdict), (vec![10], Verdict::NoTurn));
         assert_eq!((outcomes[3].reply.clone(), outcomes[3].ends), (vec![9], true));
         let (jsonl, tsv) = outputs(&rows, &outcomes, m.eos);
         assert_eq!(jsonl.lines().next(), Some(r#"{"i":0,"ids":[9,1]}"#));
-        assert_eq!(tsv.lines().next(), Some("0\tgeneral\t6 7 8\t9\t1\t13\treplaced"));
-        assert_eq!(tsv.lines().nth(2), Some("1\tgeneral\t6 7\t10\t1\t10\tnoturn"));
-        assert_eq!(tally.line(KEEP_HALF), "100\t1/2\t3\t2\t3\t1\t0\t1\t0\t0\t1\t1\t1\t0\t0");
+        assert_eq!(tsv.lines().next(), Some("0\tgeneral\t6 7 8\t9\t1\t13\treplaced\t0\t2796202"));
+        assert_eq!(tsv.lines().nth(2), Some("1\tgeneral\t6 7\t10\t1\t10\tnoturn\t0\t0"));
+        assert_eq!(tally.line(KEEP_HALF), "100\t1/2\t0\t3\t2\t3\t1\t0\t1\t0\t0\t1\t0\t1\t1\t0\t0");
     }
 
     #[test]

@@ -22,7 +22,7 @@ All of the above is sizing on a panel already read (kit files under `local/claud
 **The mechanism.** Each token has its prime; an expert is an unordered pair of distinct tokens of the last user turn, addressed by the product of the two primes (a semiprime below 2^31), as the prime router of `docs/mechanisms/exact-memory.md` names it. No head chooses which two tokens are the key: every pair of the turn is an expert, and TRAIN's counts decide which ones know. An expert holds the replies it was seen with and how often; a pair seen more than a cap of times is no expert. The model writes its reply as today. Then:
 
 1. A turn the counted table classes as asking for a told value, or as a repeat ask, is left alone.
-2. The reply **stands** when the turn has no expert, or when the experts' vote for that reply is within a fixed ratio of their vote for their top reply.
+2. The reply **stands** when the turn has no expert, when the experts' vote for that reply is within a fixed ratio of their vote for their top reply, or when their top vote is under a fixed floor: they do not know the turn (amendment 2).
 3. Otherwise the experts' top reply is given, and the conversation holds that reply.
 
 A vote is the sum over the turn's experts of the reply's count over the expert's count, in integer fixed point; ties go to the smaller reply index.
@@ -32,7 +32,7 @@ A vote is the sum over the turn's experts of the reply's count over the expert's
 1. **The table** (`pair_experts.rs`, `place-asks experts`): built once from a TRAIN split, written as a file with its own magic and the SHA-256 of the tokens it was counted on.
 2. **The check** after the served reply (`uor-chat`, the reply reader): rules 1 to 3; with no table named, every reply is id for id today's.
 3. **Hold-out for an honest count:** a reader flag that takes the row's own TRAIN entries out of every expert before it votes, so the reading is on a phrasing the experts did not see.
-4. **The two numbers** (the cap and the ratio) are set by the Rust tool on the seed-23 panel, which is already read, and committed before the seed-24 panel is written.
+4. **The numbers** (the cap, the ratio and, by amendment 2, the floor) are set by the Rust tool on the seed-23 panel, which is already read, and committed before the seed-24 panel is written.
 5. **Read on the laptop:** the three saved models, off, held out and as served, on the seed-24 panel; the nine-turn conversation and a second conversation of fact questions, word for word; tokens a second; the table's size.
 
 **Claim check.**
@@ -84,6 +84,22 @@ Named out of scope, counted and reported, no bar: work on the turn's numbers (ad
 
 ## Stop rules
 
-- The cap, the ratio and the bars are not moved after a seed-24 reply is read. The seed-24 panel is read once per model and setting.
+- The cap, the ratio, the floor and the bars are not moved after a seed-24 reply is read. The seed-24 panel is read once per model and setting.
 - No pod and no training in this unit.
 - Nothing is served as a product: the experts are read only from a table file named on the command line.
+
+## Amendments, all made before the seed-24 panel is written
+
+The bars above are unchanged by every amendment.
+
+1. **Registration files** (commit `98432ac9e`): the crate registers a module in `native_geometry.rs` and `serving_root.rs`.
+2. **A floor on the experts' top vote.** Rule 2 gains a third way for a reply to stand: the experts' top vote is under a floor, so they do not know the turn. A vote of 1 is one expert that saw only that reply.
+   - **Why.** On the seed-23 panel, held out, the best cap and ratio alone took good everyday replies from 145 to 178 (p-s1), and took the rows whose reply needs no word of the turn from 113 good to 105: the guard this ORDER sets at 3. The lost rows are small talk whose own phrasing is held out ("I appreciate it." six times), answered by pairs of common tokens.
+   - **What separates them.** Every one of the 10 lost rows had a top vote under 1.9; 40 of the 43 newly good rows had one of 2.0 or more.
+3. **The settings**, in `settings.json` beside this file, with the grids they were read from (`grid23-caps.tsv`, `grid23.tsv`):
+   - **Cap: off** (the type's largest value). A cap of 5,000 or more changes at most one row a model; a cap of 2,000 or 300 loses rows (p-s1: 163 and 129 good, against 177 with none).
+   - **Ratio: 1/32.** From 1/16 to 1/256 the count moves by at most one row a model.
+   - **Floor: 1.5.** From 1.25 to 2.0 the count moves by at most one row a model; at 2.5 it falls by five.
+   - **Seed-23 reading at these settings, held out** (sizing, no bar): good everyday replies 145 to 185, 144 to 182, 142 to 183 of 235; one good row lost a model; no told-value, never-told or repeat row replaced.
+4. **One check for the chat and the panel.** The reply reader is not changed. `place-asks experts-check` replays a panel's finished replies through `PairExperts::check_prompt`, the function the chat calls after a served reply, so the panel count and the chat apply one rule. The reader's own flags (step 2, "the reply reader") are not built.
+5. **Files in scope, added:** `crates/uor-r4-integer/src/stack/session.rs` and `crates/uor-r4-integer/src/stack/hamming.rs` (a getter that hands the chat the model's own counted table and turn marks; no behaviour change), and `docs/loop/tasks/one-model-end-to-end/claude-367/chat-facts.json` (the second conversation, fixed here before any chat is served with the experts).

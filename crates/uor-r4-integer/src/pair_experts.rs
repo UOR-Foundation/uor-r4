@@ -7,7 +7,8 @@
 //!
 //! At serving time the experts of the turn vote. An expert seen at most `cap` times gives each
 //! reply it holds `(count << 20) / total`. The model's reply stands when its vote keeps a set
-//! share of the top vote; otherwise the top reply is given instead. With hold-out on, a turn's
+//! share of the top vote; otherwise the top reply is given instead, unless the experts' top vote
+//! is under a floor: then they do not know the turn, and the reply stands. With hold-out on, a turn's
 //! own counts are taken out first, so a turn is checked as if it had never been counted.
 //!
 //! A table file carries the SHA-256 of its body, and every structural rule is checked again
@@ -95,6 +96,14 @@ pub enum Check {
     NoExpert,
     /// The model's reply kept its share of the top vote.
     Stands {
+        /// The model's reply's vote.
+        vote: u64,
+        /// The top vote.
+        top: u64,
+    },
+    /// The experts' top vote is under the floor: they do not know this turn, and the model's
+    /// reply stands although it did not keep its share.
+    Unsure {
         /// The model's reply's vote.
         vote: u64,
         /// The top vote.
@@ -740,6 +749,9 @@ pub struct Setting {
     pub keep: Ratio,
     /// Whether the turn's own counts are taken out before the vote.
     pub hold_out: bool,
+    /// The top vote the experts need before they answer in the model's place, in thousandths
+    /// of one expert's whole vote. Under it they do not know the turn and the reply stands.
+    pub floor: u32,
 }
 
 /// What the experts decide about the reply to a prompt.
@@ -802,13 +814,21 @@ impl PairExperts {
         if asks.is_some_and(|asks| asks.find(prompt, &prior, &asked) != Asked::Nothing) {
             return Verdict::LeftAlone;
         }
-        Verdict::Checked(self.check(
-            &prompt[asked],
-            reply,
-            setting.hold_out,
-            setting.cap,
-            setting.keep,
-        ))
+        Verdict::Checked(self.check_setting(&prompt[asked], reply, setting))
+    }
+
+    /// [`Self::check`] under a whole setting: a reply the check would replace stands instead
+    /// when the experts' top vote is under the setting's floor. One expert that saw only the top
+    /// reply gives it a whole vote, `1 << 20`; the floor counts in thousandths of that.
+    pub fn check_setting(&self, turn: &[u32], reply: &[u32], setting: Setting) -> Check {
+        match self.check(turn, reply, setting.hold_out, setting.cap, setting.keep) {
+            Check::Replaced { vote, top, .. }
+                if u128::from(top) * 1000 < u128::from(setting.floor) << VOTE_SHIFT =>
+            {
+                Check::Unsure { vote, top }
+            }
+            other => other,
+        }
     }
 }
 
@@ -1129,6 +1149,46 @@ mod tests {
             .contains("turns are not strictly increasing"));
     }
 
+    #[test]
+    fn the_experts_do_not_answer_when_their_top_vote_is_under_the_floor() {
+        let t = table(&sample());
+        let turn = [0, 1, 2];
+        // Reply A's vote on turn {0, 1, 2}: 2/3 of expert 6 and the whole of experts 10 and 15.
+        let top = (2u64 << 20) / 3 + (1 << 20) + (1 << 20);
+        let vote = (1u64 << 20) / 3;
+        assert_eq!(top * 1000 / (1 << 20), 2666);
+        let at = |floor: u32| Setting {
+            cap: 100,
+            keep: Ratio { num: 1, den: 2 },
+            hold_out: false,
+            floor,
+        };
+        // With no floor the setting's check is the check.
+        assert_eq!(
+            t.check_setting(&turn, B, at(0)),
+            t.check(&turn, B, false, 100, at(0).keep)
+        );
+        // A top vote of 2.666 whole votes answers at a floor of 2.666 and not at 2.667.
+        assert_eq!(
+            t.check_setting(&turn, B, at(2666)),
+            Check::Replaced {
+                reply: 0,
+                vote,
+                top
+            }
+        );
+        assert_eq!(
+            t.check_setting(&turn, B, at(2667)),
+            Check::Unsure { vote, top }
+        );
+        // The floor never touches a reply that stands, and a turn with no expert has none.
+        assert_eq!(
+            t.check_setting(&turn, A, at(u32::MAX)),
+            Check::Stands { vote: top, top }
+        );
+        assert_eq!(t.check_setting(&[4, 5], B, at(u32::MAX)), Check::NoExpert);
+    }
+
     const BOS: u32 = 100;
     const EOS: u32 = 101;
     const SEP: u32 = 102;
@@ -1178,6 +1238,7 @@ mod tests {
             cap: 100,
             keep: Ratio { num: 1, den: 2 },
             hold_out: false,
+            floor: 0,
         };
         // The earlier turn {0, 1} holds reply B; the asked turn {0, 1, 2} holds A three ways.
         let prompt = [

@@ -8905,7 +8905,7 @@ fn stack_chat_serves_a_reply_again_when_its_found_place_was_never_offered() -> C
 fn pair_experts(turns: &[&[u32]]) -> (crate::pair_experts::PairExperts, crate::pair_experts::Setting) {
     let occurrences: Vec<_> = turns.iter().map(|turn| crate::pair_experts::Occurrence { turn, reply: &[44, 45] }).collect();
     let table = crate::pair_experts::PairExperts::count(512, [0; 32], &occurrences).expect("the experts are counted");
-    let setting = crate::pair_experts::Setting { cap: 8, keep: crate::pair_experts::Ratio { num: 1, den: 2 }, hold_out: false };
+    let setting = crate::pair_experts::Setting { cap: 8, keep: crate::pair_experts::Ratio { num: 1, den: 2 }, hold_out: false, floor: 0 };
     (table, setting)
 }
 
