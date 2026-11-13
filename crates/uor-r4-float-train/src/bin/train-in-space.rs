@@ -1,7 +1,7 @@
 //! `train-in-space --data-root DIR --out DIR [--objective sheet|voronoi|nearest|cell] [--steps N]
 //! [--train-split DIR --train-sha256 HEX --train-mask-sha256 HEX] [--train-targets observed|mode:K]
 //! [--batch B] [--eval-every K] [--seed S] [--lr X] [--lr-end X] [--decay-mult X]
-//! [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--fix-input-table 0|1] [--flock-read K] [--content-read K] [--hamming-read H] [--hamming-copy-key 1|2] [--hamming-copy-latest 0|1] [--opening-read K] [--opening-anchor turn|last] [--prompt-register Q] [--register-picks K] [--register-select learned|all] [--width N] [--type-spin 0|1] [--opening-weight W] [--samples N] [--reply-tokens N] [--micro-batch M] [--profile K] [--time-without-quantizers 0|1] [--fused-quantize 0|1] [--turn-memory K] [--turn-memory-empty 0|1] [--turn-memory-reply 0|1] [--turn-memory-leave-copied 0|1] [--turn-memory-dropout P] [--fbs-arm one-atom|identity|frozen] [--train-as-served 0|1] [--writer-anchor 0|1] [--init-from CHECKPOINT] [--address-memory e8|sign|collapse|token] [--address-band X] [--served-forward 0|1] [--context N]`
+//! [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--fix-input-table 0|1] [--flock-read K] [--content-read K] [--hamming-read H] [--hamming-copy-key 1|2] [--hamming-copy-latest 0|1] [--opening-read K] [--opening-anchor turn|last] [--prompt-register Q] [--register-picks K] [--register-select learned|all] [--width N] [--type-spin 0|1] [--opening-weight W] [--samples N] [--reply-tokens N] [--micro-batch M] [--profile K] [--time-without-quantizers 0|1] [--fused-quantize 0|1] [--turn-memory K] [--turn-memory-empty 0|1] [--turn-memory-reply 0|1] [--turn-memory-leave-copied 0|1] [--turn-memory-dropout P] [--fbs-arm one-atom|identity|frozen] [--train-as-served 0|1] [--writer-anchor 0|1] [--init-from CHECKPOINT] [--address-memory e8|sign|collapse|token] [--address-band X] [--pair-rows N] [--served-forward 0|1] [--context N]`
 //!
 //! `--train-targets mode:K` (K from 1 to 4, claude-296) trains on fixed targets: each scored
 //! TRAIN target becomes the commonest scored token after its last K tokens in the whole split,
@@ -65,6 +65,15 @@
 //! `--train-as-served 1` are rounded to 16 bits on the residual stream's 2^-16 grid. Each
 //! checkpoint saves them as `address_memory.safetensors`, which scoring loads and the export
 //! refuses, and adds a line to `DIR/address.jsonl`. `--init-from` and `--recall` refuse the flag.
+//!
+//! `--pair-rows N` (claude-370) adds the pair rows to a training run with `--out`: a table of
+//! learned rows addressed by the exact unordered pairs of different tokens in a user turn. A pair
+//! gets a row when it appears in at least N of TRAIN's user turns (N is 1 or more); the rows
+//! start at zero. The turn's rows are summed and added once at the first layer's seam at every
+//! position of the reply. Each checkpoint saves them as `pair_rows.safetensors` and
+//! `pair_rows.dict`, which scoring loads and the export refuses. The flag is training-only: a
+//! scoring pass reads the rows from the checkpoint, so every mode but training with `--out`
+//! refuses it, and so do `--recall`, `--init-from` and `--train-as-served`.
 //!
 //! `--writer-anchor 1` anchors the writer's ports (claude-290): the shared table's first and last
 //! 8D blocks hold exactly the SpiralCore roots of each token's own cell, re-set after every main
@@ -375,6 +384,54 @@ fn address_applies(address: bool, training_with_out: bool) -> Result<()> {
     if address && !training_with_out {
         return Err(FloatTrainError::Invalid(
             "--address-memory and --address-band apply to training with --out only".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+/// claude-370: `--pair-rows N` names the least number of TRAIN user turns a token pair must
+/// appear in to get a learned row; 0 would give every pair a row, so it is refused.
+fn pair_rows_min(value: &str) -> Result<u32> {
+    match value.parse::<u32>() {
+        Ok(min) if min >= 1 => Ok(min),
+        _ => Err(FloatTrainError::Invalid(format!(
+            "--pair-rows wants a minimum turn count of 1 or more, not {value:?}"
+        ))),
+    }
+}
+
+/// claude-370: the pair rows are built by a training run; scoring reads them from the
+/// checkpoint, so a mode that trains nothing refuses the flag, and so do the training
+/// switches the rows are not built for.
+fn pair_rows_applies(
+    pair: bool,
+    training_with_out: bool,
+    recall: bool,
+    init_from: bool,
+    train_as_served: bool,
+) -> Result<()> {
+    if !pair {
+        return Ok(());
+    }
+    if !training_with_out {
+        return Err(FloatTrainError::Invalid(
+            "--pair-rows applies to training with --out only; scoring loads the rows from the checkpoint"
+                .to_owned(),
+        ));
+    }
+    if recall {
+        return Err(FloatTrainError::Invalid(
+            "--pair-rows is not built for the --recall task".to_owned(),
+        ));
+    }
+    if init_from {
+        return Err(FloatTrainError::Invalid(
+            "--pair-rows starts its rows at zero and refuses --init-from".to_owned(),
+        ));
+    }
+    if train_as_served {
+        return Err(FloatTrainError::Invalid(
+            "--pair-rows has no served form yet and refuses --train-as-served".to_owned(),
         ));
     }
     Ok(())
@@ -717,6 +774,7 @@ fn main() -> Result<()> {
                     FloatTrainError::Invalid("--address-band wants a number".to_owned())
                 })?)
             }
+            "--pair-rows" => config.pair_rows = Some(pair_rows_min(&value)?),
             "--served-forward" => served_forward = Some(switch(&value)?),
             "--batched-decode" => batched_decode = Some(switch(&value)?),
             "--decode-cache" => decode_cache = switch(&value)?,
@@ -994,6 +1052,13 @@ fn main() -> Result<()> {
     address_applies(
         config.address_memory.is_some() || config.address_band.is_some(),
         modes[7] && recall == 0,
+    )?;
+    pair_rows_applies(
+        config.pair_rows.is_some(),
+        modes[7],
+        recall > 0,
+        config.init_from.is_some(),
+        config.train_as_served,
     )?;
     fast_rivals_applies(
         config.fast_rivals,
@@ -2198,5 +2263,29 @@ mod tests {
         assert!(address_applies(true, true).is_ok());
         let error = address_applies(true, false).unwrap_err().to_string();
         assert!(error.contains("training with --out only"), "{error}");
+    }
+
+    #[test]
+    fn the_pair_rows_are_a_training_only_switch() {
+        assert_eq!(pair_rows_min("2").unwrap(), 2);
+        for value in ["0", "-1", "x", ""] {
+            let error = pair_rows_min(value).unwrap_err().to_string();
+            assert!(error.contains("--pair-rows wants a minimum turn count of 1 or more"), "{error}");
+        }
+        assert!(pair_rows_applies(false, false, true, true, true).is_ok());
+        assert!(pair_rows_applies(true, true, false, false, false).is_ok());
+        let cases = [
+            ((true, false, false, false, false), "training with --out only"),
+            ((true, true, true, false, false), "--recall task"),
+            ((true, true, false, true, false), "refuses --init-from"),
+            ((true, true, false, false, true), "refuses --train-as-served"),
+        ];
+        for ((pair, out, recall, init_from, served), fragment) in cases {
+            let error = pair_rows_applies(pair, out, recall, init_from, served)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("--pair-rows"), "{error}");
+            assert!(error.contains(fragment), "{error}");
+        }
     }
 }
