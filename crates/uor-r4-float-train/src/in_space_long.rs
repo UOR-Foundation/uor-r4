@@ -158,6 +158,14 @@ pub struct LongConfig {
     /// session serves as `CopyRule::LatestExact`. Left out of `config.json` when false.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub hamming_copy_latest: bool,
+    /// The longest rule (`HammingReads::with_copy_longest`, claude-357), named by the reply
+    /// marker: the two token ids that stand before a reply's first token. A copy head then reads
+    /// the latest exact match whose token before it also agrees, and the latest exact match at a
+    /// reply's opening row, the rule the integer session serves as
+    /// `CopyRule::LongestAfterOpening`. Needs `hamming_copy_latest` and one-token copy keys.
+    /// Left out of `config.json` when not set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hamming_copy_longest: Option<[u32; 2]>,
     /// The Hamming read's type heads as ask heads (`HammingReads::with_ask`, claude-330): each
     /// asks with its token's point plus a learned question row, against the copy key. Off by
     /// default, and left out of `config.json` when off.
@@ -184,6 +192,16 @@ pub struct LongConfig {
     /// and left out of `config.json`.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub hamming_carry_question: usize,
+    /// claude-351: the place read (`HammingReads::with_place`), named by the kit it trains from:
+    /// the labels, marks and stop tokens `--turn-census ... --places-out` writes from the corpus
+    /// this run trains on. It needs the ask heads and refuses the question carry. Left out of
+    /// `config.json` when off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hamming_place: Option<PathBuf>,
+    /// The place pull's weight λ in the loss (`HammingReads::place_step`); it needs the place
+    /// read. 0, the default, is off and left out of `config.json`.
+    #[serde(default, skip_serializing_if = "is_zero_f64")]
+    pub hamming_place_pull: f64,
     /// Pass no gradient from the input encoding into the shared table
     /// (`geometric_stack::set_input_table_fixed`); it changes training only, never a forward.
     pub fix_input_table: bool,
@@ -1086,6 +1104,9 @@ fn checkpoint_hamming(
                 "--hamming-copy-key and --hamming-copy-keys need the checkpoint's --hamming-read",
             ));
         }
+        if config.hamming_copy_longest.is_some() {
+            return Err(invalid("--hamming-copy-longest needs the checkpoint's --hamming-read"));
+        }
         return Ok(None);
     }
     let reads = crate::flock_read_hamming::HammingReads::load(directory, device)?.ok_or_else(
@@ -1155,9 +1176,60 @@ fn checkpoint_hamming(
             config.hamming_carry_question
         )));
     }
+    // claude-357: the leave rule and the marker check read the run's marker, so the two agree.
+    if reads.copy_longest() != config.hamming_copy_longest {
+        return Err(invalid(format!(
+            "--init-from checkpoint's longest-rule marker is {:?}, but this run names {:?}",
+            reads.copy_longest(),
+            config.hamming_copy_longest
+        )));
+    }
+    let reads = start_place(config, reads)?;
     crate::flock_read_hamming::set_hamming_reads(Some(reads.clone()));
     let opt = crate::flock_read::FlockAdamW::for_vars(&reads.variables())?;
     Ok(Some((reads, opt)))
+}
+
+/// claude-351: `reads` with the place read `config` names, and its kit set as what the training
+/// step teaches from on this thread. Reads that carry a place read already, a checkpoint's, keep
+/// its counts, and must be framed as the kit is; reads without one start it at zero. The kit
+/// must name the corpus the run trains on. Without `--hamming-place` the thread's kit is
+/// cleared, and reads that carry a place read are refused.
+fn start_place(
+    config: &LongConfig,
+    reads: crate::flock_read_hamming::HammingReads,
+) -> Result<crate::flock_read_hamming::HammingReads> {
+    use crate::flock_read_hamming::{set_place_teach, PlaceKit};
+    let Some(path) = &config.hamming_place else {
+        set_place_teach(None);
+        if reads.place().is_some() {
+            return Err(invalid("--init-from checkpoint has the place read; name its kit with --hamming-place"));
+        }
+        return Ok(reads);
+    };
+    let kit = PlaceKit::load(path)?;
+    let corpus = config
+        .train_split
+        .as_ref()
+        .map_or(hs::PINNED_TRAIN_TOKENS_SHA256, |split| split.tokens_sha256.as_str());
+    if kit.tokens_sha256 != corpus {
+        return Err(invalid(format!(
+            "--hamming-place {} was read from another corpus than the one this run trains on",
+            path.display()
+        )));
+    }
+    let reads = match reads.place() {
+        Some(place) if place.framed_as(&kit.marks, &kit.stop) => reads,
+        Some(_) => {
+            return Err(invalid(format!(
+                "--init-from checkpoint's place read has other marks or stop tokens than --hamming-place {}",
+                path.display()
+            )))
+        }
+        None => reads.with_place(kit.marks.clone(), &kit.stop)?,
+    };
+    set_place_teach(Some((kit, config.hamming_place_pull)));
+    Ok(reads)
 }
 
 /// The Hamming reads `config` asks for, set on this thread, with their optimizer; none when off.
@@ -1190,6 +1262,9 @@ fn start_hamming(
         if config.hamming_copy_latest {
             return Err(invalid("--hamming-copy-latest sets the Hamming read's copy rule; turn the read on with --hamming-read"));
         }
+        if config.hamming_copy_longest.is_some() {
+            return Err(invalid("--hamming-copy-longest sets the Hamming read's copy rule; turn the read on with --hamming-read"));
+        }
         return Ok(None);
     }
     if let Some(keys) = &config.hamming_copy_keys {
@@ -1211,6 +1286,12 @@ fn start_hamming(
     if config.hamming_copy_latest {
         reads = reads.with_copy_latest();
     }
+    if let Some(marker) = config.hamming_copy_longest {
+        if !config.hamming_copy_latest {
+            return Err(invalid("--hamming-copy-longest orders the latest exact matches: it needs --hamming-copy-latest 1"));
+        }
+        reads = reads.with_copy_longest(marker)?;
+    }
     if config.type_spin {
         reads = reads.with_type_spin()?;
     }
@@ -1226,6 +1307,7 @@ fn start_hamming(
         // claude-335: one carry gain per token of the same shared table.
         reads = reads.with_carry(config.hamming_carry_question, hs::SHEET_VOCAB)?;
     }
+    let reads = start_place(config, reads)?;
     crate::flock_read_hamming::set_hamming_reads(Some(reads.clone()));
     let opt = crate::flock_read::FlockAdamW::for_vars(&reads.variables())?;
     Ok(Some((reads, opt)))
@@ -1383,7 +1465,13 @@ fn start_memory(
             .into_iter()
             .filter(|row| !row.prompt.is_empty())
             .map(|row| {
-                let copied = copy_names_by(&leave_keys, &windows[row.window].input_ids, row.offset, row.target);
+                let copied = copy_names_ruled(
+                    &leave_keys,
+                    config.hamming_copy_longest,
+                    &windows[row.window].input_ids,
+                    row.offset,
+                    row.target,
+                );
                 let key = row.prompt[..config.turn_memory.min(row.prompt.len())].to_vec();
                 (key, copied)
             })
@@ -1424,7 +1512,7 @@ fn start_memory(
                 .iter()
                 .map(|row| {
                     let ids = &windows[row.window].input_ids;
-                    copy_names_by(&leave_keys, ids, row.offset, row.target)
+                    copy_names_ruled(&leave_keys, config.hamming_copy_longest, ids, row.offset, row.target)
                 })
                 .collect()
         });
@@ -2136,6 +2224,24 @@ fn step_gradient(
         }
         _ => None,
     };
+    // claude-351: the place read's reads, what the step teaches it from and the shared table,
+    // when it trains: every forward runs its register over the forward's windows, casts the two
+    // gains' votes and adds the place pull.
+    let placing = match (
+        crate::flock_read_hamming::place_teach(),
+        crate::flock_read_hamming::hamming_reads().filter(|reads| reads.place().is_some()),
+    ) {
+        (Some(teach), Some(reads)) => {
+            let table = model
+                .variables()
+                .get("embedding.weight")
+                .ok_or_else(|| invalid("the model has no shared vector table"))?
+                .as_tensor()
+                .clone();
+            Some((reads, teach, table))
+        }
+        _ => None,
+    };
     let mut pulled: Vec<Tensor> = Vec::new();
     let mut grads: Option<candle_core::backprop::GradStore> = None;
     let mut losses = Vec::new();
@@ -2184,6 +2290,21 @@ fn step_gradient(
                 }
                 None => loss,
             };
+            // claude-351: the place step, weighted by this forward's share of the step's windows.
+            let loss = match &placing {
+                Some((reads, teach, table)) => {
+                    let plain = assemble(&windows[lo..hi]).0;
+                    let starts = window_starts(&windows[lo..hi]);
+                    match reads.place_step(&plain, context, table, &teach.kit, &starts)? {
+                        Some(distance) if teach.pull > 0.0 => {
+                            let weight = teach.pull * (hi - lo) as f64 / windows.len() as f64;
+                            loss.add(&distance.affine(weight, 0.0)?)?
+                        }
+                        _ => loss,
+                    }
+                }
+                None => loss,
+            };
             let grads = variables_only(&loss, loss.backward()?)?;
             stage_clock::mark("backward");
             Ok((detached, share.unwrap_or(1.0), grads))
@@ -2215,6 +2336,19 @@ fn step_gradient(
         tally.record(distance, *all);
     }
     Ok((value, grads))
+}
+
+/// claude-351: each window's corpus start, its first scored target, less one, less that row's
+/// offset ([`window_input_mask`]); none for a window with no scored row, which is labelled with
+/// nothing.
+fn window_starts(windows: &[&CausalWindow]) -> Vec<Option<usize>> {
+    windows
+        .iter()
+        .map(|w| match (w.scored_corpus_positions.first(), w.scored_offsets.first()) {
+            (Some(&p), Some(&o)) if p > o => Some(p - 1 - o),
+            _ => None,
+        })
+        .collect()
 }
 
 /// claude-337: the found-copy pull's record over the steps since the last checkpoint, on a
@@ -3360,6 +3494,21 @@ fn check_pull_flags(config: &LongConfig) -> Result<()> {
     }
     if config.hamming_attract_at_both && config.hamming_attract_at_question {
         return Err(invalid("--hamming-attract-at takes one placement: scored, question or both"));
+    }
+    // claude-351: the place read and its pull.
+    if config.hamming_place_pull < 0.0 || !config.hamming_place_pull.is_finite() {
+        return Err(invalid("--hamming-place-pull is a weight of at least 0"));
+    }
+    if config.hamming_place_pull > 0.0 && config.hamming_place.is_none() {
+        return Err(invalid("--hamming-place-pull pulls the place read's questions; turn it on with --hamming-place"));
+    }
+    if config.hamming_place.is_some() && !config.hamming_ask {
+        return Err(invalid("--hamming-place finds with the ask heads; turn them on with --hamming-ask 1"));
+    }
+    if config.hamming_place.is_some() && config.hamming_carry_question > 0 {
+        return Err(invalid(
+            "--hamming-place and --hamming-carry-question both change the readout read's question; one is on at a time",
+        ));
     }
     Ok(())
 }
@@ -5277,21 +5426,29 @@ pub struct PanelPrompt {
 }
 
 /// The prompts [`score_rows`] decodes on a split (claude-224):
-/// - the windows are [`sample_windows`]';
+/// - the windows are [`sample_windows`]', or [`last_openings`]' with `last_opening` (claude-352);
 /// - each prompt is its window's input through its first scored offset;
 /// - each reference is its [`reference_reply`].
 ///
 /// No model is involved.
-fn split_prompts(windows: &[CausalWindow], mask: &[u8], samples: usize, reply_tokens: usize) -> Vec<PanelPrompt> {
-    sample_windows(windows, mask, samples)
-        .into_iter()
-        .map(|window| PanelPrompt {
-            position: window.scored_corpus_positions[0],
-            prompt: window.input_ids[..=window.scored_offsets[0]].to_vec(),
-            reference: reference_reply(window, reply_tokens),
-            float_keyed: None,
-        })
-        .collect()
+fn split_prompts(
+    windows: &[CausalWindow],
+    mask: &[u8],
+    samples: usize,
+    reply_tokens: usize,
+    last_opening: bool,
+) -> Vec<PanelPrompt> {
+    let prompt = |window: &CausalWindow| PanelPrompt {
+        position: window.scored_corpus_positions[0],
+        prompt: window.input_ids[..=window.scored_offsets[0]].to_vec(),
+        reference: reference_reply(window, reply_tokens),
+        float_keyed: None,
+    };
+    if last_opening {
+        last_openings(windows, mask, samples).iter().map(prompt).collect()
+    } else {
+        sample_windows(windows, mask, samples).into_iter().map(prompt).collect()
+    }
 }
 
 /// `--panel-prompts` (claude-224): DEV's and each panel's prompts, as [`score_rows`] decodes them,
@@ -5302,26 +5459,38 @@ fn split_prompts(windows: &[CausalWindow], mask: &[u8], samples: usize, reply_to
 /// name. A served sample whose position, prompt or reference is not its prompt's is refused: the
 /// float arms decoded these prompts, so the two lists are one.
 ///
+/// `context` cuts each panel's windows as `--score-rows --context` cuts them, and DEV keeps
+/// [`SHEET_CONTEXT`]; with `last_opening` every split's prompts are [`last_openings`]', as
+/// `--score-rows --sample-opening last` decodes them (claude-352). At [`SHEET_CONTEXT`] and the
+/// first opening the files are the ones written before.
+///
 /// It returns each written file's name and rows.
+#[allow(clippy::too_many_arguments)]
 pub fn panel_prompts(
     data_root: &Path,
     panels: &[(String, PathBuf)],
     samples: usize,
     reply_tokens: usize,
+    context: usize,
+    last_opening: bool,
     served_runs: Option<&Path>,
     out: &Path,
 ) -> Result<Vec<(String, usize)>> {
     let windows_of = |tokens: &[u32], mask: &[u8]| -> Result<Vec<CausalWindow>> {
-        Ok(hs::build_document_windows(tokens, mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?.0)
+        Ok(hs::build_document_windows(tokens, mask, context, hs::SHEET_BOS_ID)?.0)
     };
     let (dev_windows, dev_mask) = load_dev(data_root)?;
-    let mut splits = vec![("dev".to_owned(), split_prompts(&dev_windows, &dev_mask, samples, reply_tokens))];
+    let mut splits =
+        vec![("dev".to_owned(), split_prompts(&dev_windows, &dev_mask, samples, reply_tokens, last_opening))];
     for (name, dir) in panels {
         if !panel_name_ok(name) || splits.iter().any(|(n, _)| n == name) {
             return Err(invalid(format!("--panel {name}: a panel name is one word, not dev")));
         }
         let (tokens, mask, _) = load_unpinned_uort(dir)?;
-        splits.push((name.clone(), split_prompts(&windows_of(&tokens, &mask)?, &mask, samples, reply_tokens)));
+        splits.push((
+            name.clone(),
+            split_prompts(&windows_of(&tokens, &mask)?, &mask, samples, reply_tokens, last_opening),
+        ));
     }
     fs::create_dir_all(out)?;
     let mut written = Vec::new();
@@ -5616,6 +5785,90 @@ fn copy_names_by(keys: &[usize], ids: &[u32], offset: usize, target: u32) -> boo
         }
         _ => copy_names(ids, offset, target),
     })
+}
+
+/// Whether the copy read names `target` under the run's copy rule (claude-357): the turn memory's
+/// leave rule asks the copy read as it is built. Without the longest rule this is
+/// [`copy_names_by`]. With it, `longest` holding the reply marker: a row that opens a reply (its
+/// previous and own tokens are the marker) reads its latest exact match, as before; every other
+/// row reads the latest position `s` in `2..offset` whose two previous tokens are the row's
+/// previous and own tokens, and with none its latest exact match. This is the choice of
+/// `HammingReads::with_copy_longest` and of the integer session's
+/// `CopyRule::LongestAfterOpening`, read off the tokens.
+fn copy_names_ruled(
+    keys: &[usize],
+    longest: Option<[u32; 2]>,
+    ids: &[u32],
+    offset: usize,
+    target: u32,
+) -> bool {
+    let Some(marker) = longest else {
+        return copy_names_by(keys, ids, offset, target);
+    };
+    if offset >= 1 && ids[offset - 1] == marker[0] && ids[offset] == marker[1] {
+        return copy_names_by(keys, ids, offset, target);
+    }
+    let exact = |s: &usize| ids[*s - 1] == ids[offset];
+    (2..offset)
+        .rev()
+        .find(|s| exact(s) && ids[*s - 2] == ids[offset - 1])
+        .or_else(|| (1..offset).rev().find(exact))
+        .is_some_and(|s| ids[s] == target)
+}
+
+/// The reply marker against a split's reply mask (claude-357). Under the longest rule the copy
+/// read finds the row that chooses a reply's first token by the marker, the two token ids before
+/// it, and not by the mask. Refused unless the marker stands before every reply's first token of
+/// `tokens` and nowhere else; returns how many replies open.
+fn check_reply_marker(name: &str, tokens: &[u32], mask: &[u8], marker: [u32; 2]) -> Result<usize> {
+    if tokens.len() != mask.len() {
+        return Err(invalid(format!(
+            "{name}: {} tokens and {} mask bytes",
+            tokens.len(),
+            mask.len()
+        )));
+    }
+    let mut openings = 0;
+    for position in 1..tokens.len() {
+        let opens = mask[position] != 0 && mask[position - 1] == 0;
+        let marked = position >= 2
+            && tokens[position - 2] == marker[0]
+            && tokens[position - 1] == marker[1];
+        if opens != marked {
+            return Err(invalid(format!(
+                "--hamming-copy-longest {},{}: in {name}, the token at {position} {}",
+                marker[0],
+                marker[1],
+                if opens {
+                    "opens a reply without the marker before it"
+                } else {
+                    "follows the marker and opens no reply"
+                }
+            )));
+        }
+        openings += usize::from(opens);
+    }
+    Ok(openings)
+}
+
+/// [`check_reply_marker`] on the run's TRAIN and DEV splits, before anything is built; nothing
+/// without `--hamming-copy-longest`.
+fn check_run_markers(data_root: &Path, config: &LongConfig) -> Result<()> {
+    let Some(marker) = config.hamming_copy_longest else {
+        return Ok(());
+    };
+    let (tokens, mask) = match config.train_split.as_ref() {
+        None => load_train_split(data_root)?,
+        Some(split) => load_named_split(split)?,
+    };
+    let train = check_reply_marker("TRAIN", &tokens, &mask, marker)?;
+    let (tokens, mask) = load_dev_split(data_root)?;
+    let dev = check_reply_marker("DEV", &tokens, &mask, marker)?;
+    println!(
+        "[hamming] the longest rule's marker {},{} stands before every reply opening and nowhere else: TRAIN {train}, DEV {dev}",
+        marker[0], marker[1]
+    );
+    Ok(())
 }
 
 /// The forms a reply key holds, in the order the read asks them. Without a tail (claude-193),
@@ -8457,8 +8710,8 @@ pub fn root_separation() -> Result<(f64, f64)> {
 }
 
 /// The pinned DEV panel's windows and its response mask.
-fn load_dev(data_root: &Path) -> Result<(Vec<CausalWindow>, Vec<u8>)> {
-    let (dev_tokens, dev_mask) = hs::load_pinned_uort_split(
+fn load_dev_split(data_root: &Path) -> Result<(Vec<u32>, Vec<u8>)> {
+    hs::load_pinned_uort_split(
         &data_root.join("ft/dev/tokens.u16"),
         &data_root.join("ft/dev/response_mask.u8"),
         hs::PINNED_DEV_TOKENS_SHA256,
@@ -8467,7 +8720,11 @@ fn load_dev(data_root: &Path) -> Result<(Vec<CausalWindow>, Vec<u8>)> {
         hs::EXPECTED_DEV_ELIGIBLE_TARGETS,
         hs::SHEET_VOCAB,
         hs::SHEET_BOS_ID,
-    )?;
+    )
+}
+
+fn load_dev(data_root: &Path) -> Result<(Vec<CausalWindow>, Vec<u8>)> {
+    let (dev_tokens, dev_mask) = load_dev_split(data_root)?;
     let (dev_windows, _) =
         hs::build_document_windows(&dev_tokens, &dev_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
     Ok((dev_windows, dev_mask))
@@ -9275,6 +9532,11 @@ pub fn score_rows(
             return Err(invalid(format!("--panel-queries {name} needs --panel {name}=DIR")));
         }
     }
+    let panel_marker = match panels.is_empty() {
+        true => None,
+        false => crate::flock_read_hamming::HammingReads::load(checkpoint, device)?
+            .and_then(|reads| reads.copy_longest()),
+    };
     for (name, dir) in panels {
         if !panel_name_ok(name) || splits.iter().any(|s| s.name == *name) {
             return Err(invalid(format!(
@@ -9282,6 +9544,14 @@ pub fn score_rows(
             )));
         }
         let (tokens, mask, sha) = load_unpinned_uort(dir)?;
+        // claude-357: a checkpoint under the longest rule finds reply openings by its marker.
+        if let Some(marker) = panel_marker {
+            let openings = check_reply_marker(name, &tokens, &mask, marker)?;
+            println!(
+                "[longest] the checkpoint reads by the marker {},{}: {name} has it before every reply opening and nowhere else: {openings}",
+                marker[0], marker[1]
+            );
+        }
         // claude-287: the rule's cut, and the context its windows and decodes run at.
         let (runs_at, windows) = match past_window {
             Some(rule) => past_window_cut(rule, &tokens, &mask, context)?,
@@ -14642,6 +14912,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             config.train_targets,
         )?;
     let (dev_windows, dev_mask) = load_dev(data_root)?;
+    check_run_markers(data_root, config)?;
     let prompts = sample_windows(&dev_windows, &dev_mask, config.samples);
     println!(
         "[in-space] usable TRAIN windows {} (batch {}, {} steps = {:.2} epochs), DEV windows {}",
@@ -15166,9 +15437,28 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             if let Some(tally) = pull_tally.as_mut() {
                 append_line(&out.join("pull.jsonl"), &serde_json::to_string(&tally.line(step + 1))?)?;
             }
+            // claude-351: the place read's reading for this checkpoint, on a run with it.
+            if let Some(line) = place_line(step + 1)? {
+                append_line(&out.join("place.jsonl"), &serde_json::to_string(&line)?)?;
+            }
         }
     }
     Ok(())
+}
+
+/// claude-351: a checkpoint's `place.jsonl` line on a language run with the place read
+/// (`run_long` under `--hamming-place`): the step, and the place read's gains and, since the
+/// line before, its votes and mean pull (`PlaceRead::reading`, which starts the next tally).
+/// None on a run without the place read, which writes no such file.
+fn place_line(step: usize) -> Result<Option<serde_json::Value>> {
+    let Some(reads) = crate::flock_read_hamming::hamming_reads() else {
+        return Ok(None);
+    };
+    let Some(place) = reads.place() else {
+        return Ok(None);
+    };
+    let line = place.line(step)?;
+    Ok(Some(line))
 }
 
 #[cfg(test)]
@@ -16572,12 +16862,15 @@ mod tests {
             hamming_copy_key: 1,
             hamming_copy_keys: None,
             hamming_copy_latest: false,
+            hamming_copy_longest: None,
             hamming_ask: false,
             hamming_attract: 0.0,
             hamming_attract_at_question: false,
             hamming_hold: 0,
             hamming_attract_at_both: false,
             hamming_carry_question: 0,
+            hamming_place: None,
+            hamming_place_pull: 0.0,
             fix_input_table: false,
             train_split: None,
             opening_weight: 1,
@@ -20506,9 +20799,9 @@ mod tests {
         let windows = hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, bos).unwrap().0;
         let prompt = |doc: u32| std::iter::once(bos).chain((0..20).map(|i| 10 + i + doc)).collect::<Vec<u32>>();
         let row = |position: usize, doc: u32| PanelPrompt { position, prompt: prompt(doc), reference: vec![5, 6, 7], float_keyed: None };
-        assert_eq!(split_prompts(&windows, &mask, 2, 64), [row(21, 0), row(45, 1)]);
-        assert_eq!(split_prompts(&windows, &mask, 2, 2)[0].reference, [5, 6], "at most the reply tokens");
-        assert_eq!(split_prompts(&windows, &mask, 1, 64), [row(21, 0)], "the stride takes the first");
+        assert_eq!(split_prompts(&windows, &mask, 2, 64, false), [row(21, 0), row(45, 1)]);
+        assert_eq!(split_prompts(&windows, &mask, 2, 2, false)[0].reference, [5, 6], "at most the reply tokens");
+        assert_eq!(split_prompts(&windows, &mask, 1, 64, false), [row(21, 0)], "the stride takes the first");
     }
 
     fn integer_sample(keyed: Option<u32>, reply: Vec<u32>, reference: Vec<u32>) -> IntegerSample {
@@ -22356,6 +22649,32 @@ mod tests {
         );
     }
 
+    /// claude-352: `--panel-prompts` writes the prompts the scorer decodes. With
+    /// `--sample-opening last` each is its window's input through the last reply opening, with
+    /// that reply as its reference; without it, the first opening's, as before.
+    #[test]
+    fn the_panel_prompts_follow_the_sample_opening() {
+        // BOS, a 20-token prompt, a reply (3), a 5-token prompt, a reply (3).
+        let mut tokens = vec![0u32];
+        tokens.extend(100..120);
+        tokens.extend([200, 201, 202]);
+        tokens.extend(300..305);
+        tokens.extend([400, 401, 402]);
+        let mask: Vec<u8> =
+            tokens.iter().map(|&t| u8::from((200..203).contains(&t) || (400..403).contains(&t))).collect();
+        let (windows, _) = hs::build_document_windows(&tokens, &mask, 2048, 0).unwrap();
+        let first = split_prompts(&windows, &mask, 4, 64, false);
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].position, 21);
+        assert_eq!(first[0].prompt, tokens[..21]);
+        assert_eq!(first[0].reference, [200, 201, 202]);
+        let last = split_prompts(&windows, &mask, 4, 64, true);
+        assert_eq!(last.len(), 1);
+        assert_eq!(last[0].position, 29);
+        assert_eq!(last[0].prompt, tokens[..29]);
+        assert_eq!(last[0].reference, [400, 401, 402]);
+    }
+
     /// claude-274: a scored file at 192 writes no `context`, so a 192 manifest is as before; at
     /// another window it names it.
     #[test]
@@ -23545,6 +23864,59 @@ mod tests {
         assert!(RECALL_ABLATIONS.iter().all(|a| *a == Ablation::CopyAtQuery || a.row_scope().is_none()));
     }
 
+    /// claude-357: the longest rule's marker stays out of `config.json` when not set, needs the
+    /// read, the latest-exact rule and one-token keys, and reaches the reads the run builds.
+    #[test]
+    fn the_longest_flag_is_off_by_default_and_checked() {
+        let plain = serde_json::to_string(&config(0, None)).unwrap();
+        assert!(!plain.contains("hamming_copy_longest"));
+        let on = LongConfig {
+            hamming_read: 4,
+            hamming_copy_latest: true,
+            hamming_copy_longest: Some([714, 28]),
+            ..config(0, None)
+        };
+        let json = serde_json::to_string(&on).unwrap();
+        assert!(json.contains("\"hamming_copy_longest\":[714,28]"));
+        let refused = |c: LongConfig| start_hamming(&c, &Device::Cpu).err().map(|e| e.to_string());
+        let no_read = LongConfig { hamming_read: 0, hamming_copy_latest: false, ..on.clone() };
+        assert!(refused(no_read).unwrap().contains("--hamming-copy-longest sets"));
+        let no_latest = LongConfig { hamming_copy_latest: false, ..on.clone() };
+        assert!(refused(no_latest).unwrap().contains("it needs --hamming-copy-latest 1"));
+        let two_token = LongConfig { hamming_copy_key: 2, ..on.clone() };
+        assert!(refused(two_token).unwrap().contains("one-token copy keys"));
+        let (reads, _) = start_hamming(&on, &Device::Cpu).unwrap().expect("a read");
+        assert_eq!(reads.copy_longest(), Some([714, 28]));
+        let off = LongConfig { hamming_copy_longest: None, ..on.clone() };
+        let (plain_reads, _) = start_hamming(&off, &Device::Cpu).unwrap().expect("a read");
+        assert_eq!(plain_reads.copy_longest(), None);
+        // A resumed run's marker must be its checkpoint's, both ways and by value.
+        let other = LongConfig { hamming_copy_longest: Some([714, 29]), ..on.clone() };
+        crate::flock_read_hamming::set_hamming_reads(None);
+        let dir = std::env::temp_dir().join(format!(
+            "longest-checkpoint-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        for (saved, run, fits) in [
+            (&reads, &on, true),
+            (&plain_reads, &off, true),
+            (&reads, &off, false),
+            (&plain_reads, &on, false),
+            (&reads, &other, false),
+        ] {
+            std::fs::create_dir(&dir).unwrap();
+            saved.save(&dir).unwrap();
+            let got = checkpoint_hamming(run, &dir, &Device::Cpu).map(|r| r.map(|(r, _)| r.copy_longest()));
+            std::fs::remove_dir_all(&dir).unwrap();
+            match got {
+                Ok(marker) => assert!(fits && marker == Some(run.hamming_copy_longest), "{marker:?}"),
+                Err(e) => assert!(!fits && e.to_string().contains("longest-rule marker"), "{e}"),
+            }
+        }
+        crate::flock_read_hamming::set_hamming_reads(None);
+    }
+
     /// claude-334: `−aS` drops the stream read's ask (type) class alone and keeps the hold on;
     /// `−H` drops no class and turns the hold off; neither cuts rows.
     #[test]
@@ -23865,5 +24237,81 @@ mod copy_names_tests {
                 assert_eq!(copy_names_by(&[1, 1], &ids, offset, target), copy_names(&ids, offset, target));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod copy_longest_tests {
+    use super::{check_reply_marker, copy_names, copy_names_ruled};
+
+    /// claude-357: under the longest rule the leave rule asks the copy read as it is built. A row
+    /// reads the latest match whose token before it also agrees, and with none the latest match;
+    /// a row whose previous and own tokens are the marker reads the latest, as before.
+    #[test]
+    fn the_leave_rule_reads_the_longer_match_except_at_an_opening() {
+        let (c, x, q, b, p) = (11, 12, 13, 14, 15);
+        let ids = [c, x, q, b, x, p, c, x];
+        let absent = Some([98, 99]);
+        assert!(copy_names(&ids, 7, p) && !copy_names(&ids, 7, q), "the latest X is followed by P");
+        assert!(copy_names_ruled(&[1], None, &ids, 7, p), "without the rule: the latest");
+        assert!(copy_names_ruled(&[1], absent, &ids, 7, q), "the X after C is followed by Q");
+        assert!(!copy_names_ruled(&[1], absent, &ids, 7, p));
+        assert!(copy_names_ruled(&[1], Some([c, x]), &ids, 7, p), "an opening row: the latest");
+        assert!(!copy_names_ruled(&[1], Some([c, x]), &ids, 7, q));
+        assert!(copy_names_ruled(&[1], absent, &ids, 4, q), "no longer match: the latest");
+        assert!(!copy_names_ruled(&[1], absent, &ids, 0, x));
+        assert!(!copy_names_ruled(&[1], absent, &ids, 1, q));
+        // Every six-token window over three tokens, against the rule spelled out position by
+        // position as the integer reader walks it (`longest_of`).
+        let spelled = |ids: &[u32], t: usize, target: u32, marker: [u32; 2]| {
+            let opening = t >= 1 && ids[t - 1] == marker[0] && ids[t] == marker[1];
+            let (mut exact, mut long) = (None, None);
+            for s in 1..t {
+                if ids[s - 1] == ids[t] {
+                    exact = Some(s);
+                    if !opening && s >= 2 && ids[s - 2] == ids[t - 1] {
+                        long = Some(s);
+                    }
+                }
+            }
+            long.or(exact).is_some_and(|s| ids[s] == target)
+        };
+        let mut differ = 0;
+        for code in 0..729u32 {
+            let ids: Vec<u32> = (0..6).map(|i| code / 3u32.pow(i) % 3).collect();
+            for marker in [[0, 1], [2, 2], [98, 99]] {
+                for offset in 0..6 {
+                    for target in 0..3 {
+                        let ruled = copy_names_ruled(&[1], Some(marker), &ids, offset, target);
+                        assert_eq!(
+                            ruled,
+                            spelled(&ids, offset, target, marker),
+                            "{ids:?} {offset} {target} {marker:?}"
+                        );
+                        differ += usize::from(ruled != copy_names(&ids, offset, target));
+                    }
+                }
+            }
+        }
+        assert!(differ > 0, "the rule changes some row");
+    }
+
+    /// claude-357: the marker stands before every reply's first token and nowhere else, or the
+    /// split is refused with the position.
+    #[test]
+    fn the_marker_check_refuses_a_missing_and_a_stray_marker() {
+        let tokens = [1, 3, 7, 8, 5, 5, 4, 7, 8, 6];
+        let mask = [0, 0, 0, 0, 1, 1, 0, 0, 0, 1];
+        assert_eq!(check_reply_marker("toy", &tokens, &mask, [7, 8]).unwrap(), 2);
+        let stray = check_reply_marker("toy", &tokens, &mask, [3, 7]).unwrap_err().to_string();
+        assert!(stray.contains("the token at 3 follows the marker and opens no reply"), "{stray}");
+        let other = [1, 3, 7, 9, 5, 5, 4, 7, 8, 6];
+        let missing = check_reply_marker("toy", &other, &mask, [7, 8]).unwrap_err().to_string();
+        assert!(
+            missing.contains("the token at 4 opens a reply without the marker before it"),
+            "{missing}"
+        );
+        assert!(check_reply_marker("toy", &tokens, &mask[..9], [7, 8]).is_err(), "lengths differ");
+        assert_eq!(check_reply_marker("toy", &[1, 2], &[0, 0], [7, 8]).unwrap(), 0);
     }
 }

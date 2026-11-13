@@ -26,6 +26,10 @@
 //! the artifact's `hamming.d{depth}.ask` and `.carry` sections (claude-336): the question table
 //! at Q12, the gains at Q16. A snapshot without the key exports byte for byte as before.
 //!
+//! A snapshot of a model with the place read (claude-351) holds its marks and each token's class
+//! under `hamming_place`. They are served from the readout read's `hamming.d{depth}.place`
+//! section and the Hamming record's `place`, added after the ask heads the read sits on.
+//!
 //! `--run-config` reads the run's `config.json` for its readout (integer-nearest-readout,
 //! claude-231) and served contract. A `cell` or `nearest` objective serves the whole table's
 //! nearest token (`head = "native_vector_nearest"`), for a snapshot taken before `fbs-snapshot`
@@ -33,7 +37,10 @@
 //! config whose `retain_rates` disagrees with the snapshot's, or whose objective reads the writer
 //! for a snapshot that reads nearest. A config with `hamming_copy_latest: true` (claude-345) sets
 //! the Hamming record's `copy_latest`, so the copy heads serve their latest exact match; the
-//! snapshot does not carry that rule, so such a run is exported with its config. A config with a
+//! snapshot does not carry that rule, so such a run is exported with its config. A config with
+//! `hamming_copy_longest: [A, B]` (claude-357) sets the record's `copy_longest`, the reply
+//! marker, so the copy heads serve the longest match after a reply's opening and find the opening
+//! row from the tokens; it needs `hamming_copy_latest: true`. A config with a
 //! `turn_memory_tail` above 0 (claude-345) exports the memory chain with tail keys of that many
 //! turn ids, and one without the key or with 0 exports none.
 //!
@@ -65,12 +72,13 @@ use std::process::ExitCode;
 
 use sha2::{Digest, Sha256};
 use uor_r4_integer::fbs_snapshot::{
-    quantize_hamming_ask, run_readout_nearest, write_new_file, FbsHammingAskRead,
-    FBS_HAMMING_ASK_KEY,
+    quantize_hamming_ask, run_readout_nearest, write_new_file, FbsHammingAskRead, PlaceImage,
+    FBS_HAMMING_ASK_KEY, FBS_HAMMING_PLACE_KEY,
 };
 use uor_r4_integer::stack::{
-    add_hamming_ask_uorlut01, add_point_key_uorlut01, build_point_key, check_point_key_read_back,
+    add_hamming_ask_uorlut01, add_hamming_place_uorlut01, add_point_key_uorlut01, build_point_key, check_point_key_read_back,
     export_fbs_trunk_uorlut01_with_provenance, point_key_windows, set_hamming_copy_latest_uorlut01,
+    set_hamming_copy_longest_uorlut01,
     AskImage, FbsExportProvenance, FbsExportSnaps, FbsTrunkSnapshot, IntegerStackModel,
     StackContractProvenance, POINT_KEY_BOS, POINT_KEY_WINDOW,
 };
@@ -212,6 +220,8 @@ fn run() -> Result<(), String> {
     let (mut paths, mut run_config) = (Vec::new(), None::<String>);
     // The copy rule the run trained (claude-345), read from its config below.
     let mut copy_latest = false;
+    // The longest rule's reply marker the run trained with (claude-357), read from its config.
+    let mut copy_longest = None::<[u32; 2]>;
     // The memory chain's tail the run trained (claude-345), 0 for none, read from its config below.
     let mut chain_tail = 0usize;
     let mut carry = None::<usize>;
@@ -302,6 +312,17 @@ fn run() -> Result<(), String> {
                 .map_err(|e| format!("{snapshot}: {FBS_HAMMING_ASK_KEY}: {e}"))?,
         ),
     };
+    // The place read (claude-351) rides beside the trunk snapshot the same way.
+    let place: Option<PlaceImage> = match value
+        .as_object_mut()
+        .and_then(|o| o.remove(FBS_HAMMING_PLACE_KEY))
+    {
+        None => None,
+        Some(place) => Some(
+            serde_json::from_value(place)
+                .map_err(|e| format!("{snapshot}: {FBS_HAMMING_PLACE_KEY}: {e}"))?,
+        ),
+    };
     let mut snap: FbsTrunkSnapshot =
         serde_json::from_value(value).map_err(|e| format!("{snapshot}: {e}"))?;
     // A block in which no read asks is the plain snapshot (claude-336 review).
@@ -366,6 +387,16 @@ fn run() -> Result<(), String> {
             .get("hamming_copy_latest")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false);
+        copy_longest = match serde_json::from_str::<serde_json::Value>(&text)
+            .map_err(|e| format!("{config}: {e}"))?
+            .get("hamming_copy_longest")
+        {
+            None | Some(serde_json::Value::Null) => None,
+            Some(marker) => Some(
+                serde_json::from_value::<[u32; 2]>(marker.clone())
+                    .map_err(|e| format!("{config}: hamming_copy_longest: {e}"))?,
+            ),
+        };
         let tail = serde_json::from_str::<serde_json::Value>(&text)
             .map_err(|e| format!("{config}: {e}"))?
             .get("turn_memory_tail")
@@ -437,12 +468,26 @@ fn run() -> Result<(), String> {
             add_hamming_ask_uorlut01(&artifact, &asks).map_err(|e| format!("the ask heads: {e}"))?
         }
     };
+    // claude-351: the place read sits on the readout read's ask heads, so it is added after them.
+    let artifact = match place {
+        None => artifact,
+        Some(place) => add_hamming_place_uorlut01(&artifact, &place)
+            .map_err(|e| format!("the place read: {e}"))?,
+    };
     // A run trained with `--hamming-copy-latest` serves the latest exact match: the rule is in
     // its config, not in the snapshot, and goes into the Hamming record here.
     let artifact = if copy_latest {
         set_hamming_copy_latest_uorlut01(&artifact).map_err(|e| format!("the copy rule: {e}"))?
     } else {
         artifact
+    };
+    // A run trained with `--hamming-copy-longest` (claude-357) serves the longest match after a
+    // reply's opening, the opening row found by the run's marker. The record refuses a marker
+    // without the latest exact rule.
+    let artifact = match copy_longest {
+        Some(marker) => set_hamming_copy_longest_uorlut01(&artifact, marker)
+            .map_err(|e| format!("the longest rule: {e}"))?,
+        None => artifact,
     };
     IntegerStackModel::parse(&artifact)
         .map_err(|e| format!("the exported artifact does not parse: {e}"))?;

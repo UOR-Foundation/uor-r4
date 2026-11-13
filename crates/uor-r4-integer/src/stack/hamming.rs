@@ -9,6 +9,10 @@
 use crate::bitcode::popcount_swar;
 use crate::fbs_snapshot::{CodeRole, ForcedCode, HammingTraceHead, HammingTraceRead, HammingTraceWindow};
 
+use core::ops::Range;
+
+use crate::fbs_snapshot::{place_find, place_first, PlaceImage, PlaceState};
+
 use super::format::{Container, StackHamming, HAMMING_WEIGHT_EXP};
 use super::kernels::{stack_div_u64, stack_hamilton, NORM_FINE_EXP, RESIDUAL_EXP};
 use super::session::{stack_rotation, GATE_EPSILON};
@@ -39,6 +43,8 @@ pub struct HammingReadImage {
 pub struct HammingImage {
     pub record: StackHamming,
     pub reads: Vec<HammingReadImage>,
+    /// The readout read's place read (claude-351), or `None` for a stack without one.
+    pub place: Option<PlaceImage>,
 }
 
 /// The Hamming reads of a `UORLUT01` stack artifact, with every section at the length its shape
@@ -101,7 +107,18 @@ pub(crate) fn hamming_image(artifact: &Container<'_>) -> Result<Option<HammingIm
             ask: AskImage::checked(ask_table, carry, artifact.shape.vocab, width)?,
         });
     }
-    Ok(Some(HammingImage { record, reads }))
+    // claude-351: the place section is present exactly when the record carries the marks.
+    let place_name = record.depths.last().map(|depth| format!("hamming.d{depth}.place"));
+    let place = match (&record.place, place_name) {
+        (Some(marks), Some(name)) => Some(PlaceImage::checked(marks.clone(), artifact.table_i16(&name)?, artifact.shape.vocab).map_err(StackError::Numerics)?),
+        (None, Some(name)) => match artifact.table_i16(&name) {
+            Err(StackError::MissingSection(_)) => None,
+            Ok(_) => return Err(StackError::Numerics(format!("{name}: present, but the record names no place read"))),
+            Err(e) => return Err(e),
+        },
+        _ => None,
+    };
+    Ok(Some(HammingImage { record, reads, place }))
 }
 
 /// What the copy-code check (claude-237) takes from a stack artifact: its Hamming reads, its Q12
@@ -167,15 +184,29 @@ pub enum CopyRule {
     /// The latest of the positions at the smallest distance, when that distance is inside the
     /// margin: hard top-1 (the 26 Sep retrieval head), with ties to the later position.
     LatestNearest,
+    /// The longest match (claude-355): among the positions whose key equals the query exactly,
+    /// the latest whose token before the key also equals the token before the row's query
+    /// tokens, by the head's code; with no such position, [`Self::LatestExact`]'s. Under copy
+    /// key 1 that is a match of two tokens, else of one. A head with no exact match reads nothing.
+    LongestExact,
+    /// The longest match after a reply's opening (claude-356): at the row that chooses a reply's
+    /// first token, [`Self::LatestExact`]'s position; at every other row, [`Self::LongestExact`]'s.
+    /// The session names the opening row by its reply mark; with no mark every row reads as
+    /// [`Self::LongestExact`]. An artifact whose record names a reply marker (`copy_longest`,
+    /// claude-357) serves this rule as its own and finds the opening row from the tokens.
+    LongestAfterOpening,
 }
 
 impl CopyRule {
-    /// The rule `name` names (`mean`, `latest-exact`, `latest-nearest`), or `None`.
+    /// The rule `name` names (`mean`, `latest-exact`, `latest-nearest`, `longest-exact`,
+    /// `longest-after-opening`), or `None`.
     pub fn parse(name: &str) -> Option<Self> {
         match name {
             "mean" => Some(Self::Mean),
             "latest-exact" => Some(Self::LatestExact),
             "latest-nearest" => Some(Self::LatestNearest),
+            "longest-exact" => Some(Self::LongestExact),
+            "longest-after-opening" => Some(Self::LongestAfterOpening),
             _ => None,
         }
     }
@@ -186,6 +217,19 @@ impl CopyRule {
             Self::Mean => "mean",
             Self::LatestExact => "latest-exact",
             Self::LatestNearest => "latest-nearest",
+            Self::LongestExact => "longest-exact",
+            Self::LongestAfterOpening => "longest-after-opening",
+        }
+    }
+
+    /// The rule in force at one row (claude-356): [`Self::LongestAfterOpening`] is
+    /// [`Self::LatestExact`] at a reply's `opening` row and [`Self::LongestExact`] at every other;
+    /// every other rule is itself at every row.
+    fn at(self, opening: bool) -> Self {
+        match (self, opening) {
+            (Self::LongestAfterOpening, true) => Self::LatestExact,
+            (Self::LongestAfterOpening, false) => Self::LongestExact,
+            (rule, _) => rule,
         }
     }
 }
@@ -229,6 +273,9 @@ pub struct CopyHeads {
     pair: Vec<Option<u64>>,
     /// Which positions [`Self::mean`] reads; [`CopyRule::Mean`] unless a caller sets another.
     rule: CopyRule,
+    /// The artifact's reply marker (claude-357), when its record names one: a row opens a reply
+    /// when its previous and own tokens are these two, whatever the caller's mark says.
+    marker: Option<[u32; 2]>,
 }
 
 impl CopyHeads {
@@ -247,8 +294,25 @@ impl CopyHeads {
                     (record.head_copy_key(h) == 2).then(|| (1u64 << (width / record.heads / 2)) - 1)
                 })
                 .collect(),
-            // The artifact's own rule (claude-345): latest-exact when its record says so.
-            rule: if record.copy_latest { CopyRule::LatestExact } else { CopyRule::Mean },
+            // The artifact's own rule: latest-exact when its record says so (claude-345), and
+            // the longest match after a reply's opening when it names a marker (claude-357).
+            rule: match (record.copy_longest, record.copy_latest) {
+                (Some(_), _) => CopyRule::LongestAfterOpening,
+                (None, true) => CopyRule::LatestExact,
+                (None, false) => CopyRule::Mean,
+            },
+            marker: record.copy_longest,
+        }
+    }
+
+    /// Whether the last row of `tokens` opens a reply (claude-357). An artifact that names its
+    /// reply marker finds the row from the tokens, as its float read was trained: the row's
+    /// previous and own tokens are the marker. Without a marker it is the caller's `opening`,
+    /// the session's reply mark (claude-356).
+    fn opens(&self, tokens: &[u32], opening: bool) -> bool {
+        match self.marker {
+            Some([first, second]) => matches!(tokens, [.., a, b] if *a == first && *b == second),
+            None => opening,
         }
     }
 
@@ -274,12 +338,31 @@ impl CopyHeads {
         latest_of(self.query_at(tokens, t, h), t, exact, |s| self.key_at(tokens, s, h))
     }
 
-    /// The positions [`Self::mean`] reads for head `h`, by the head's [`CopyRule`].
-    fn choose_ruled(&self, h: usize, tokens: &[u32]) -> Vec<(usize, u32)> {
-        match self.rule {
+    /// Whether, at position `s`, one token more than copy head `h`'s key matches row `t` of
+    /// `tokens` (claude-355): the token before the key (`x_{s−2}` under copy key 1, `x_{s−3}`
+    /// under copy key 2) equals, by the head's code, the token before the row's query tokens
+    /// (`x_{t−1}`, `x_{t−2}`). A position with no token before its key has no longer match.
+    /// It is asked for `1 ≤ s < t` only, so `t` is at least 2 and the row has that token.
+    fn longer_at(&self, tokens: &[u32], s: usize, t: usize, h: usize) -> bool {
+        let key = if self.pair[h].is_some() { 2 } else { 1 };
+        s > key && self.code(tokens[s - 1 - key], h) == self.code(tokens[t - key], h)
+    }
+
+    /// The positions [`Self::mean_at`] reads for head `h`, by the head's [`CopyRule`] at a row
+    /// that is a reply's `opening` or not.
+    fn choose_ruled(&self, h: usize, tokens: &[u32], opening: bool) -> Vec<(usize, u32)> {
+        match self.rule.at(self.opens(tokens, opening)) {
             CopyRule::Mean => self.choose(h, tokens),
             CopyRule::LatestExact => self.latest(h, tokens, true),
             CopyRule::LatestNearest => self.latest(h, tokens, false),
+            // [`CopyRule::at`] names one of the two rules it switches between, never itself.
+            CopyRule::LongestExact | CopyRule::LongestAfterOpening => {
+                let Some(t) = tokens.len().checked_sub(1) else {
+                    return Vec::new();
+                };
+                let key = |s: usize| self.key_at(tokens, s, h);
+                longest_of(self.query_at(tokens, t, h), t, key, |s| self.longer_at(tokens, s, t, h))
+            }
         }
     }
 
@@ -325,17 +408,22 @@ impl CopyHeads {
     /// The positions [`Self::mean`] reads for head `h`, with the codes `force` names in place of
     /// the computed ones (Q5's forced replay, claude-249): the row's query, and each candidate
     /// `s`'s key. The positions are picked by the head's [`CopyRule`], as the served read picks
-    /// them, so a replay that forces nothing is the served read (claude-345).
-    fn choose_forced(&self, h: usize, tokens: &[u32], force: &HeadForce) -> Vec<(usize, u32)> {
+    /// them, so a replay that forces nothing is the served read (claude-345), at a row that is a
+    /// reply's `opening` or not (claude-356).
+    fn choose_forced(&self, h: usize, tokens: &[u32], force: &HeadForce, opening: bool) -> Vec<(usize, u32)> {
         let Some(t) = tokens.len().checked_sub(1) else {
             return Vec::new();
         };
         let query = force.query(t).unwrap_or_else(|| self.query_at(tokens, t, h));
         let key = |s: usize| force.key(s).unwrap_or_else(|| self.key_at(tokens, s, h));
-        match self.rule {
+        match self.rule.at(self.opens(tokens, opening)) {
             CopyRule::Mean => nearest(query, t, self.kept, key),
             CopyRule::LatestExact => latest_of(query, t, true, key),
             CopyRule::LatestNearest => latest_of(query, t, false, key),
+            // The longer test reads the tokens, which a replay does not force.
+            CopyRule::LongestExact | CopyRule::LongestAfterOpening => {
+                longest_of(query, t, key, |s| self.longer_at(tokens, s, t, h))
+            }
         }
     }
 
@@ -348,7 +436,13 @@ impl CopyHeads {
     /// that found a candidate, so a head that found nothing does not dilute one that did. Both
     /// quotients truncate toward zero.
     pub fn mean(&self, tokens: &[u32], table: &[i16]) -> Option<Vec<i128>> {
-        self.mean_by(tokens, table, |h| self.choose_ruled(h, tokens))
+        self.mean_at(tokens, table, false)
+    }
+
+    /// [`Self::mean`] at a row the caller names as a reply's `opening` or not (claude-356). Only
+    /// [`CopyRule::LongestAfterOpening`] reads the two differently.
+    pub fn mean_at(&self, tokens: &[u32], table: &[i16], opening: bool) -> Option<Vec<i128>> {
+        self.mean_by(tokens, table, |h| self.choose_ruled(h, tokens, opening))
     }
 
     /// [`Self::mean`] over the kept positions `choose` gives each head.
@@ -444,6 +538,23 @@ fn latest_of(query: u64, t: usize, exact: bool, key: impl Fn(usize) -> u64) -> V
     best.into_iter().collect()
 }
 
+/// The one position the longest rule reads at row `t` (claude-355): over every `1 ≤ s < t` whose
+/// key equals `query`, the latest `s` at which `longer` holds; with none, the latest such `s`.
+/// Empty when no key equals the query.
+fn longest_of(query: u64, t: usize, key: impl Fn(usize) -> u64, longer: impl Fn(usize) -> bool) -> Vec<(usize, u32)> {
+    let (mut exact, mut long) = (None, None);
+    for s in 1..t {
+        if key(s) != query {
+            continue;
+        }
+        exact = Some(s);
+        if longer(s) {
+            long = Some(s);
+        }
+    }
+    long.or(exact).map(|s| (s, 0)).into_iter().collect()
+}
+
 /// The `min(kept, t − 1)` positions `1 ≤ s < t` nearest to `query` by `popcount(query XOR key(s))`,
 /// with their distances, in ascending distance and then ascending `s` (the design's tie rule).
 fn nearest(query: u64, t: usize, kept: usize, key: impl Fn(usize) -> u64) -> Vec<(usize, u32)> {
@@ -485,6 +596,7 @@ mod copy_rule_tests {
             margins: vec![4 << 16],
             pair: vec![None],
             rule,
+            marker: None,
         };
         (heads, (0..4i16).flat_map(|v| [10 * v + 1; 4]).collect())
     }
@@ -498,9 +610,16 @@ mod copy_rule_tests {
 
     #[test]
     fn the_names_round_trip() {
-        for rule in [CopyRule::Mean, CopyRule::LatestExact, CopyRule::LatestNearest] {
+        for rule in [
+            CopyRule::Mean,
+            CopyRule::LatestExact,
+            CopyRule::LatestNearest,
+            CopyRule::LongestExact,
+            CopyRule::LongestAfterOpening,
+        ] {
             assert_eq!(CopyRule::parse(rule.name()), Some(rule));
         }
+        assert_eq!(CopyRule::LongestAfterOpening.name(), "longest-after-opening");
         assert_eq!(CopyRule::parse("latest"), None);
         assert_eq!(CopyRule::default(), CopyRule::Mean);
     }
@@ -547,15 +666,157 @@ mod copy_rule_tests {
         }
     }
 
+    /// Token 1 was followed by 3 after a 2 and later by 2 after a 0, and the row's 1 comes after
+    /// a 2. The latest rule brings back the last follower; the longest rule the follower of the
+    /// match of two tokens, though it is the earlier one (claude-355).
+    #[test]
+    fn the_longest_rule_takes_the_match_of_two_tokens_before_a_later_match_of_one() {
+        let tokens = [2, 1, 3, 0, 1, 2, 2, 1];
+        let (latest, table) = heads(16, CopyRule::LatestExact);
+        assert_eq!(latest.mean(&tokens, &table), row(2, FULL));
+        let (longest, _) = heads(16, CopyRule::LongestExact);
+        assert_eq!(longest.choose_ruled(0, &tokens, false), vec![(2, 0)]);
+        assert_eq!(longest.mean(&tokens, &table), row(3, FULL));
+    }
+
+    /// Of two matches of two tokens the longest rule takes the later, past a still later match
+    /// of one token: s = 5 (row 0), not s = 2 (row 3) and not the latest rule's s = 8 (row 2).
+    #[test]
+    fn the_longest_rule_takes_the_latest_of_its_longer_matches() {
+        let tokens = [2, 1, 3, 2, 1, 0, 0, 1, 2, 2, 1];
+        let (latest, table) = heads(16, CopyRule::LatestExact);
+        assert_eq!(latest.mean(&tokens, &table), row(2, FULL));
+        let (longest, _) = heads(16, CopyRule::LongestExact);
+        assert_eq!(longest.choose_ruled(0, &tokens, false), vec![(5, 0)]);
+        assert_eq!(longest.mean(&tokens, &table), row(0, FULL));
+    }
+
+    /// With no match of two tokens the longest rule is the latest rule, with no exact match it
+    /// reads nothing, and position 1, whose key has no token before it, is no longer match.
+    #[test]
+    fn the_longest_rule_falls_back_to_the_latest_exact_match() {
+        let (latest, table) = heads(16, CopyRule::LatestExact);
+        let (longest, _) = heads(16, CopyRule::LongestExact);
+        // The 1s at 1 and 4 come after 0s, the row's 1 after a 2: one token matches, never two.
+        let one = [0, 1, 3, 0, 1, 2, 2, 1];
+        assert_eq!(longest.choose_ruled(0, &one, false), vec![(5, 0)]);
+        assert_eq!(longest.mean(&one, &table), latest.mean(&one, &table));
+        assert_eq!(longest.mean(&[2, 0, 2, 3, 1], &table), None);
+        // The only match is s = 1: the key is `x_0` and nothing stands before it.
+        let first = [1, 3, 0, 1];
+        assert_eq!(longest.choose_ruled(0, &first, false), vec![(1, 0)]);
+        assert_eq!(longest.mean(&first, &table), row(3, FULL));
+    }
+
+    /// Under copy key 2 the key is already two tokens, and the longer match is of three: the
+    /// pair `1 3` stands at 1-2 after a 0 and at 5-6 after a 2, and the row's pair after a 0.
+    #[test]
+    fn under_copy_key_two_the_longer_match_is_of_three_tokens() {
+        let tokens = [0, 1, 3, 2, 2, 1, 3, 0, 0, 1, 3];
+        let pair = |rule| {
+            let (mut heads, table) = heads(16, rule);
+            heads.pair = vec![Some(0b0011)];
+            (heads, table)
+        };
+        let (latest, table) = pair(CopyRule::LatestExact);
+        assert_eq!(latest.choose_ruled(0, &tokens, false), vec![(7, 0)]);
+        let (longest, _) = pair(CopyRule::LongestExact);
+        assert_eq!(longest.choose_ruled(0, &tokens, false), vec![(3, 0)]);
+        assert_eq!(longest.mean(&tokens, &table), row(2, FULL));
+        // A pair match at 2 has no token before its key: it is the latest exact match, no more.
+        assert_eq!(longest.choose_ruled(0, &[1, 3, 0, 1, 3], false), vec![(2, 0)]);
+    }
+
+    /// The longer test is by the head's code, not by the token: once tokens 2 and 3 share a
+    /// code, the 3 before the key at 2 matches the 2 before the row's token.
+    #[test]
+    fn the_longer_match_is_by_the_heads_code() {
+        let tokens = [3, 1, 0, 0, 1, 3, 2, 1];
+        let (mut longest, table) = heads(16, CopyRule::LongestExact);
+        assert_eq!(longest.choose_ruled(0, &tokens, false), vec![(5, 0)]);
+        longest.codes[3] = longest.codes[2];
+        assert_eq!(longest.choose_ruled(0, &tokens, false), vec![(2, 0)]);
+        assert_eq!(longest.mean(&tokens, &table), row(0, FULL));
+    }
+
+    /// claude-357: copy heads that hold a reply marker find the opening row from the tokens and
+    /// not from the caller. The row's previous and own tokens, 2 and 1, are the marker: the
+    /// latest exact match, s = 5, whatever the caller names. Under another marker the row is no
+    /// opening, whatever the caller names: the longest match, s = 2.
+    #[test]
+    fn the_marker_names_the_opening_row_in_place_of_the_caller() {
+        let tokens = [2, 1, 3, 0, 1, 2, 2, 1];
+        let (mut heads, table) = heads(16, CopyRule::LongestAfterOpening);
+        let free = HeadForce::default();
+        heads.marker = Some([2, 1]);
+        for caller in [false, true] {
+            assert_eq!(heads.choose_ruled(0, &tokens, caller), vec![(5, 0)]);
+            assert_eq!(heads.choose_forced(0, &tokens, &free, caller), vec![(5, 0)]);
+            assert_eq!(heads.mean_at(&tokens, &table, caller), row(2, FULL));
+        }
+        assert_eq!(heads.mean(&tokens, &table), row(2, FULL));
+        heads.marker = Some([3, 1]);
+        for caller in [false, true] {
+            assert_eq!(heads.choose_ruled(0, &tokens, caller), vec![(2, 0)]);
+            assert_eq!(heads.choose_forced(0, &tokens, &free, caller), vec![(2, 0)]);
+            assert_eq!(heads.mean_at(&tokens, &table, caller), row(3, FULL));
+        }
+    }
+
+    /// claude-356: the rule that spares a reply's opening. Token 1 was followed by 3 after a 2
+    /// and later by 2 after a 0, and the row's 1 comes after a 2. At an opening row the rule
+    /// reads the latest exact match, s = 5 (row 2); at any other row the longest, s = 2 (row 3).
+    #[test]
+    fn the_longest_after_opening_rule_is_latest_at_the_opening_and_longest_elsewhere() {
+        let tokens = [2, 1, 3, 0, 1, 2, 2, 1];
+        let (spared, table) = heads(16, CopyRule::LongestAfterOpening);
+        let (latest, _) = heads(16, CopyRule::LatestExact);
+        let (longest, _) = heads(16, CopyRule::LongestExact);
+        assert_eq!(spared.choose_ruled(0, &tokens, true), vec![(5, 0)]);
+        assert_eq!(spared.choose_ruled(0, &tokens, true), latest.choose_ruled(0, &tokens, false));
+        assert_eq!(spared.mean_at(&tokens, &table, true), row(2, FULL));
+        assert_eq!(spared.choose_ruled(0, &tokens, false), vec![(2, 0)]);
+        assert_eq!(spared.choose_ruled(0, &tokens, false), longest.choose_ruled(0, &tokens, false));
+        assert_eq!(spared.mean_at(&tokens, &table, false), row(3, FULL));
+        // A caller that names no opening reads the longest rule's.
+        assert_eq!(spared.mean(&tokens, &table), row(3, FULL));
+    }
+
+    /// The opening moves no other rule: each reads the same positions at both kinds of row.
+    #[test]
+    fn the_opening_moves_no_other_rule() {
+        let tokens = [2, 1, 3, 0, 1, 2, 2, 1];
+        for rule in [CopyRule::Mean, CopyRule::LatestExact, CopyRule::LatestNearest, CopyRule::LongestExact] {
+            let (heads, table) = heads(16, rule);
+            assert_eq!(heads.choose_ruled(0, &tokens, true), heads.choose_ruled(0, &tokens, false), "{}", rule.name());
+            assert_eq!(heads.mean_at(&tokens, &table, true), heads.mean(&tokens, &table), "{}", rule.name());
+        }
+    }
+
+    /// A replay that forces no code is the served read under the opening rule at both kinds of
+    /// row, so a replay of an opening row picks the latest match as the served read did.
+    #[test]
+    fn a_forced_replay_reads_the_opening_as_the_served_read_does() {
+        let tokens = [2, 1, 3, 0, 1, 2, 2, 1];
+        let (spared, table) = heads(16, CopyRule::LongestAfterOpening);
+        let free = HeadForce::default();
+        assert_eq!(spared.choose_forced(0, &tokens, &free, true), vec![(5, 0)]);
+        assert_eq!(spared.choose_forced(0, &tokens, &free, false), vec![(2, 0)]);
+        for opening in [true, false] {
+            let replay = spared.mean_by(&tokens, &table, |h| spared.choose_forced(h, &tokens, &free, opening));
+            assert_eq!(replay, spared.mean_at(&tokens, &table, opening), "opening {opening}");
+        }
+    }
+
     /// A replay that forces no code is the served read under every rule, and a forced query is
     /// read by the rule in force: under the exact rule a query no key equals reads nothing.
     #[test]
     fn a_forced_replay_picks_its_positions_by_the_rule_in_force() {
         let tokens = [1, 2, 0, 1, 3, 0, 1];
-        for rule in [CopyRule::Mean, CopyRule::LatestExact, CopyRule::LatestNearest] {
+        for rule in [CopyRule::Mean, CopyRule::LatestExact, CopyRule::LatestNearest, CopyRule::LongestExact] {
             let (heads, table) = heads(16, rule);
             let free = HeadForce::default();
-            let replay = heads.mean_by(&tokens, &table, |h| heads.choose_forced(h, &tokens, &free));
+            let replay = heads.mean_by(&tokens, &table, |h| heads.choose_forced(h, &tokens, &free, false));
             assert_eq!(replay, heads.mean(&tokens, &table), "{}", rule.name());
         }
         let at_row_6 = |query: u64| HeadForce { query: [vec![None; 6], vec![Some(query)]].concat(), key: Vec::new() };
@@ -565,17 +826,23 @@ mod copy_rule_tests {
         // 0b0110 is 2 bits from the first four and 3 from the last: the exact rule reads nothing,
         // the nearest rule the latest at 2 bits, s = 4 (row 3), at that distance's half weight.
         let off = at_row_6(0b0110);
-        assert_eq!(exact.mean_by(&tokens, &table, |h| exact.choose_forced(h, &tokens, &off)), None);
-        assert_eq!(near.mean_by(&tokens, &table, |h| near.choose_forced(h, &tokens, &off)), row(3, 1 << 30));
+        assert_eq!(exact.mean_by(&tokens, &table, |h| exact.choose_forced(h, &tokens, &off, false)), None);
+        assert_eq!(near.mean_by(&tokens, &table, |h| near.choose_forced(h, &tokens, &off, false)), row(3, 1 << 30));
         // A query forced to 0b0001 equals only the key at s = 5 (row 0), not the unforced s = 4.
         let moved = at_row_6(0b0001);
-        assert_eq!(exact.mean_by(&tokens, &table, |h| exact.choose_forced(h, &tokens, &moved)), row(0, FULL));
+        assert_eq!(exact.mean_by(&tokens, &table, |h| exact.choose_forced(h, &tokens, &moved, false)), row(0, FULL));
     }
 
     #[test]
     fn a_row_with_no_earlier_position_reads_nothing() {
-        for rule in [CopyRule::LatestExact, CopyRule::LatestNearest] {
+        for rule in [
+            CopyRule::LatestExact,
+            CopyRule::LatestNearest,
+            CopyRule::LongestExact,
+            CopyRule::LongestAfterOpening,
+        ] {
             let (latest, table) = heads(16, rule);
+            assert_eq!(latest.mean_at(&[1, 1], &table, true), None);
             assert_eq!(latest.mean(&[1], &table), None);
             assert_eq!(latest.mean(&[1, 1], &table), None);
             assert_eq!(latest.mean(&[], &table), None);
@@ -643,6 +910,10 @@ impl AskImage {
 /// is, so the keys are built once per vocabulary entry. What a kept position brings back is the
 /// full-width `p_s` through the value rotation: its payload, which the session keeps for every
 /// position ([`Self::payload`]).
+///
+/// An ask head (claude-336) asks from its question table instead, and brings back what a copy
+/// head does (claude-353, the float read's claude-330): the table's point of the kept position's
+/// own token, so a read that asks keeps no payloads ([`Brought::Points`]).
 pub struct TypeHeads {
     copy: usize,
     heads: usize,
@@ -683,6 +954,12 @@ impl TypeHeads {
     pub fn with_ask(mut self, ask: AskImage) -> Self {
         self.ask = Some(ask);
         self
+    }
+
+    /// Whether these heads ask from a question table: they then bring back the kept token's
+    /// table point and no payload (claude-353).
+    pub fn asks(&self) -> bool {
+        self.ask.is_some()
     }
 
     /// The ask heads' point at row `t` of `tokens`, whose window starts at row `start`, at Q28:
@@ -766,13 +1043,22 @@ impl TypeHeads {
     /// as the copy mean: each head's `Σ w_s · v_s / max(1, #{w_s > 0})`, then the mean over the
     /// heads that found a candidate, both truncating toward zero.
     pub fn mean(&self, queries: &[u64], tokens: &[u32], payloads: &[i64]) -> Option<Vec<i128>> {
-        self.mean_by(queries, tokens, payloads, None)
+        self.mean_by(queries, tokens, Brought::Payloads(payloads), None)
     }
 
-    /// [`Self::mean`], with each head `j`'s kept positions from [`Self::choose_forced`] under
-    /// `force[j]` when `force` is given, else from [`Self::choose`]. It takes no `choose` closure:
-    /// its captures were copied through a SIMD register (`fmov`), which the audit refuses (claude-255).
-    fn mean_by(&self, queries: &[u64], tokens: &[u32], payloads: &[i64], force: Option<&[HeadForce]>) -> Option<Vec<i128>> {
+    /// The ask heads' mean at the last row of `tokens`, at [`COPY_MEAN_EXP`] (claude-353), or
+    /// `None` when no ask head kept a candidate inside its margin: [`Self::mean`]'s quotients
+    /// over the Q12 `table`'s point of each kept position's own token, as the copy mean's sum
+    /// is, for the question codes `queries` ([`Self::ask_queries`]).
+    pub fn ask_mean(&self, queries: &[u64], tokens: &[u32], table: &[i16]) -> Option<Vec<i128>> {
+        self.mean_by(queries, tokens, Brought::Points(table), None)
+    }
+
+    /// [`Self::mean`] over what `brought` names, with each head `j`'s kept positions from
+    /// [`Self::choose_forced`] under `force[j]` when `force` is given, else from [`Self::choose`].
+    /// It takes no `choose` closure: its captures were copied through a SIMD register (`fmov`),
+    /// which the audit refuses (claude-255).
+    fn mean_by(&self, queries: &[u64], tokens: &[u32], brought: Brought<'_>, force: Option<&[HeadForce]>) -> Option<Vec<i128>> {
         let width = self.width;
         let mut sum = vec![0i128; width];
         let mut found = 0i128;
@@ -789,9 +1075,18 @@ impl TypeHeads {
                     continue;
                 }
                 count += 1;
-                for (acc, &v) in head.iter_mut().zip(&payloads[s * width..][..width]) {
-                    // Behind `black_box`, as the copy mean's points (claude-194).
-                    *acc += i128::from(core::hint::black_box(v)) * i128::from(weight);
+                match brought {
+                    Brought::Payloads(payloads) => {
+                        for (acc, &v) in head.iter_mut().zip(&payloads[s * width..][..width]) {
+                            // Behind `black_box`, as the copy mean's points (claude-194).
+                            *acc += i128::from(core::hint::black_box(v)) * i128::from(weight);
+                        }
+                    }
+                    Brought::Points(table) => {
+                        for (acc, &p) in head.iter_mut().zip(&table[tokens[s] as usize * width..][..width]) {
+                            *acc += i128::from(core::hint::black_box(p)) * i128::from(weight);
+                        }
+                    }
                 }
             }
             if count == 0 {
@@ -804,6 +1099,17 @@ impl TypeHeads {
         }
         (found > 0).then(|| sum.into_iter().map(|value| value / found).collect())
     }
+}
+
+/// What a type head's kept position brings back into its mean.
+#[derive(Clone, Copy)]
+enum Brought<'a> {
+    /// The hook's input there through the value rotation, `width` values a position
+    /// ([`TypeHeads::payload`]): the mean is at the payloads' exponent minus 31.
+    Payloads(&'a [i64]),
+    /// The Q12 table's point of the position's own token, as a copy head brings (an ask head,
+    /// claude-353): the mean is at [`COPY_MEAN_EXP`].
+    Points(&'a [i16]),
 }
 
 /// From `w_c ⊙ c`'s exponent (`2^HAMMING_WEIGHT_EXP` times `2^COPY_MEAN_EXP`) to the residual's Q16.
@@ -934,6 +1240,33 @@ pub(crate) struct ServedHamming {
     reads: Vec<ServedRead>,
     layers: usize,
     width: usize,
+    /// The place read (claude-351), when the artifact has one.
+    place: Option<ServedPlace>,
+}
+
+/// The place read on the served path (claude-351): the readout read's ask heads, which find a
+/// place and bring nothing back themselves, and the read's tables.
+struct ServedPlace {
+    heads: TypeHeads,
+    image: PlaceImage,
+    /// The low half of a head's bits: the half its learned question fills. The other half is the
+    /// token before, plainly.
+    first: u64,
+}
+
+impl ServedPlace {
+    /// The place the question at the last row `t` of `tokens` finds among `users`, the contents
+    /// of the finished user turns: [`place_find`], the two-token question the float trainer
+    /// asks too, on this artifact's question and key codes.
+    fn find(&self, table: &[i16], tokens: &[u32], users: &[Range<usize>]) -> Option<usize> {
+        let t = tokens.len().checked_sub(1).filter(|&t| t >= 1)?;
+        let heads = &self.heads;
+        let asks = heads.ask_queries(table, tokens, t, 0)?;
+        if asks.len() != heads.margins.len() {
+            return None;
+        }
+        place_find(self.first, &heads.margins, users, t, |j| asks[j], |j, p| heads.key(tokens[p], j))
+    }
 }
 
 /// Refuse a payload cache of `typed` reads over `context` positions of `width` past
@@ -970,9 +1303,21 @@ impl ServedHamming {
     /// weights is not zero; at `w_y = 0` they add nothing, as in the float read.
     pub(crate) fn new(image: &HammingImage, table: &[i16], vocab: usize, width: usize, layers: usize, context: usize) -> Result<Self, StackError> {
         let mut reads = Vec::with_capacity(image.reads.len());
+        let mut place = None;
         for read in &image.reads {
             let (copy_weight, type_weight) = read.weight.split_at(width);
-            let typed = type_weight.iter().any(|&w| w != 0);
+            // The place read's ask heads find and bring nothing back (claude-351): the readout
+            // read then serves no type heads, whatever its type weights are.
+            let places = image.place.as_ref().filter(|_| read.depth == layers);
+            if let Some(tables) = places {
+                let ask = read.ask.clone().ok_or(StackError::Shape("the place read needs the readout read's ask heads"))?;
+                place = Some(ServedPlace {
+                    heads: TypeHeads::new(&image.record, read, table, vocab, width).with_ask(ask),
+                    image: tables.clone(),
+                    first: place_first(width / image.record.heads),
+                });
+            }
+            let typed = places.is_none() && type_weight.iter().any(|&w| w != 0);
             reads.push(ServedRead {
                 depth: read.depth,
                 copy: CopyHeads::new(&image.record, read, table, vocab, width),
@@ -989,7 +1334,23 @@ impl ServedHamming {
         }
         let typed = reads.iter().filter(|r| r.types.is_some()).count();
         check_payload_cache(typed, context, width)?;
-        Ok(Self { reads, layers, width })
+        if image.place.is_some() && place.is_none() {
+            return Err(StackError::Shape("the place read needs a read at the readout"));
+        }
+        Ok(Self { reads, layers, width, place })
+    }
+
+    /// Whether the artifact has a place read, whose register a session keeps (claude-351).
+    pub(crate) fn has_place(&self) -> bool {
+        self.place.is_some()
+    }
+
+    /// The place register's step at the last row of `tokens` ([`PlaceState::advance`]), its
+    /// questions asked by the readout read's ask heads: the place whose token the readout is
+    /// offered at this row, if the row is open. `None` without a place read.
+    pub(crate) fn place_advance(&self, state: &mut PlaceState, tokens: &[u32], table: &[i16]) -> Option<usize> {
+        let place = self.place.as_ref()?;
+        state.advance(tokens, &place.image, |users| place.find(table, tokens, users)).offer
     }
 
     /// Whether any read serves type heads, whose per-position payloads a session keeps.
@@ -997,12 +1358,12 @@ impl ServedHamming {
         self.reads.iter().any(|r| r.types.is_some())
     }
 
-    /// A session's payload caches: for each read, `context * width` zeros if it has type heads,
-    /// and nothing otherwise.
+    /// A session's payload caches: for each read, `context * width` zeros if it has type heads
+    /// that bring a payload back, and nothing otherwise (a read that asks brings table points).
     pub(crate) fn payload_caches(&self, context: usize) -> Vec<Vec<i64>> {
         self.reads
             .iter()
-            .map(|r| if r.types.is_some() { vec![0; context * self.width] } else { Vec::new() })
+            .map(|r| if r.types.as_ref().is_some_and(|t| !t.asks()) { vec![0; context * self.width] } else { Vec::new() })
             .collect()
     }
 
@@ -1010,8 +1371,12 @@ impl ServedHamming {
     /// served order, from `codes` over a window of at most `context` steps. Refused: a depth no
     /// read runs at (0, past the layer count, or a second read at a depth), a head the read does
     /// not serve, a step past the context, a key at step 0 (it names no candidate), and a code
-    /// forced twice.
+    /// forced twice. An artifact with a place read (claude-351) refuses every forced code: at an
+    /// open row the readout takes the place, and a forced copy code there would change nothing.
     pub(crate) fn forcing(&self, codes: &[ForcedCode], context: usize) -> Result<Vec<ReadForce>, StackError> {
+        if self.place.is_some() && !codes.is_empty() {
+            return Err(StackError::Shape("forced codes are not served with a place read"));
+        }
         let mut reads: Vec<ReadForce> = self
             .reads
             .iter()
@@ -1061,23 +1426,30 @@ impl ServedHamming {
     /// The type mean at the last row `t` of `tokens` for the read `i`, with the hook's input
     /// `point`: `point`'s payload is kept at row `t` first, for the rows after it. A `force`
     /// replaces the codes it names (claude-249).
+    ///
+    /// A read that asks (claude-353) keeps no payload: its heads bring back the table's point of
+    /// each kept position's own token, and the mean is at [`COPY_MEAN_EXP`], as the copy mean.
     fn type_mean(&self, i: usize, point: &[i64], tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], force: Option<&ReadForce>) -> Option<Vec<i128>> {
         let types = self.reads[i].types.as_ref()?;
         let t = tokens.len().checked_sub(1)?;
-        let cache = &mut payloads[i];
-        types.payload(point, &mut cache[t * self.width..][..self.width]);
-        let payloads = &cache[..(t + 1) * self.width];
+        let brought = if types.asks() {
+            Brought::Points(table)
+        } else {
+            let cache = &mut payloads[i];
+            types.payload(point, &mut cache[t * self.width..][..self.width]);
+            Brought::Payloads(&cache[..(t + 1) * self.width])
+        };
+        let mut queries = Self::type_queries(types, point, table, tokens, t);
         let Some(force) = force else {
-            return types.mean(&Self::type_queries(types, point, table, tokens, t), tokens, payloads);
+            return types.mean_by(&queries, tokens, brought, None);
         };
         let heads = &force.heads[self.reads[i].copy.copy..];
-        let mut queries = Self::type_queries(types, point, table, tokens, t);
         for (query, head) in queries.iter_mut().zip(heads) {
             if let Some(forced) = head.query(t) {
                 *query = forced;
             }
         }
-        types.mean_by(&queries, tokens, payloads, Some(heads))
+        types.mean_by(&queries, tokens, brought, Some(heads))
     }
 
     /// Read `i`'s choices at the last row `t` of `tokens`, its type heads asking with the hook's
@@ -1085,7 +1457,7 @@ impl ServedHamming {
     /// (claude-249). It recomputes what the read's means choose, so the served sums are
     /// untouched by it.
     #[inline(never)]
-    fn record(&self, i: usize, point: &[i64], tokens: &[u32], table: &[i16], force: Option<&ReadForce>) -> HammingStepRead {
+    fn record(&self, i: usize, point: &[i64], tokens: &[u32], table: &[i16], force: Option<&ReadForce>, opening: bool) -> HammingStepRead {
         let read = &self.reads[i];
         let (Some(_), t) = (tokens.last(), tokens.len().saturating_sub(1)) else {
             return HammingStepRead { depth: read.depth, heads: Vec::new() };
@@ -1097,7 +1469,7 @@ impl ServedHamming {
             .map(|h| HammingStepHead {
                 query: forced(h).query(t).unwrap_or_else(|| read.copy.query_at(tokens, t, h)),
                 key: if t == 0 { 0 } else { forced(h).key(t).unwrap_or_else(|| read.copy.key_at(tokens, t, h)) },
-                kept: kept(read.copy.choose_forced(h, tokens, forced(h))),
+                kept: kept(read.copy.choose_forced(h, tokens, forced(h), opening)),
             })
             .collect();
         if let Some(types) = &read.types {
@@ -1118,12 +1490,15 @@ impl ServedHamming {
     /// `x = q16(read.apply(&x, ids, &table))`: `x + w_c ⊙ c + w_y ⊙ y` at the last row of
     /// `tokens`, each sum formed exactly and rounded once to the residual's Q16, half away from
     /// zero, as `q16` rounds the sum. A kind of head that found no candidate adds nothing, as the
-    /// float's `sums / max(found, 1)` is 0 there. A depth with no read, or the layer count (the
+    /// float's `sums / max(found, 1)` is 0 there. Where the read asks (claude-353), `y` is the ask
+    /// heads' mean of the kept tokens' table points. A depth with no read, or the layer count (the
     /// readout's), is left alone. A `trace` receives the read's choices (claude-235), and
     /// `force`, each read's from [`Self::forcing`], replaces the codes it names (claude-249).
+    /// `opening` says the row chooses a reply's first token (claude-356), which only
+    /// [`CopyRule::LongestAfterOpening`] reads.
     #[inline(never)]
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn stream(&self, depth: usize, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], x: &mut [i32], trace: Option<&mut Vec<HammingStepRead>>, force: Option<&[ReadForce]>) {
+    pub(crate) fn stream(&self, depth: usize, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], x: &mut [i32], trace: Option<&mut Vec<HammingStepRead>>, force: Option<&[ReadForce]>, opening: bool) {
         if depth == self.layers {
             return;
         }
@@ -1133,17 +1508,23 @@ impl ServedHamming {
         let force = force.and_then(|f| f.get(i));
         if let Some(trace) = trace {
             let point: Vec<i64> = x.iter().map(|&v| i64::from(v)).collect();
-            trace.push(self.record(i, &point, tokens, table, force));
+            trace.push(self.record(i, &point, tokens, table, force, opening));
         }
         let read = &self.reads[i];
         let copy = match force {
-            None => read.copy.mean(tokens, table),
-            Some(f) => read.copy.mean_by(tokens, table, |h| read.copy.choose_forced(h, tokens, &f.heads[h])),
+            None => read.copy.mean_at(tokens, table, opening),
+            Some(f) => read.copy.mean_by(tokens, table, |h| read.copy.choose_forced(h, tokens, &f.heads[h], opening)),
         };
-        let typed = match read.types {
-            Some(_) => {
+        let typed = match &read.types {
+            Some(types) => {
                 let point: Vec<i64> = x.iter().map(|&v| i64::from(v)).collect();
-                self.type_mean(i, &point, tokens, table, payloads, force)
+                let mean = self.type_mean(i, &point, tokens, table, payloads, force);
+                // claude-353: an ask mean is at the copy mean's exponent, raised here to the
+                // type term's, exactly. `|y| < 2^46`, so the raised mean is far inside the sum's bound.
+                match (mean, types.asks()) {
+                    (Some(y), true) => Some(y.into_iter().map(|v| v << STREAM_COPY_RAISE).collect()),
+                    (mean, _) => mean,
+                }
             }
             None => None,
         };
@@ -1163,28 +1544,49 @@ impl ServedHamming {
     /// below `n`'s grid ([`readout_sum`]), and the sum then rounded once to `n`'s exponent. Not
     /// rounded to Q16, as the float trunk does not round the readout read. A `trace` receives the
     /// read's choices (claude-235), and `force` replaces the codes it names (claude-249).
+    ///
+    /// A read that asks (claude-353) mixes its ask mean in the copy form instead, as the float
+    /// read does (claude-330): `w_y ⊙ (y − n)` where an ask head found a candidate, `y` the mean
+    /// of the kept tokens' table points ([`readout_ask_sum`]).
+    ///
+    /// At a row the place read opens (claude-351), `offer` is the place: the table's point of the
+    /// token there is `c`, in place of the copy heads' mean, at the weight of one whole candidate.
+    /// `opening` is as [`Self::stream`]'s.
     #[inline(never)]
-    pub(crate) fn readout(&self, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], n: &mut [i64], trace: Option<&mut Vec<HammingStepRead>>, force: Option<&[ReadForce]>) {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn readout(&self, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], n: &mut [i64], trace: Option<&mut Vec<HammingStepRead>>, force: Option<&[ReadForce]>, offer: Option<usize>, opening: bool) {
         let Some(i) = self.reads.iter().position(|r| r.depth == self.layers) else {
             return;
         };
         let force = force.and_then(|f| f.get(i));
         if let Some(trace) = trace {
-            trace.push(self.record(i, n, tokens, table, force));
+            trace.push(self.record(i, n, tokens, table, force, opening));
         }
         let read = &self.reads[i];
-        let copy = match force {
-            None => read.copy.mean(tokens, table),
-            Some(f) => read.copy.mean_by(tokens, table, |h| read.copy.choose_forced(h, tokens, &f.heads[h])),
+        let copy = match (offer, force) {
+            (Some(place), _) => {
+                let at = tokens[place] as usize * self.width;
+                // A Q12 point at a Q31 weight of 1: `2^COPY_MEAN_EXP`, as a mean's sum is.
+                Some(table[at..at + self.width].iter().map(|&v| i128::from(v) << 31).collect())
+            }
+            (None, None) => read.copy.mean_at(tokens, table, opening),
+            (None, Some(f)) => read.copy.mean_by(tokens, table, |h| read.copy.choose_forced(h, tokens, &f.heads[h], opening)),
         };
         let typed = self.type_mean(i, n, tokens, table, payloads, force);
         if copy.is_none() && typed.is_none() {
             return;
         }
+        // claude-353: a read that asks mixes its ask mean in the copy form, as the float read
+        // (claude-330): `w_y ⊙ (y − n)` where an ask head found a candidate.
+        let asks = read.types.as_ref().is_some_and(TypeHeads::asks);
         for (k, n) in n.iter_mut().enumerate() {
             let c = copy.as_ref().map(|c| c[k]);
-            let y = typed.as_ref().map_or(0, |y| y[k]);
-            *n = readout_sum(*n, read.copy_weight[k], c, read.type_weight[k], y);
+            *n = if asks {
+                readout_ask_sum(*n, read.copy_weight[k], c, read.type_weight[k], typed.as_ref().map(|y| y[k]))
+            } else {
+                let y = typed.as_ref().map_or(0, |y| y[k]);
+                readout_sum(*n, read.copy_weight[k], c, read.type_weight[k], y)
+            };
         }
     }
 }
@@ -1211,6 +1613,19 @@ pub(super) fn readout_sum(n: i64, w_c: i32, c: Option<i128>, w_y: i32, y: i128) 
     let moved = c.map_or(0, |c| i128::from(w_c) * (c - (i128::from(n) << NORM_RAISE)));
     let typed = round_shift(i128::from(w_y) * y, READOUT_TYPE_DROP);
     let sum = round_shift((i128::from(n) << READOUT_SHIFT) + moved + typed, READOUT_SHIFT);
+    sum.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64
+}
+
+/// One coordinate of the readout move of a read that asks (claude-353):
+/// `n + w_c · (c − n) + w_y · (y − n)`, each move present where a head of its kind matched (`n`
+/// at `NORM_FINE_EXP`, `c` and `y` both at `2^COPY_MEAN_EXP`), the sum formed exactly and rounded
+/// once to `n`'s exponent, half away from zero.
+pub(super) fn readout_ask_sum(n: i64, w_c: i32, c: Option<i128>, w_y: i32, y: Option<i128>) -> i64 {
+    // As [`readout_sum`]: `n · 2^43 < 2^106` and each move `< 2^114`, so the sum fits an i128.
+    let raised = i128::from(n) << NORM_RAISE;
+    let copied = c.map_or(0, |c| i128::from(w_c) * (c - raised));
+    let asked = y.map_or(0, |y| i128::from(w_y) * (y - raised));
+    let sum = round_shift((i128::from(n) << READOUT_SHIFT) + copied + asked, READOUT_SHIFT);
     sum.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64
 }
 

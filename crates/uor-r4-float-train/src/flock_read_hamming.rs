@@ -64,7 +64,10 @@ use std::cell::RefCell;
 use std::path::Path;
 
 use candle_core::{DType, Device, Tensor, Var};
-use uor_r4_integer::fbs_snapshot::{HammingTraceHead, HammingTraceRead, HammingTraceWindow};
+use uor_r4_integer::fbs_snapshot::{
+    place_find, place_first, HammingTraceHead, HammingTraceRead, HammingTraceWindow, PlaceImage,
+    PlaceMarks, PlaceRow, PlaceState, PLACE_ARM, PLACE_OPEN, PLACE_STOP,
+};
 
 use crate::geometric_stack::hamilton_gate;
 use crate::{invalid, Result};
@@ -621,6 +624,9 @@ pub struct HammingRead {
     /// Whether each copy head reads its latest exact match in place of the mean of its nearest
     /// [`HAMMING_KEPT`] ([`HammingReads::with_copy_latest`], claude-345).
     copy_latest: bool,
+    /// The reply marker under the longest rule ([`HammingReads::with_copy_longest`], claude-357):
+    /// the two token ids that end every prompt. `None`, the default, reads as before.
+    copy_longest: Option<[u32; 2]>,
     /// The ask heads' question table, when on ([`HammingReads::with_ask`], claude-330): one
     /// learned point per token, `(vocab, width)`, starting at zero. The type heads then ask with
     /// the current token's point plus its row, through the key's rotation, and bring back the
@@ -634,6 +640,11 @@ pub struct HammingRead {
     /// read only, each ask head's asked point adds the asked points of the `rows` rows before it
     /// in its window, each scaled by one learned scalar per token of that row, starting at zero.
     pub(crate) carry: Option<Hold>,
+    /// The place read, when on ([`HammingReads::with_place`], claude-351): at the readout read
+    /// only, the ask heads find a place in an earlier user turn, one register a conversation
+    /// holds it, and at an open reply row the copy mix's source is the point of the token at the
+    /// place. The ask heads then write nothing at this read.
+    pub(crate) place: Option<PlaceRead>,
 }
 
 /// The held ask write (claude-333): how many rows a write is held for, and the per-token gain
@@ -1127,7 +1138,9 @@ impl HammingReads {
 
     /// The sheet's pull-distance reading (claude-330): [`Self::ask_pull`]'s mean distance at each
     /// depth on its own, as plain numbers, over the same `(row, target)`s. `None` when no row has
-    /// a copy.
+    /// a copy. Under the place read the found-copy pull passes the readout read over, so the list
+    /// is one entry short and an index is no longer a depth; the recall run, this reading's one
+    /// caller, refuses the place read.
     pub fn ask_pull_depths(
         &self,
         ids: &[u32],
@@ -1164,8 +1177,11 @@ impl HammingReads {
         if spans.is_empty() {
             return Ok(None);
         }
+        // claude-351: under the place read the readout read's question rows learn from the place
+        // pull alone, so the found-copy pull passes that read over.
         self.reads
             .iter()
+            .filter(|read| read.place.is_none())
             .map(|read| read.pull_bits(ids, time, table, &pairs, &spans))
             .collect::<Result<Vec<_>>>()
             .map(Some)
@@ -1174,6 +1190,9 @@ impl HammingReads {
     /// The same reads with their copy heads keyed on `copy_key` tokens before a position: 1, the
     /// default, or 2, the ordered two-token key (claude-261). Type heads are untouched.
     pub fn with_copy_key(mut self, copy_key: usize) -> Result<Self> {
+        if self.copy_longest().is_some() && copy_key != 1 {
+            return Err(invalid("the longest rule needs one-token copy keys"));
+        }
         for read in &mut self.reads {
             check_copy_key(copy_key, read.heads, read.weight.dim(1)?)?;
             read.copy_keys = vec![copy_key; read.copy_heads()];
@@ -1184,6 +1203,9 @@ impl HammingReads {
     /// The same reads with copy head `h` keyed on `copy_keys[h]` tokens before a position, each
     /// 1 or 2 (claude-268), one entry per copy head. Type heads are untouched.
     pub fn with_copy_keys(mut self, copy_keys: &[usize]) -> Result<Self> {
+        if self.copy_longest().is_some() && copy_keys.iter().any(|&k| k != 1) {
+            return Err(invalid("the longest rule needs one-token copy keys"));
+        }
         for read in &mut self.reads {
             check_copy_keys(copy_keys, read.heads, read.weight.dim(1)?)?;
             read.copy_keys = copy_keys.to_vec();
@@ -1228,6 +1250,36 @@ impl HammingReads {
     /// Whether the copy heads read their latest exact match ([`Self::with_copy_latest`]).
     pub fn copy_latest(&self) -> bool {
         self.reads.first().is_some_and(|read| read.copy_latest)
+    }
+
+    /// The same reads with each copy head under the latest-exact rule reading its longest match
+    /// after a reply's opening (claude-357). Of the earlier positions whose key is the query's
+    /// own code, a head keeps the latest one whose token before the key is also the row's
+    /// previous token, by the head's code; with none, the latest one, as
+    /// [`Self::with_copy_latest`] does. A row whose own token and the one before it are
+    /// `marker`, the two ids that end every prompt, chooses a reply's first token and keeps the
+    /// latest one. The integer session serves the same choice, `CopyRule::LongestAfterOpening`,
+    /// for an artifact whose record holds the marker. It needs [`Self::with_copy_latest`] and
+    /// one-token copy keys.
+    pub fn with_copy_longest(mut self, marker: [u32; 2]) -> Result<Self> {
+        if !self.copy_latest() {
+            return Err(invalid(
+                "the longest rule needs the latest-exact rule (with_copy_latest)",
+            ));
+        }
+        if self.copy_keys().iter().any(|&k| k != 1) {
+            return Err(invalid("the longest rule needs one-token copy keys"));
+        }
+        for read in &mut self.reads {
+            read.copy_longest = Some(marker);
+        }
+        Ok(self)
+    }
+
+    /// The reply marker the copy heads read their longest match under
+    /// ([`Self::with_copy_longest`]).
+    pub fn copy_longest(&self) -> Option<[u32; 2]> {
+        self.reads.first().and_then(|read| read.copy_longest)
     }
 
     /// The read's head count when it has one; a saved checkpoint always does.
@@ -1383,6 +1435,10 @@ impl HammingReads {
         if self.copy_latest() {
             tensors.insert("copy_latest".to_owned(), Tensor::new(&[1u32], device)?);
         }
+        // claude-357: only a read under the longest rule records its marker.
+        if let Some([first, second]) = self.copy_longest() {
+            tensors.insert("copy_longest".to_owned(), Tensor::new(&[first, second], device)?);
+        }
         // claude-333: only a held read records its rows, so every other file is as before.
         if self.hold_rows() > 0 {
             let rows = self.hold_rows() as u32;
@@ -1393,14 +1449,28 @@ impl HammingReads {
             let rows = self.carry_rows() as u32;
             tensors.insert("carry_rows".to_owned(), Tensor::new(&[rows], device)?);
         }
+        // claude-351: only a read with the place read writes its host state, so every other
+        // checkpoint is as before. It is written before the reads' file: a save cut short between
+        // the two leaves a place file with no reads beside it, which `load` refuses, and never
+        // reads that have silently lost their place read.
+        if let Some(place) = self.place() {
+            std::fs::write(directory.join(PLACE_FILE), serde_json::to_vec(&place.saved()?)?)?;
+        }
         candle_core::safetensors::save(&tensors, directory.join(FILE))?;
         Ok(())
     }
 
-    /// The reads saved in `directory`, or none when the checkpoint has none.
+    /// The reads saved in `directory`, or none when the checkpoint has none. A place read's
+    /// state with no reads beside it is a save cut short, and is refused.
     pub fn load(directory: &Path, device: &Device) -> Result<Option<Self>> {
         let path = directory.join(FILE);
         if !path.exists() {
+            if directory.join(PLACE_FILE).exists() {
+                return Err(invalid(format!(
+                    "{} holds a place read's state and no reads: the save was cut short",
+                    directory.display()
+                )));
+            }
             return Ok(None);
         }
         let tensors = candle_core::safetensors::load(path, device)?;
@@ -1439,6 +1509,7 @@ impl HammingReads {
                     .transpose()?,
                 copy_keys: Vec::new(),
                 copy_latest: false,
+                copy_longest: None,
                 // Present only when the read was trained with the ask heads (claude-330).
                 ask: tensors
                     .get(&format!("d{depth}.ask"))
@@ -1446,6 +1517,7 @@ impl HammingReads {
                     .transpose()?,
                 hold: None,
                 carry: None,
+                place: None,
             });
         }
         // claude-333: a hold is saved as the stream read's gain and its row count, both or
@@ -1543,11 +1615,13 @@ impl HammingReads {
         } else {
             reads
         };
-        match tensors.get("copy_keys") {
-            None => Ok(Some(reads)),
-            Some(_) if tensors.contains_key("copy_key") => Err(invalid(
-                "the saved Hamming read records both a copy key and per-head copy keys",
-            )),
+        let reads = match tensors.get("copy_keys") {
+            None => reads,
+            Some(_) if tensors.contains_key("copy_key") => {
+                return Err(invalid(
+                    "the saved Hamming read records both a copy key and per-head copy keys",
+                ));
+            }
             Some(tensor) => {
                 let keys: Vec<usize> = tensor.to_vec1::<u32>()?.into_iter().map(|k| k as usize).collect();
                 if keys.windows(2).all(|w| w[0] == w[1]) {
@@ -1555,9 +1629,25 @@ impl HammingReads {
                         "the saved Hamming read records per-head copy keys that are all the same; one key is saved as copy_key",
                     ));
                 }
-                Ok(Some(reads.with_copy_keys(&keys)?))
+                reads.with_copy_keys(&keys)?
             }
-        }
+        };
+        // claude-357: a read saved under the longest rule records its marker; it is set after
+        // the copy keys, which it checks.
+        let reads = match tensors.get("copy_longest") {
+            None => reads,
+            Some(tensor) => match tensor.to_vec1::<u32>()?[..] {
+                [first, second] => reads.with_copy_longest([first, second])?,
+                _ => {
+                    return Err(invalid(
+                        "the saved Hamming read's longest rule is not two token ids",
+                    ));
+                }
+            },
+        };
+        // claude-351: the place read's host state is saved beside the tensors, and only by a
+        // read that has it.
+        Ok(Some(reads.with_saved_place(directory)?))
     }
 }
 
@@ -1604,9 +1694,11 @@ impl HammingRead {
             step_rotation: None,
             copy_keys: vec![1; heads / 2],
             copy_latest: false,
+            copy_longest: None,
             ask: None,
             hold: None,
             carry: None,
+            place: None,
         })
     }
 
@@ -1987,6 +2079,13 @@ impl HammingRead {
                 force_codes(&key, &forced, true, head_width)?,
             )
         };
+        // claude-351: the place read, at the readout read only. The register program runs on the
+        // host over each window's tokens, its questions asked on this forward's own codes. No
+        // gradient passes through it.
+        let offers = match (&self.place, readout) {
+            (Some(place), true) => Some(self.place_rows(place, &query, &key, ids, time)?),
+            _ => None,
+        };
         let zero = Tensor::new(&[0u32], device)?;
         let margins = self.margin.as_tensor();
         // A decode's scope names positions in its one window (claude-215); a row cut names one
@@ -2046,6 +2145,8 @@ impl HammingRead {
         // rule is on by default and the trace off.
         let tie = TIE.with(|t| t.get());
         let mut traced = Vec::new();
+        // claude-357: under the longest rule, the asking rows that are not a reply's opening.
+        let longer_rows = self.copy_longest.map(|marker| longer_rows(ids, time, from, marker));
         for h in 0..self.heads {
             let q = query.narrow(1, h * head_width, head_width)?.contiguous()?;
             let k = key.narrow(1, h * head_width, head_width)?.contiguous()?;
@@ -2057,7 +2158,13 @@ impl HammingRead {
             let latest = self.copy_latest && h < self.copy_heads();
             // A whole window keeps the call it made before the step existed (claude-279).
             let (picks, real) = if latest {
-                choose_latest_from(&q, &k, batch, time, from, 1, &limits)?
+                match &longer_rows {
+                    // claude-357: among its exact matches the head keeps a longer one first.
+                    Some(rows) => {
+                        choose_longest_from(&q, &k, batch, time, from, 1, &limits, rows)?
+                    }
+                    None => choose_latest_from(&q, &k, batch, time, from, 1, &limits)?,
+                }
             } else if from == 0 {
                 choose_sorted(&q, &k, batch, time, HAMMING_KEPT, 1, &limits, tie)?
             } else {
@@ -2188,11 +2295,34 @@ impl HammingRead {
             Ok(means[kind].sub(&asked)?.broadcast_mul(&matched)?)
         };
         let copied = if readout { moved(0)? } else { means[0].clone() };
+        // claude-351: at an open row the point of the token at the place is the mix's source in
+        // place of the copy heads' mean, `n + w_c ⊙ (c − n)`; a closed row reads as before.
+        let copied = match &offers {
+            None => copied,
+            Some(rows) => {
+                let (mut at, mut open) = (Vec::with_capacity(asking), Vec::with_capacity(asking));
+                for b in 0..batch {
+                    for t in from..time {
+                        let offer = rows[b * time + t].offer;
+                        at.push(offer.map_or(0, |place| ids[b * time + place]));
+                        open.push(if offer.is_some() { 1.0f32 } else { 0.0 });
+                    }
+                }
+                let source = table.index_select(&Tensor::from_vec(at, asking, device)?, 0)?;
+                let open = Tensor::from_vec(open, (asking, 1), device)?;
+                source
+                    .sub(&asked)?
+                    .broadcast_mul(&open)?
+                    .add(&copied.broadcast_mul(&open.affine(-1.0, 1.0)?)?)?
+            }
+        };
         // claude-330: an ask head combines in the copy form, through the type weight row.
         let typed = match (&self.ask, readout) {
             (Some(_), true) => moved(1)?,
             _ => means[1].clone(),
         };
+        // claude-351: under the place read the readout read's ask heads find and write nothing.
+        let typed = if offers.is_some() { typed.zeros_like()? } else { typed };
         let written = typed.broadcast_mul(&type_weight)?;
         let added = copied.broadcast_mul(&copy_weight)?.add(&written)?;
         // claude-333: the stream read's ask write `u = w_y ⊙ y`, held for the next rows of its
@@ -2223,6 +2353,660 @@ impl HammingRead {
             return Err(invalid("the row capture needs whole windows, not a decode step"));
         }
         Ok(out.reshape((batch, asks, width))?)
+    }
+}
+
+/// claude-351: how far a place count runs before it saturates. A count is read by its sign, so
+/// the bound is how many net votes a token needs to change sides: enough that a token right a
+/// little over half the time stays armed, and few enough that the wrong votes of the first steps,
+/// before the question rows have learned, are undone soon.
+pub const PLACE_COUNT_BOUND: i16 = 64;
+
+/// claude-351: where the place read's host state is saved, beside the reads' tensors.
+const PLACE_FILE: &str = "hamming_place.json";
+
+/// The place read's two gains (claude-351): one saturating signed count per token each, read by
+/// its sign. `arm` says whether a question row's find sets the register; `open` whether a reply
+/// row opens the read. No gradient reaches either: each is a vote on what the labels show.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlaceCounts {
+    pub arm: Vec<i16>,
+    pub open: Vec<i16>,
+}
+
+/// The place read's host state (claude-351), on the readout read: the marks that frame a
+/// conversation, the tokens a read stops at (B1), and the two gains. Clones share the gains, so
+/// the reads a model applies and the reads its training step votes on are one.
+#[derive(Clone)]
+pub struct PlaceRead {
+    marks: PlaceMarks,
+    stop: Vec<bool>,
+    counts: std::sync::Arc<std::sync::Mutex<PlaceCounts>>,
+    tally: std::sync::Arc<std::sync::Mutex<PlaceTally>>,
+}
+
+/// The place read's votes and pull over the training steps since the last reading (claude-351):
+/// the arm and open votes, up then down, the sum of the steps' mean pulls and how many steps
+/// pulled. Never saved.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct PlaceTally {
+    arm: [u64; 2],
+    open: [u64; 2],
+    pull: f64,
+    pulls: u64,
+}
+
+/// A reading of the place read (claude-351) for a checkpoint's record: how many tokens arm and
+/// how many open as the counts stand, and, over the training steps since the last reading, the
+/// arm and the open votes, up then down, and the mean place pull (`bits / half`, so a half is
+/// chance and 0 a match), left out when no step pulled.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PlaceReading {
+    pub armed: usize,
+    pub opening: usize,
+    pub arm_votes: [u64; 2],
+    pub open_votes: [u64; 2],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pull_mean: Option<f64>,
+}
+
+/// What [`PlaceRead`] saves.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PlaceSaved {
+    marks: PlaceMarks,
+    stop: Vec<u32>,
+    counts: PlaceCounts,
+}
+
+impl PlaceRead {
+    fn new(marks: PlaceMarks, stop: Vec<bool>, counts: PlaceCounts) -> Result<Self> {
+        let vocab = stop.len();
+        if counts.arm.len() != vocab || counts.open.len() != vocab {
+            return Err(invalid(format!(
+                "the place read has {} arm and {} open counts for {vocab} tokens",
+                counts.arm.len(),
+                counts.open.len()
+            )));
+        }
+        let place = Self {
+            marks,
+            stop,
+            counts: std::sync::Arc::new(std::sync::Mutex::new(counts)),
+            tally: std::sync::Arc::default(),
+        };
+        // The marks are checked as the artifact's are, before any row reads them.
+        place.image()?;
+        Ok(place)
+    }
+
+    fn counts(&self) -> Result<std::sync::MutexGuard<'_, PlaceCounts>> {
+        self.counts.lock().map_err(|_| invalid("the place read's counts are poisoned"))
+    }
+
+    /// The tables the register program reads, as the artifact carries them: each token's stop,
+    /// arm and open bits, the last two from the counts' signs as they stand now.
+    pub fn image(&self) -> Result<PlaceImage> {
+        let counts = self.counts()?;
+        let class = (0..self.stop.len())
+            .map(|v| {
+                let bit = |on: bool, bit: i16| if on { bit } else { 0 };
+                bit(self.stop[v], PLACE_STOP) | bit(counts.arm[v] > 0, PLACE_ARM) | bit(counts.open[v] > 0, PLACE_OPEN)
+            })
+            .collect();
+        PlaceImage::checked(self.marks.clone(), class, self.stop.len()).map_err(invalid)
+    }
+
+    /// Adds a training step's votes and, when it pulled, its mean pull to the tally.
+    fn tallied(&self, votes: [[u64; 2]; 2], pull: Option<f64>) -> Result<()> {
+        let mut tally = self.tally.lock().map_err(|_| invalid("the place read's tally is poisoned"))?;
+        for (side, (arm, open)) in votes[0].iter().zip(&votes[1]).enumerate() {
+            tally.arm[side] += arm;
+            tally.open[side] += open;
+        }
+        if let Some(pull) = pull {
+            tally.pull += pull;
+            tally.pulls += 1;
+        }
+        Ok(())
+    }
+
+    /// The reading for a checkpoint's record; the tally starts again from zero.
+    pub fn reading(&self) -> Result<PlaceReading> {
+        let (armed, opening) = {
+            let counts = self.counts()?;
+            let on = |c: &[i16]| c.iter().filter(|&&v| v > 0).count();
+            (on(&counts.arm), on(&counts.open))
+        };
+        let mut tally = self.tally.lock().map_err(|_| invalid("the place read's tally is poisoned"))?;
+        let taken = std::mem::take(&mut *tally);
+        Ok(PlaceReading {
+            armed,
+            opening,
+            arm_votes: taken.arm,
+            open_votes: taken.open,
+            pull_mean: (taken.pulls > 0).then(|| taken.pull / taken.pulls as f64),
+        })
+    }
+
+    /// Whether this read frames a conversation and stops as a kit with `marks` and `stop` does.
+    pub fn framed_as(&self, marks: &PlaceMarks, stop: &[u32]) -> bool {
+        let flags = stop_flags(stop, self.stop.len());
+        self.marks == *marks && flags.is_ok_and(|flags| flags == self.stop)
+    }
+
+    /// The two gains as they stand, for a sheet's reading.
+    pub fn gains(&self) -> Result<PlaceCounts> {
+        Ok(self.counts()?.clone())
+    }
+
+    /// A checkpoint's line in a run's `place.jsonl`: [`Self::reading`] with the step it was
+    /// taken at. The tally starts again, as it does for the reading.
+    pub fn line(&self, step: usize) -> Result<serde_json::Value> {
+        let mut line = serde_json::to_value(self.reading()?)
+            .map_err(|e| invalid(format!("the place reading does not serialize: {e}")))?;
+        line["step"] = step.into();
+        Ok(line)
+    }
+
+    fn saved(&self) -> Result<PlaceSaved> {
+        let stop = (0..self.stop.len() as u32).filter(|&v| self.stop[v as usize]).collect();
+        Ok(PlaceSaved { marks: self.marks.clone(), stop, counts: self.counts()?.clone() })
+    }
+}
+
+/// The tokens a read stops at as flags over `vocab` tokens; a token past the vocabulary is refused.
+fn stop_flags(stop: &[u32], vocab: usize) -> Result<Vec<bool>> {
+    let mut flags = vec![false; vocab];
+    for &token in stop {
+        *flags
+            .get_mut(token as usize)
+            .ok_or_else(|| invalid(format!("stop token {token} is past the {vocab}-token vocabulary")))? = true;
+    }
+    Ok(flags)
+}
+
+/// What a window's reply is labelled with (claude-351), in the window's own positions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlaceLabel {
+    /// The place, the position in an earlier user turn of the value's first token, and the
+    /// value-start row, the reply row that predicts that token.
+    At { place: usize, value_row: usize },
+    /// The reply has a place, and the window does not hold it: the reply teaches nothing.
+    Outside,
+}
+
+/// A batch's labels (claude-351), keyed by the flat row each reply starts at, `b · time + t`, the
+/// row of the last token of its role marker. A reply with no entry has no label.
+pub type PlaceLabels = std::collections::HashMap<usize, PlaceLabel>;
+
+/// What the trainer of the place read needs beside its corpus (claude-351), written by
+/// `--turn-census` from that corpus and its oracle twin: the marks, the tokens a read stops at,
+/// and each labelled reply's `[reply start, place, value start, value length]` in corpus
+/// positions, in ascending reply start. It names the corpus it was read from.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlaceKit {
+    /// The SHA-256 of the corpus's `tokens.u16`, so a run on another corpus refuses the kit.
+    pub tokens_sha256: String,
+    pub marks: PlaceMarks,
+    pub stop: Vec<u32>,
+    pub places: Vec<[u32; 4]>,
+}
+
+impl PlaceKit {
+    /// The kit at `path`, refused unless its places are in ascending reply start and each place
+    /// stands before its reply and its value inside it.
+    pub fn load(path: &Path) -> Result<Self> {
+        let kit: Self = serde_json::from_slice(&std::fs::read(path)?)
+            .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+        kit.check()?;
+        Ok(kit)
+    }
+
+    pub fn check(&self) -> Result<()> {
+        let ordered = self.places.windows(2).all(|w| w[0][0] < w[1][0]);
+        let whole = self.places.iter().all(|&[reply, s, p, len]| s >= 2 && s < reply && reply <= p && len >= 1);
+        if !ordered || !whole {
+            return Err(invalid("the place kit's labels are out of order, or a place does not stand before its reply"));
+        }
+        Ok(())
+    }
+
+    /// The labels of the windows that start at the corpus positions `starts`, each `time` long.
+    /// A reply that starts at corpus position `r` is reported at the row before it. Its place is
+    /// a candidate only from the window's third position on, so an earlier one is [`Outside`].
+    ///
+    /// [`Outside`]: PlaceLabel::Outside
+    pub fn labels(&self, starts: &[Option<usize>], time: usize) -> PlaceLabels {
+        let mut out = PlaceLabels::new();
+        for (b, start) in starts.iter().enumerate() {
+            // A window with no corpus start is labelled with nothing.
+            let Some(start) = *start else { continue };
+            let from = self.places.partition_point(|p| (p[0] as usize) <= start);
+            let inside = self.places[from..].iter().take_while(|p| (p[0] as usize) <= start + time);
+            for &[reply, s, p, _] in inside {
+                let (reply, s, p) = (reply as usize, s as usize, p as usize);
+                let label = if s >= start + 2 {
+                    PlaceLabel::At { place: s - start, value_row: p - 1 - start }
+                } else {
+                    PlaceLabel::Outside
+                };
+                out.insert(b * time + reply - 1 - start, label);
+            }
+        }
+        out
+    }
+}
+
+/// What a training step teaches the place read from (claude-351): the kit its windows are
+/// labelled from, and the weight of the place pull in the loss.
+#[derive(Clone)]
+pub struct PlaceTeach {
+    pub kit: std::sync::Arc<PlaceKit>,
+    pub pull: f64,
+}
+
+thread_local! {
+    /// claude-351: what the training step teaches the place read from, when it trains.
+    static PLACE_TEACH: RefCell<Option<PlaceTeach>> = const { RefCell::new(None) };
+}
+
+/// Make `kit` the labels the training step reads on this thread, with the pull's weight; or none.
+pub fn set_place_teach(teach: Option<(PlaceKit, f64)>) {
+    let teach = teach.map(|(kit, pull)| PlaceTeach { kit: std::sync::Arc::new(kit), pull });
+    PLACE_TEACH.with(|cell| *cell.borrow_mut() = teach);
+}
+
+/// What the training step teaches the place read from on this thread, if set.
+pub fn place_teach() -> Option<PlaceTeach> {
+    PLACE_TEACH.with(|cell| cell.borrow().clone())
+}
+
+/// A float margin in bits at Q16, as the export rounds it, so the trainer's find tests the
+/// margin the artifact will.
+fn margin_q16(margin: f32) -> i32 {
+    (f64::from(margin) * 65536.0).round() as i32
+}
+
+/// One row's sign bits, a byte a coordinate, packed a head to a word in coordinate order, as
+/// [`pack_signs`] packs a served code.
+fn pack_heads(row: &[u8], head_width: usize) -> Vec<u64> {
+    row.chunks(head_width)
+        .map(|head| head.iter().enumerate().fold(0u64, |word, (i, &b)| word | (u64::from(b != 0) << i)))
+        .collect()
+}
+
+/// The register program over a batch's windows (claude-351): one [`PlaceState`] a window, read
+/// from the window's first token as a session reads a conversation, each question asked through
+/// [`place_find`]. `q[r · asks + j]` is ask head `j`'s question code at flat row `r` and
+/// `k[r · asks + j]` its key code of the token before row `r`, `asks = margins.len()`.
+fn place_pass(
+    image: &PlaceImage,
+    first: u64,
+    margins: &[i32],
+    ids: &[u32],
+    time: usize,
+    q: &[u64],
+    k: &[u64],
+) -> Vec<PlaceRow> {
+    let asks = margins.len();
+    let mut rows = Vec::with_capacity(ids.len());
+    for (b, window) in ids.chunks(time).enumerate() {
+        let base = b * time;
+        let mut state = PlaceState::default();
+        for t in 0..window.len() {
+            rows.push(state.advance(&window[..=t], image, |users| {
+                // The key code of the token at `p` is the one row `p + 1` holds.
+                place_find(first, margins, users, t, |j| q[(base + t) * asks + j], |j, p| k[(base + p + 1) * asks + j])
+            }));
+        }
+    }
+    rows
+}
+
+/// One vote on a token's count: up or down by one, held inside [`PLACE_COUNT_BOUND`].
+fn place_vote(counts: &mut [i16], token: u32, up: bool) {
+    if let Some(count) = counts.get_mut(token as usize) {
+        *count = (*count + if up { 1 } else { -1 }).clamp(-PLACE_COUNT_BOUND, PLACE_COUNT_BOUND);
+    }
+}
+
+/// What a pass teaches (claude-351), from `rows` ([`place_pass`]) and the batch's `labels`.
+///
+/// **The arm count** of a question row's token goes up when the row's find is the labelled
+/// place, and down when it is another place or the reply has no label. A row that found nothing
+/// is not among the reply's finds and votes on nothing.
+///
+/// **The open count** of a reply row's token, at a row where the register is set:
+/// - with the register at the labelled place, the value-start row votes up, each row before it
+///   votes down, and the rows after it do not vote;
+/// - with the register anywhere else, at another place or in a reply with no label, every row
+///   of the reply votes down;
+/// - a row the step opened does not vote.
+///
+/// **Nothing votes** in a reply whose place the window does not hold ([`PlaceLabel::Outside`]),
+/// or in a window the kit could not place in the corpus (`placed[b]` false): its replies have
+/// labels the trainer cannot see, and "no label" there would be a guess.
+///
+/// A label's `value_row` may lie past the window's end. It is only compared with a row, never
+/// used as an index.
+///
+/// Returns the pull's pairs, flat rows `(t, s)`: every row `t` of a labelled question, from the
+/// window's second, with the labelled place `s`; and the votes cast, arm then open, each up then
+/// down.
+fn place_learn(
+    rows: &[PlaceRow],
+    ids: &[u32],
+    time: usize,
+    labels: &PlaceLabels,
+    placed: &[bool],
+    counts: &mut PlaceCounts,
+) -> (Vec<(u32, u32)>, [[u64; 2]; 2]) {
+    // The votes cast, arm then open, each up then down.
+    let mut votes = [[0u64; 2]; 2];
+    let mut vote = |counts: &mut [i16], gain: usize, token: u32, up: bool| {
+        place_vote(counts, token, up);
+        votes[gain][usize::from(!up)] += 1;
+    };
+    let mut pairs = Vec::new();
+    for (b, window) in rows.chunks(time).enumerate() {
+        if !placed.get(b).copied().unwrap_or(false) {
+            continue;
+        }
+        let base = b * time;
+        // The reply the rows are in: its label, and whether its value-start row has passed.
+        let mut reply: Option<(Option<PlaceLabel>, bool)> = None;
+        for (t, row) in window.iter().enumerate() {
+            if let Some((content, found)) = &row.asked {
+                let label = labels.get(&(base + t)).copied();
+                reply = Some((label, false));
+                match label {
+                    Some(PlaceLabel::Outside) => {}
+                    Some(PlaceLabel::At { place, .. }) => {
+                        for &(at, pos) in found {
+                            vote(&mut counts.arm, 0, ids[base + at], pos == place);
+                        }
+                        let asking = content.clone().filter(|&at| at >= 1);
+                        pairs.extend(asking.map(|at| ((base + at) as u32, (base + place) as u32)));
+                    }
+                    None => {
+                        for &(at, _) in found {
+                            vote(&mut counts.arm, 0, ids[base + at], false);
+                        }
+                    }
+                }
+            }
+            let (Some(held), Some((label, passed))) = (row.held, reply.as_mut()) else {
+                continue;
+            };
+            if row.stepped || *passed {
+                continue;
+            }
+            let token = ids[base + t];
+            match *label {
+                Some(PlaceLabel::Outside) => {}
+                Some(PlaceLabel::At { place, value_row }) if held == place => {
+                    if t == value_row {
+                        vote(&mut counts.open, 1, token, true);
+                    }
+                    if t < value_row {
+                        vote(&mut counts.open, 1, token, false);
+                    }
+                    *passed = t >= value_row;
+                }
+                _ => vote(&mut counts.open, 1, token, false),
+            }
+        }
+    }
+    (pairs, votes)
+}
+
+impl HammingRead {
+    /// claude-351: the register program's rows over `ids`' windows of `time`, its questions asked
+    /// on the ask heads' sign codes in `query` and `key` `(rows, width)`, the forward's own or
+    /// [`Self::place_codes`]'. The codes cross to the host as one byte a coordinate.
+    fn place_rows(
+        &self,
+        place: &PlaceRead,
+        query: &Tensor,
+        key: &Tensor,
+        ids: &[u32],
+        time: usize,
+    ) -> Result<Vec<PlaceRow>> {
+        let head_width = query.dim(1)? / self.heads;
+        let copy_heads = self.copy_heads();
+        let asks = self.heads - copy_heads;
+        let host = |codes: &Tensor| -> Result<Vec<u64>> {
+            let bits = codes
+                .narrow(1, copy_heads * head_width, asks * head_width)?
+                .contiguous()?
+                .ge(0.0)?
+                .to_vec2::<u8>()?;
+            Ok(bits.iter().flat_map(|row| pack_heads(row, head_width)).collect())
+        };
+        let margins: Vec<i32> = self.margin.as_tensor().to_vec1::<f32>()?[copy_heads..]
+            .iter()
+            .map(|&m| margin_q16(m))
+            .collect();
+        let image = place.image()?;
+        Ok(place_pass(&image, place_first(head_width), &margins, ids, time, &host(query)?, &host(key)?))
+    }
+
+    /// claude-351: every row's question and key coordinates as the readout read's forward
+    /// computes them for its ask heads, `(rows, width)` each, detached: the current token's point
+    /// plus its question row, and the previous token's point, both through the key's rotation.
+    fn place_codes(&self, ids: &[u32], time: usize, table: &Tensor) -> Result<(Tensor, Tensor)> {
+        let ask = self
+            .ask
+            .as_ref()
+            .ok_or_else(|| invalid("the place read finds with the ask heads"))?;
+        let (rows, device) = (ids.len(), table.device());
+        let table = table.detach();
+        let points = |ids: Vec<u32>| -> Result<Tensor> {
+            Ok(table.index_select(&Tensor::from_vec(ids, rows, device)?, 0)?)
+        };
+        let previous: Vec<u32> = (0..rows)
+            .map(|r| if r % time == 0 { ids[r] } else { ids[r - 1] })
+            .collect();
+        let (current, previous) = (points(ids.to_vec())?, points(previous)?);
+        as_trained(|| {
+            Ok((
+                Self::rotate(&self.key_rotation, &self.asked(&current, ask, ids, time)?)?.detach(),
+                Self::rotate(&self.key_rotation, &previous)?.detach(),
+            ))
+        })
+    }
+
+    /// claude-351: the place pull over `pairs`, flat rows `(t, s)`. Each row's question row is
+    /// pulled toward the key that names the token before the place, on the half of each ask head
+    /// the question row moves: the sum over the pairs of the nearer head's `bits / half`, and how
+    /// many pairs. The key and the rotation are detached, so only the question rows learn. The
+    /// other half of a question is the previous token's own code, which nothing here moves.
+    fn place_pull_bits(
+        &self,
+        ids: &[u32],
+        table: &Tensor,
+        pairs: &[(u32, u32)],
+    ) -> Result<(Tensor, usize)> {
+        let ask = self
+            .ask
+            .as_ref()
+            .ok_or_else(|| invalid("the place pull needs the ask heads"))?;
+        let (n, device) = (pairs.len(), table.device());
+        let width = table.dim(1)?;
+        let head_width = width / self.heads;
+        let half = head_width / 2;
+        let (copy_heads, asks) = (self.copy_heads(), self.heads - self.copy_heads());
+        let table = table.detach();
+        let tokens = |rows: Vec<u32>| Tensor::from_vec(rows, n, device);
+        let asking: Vec<u32> = pairs.iter().map(|&(t, _)| ids[t as usize]).collect();
+        check_ask_ids(ask, &asking)?;
+        let named: Vec<u32> = pairs.iter().map(|&(_, s)| ids[s as usize - 1]).collect();
+        let current = table.index_select(&tokens(asking.clone())?, 0)?;
+        let keyed = table.index_select(&tokens(named)?, 0)?;
+        let rotation = self.key_rotation.as_tensor().detach();
+        let (query, key) = as_trained(|| {
+            let question = current.add(&ask.as_tensor().index_select(&tokens(asking)?, 0)?)?;
+            Ok((
+                Self::rotate_by(&rotation, &question)?,
+                Self::rotate_by(&rotation, &keyed)?.detach(),
+            ))
+        })?;
+        let signs = |p: &Tensor| -> Result<Tensor> {
+            Ok(p.ge(0.0)?.to_dtype(DType::F32)?.affine(2.0, -1.0)?)
+        };
+        // Each ask head's first half, `(n, asks, half)`.
+        let halves = |p: &Tensor| -> Result<Tensor> {
+            Ok(p.narrow(1, copy_heads * head_width, asks * head_width)?
+                .reshape((n, asks, head_width))?
+                .narrow(2, 0, half)?
+                .contiguous()?)
+        };
+        // The read's straight-through code on the question; the key's code is a constant.
+        let q = halves(&query)?;
+        let q = q.add(&signs(&q)?.sub(&q)?.detach())?;
+        let k = signs(&halves(&key)?)?;
+        let bits = q.mul(&k)?.sum(2)?.affine(-0.5, half as f64 / 2.0)?;
+        let values = bits.detach().to_vec2::<f32>()?;
+        let chosen: Vec<u32> = values
+            .iter()
+            .enumerate()
+            .map(|(i, row)| (i * asks + nearer_head(row)) as u32)
+            .collect();
+        let picked = bits.flatten_all()?.index_select(&tokens(chosen)?, 0)?;
+        Ok((picked.sum_all()?.affine(1.0 / half as f64, 0.0)?, n))
+    }
+}
+
+/// The head with the fewest bits, the lower head on a tie: the one a pair pulls.
+fn nearer_head(bits: &[f32]) -> usize {
+    (0..bits.len())
+        .min_by(|&a, &b| bits[a].total_cmp(&bits[b]).then(a.cmp(&b)))
+        .unwrap_or(0)
+}
+
+impl HammingReads {
+    /// The same reads with the place read on the readout read (claude-351, `--hamming-place`):
+    /// one place register a conversation, set by the ask heads' two-token find over the earlier
+    /// user turns, and at an open reply row the point of the token at the place as the copy
+    /// mix's source. `marks` frame a conversation and `stop` are the tokens a read stops at.
+    /// Both gains start at zero, so at the start no row arms and the forward is the forward
+    /// without it, less the readout read's ask write, which the place read replaces. The readout
+    /// read's ask heads take a margin of an eighth of a head's bits: a find is a match on both
+    /// tokens of the question, and a quarter would pass half of the candidates that match one.
+    pub fn with_place(self, marks: PlaceMarks, stop: &[u32]) -> Result<Self> {
+        let vocab = self.place_vocab()?;
+        let counts = PlaceCounts { arm: vec![0; vocab], open: vec![0; vocab] };
+        let mut reads = self.with_place_state(marks, stop, counts)?;
+        let read = &mut reads.reads[1];
+        let head_width = read.weight.dim(1)? / read.heads;
+        let copy_heads = read.copy_heads();
+        let device = read.weight.device().clone();
+        let margins: Vec<f32> = read
+            .margin
+            .as_tensor()
+            .to_vec1::<f32>()?
+            .into_iter()
+            .enumerate()
+            .map(|(h, m)| if h < copy_heads { m } else { (head_width / 8) as f32 })
+            .collect();
+        read.margin = Var::from_tensor(&Tensor::from_vec(margins, read.heads, &device)?)?;
+        Ok(reads)
+    }
+
+    /// How many tokens the readout read's question table has, the place read's vocabulary; the
+    /// reads the place read cannot sit on are refused here.
+    fn place_vocab(&self) -> Result<usize> {
+        if !self.has_ask() {
+            return Err(invalid("the place read finds with the ask heads; turn them on with --hamming-ask 1"));
+        }
+        if self.carry_rows() > 0 {
+            return Err(invalid(
+                "the place read and the question carry both change the readout read's question; one is on at a time",
+            ));
+        }
+        let read = self
+            .reads
+            .get(1)
+            .ok_or_else(|| invalid("the place read is the readout read's, and there is none"))?;
+        let head_width = read.weight.dim(1)? / read.heads;
+        if head_width > 64 || !head_width.is_multiple_of(8) {
+            return Err(invalid(format!(
+                "the place read needs heads of whole 8-coordinate blocks of at most 64 coordinates, not {head_width}"
+            )));
+        }
+        match &read.ask {
+            Some(ask) => Ok(ask.as_tensor().dim(0)?),
+            None => Err(invalid("the place read finds with the ask heads")),
+        }
+    }
+
+    /// The reads with the place read's host state attached as given, margins untouched.
+    fn with_place_state(mut self, marks: PlaceMarks, stop: &[u32], counts: PlaceCounts) -> Result<Self> {
+        let vocab = self.place_vocab()?;
+        self.reads[1].place = Some(PlaceRead::new(marks, stop_flags(stop, vocab)?, counts)?);
+        Ok(self)
+    }
+
+    /// The reads with the place read saved in `directory`, when it holds one.
+    fn with_saved_place(self, directory: &Path) -> Result<Self> {
+        let path = directory.join(PLACE_FILE);
+        if !path.exists() {
+            return Ok(self);
+        }
+        let saved: PlaceSaved = serde_json::from_slice(&std::fs::read(&path)?)
+            .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+        self.with_place_state(saved.marks, &saved.stop, saved.counts)
+    }
+
+    /// The readout read's place read, when on.
+    pub fn place(&self) -> Option<&PlaceRead> {
+        self.reads.get(1).and_then(|r| r.place.as_ref())
+    }
+
+    /// One training step of the place read (claude-351) on `ids`' windows of `time`, labelled
+    /// from `kit` by each window's corpus start in `starts`: the register program runs over
+    /// every window on the ask heads' own codes, the two gains take their votes, and the place
+    /// pull is returned, the mean over every row of every labelled question of the nearer head's
+    /// distance to the key of the labelled place, for the caller to scale. `None` when no
+    /// question in the batch is labelled. A window with no start teaches nothing.
+    ///
+    /// The votes are cast here, at this forward. A training step split into several forwards
+    /// therefore runs its later forwards on the counts its earlier ones moved.
+    pub fn place_step(
+        &self,
+        ids: &[u32],
+        time: usize,
+        table: &Tensor,
+        kit: &PlaceKit,
+        starts: &[Option<usize>],
+    ) -> Result<Option<Tensor>> {
+        let read = self
+            .reads
+            .get(1)
+            .ok_or_else(|| invalid("the place read is the readout read's, and there is none"))?;
+        let place = read
+            .place
+            .as_ref()
+            .ok_or_else(|| invalid("the place step needs the place read; turn it on with --hamming-place"))?;
+        if time == 0 || !ids.len().is_multiple_of(time) || starts.len() != ids.len() / time {
+            return Err(invalid("the place step needs whole windows, and a corpus start or none for each"));
+        }
+        let labels = kit.labels(starts, time);
+        let placed: Vec<bool> = starts.iter().map(Option::is_some).collect();
+        let (query, key) = read.place_codes(ids, time, table)?;
+        let rows = read.place_rows(place, &query, &key, ids, time)?;
+        let (pairs, votes) = place_learn(&rows, ids, time, &labels, &placed, &mut *place.counts()?);
+        if pairs.is_empty() {
+            place.tallied(votes, None)?;
+            return Ok(None);
+        }
+        let (sum, terms) = read.place_pull_bits(ids, table, &pairs)?;
+        let mean = sum.affine(1.0 / terms as f64, 0.0)?;
+        place.tallied(votes, Some(f64::from(mean.to_scalar::<f32>()?)))?;
+        Ok(Some(mean))
     }
 }
 
@@ -2363,6 +3147,7 @@ pub(crate) fn choose_sorted_from(
         limits,
         tie,
         false,
+        None,
         DISTANCE_CHUNK_BYTES,
     )
 }
@@ -2459,6 +3244,7 @@ fn choose_sorted_in(
         limits,
         tie,
         false,
+        None,
         chunk_bytes,
     )
 }
@@ -2488,13 +3274,107 @@ pub(crate) fn choose_latest_from(
         limits,
         true,
         true,
+        None,
+        DISTANCE_CHUNK_BYTES,
+    )
+}
+
+/// For each row that asks (positions `from..time` of each window of `time` ids), whether the
+/// longest rule may keep a longer match (claude-357): 1 at every row but a reply's opening, the
+/// row whose own token and the one before it are `marker`; 0 there. A window's first position
+/// has no token before it and is never an opening.
+fn longer_rows(ids: &[u32], time: usize, from: usize, marker: [u32; 2]) -> Vec<f32> {
+    ids.chunks(time.max(1))
+        .flat_map(|window| {
+            (from..window.len()).map(move |t| {
+                let opening = t >= 1 && window[t - 1] == marker[0] && window[t] == marker[1];
+                f32::from(u8::from(!opening))
+            })
+        })
+        .collect()
+}
+
+/// The longest rule's choice (claude-357) for the query positions `from..time` of each window:
+/// [`choose_latest_from`]'s, except that among a row's equal distances a position with the
+/// longer match goes before the others, latest first, where `longer_rows` ([`longer_rows`], one
+/// entry per asking row) holds 1 for the row. The key at `s` names token `s − 1`, so the token
+/// before a match at `s` is named by `key[s − 1]` and the row's previous token by `key[t]`: the
+/// longer match is `key[s − 1] = key[t]`, bit for bit, for `s ≥ 2` (a position below 2 has no
+/// token before its key). The caller weighs the pick only at distance 0.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn choose_longest_from(
+    query: &Tensor,
+    key: &Tensor,
+    batch: usize,
+    time: usize,
+    from: usize,
+    first: usize,
+    limits: &[usize],
+    longer_rows: &[f32],
+) -> Result<(Tensor, Tensor)> {
+    if from >= time {
+        return Err(invalid(format!(
+            "the read asks from position {from} of a window of {time}"
+        )));
+    }
+    let asks = time - from;
+    let rows = batch * asks;
+    if longer_rows.len() != rows {
+        return Err(invalid("the longest rule names every asking row"));
+    }
+    // A window of one position has no key before another.
+    if time < 2 {
+        return choose_latest_from(query, key, batch, time, from, first, limits);
+    }
+    let device = query.device();
+    let width = key.dim(1)?;
+    let chunk = distance_chunk(batch, time, width, DISTANCE_CHUNK_BYTES).min(asks);
+    if !launch_fits(&[rows, time]) || !launch_fits(&[batch, chunk, time, width]) {
+        return Err(invalid(format!(
+            "the read over {batch} windows of {time} positions builds a tensor of 2^32 elements \
+             or more, past candle's 32-bit launch size"
+        )));
+    }
+    let keys = key.detach().reshape((batch, time, width))?;
+    let own = keys
+        .narrow(1, from, asks)?
+        .contiguous()?
+        .reshape((batch, asks, 1, width))?;
+    // Position `s` holds `key[s − 1]`; position 0 holds its own key and is masked below.
+    let before = Tensor::cat(&[&keys.narrow(1, 0, 1)?, &keys.narrow(1, 0, time - 1)?], 1)?
+        .contiguous()?
+        .reshape((batch, 1, time, width))?;
+    // Between ±1 codes the mean of `|a − b|` is `2h / width`: 0 bits is an equal code.
+    let agree = mean_l1_rows(&own, &before, batch, time, chunk)?
+        .affine(width as f64 / 2.0, 0.0)?
+        .round()?
+        .eq(0.0)?
+        .to_dtype(DType::F32)?;
+    let has_before: Vec<f32> = (0..time).map(|s| f32::from(u8::from(s >= 2))).collect();
+    let longer = agree
+        .broadcast_mul(&Tensor::from_vec(has_before, (1, time), device)?)?
+        .broadcast_mul(&Tensor::from_vec(longer_rows.to_vec(), (rows, 1), device)?)?;
+    choose_sorted_asking(
+        query,
+        key,
+        batch,
+        time,
+        from,
+        1,
+        first,
+        limits,
+        true,
+        true,
+        Some(&longer),
         DISTANCE_CHUNK_BYTES,
     )
 }
 
 /// [`choose_sorted_in`] for the query positions `from..time` of each window ([`choose_sorted_from`]).
 /// With `latest` (which needs `tie`), equal distances go to the later position
-/// ([`choose_latest_from`]).
+/// ([`choose_latest_from`]). With `longer` (which needs `latest`), a `(rows, time)` table of 0
+/// and 1, equal distances go first to the positions it marks and then to the later
+/// ([`choose_longest_from`]).
 #[allow(clippy::too_many_arguments)]
 fn choose_sorted_asking(
     query: &Tensor,
@@ -2507,12 +3387,18 @@ fn choose_sorted_asking(
     limits: &[usize],
     tie: bool,
     latest: bool,
+    longer: Option<&Tensor>,
     chunk_bytes: usize,
 ) -> Result<(Tensor, Tensor)> {
     if from >= time {
         return Err(invalid(format!(
             "the read asks from position {from} of a window of {time}"
         )));
+    }
+    if longer.is_some() && !(tie && latest) {
+        return Err(invalid(
+            "the longest rule orders the latest-exact choice (an instrument fault)",
+        ));
     }
     let device = query.device();
     let kept = neighbours.min(time.saturating_sub(1)).max(1);
@@ -2534,20 +3420,29 @@ fn choose_sorted_asking(
     // Between ±1 codes the mean of `|q − k|` is `2h / width`, so `h` is that times `width / 2`,
     // rounded off the codes' last-bit noise.
     let distance = if tie {
-        if !tie_keys_exact(width, time) {
+        // claude-357: the longest rule's keys order (bits, no longer match, position), so each
+        // bit takes twice the room ([`longest_key`]).
+        let room = if longer.is_some() { 2 * time } else { time };
+        if !tie_keys_exact(width, room) {
             return Err(invalid(format!(
-                "the read's tie keys for {width} coordinates over {time} positions pass 2^24"
+                "the read's tie keys for {width} coordinates over {room} key positions ({time} rows) pass 2^24"
             )));
         }
         // The tie key orders equal distances by position, earliest first; reversed, latest first.
         let positions: Vec<f32> = (0..time)
             .map(|s| tie_key(0, if latest { time - 1 - s } else { s }, time))
             .collect();
-        distance
+        let keys = distance
             .affine(width as f64 / 2.0, 0.0)?
             .round()?
-            .affine(time as f64, 0.0)?
-            .broadcast_add(&Tensor::from_vec(positions, (1, time), device)?)?
+            .affine(room as f64, 0.0)?
+            .broadcast_add(&Tensor::from_vec(positions, (1, time), device)?)?;
+        match longer {
+            // A position without the longer match sorts after every position with it:
+            // `time · (1 − longer)`.
+            Some(longer) => keys.add(&longer.affine(-(time as f64), time as f64)?)?,
+            None => keys,
+        }
     } else {
         distance
     };
@@ -2566,6 +3461,16 @@ fn choose_sorted_asking(
 /// window of `time` positions: `bits · time + s`, which orders as `(bits, s)`.
 fn tie_key(bits: usize, s: usize, time: usize) -> f32 {
     (bits * time + s) as f32
+}
+
+/// The longest rule's sort key (claude-357) for a candidate at bit distance `bits` and window
+/// position `s`, with or without the longer match, in a window of `time` positions:
+/// `bits · 2·time`, plus `time` without the longer match, plus the position reversed. It orders
+/// as (bits, no longer match, latest first), and is what [`choose_sorted_asking`] builds on the
+/// device under `longer`; the tests hold the two together.
+#[cfg(test)]
+fn longest_key(bits: usize, longer: bool, s: usize, time: usize) -> f32 {
+    (bits * 2 * time + usize::from(!longer) * time + (time - 1 - s)) as f32
 }
 
 /// Whether every tie key of a head of `width` coordinates over `time` positions is an exact
@@ -3797,6 +4702,91 @@ mod tests {
         Ok(())
     }
 
+    /// claude-357: only a read under the longest rule records its marker, and it loads back with
+    /// the latest-exact rule it stands on. The rule is refused without that rule and with a
+    /// two-token copy key, whichever is set first.
+    #[test]
+    fn the_longest_rule_is_saved_only_when_on() -> Result<()> {
+        let root = std::env::temp_dir().join(format!("uor-copy-longest-{}", std::process::id()));
+        for marker in [None, Some([714u32, 28])] {
+            let dir = root.join(marker.is_some().to_string());
+            let reads = HammingReads::new(4, 256, &Device::Cpu)?.with_copy_latest();
+            let reads = match marker {
+                Some(marker) => reads.with_copy_longest(marker)?,
+                None => reads,
+            };
+            assert_eq!(reads.copy_longest(), marker);
+            reads.save(&dir)?;
+            let tensors = candle_core::safetensors::load(dir.join(FILE), &Device::Cpu)?;
+            assert_eq!(tensors.contains_key("copy_longest"), marker.is_some());
+            let loaded = HammingReads::load(&dir, &Device::Cpu)?.expect("a saved read");
+            assert_eq!(loaded.copy_longest(), marker);
+            assert!(loaded.copy_latest());
+        }
+        std::fs::remove_dir_all(&root)?;
+        let plain = HammingReads::new(4, 256, &Device::Cpu)?;
+        assert!(plain.with_copy_longest([714, 28]).is_err(), "without the latest-exact rule");
+        let two = HammingReads::new(4, 256, &Device::Cpu)?.with_copy_key(2)?.with_copy_latest();
+        assert!(two.with_copy_longest([714, 28]).is_err(), "over a two-token key");
+        let on = || -> Result<HammingReads> {
+            HammingReads::new(4, 256, &Device::Cpu)?
+                .with_copy_latest()
+                .with_copy_longest([714, 28])
+        };
+        assert!(on()?.with_copy_key(2).is_err(), "a two-token key set after");
+        assert!(on()?.with_copy_keys(&[1, 2]).is_err(), "mixed keys set after");
+        assert_eq!(on()?.with_copy_keys(&[1, 1])?.copy_longest(), Some([714, 28]));
+        Ok(())
+    }
+
+    /// claude-357: every asking row but a reply's opening may keep a longer match. The opening is
+    /// the row whose own token and the one before it are the marker, in that order, found in
+    /// each window on its own; a decode step names only the rows it asks.
+    #[test]
+    fn the_longer_rows_are_every_row_but_a_reply_opening() {
+        // Two windows of five ids; the first ends with the marker's first id and the second
+        // begins with its second, which opens nothing.
+        let ids = [7u32, 9, 3, 9, 7, 9, 7, 9, 7, 7];
+        assert_eq!(
+            longer_rows(&ids, 5, 0, [7, 9]),
+            [1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0]
+        );
+        assert_eq!(longer_rows(&ids, 5, 2, [7, 9]), [1.0, 1.0, 1.0, 0.0, 1.0, 1.0]);
+        // The marker is ordered: (9, 7) opens other rows.
+        assert_eq!(
+            longer_rows(&ids, 5, 0, [9, 7]),
+            [1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0]
+        );
+    }
+
+    /// claude-357: the longest rule's key orders a row's candidates as the integer reader chooses
+    /// (`longest_of`): among the exact matches the latest with the longer match, with none the
+    /// latest exact one, and never an inexact candidate before an exact one. Every assignment of
+    /// (exact, longer) to the seven candidates of a window's ninth row.
+    #[test]
+    fn the_longest_key_orders_as_the_integer_reader_chooses() {
+        let time = 9;
+        let t = time - 1;
+        for pattern in 0u32..1 << (2 * (t - 1)) {
+            let exact = |s: usize| pattern >> (2 * (s - 1)) & 1 == 1;
+            let longer = |s: usize| pattern >> (2 * (s - 1) + 1) & 1 == 1;
+            let key = |s: usize| longest_key(if exact(s) { 0 } else { 3 }, longer(s), s, time);
+            let best = (1..t)
+                .min_by(|&a, &b| key(a).partial_cmp(&key(b)).unwrap())
+                .unwrap();
+            let wanted = (1..t)
+                .rev()
+                .find(|&s| exact(s) && longer(s))
+                .or_else(|| (1..t).rev().find(|&s| exact(s)));
+            match wanted {
+                Some(s) => assert_eq!(best, s, "pattern {pattern:b}"),
+                None => assert!(!exact(best), "pattern {pattern:b}"),
+            }
+        }
+        // The keys stay exact `f32`s for a 64-coordinate head over 2,048 rows, the doubled room included.
+        assert!(tie_keys_exact(64, 2 * 2048));
+    }
+
     /// claude-345: a token seen twice before, each time followed by another token. The mean
     /// blends the two followers; the latest-exact rule reads the later one alone, in full.
     #[cfg(feature = "cuda")]
@@ -3870,6 +4860,111 @@ mod tests {
             assert!((one[col] - p[col]).abs() < 1e-6, "copy key 1, {col}: the latest X");
             assert!((two[col] - q[col]).abs() < 1e-6, "copy key 2, {col}: the latest C X");
             assert!(absent[col].abs() < 1e-6, "copy key 2, {col}: no D X before");
+        }
+    }
+
+    /// claude-357: the longest choice on the device. Tokens `C X Q B X P C X`, a key naming the
+    /// token before its position: row 7 (an `X` after a `C`) has exact matches at 2 and 5, and
+    /// only position 2 follows a `C X`. The longest rule takes 2 where the latest rule takes 5,
+    /// and takes 5 when row 7 is a reply's opening. Then every row of a longer window, some of
+    /// them openings, is held to the host's choice under [`longest_key`].
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_longest_choice_takes_the_longer_match_except_at_an_opening() {
+        let device = Device::new_cuda(0).unwrap();
+        // A token's code is its low eight bits as ±1.
+        let code = |token: u32| -> [f32; 8] {
+            std::array::from_fn(|bit| if token >> bit & 1 == 1 { 1.0 } else { -1.0 })
+        };
+        let run = |tokens: &[u32], longer_rows: &[f32]| -> (Vec<Vec<u32>>, Vec<Vec<u8>>) {
+            let time = tokens.len();
+            let query: Vec<f32> = tokens.iter().flat_map(|&t| code(t)).collect();
+            // The key at `s` is the code of token `s − 1`; position 0's names no token (255).
+            let key: Vec<f32> = (0..time)
+                .flat_map(|s| code(if s == 0 { 255 } else { tokens[s - 1] }))
+                .collect();
+            let query = Tensor::from_vec(query, (time, 8), &device).unwrap();
+            let key = Tensor::from_vec(key, (time, 8), &device).unwrap();
+            let limits = vec![time; time];
+            let (picks, real) =
+                choose_longest_from(&query, &key, 1, time, 0, 1, &limits, longer_rows).unwrap();
+            (picks.to_vec2::<u32>().unwrap(), real.to_vec2::<u8>().unwrap())
+        };
+        let (c, x, q, b, p) = (1u32, 2, 3, 4, 5);
+        let tokens = [c, x, q, b, x, p, c, x];
+        let (picks, real) = run(&tokens, &[1.0; 8]);
+        assert_eq!((picks[7][0], real[7][0]), (2, 1), "the match after C X");
+        assert_eq!((picks[4][0], real[4][0]), (2, 1), "one exact match");
+        assert_eq!(real[1][0], 0, "row 1 has no earlier position");
+        let mut opening = [1.0f32; 8];
+        opening[7] = 0.0;
+        assert_eq!(run(&tokens, &opening).0[7][0], 5, "an opening keeps the latest");
+        // A longer window over five tokens, every seventh row an opening.
+        let mut state = 12_345u32;
+        let tokens: Vec<u32> = (0..48)
+            .map(|_| {
+                state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                (state >> 24) % 5 + 1
+            })
+            .collect();
+        let time = tokens.len();
+        let rows: Vec<f32> = (0..time).map(|t| f32::from(u8::from(t % 7 != 3))).collect();
+        let (picks, real) = run(&tokens, &rows);
+        for t in 2..time {
+            let key = |s: usize| {
+                let bits = (tokens[t] ^ tokens[s - 1]).count_ones() as usize;
+                let longer = rows[t] == 1.0 && s >= 2 && tokens[s - 2] == tokens[t - 1];
+                longest_key(bits, longer, s, time)
+            };
+            let best = (1..t)
+                .min_by(|&a, &b| key(a).partial_cmp(&key(b)).unwrap())
+                .unwrap();
+            assert_eq!((picks[t][0] as usize, real[t][0]), (best, 1), "row {t}");
+        }
+    }
+
+    /// claude-357: the longest rule through the read. The window holds `C X Q`, then `B X P`,
+    /// and asks at `C X`. The latest rule reads `P`, what followed the latest `X`; the longest
+    /// rule reads `Q`, what followed the latest `C X`; and with `C X` as the reply marker the
+    /// row is an opening and reads `P` again.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_longest_rule_reads_what_followed_the_longer_match_except_at_an_opening() {
+        let device = Device::new_cuda(0).unwrap();
+        let (b, x, p, c, q) = (2u32, 3, 4, 5, 6);
+        let table = table(16, 256, &device);
+        let points = table.to_vec2::<f32>().unwrap();
+        let ids = [1u32, c, x, q, b, x, p, 7, c, x];
+        let added = |marker: Option<[u32; 2]>| -> Vec<f32> {
+            let x0 = residual(1, ids.len(), 256, &device);
+            let reads = HammingReads::new(4, 256, &device).unwrap().with_copy_latest();
+            let reads = match marker {
+                Some(marker) => reads.with_copy_longest(marker).unwrap(),
+                None => reads,
+            };
+            let read = &reads.reads[0];
+            let copy_only: Vec<f32> = (0..512).map(|i| f32::from(u8::from(i < 256))).collect();
+            read.weight
+                .set(&Tensor::from_vec(copy_only, (2, 256), &device).unwrap())
+                .unwrap();
+            let rows = read
+                .apply(&x0, &ids, &table)
+                .unwrap()
+                .sub(&x0)
+                .unwrap()
+                .reshape((ids.len(), 256))
+                .unwrap()
+                .to_vec2::<f32>()
+                .unwrap();
+            rows[ids.len() - 1].clone()
+        };
+        // (8, 9) is a marker the window never holds.
+        let (latest, longest, opening) = (added(None), added(Some([8, 9])), added(Some([c, x])));
+        let (p, q) = (&points[p as usize], &points[q as usize]);
+        for col in 0..256 {
+            assert!((latest[col] - p[col]).abs() < 1e-6, "latest, {col}: the latest X");
+            assert!((longest[col] - q[col]).abs() < 1e-6, "longest, {col}: the latest C X");
+            assert!((opening[col] - p[col]).abs() < 1e-6, "opening, {col}: the latest X");
         }
     }
 
@@ -5475,3 +6570,522 @@ mod i1_digest {
     }
 }
 // I1-DIGEST END
+
+/// claude-351: the place read's host side, which runs with no device.
+#[cfg(test)]
+mod place_tests {
+    use super::*;
+
+    const BOS: u32 = 0;
+    const SEP: u32 = 2;
+    const USER: u32 = 4;
+    const MODEL: u32 = 5;
+    const DOT: u32 = 13;
+    const ASK: u32 = 15;
+    const MY: u32 = 20;
+    const NAME: u32 = 21;
+    const IS: u32 = 22;
+    const OK: u32 = 23;
+    const ITS: u32 = 24;
+    const MAYA: u32 = 30;
+    /// "my name is maya ." / "ok ." / "name ?" / "it's maya .": the question's last row asks
+    /// for the place after "name is", position 5; the reply starts at row 16 and names the
+    /// value from row 17.
+    const TALK: [u32; 20] = [
+        BOS, USER, MY, NAME, IS, MAYA, DOT, SEP, MODEL, OK, DOT, SEP, USER, NAME, ASK, SEP, MODEL,
+        ITS, MAYA, DOT,
+    ];
+    const VOCAB: usize = 32;
+
+    fn marks() -> PlaceMarks {
+        PlaceMarks { bos: BOS, eos: 1, sep: vec![SEP], system: vec![3], user: vec![USER], assistant: vec![MODEL] }
+    }
+
+    /// A token's key code on one head of 16 coordinates: its id in each half.
+    fn key(token: u32) -> u64 {
+        u64::from(token) | (u64::from(token) << 8)
+    }
+
+    /// The codes of `ids`' rows for one ask head: a row asks as its own token does, but for
+    /// `ASK`, whose learned question names "is"; a row's key code is the token before it.
+    fn codes(ids: &[u32]) -> (Vec<u64>, Vec<u64>) {
+        let q = ids.iter().map(|&t| key(if t == ASK { IS } else { t })).collect();
+        let k = (0..ids.len()).map(|r| key(ids[r.saturating_sub(1)])).collect();
+        (q, k)
+    }
+
+    fn place() -> PlaceRead {
+        let counts = PlaceCounts { arm: vec![0; VOCAB], open: vec![0; VOCAB] };
+        PlaceRead::new(marks(), stop_flags(&[DOT], VOCAB).expect("flags"), counts).expect("a place read")
+    }
+
+    /// One pass and its votes, with an exact margin: the rows' offers and the pull's pairs.
+    fn step(place: &PlaceRead, labels: &PlaceLabels) -> (Vec<Option<usize>>, Vec<(u32, u32)>) {
+        step_on(place, labels, true)
+    }
+
+    /// [`step`], on a window the kit placed in the corpus or could not.
+    fn step_on(place: &PlaceRead, labels: &PlaceLabels, placed: bool) -> (Vec<Option<usize>>, Vec<(u32, u32)>) {
+        let (q, k) = codes(&TALK);
+        let image = place.image().expect("an image");
+        let rows = place_pass(&image, place_first(16), &[1 << 16], &TALK, TALK.len(), &q, &k);
+        let counts = &mut place.counts().expect("counts");
+        let (pairs, votes) = place_learn(&rows, &TALK, TALK.len(), labels, &[placed], counts);
+        place.tallied(votes, None).expect("a tally");
+        (rows.into_iter().map(|r| r.offer).collect(), pairs)
+    }
+
+    fn kit() -> PlaceKit {
+        PlaceKit { tokens_sha256: String::new(), marks: marks(), stop: vec![DOT], places: vec![[17, 5, 18, 1]] }
+    }
+
+    #[test]
+    fn the_gains_learn_the_arm_then_the_open_and_then_the_read_opens() {
+        let (place, labels) = (place(), kit().labels(&[Some(0)], TALK.len()));
+        assert_eq!(labels.get(&16), Some(&PlaceLabel::At { place: 5, value_row: 17 }));
+        let closed = vec![None; TALK.len()];
+        // Nothing is armed: the find is right, so the question token's arm count goes up, and
+        // both rows of the question pull toward the place.
+        let (offers, pairs) = step(&place, &labels);
+        assert_eq!((offers, pairs), (closed.clone(), vec![(13, 5), (14, 5)]));
+        let gains = place.gains().expect("gains");
+        assert_eq!((gains.arm[ASK as usize], gains.open.iter().any(|&c| c != 0)), (1, false));
+        // The register is set: the value-start row's token goes up, the row before it down.
+        assert_eq!(step(&place, &labels).0, closed);
+        let gains = place.gains().expect("gains");
+        assert_eq!((gains.open[ITS as usize], gains.open[MODEL as usize]), (1, -1));
+        assert_eq!(gains.open.iter().filter(|&&c| c != 0).count(), 2);
+        // The read opens at the value-start row and offers the place; "maya" steps onto the
+        // stop token and the register clears. An opened value row votes as before, and no other.
+        let mut open = closed;
+        open[17] = Some(5);
+        assert_eq!(step(&place, &labels).0, open);
+        let gains = place.gains().expect("gains");
+        assert_eq!((gains.arm[ASK as usize], gains.open[ITS as usize], gains.open[MODEL as usize]), (3, 2, -2));
+        assert_eq!(gains.open[MAYA as usize], 0);
+        // The reading: one token arms and one opens; three right finds, and the open votes of
+        // the second and third passes, one up and one down each. Then the tally is empty.
+        let reading = place.reading().expect("a reading");
+        let want = PlaceReading { armed: 1, opening: 1, arm_votes: [3, 0], open_votes: [2, 2], pull_mean: None };
+        assert_eq!(reading, want);
+        let again = place.reading().expect("a reading");
+        assert_eq!((again.armed, again.arm_votes, again.open_votes), (1, [0, 0], [0, 0]));
+    }
+
+    #[test]
+    fn a_reply_with_no_label_or_another_place_votes_down_and_one_outside_votes_on_nothing() {
+        // No label: the find is a wrong vote, and nothing is pulled.
+        let place = place();
+        assert_eq!(step(&place, &PlaceLabels::new()).1, Vec::new());
+        assert_eq!(place.gains().expect("gains").arm[ASK as usize], -1);
+        // Outside: no vote and no pull.
+        let place = self::place();
+        let outside = PlaceLabels::from([(16, PlaceLabel::Outside)]);
+        assert_eq!(step(&place, &outside).1, Vec::new());
+        assert_eq!(place.gains().expect("gains"), PlaceCounts { arm: vec![0; VOCAB], open: vec![0; VOCAB] });
+        // Another place, with the register armed: the find votes down, and every reply row
+        // votes its token's open count down, for the register is set at a place that is not it.
+        let place = self::place();
+        place.counts().expect("counts").arm[ASK as usize] = 2;
+        let other = PlaceLabels::from([(16, PlaceLabel::At { place: 4, value_row: 17 })]);
+        assert_eq!(step(&place, &other).1, vec![(13, 4), (14, 4)]);
+        let gains = place.gains().expect("gains");
+        assert_eq!(gains.arm[ASK as usize], 1);
+        for token in [MODEL, ITS, MAYA, DOT] {
+            assert_eq!(gains.open[token as usize], -1, "token {token}");
+        }
+    }
+
+    #[test]
+    fn with_the_register_set_no_label_votes_the_reply_down_and_outside_or_unplaced_votes_on_nothing() {
+        let armed = || {
+            let place = place();
+            place.counts().expect("counts").arm[ASK as usize] = 1;
+            place
+        };
+        let untouched = |place: &PlaceRead| {
+            let gains = place.gains().expect("gains");
+            assert_eq!((gains.arm[ASK as usize], gains.open), (1, vec![0; VOCAB]));
+            let reading = place.reading().expect("a reading");
+            assert_eq!((reading.arm_votes, reading.open_votes), ([0, 0], [0, 0]));
+        };
+        // No label, in a window the kit placed: the armed find was a wrong vote, and every row
+        // of the reply votes its token's open count down, for the register is set.
+        let place = armed();
+        assert_eq!(step(&place, &PlaceLabels::new()).1, Vec::new());
+        let gains = place.gains().expect("gains");
+        assert_eq!(gains.arm[ASK as usize], 0);
+        for token in [MODEL, ITS, MAYA, DOT] {
+            assert_eq!(gains.open[token as usize], -1, "token {token}");
+        }
+        // Outside: the window does not hold the place. Nothing votes, though the register is set.
+        let place = armed();
+        let outside = PlaceLabels::from([(16, PlaceLabel::Outside)]);
+        assert_eq!(step(&place, &outside).1, Vec::new());
+        untouched(&place);
+        // A window the kit could not place in the corpus: its replies' labels are unknown, so
+        // nothing votes and nothing is pulled, with or without a label at its rows.
+        for labels in [PlaceLabels::new(), kit().labels(&[Some(0)], TALK.len())] {
+            let place = armed();
+            assert_eq!(step_on(&place, &labels, false).1, Vec::new());
+            untouched(&place);
+        }
+    }
+
+    /// A checkpoint's line in `place.jsonl` is the reading and the step, and taking it starts
+    /// the tally again, so the next line with no pull between has no mean pull.
+    #[test]
+    fn a_checkpoints_place_line_is_the_reading_and_the_step() {
+        let place = place();
+        place.counts().expect("counts").arm[ASK as usize] = 1;
+        place.tallied([[2, 1], [0, 3]], Some(0.25)).expect("a tally");
+        let line = place.line(40).expect("a line");
+        let want = serde_json::json!({
+            "armed": 1, "opening": 0, "arm_votes": [2, 1], "open_votes": [0, 3], "pull_mean": 0.25, "step": 40,
+        });
+        assert_eq!(line, want);
+        let next = place.line(80).expect("a line");
+        let want = serde_json::json!({ "armed": 1, "opening": 0, "arm_votes": [0, 0], "open_votes": [0, 0], "step": 80 });
+        assert_eq!(next, want);
+    }
+
+    #[test]
+    fn a_place_file_with_no_reads_beside_it_is_refused() {
+        let dir = std::env::temp_dir().join(format!("uor-place-lone-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("a directory");
+        // No file at all: a checkpoint without reads.
+        assert!(HammingReads::load(&dir, &Device::Cpu).expect("no reads").is_none());
+        // The place file alone: a save cut short between its two files.
+        let place = place();
+        std::fs::write(dir.join(PLACE_FILE), serde_json::to_vec(&place.saved().expect("state")).expect("json"))
+            .expect("the place file");
+        let refused = HammingReads::load(&dir, &Device::Cpu).map(|reads| reads.is_some());
+        std::fs::remove_file(dir.join(PLACE_FILE)).expect("the place file removed");
+        std::fs::remove_dir(&dir).expect("the directory removed");
+        let message = refused.expect_err("a lone place file is refused").to_string();
+        assert!(message.contains("cut short"), "{message}");
+    }
+
+    #[test]
+    fn a_second_window_is_read_and_taught_at_its_own_rows() {
+        // Two windows: one with no conversation, then the talk. The kit places the talk's
+        // window at the corpus start and the other where it has no reply.
+        let time = TALK.len();
+        let mut ids = vec![OK; time];
+        ids[0] = BOS;
+        ids.extend(TALK);
+        let (place, (q, k)) = (place(), codes(&ids));
+        let image = place.image().expect("an image");
+        let rows = place_pass(&image, place_first(16), &[1 << 16], &ids, time, &q, &k);
+        assert!(rows[..time].iter().all(|row| *row == PlaceRow::default()));
+        // The question's find is in the second window's own positions.
+        assert_eq!(rows[time + 16].asked, Some((13..15, vec![(14, 5)])));
+        let labels = kit().labels(&[Some(100), Some(0)], time);
+        assert_eq!(labels, PlaceLabels::from([(time + 16, PlaceLabel::At { place: 5, value_row: 17 })]));
+        let counts = &mut place.counts().expect("counts");
+        let (pairs, votes) = place_learn(&rows, &ids, time, &labels, &[true, true], counts);
+        // The pull's pairs are flat rows, and the one vote is the second window's right find.
+        assert_eq!(pairs, vec![(33, 25), (34, 25)]);
+        assert_eq!((votes, counts.arm[ASK as usize]), ([[1, 0], [0, 0]], 1));
+    }
+
+    #[test]
+    fn a_count_saturates_at_its_bound() {
+        let mut counts = vec![0i16; 4];
+        for _ in 0..200 {
+            place_vote(&mut counts, 1, true);
+            place_vote(&mut counts, 2, false);
+        }
+        place_vote(&mut counts, 9, true);
+        assert_eq!(counts, vec![0, PLACE_COUNT_BOUND, -PLACE_COUNT_BOUND, 0]);
+    }
+
+    #[test]
+    fn a_windows_labels_are_in_its_own_positions() {
+        let kit = kit();
+        kit.check().expect("a sound kit");
+        // The window starts four tokens in: the place, corpus position 5, is its second
+        // position, before any candidate, so the label is outside.
+        assert_eq!(kit.labels(&[Some(4)], 16), PlaceLabels::from([(12, PlaceLabel::Outside)]));
+        // Two windows: the second, from corpus position 3, holds the place at its third position.
+        let two = kit.labels(&[Some(0), Some(3)], 20);
+        assert_eq!(two.get(&16), Some(&PlaceLabel::At { place: 5, value_row: 17 }));
+        assert_eq!(two.get(&(20 + 13)), Some(&PlaceLabel::At { place: 2, value_row: 14 }));
+        assert_eq!(two.len(), 2);
+        // A window that ends before the reply's first token has no row for it.
+        assert!(kit.labels(&[Some(0)], 16).is_empty());
+        assert!(kit.labels(&[Some(17)], 16).is_empty());
+        // A window with no corpus start has no label, and the next window keeps its own rows.
+        let second = kit.labels(&[None, Some(0)], 20);
+        assert_eq!(second, PlaceLabels::from([(20 + 16, PlaceLabel::At { place: 5, value_row: 17 })]));
+        // Refused: labels out of order, and a place at or after its reply.
+        let mut bad = kit.clone();
+        bad.places.push([17, 5, 18, 1]);
+        assert!(bad.check().is_err());
+        bad.places = vec![[17, 17, 18, 1]];
+        assert!(bad.check().is_err());
+    }
+
+    #[test]
+    fn a_rows_bits_pack_as_a_served_code_and_the_nearer_head_is_the_lower_on_a_tie() {
+        let coordinates: Vec<f32> = (0..64).map(|i| if i % 3 == 0 { 0.5 } else { -0.5 }).collect();
+        let bytes: Vec<u8> = coordinates.iter().map(|&c| u8::from(c >= 0.0)).collect();
+        assert_eq!(pack_heads(&bytes, 64), pack_signs(&coordinates));
+        // Two heads of 16: each head's bits start again at bit 0.
+        let two = pack_heads(&bytes[..32], 16);
+        assert_eq!(two, vec![pack_signs(&coordinates[..16])[0], pack_signs(&coordinates[16..32])[0]]);
+        assert_eq!(margin_q16(8.0), 8 << 16);
+        assert_eq!((nearer_head(&[3.0, 3.0]), nearer_head(&[4.0, 3.0]), nearer_head(&[])), (0, 1, 0));
+    }
+
+    #[test]
+    fn the_image_reads_the_counts_by_their_sign() {
+        let place = place();
+        {
+            let mut counts = place.counts().expect("counts");
+            counts.arm[ASK as usize] = 1;
+            counts.arm[NAME as usize] = -3;
+            counts.open[ITS as usize] = PLACE_COUNT_BOUND;
+        }
+        let image = place.image().expect("an image");
+        assert!(image.has(ASK, PLACE_ARM) && !image.has(NAME, PLACE_ARM) && !image.has(MY, PLACE_ARM));
+        assert!(image.has(ITS, PLACE_OPEN) && !image.has(OK, PLACE_OPEN));
+        assert!(image.has(DOT, PLACE_STOP) && !image.has(MAYA, PLACE_STOP));
+        // The saved form and back: the same marks, stop tokens and counts.
+        let saved = place.saved().expect("saved");
+        let text = serde_json::to_vec(&saved).expect("json");
+        let back: PlaceSaved = serde_json::from_slice(&text).expect("json");
+        let again = PlaceRead::new(back.marks, stop_flags(&back.stop, VOCAB).expect("flags"), back.counts).expect("a place read");
+        assert_eq!(again.image().expect("an image"), image);
+        // Counts for another vocabulary are refused.
+        let short = PlaceCounts { arm: vec![0; 3], open: vec![0; VOCAB] };
+        assert!(PlaceRead::new(marks(), vec![false; VOCAB], short).is_err());
+        assert!(stop_flags(&[VOCAB as u32], VOCAB).is_err());
+    }
+
+    /// A table of `VOCAB` points whose codes are known: in each half of each 64-coordinate head,
+    /// token `v` is row `v` of the 32 by 32 Walsh matrix, so two tokens differ in exactly 16 of
+    /// a half's 32 coordinates. A candidate right on one token of the question and wrong on the
+    /// other is 16 bits away, twice the place read's margin of 8.
+    #[cfg(feature = "cuda")]
+    fn walsh_table(device: &Device) -> Tensor {
+        let data: Vec<f32> = (0..VOCAB * 256)
+            .map(|i| {
+                let (v, c) = (i / 256, i % 32);
+                if (v & c).count_ones().is_multiple_of(2) { 1.0 } else { -1.0 }
+            })
+            .collect();
+        Tensor::from_vec(data, (VOCAB, 256), device).unwrap()
+    }
+
+    /// Reads of four heads over 256 coordinates with the ask heads and the place read on, every
+    /// rotation the identity, so a token's key code is its table row's signs.
+    #[cfg(feature = "cuda")]
+    fn place_reads(device: &Device) -> HammingReads {
+        let reads = HammingReads::new(4, 256, device)
+            .unwrap()
+            .with_ask(VOCAB)
+            .unwrap()
+            .with_place(marks(), &[DOT])
+            .unwrap();
+        let identity = Tensor::from_vec([1.0f32, 0.0, 0.0, 0.0].repeat(64), (64, 4), device).unwrap();
+        for read in &reads.reads {
+            read.key_rotation.set(&identity).unwrap();
+            read.query_rotation.set(&identity).unwrap();
+        }
+        reads
+    }
+
+    /// The readout read's weight rows: `copy` on the copy row and 0 on the type row.
+    #[cfg(feature = "cuda")]
+    fn copy_weight(copy: f32, device: &Device) -> Tensor {
+        let rows: Vec<f32> = (0..512).map(|i| if i < 256 { copy } else { 0.0 }).collect();
+        Tensor::from_vec(rows, (2, 256), device).unwrap()
+    }
+
+    /// A residual of `TALK`'s rows with no zero and no token's point in it.
+    #[cfg(feature = "cuda")]
+    fn talk_residual(device: &Device) -> Tensor {
+        let data: Vec<f32> = (0..TALK.len() * 256).map(|i| 0.25 + (i % 7) as f32 * 0.03125).collect();
+        Tensor::from_vec(data, (1, TALK.len(), 256), device).unwrap()
+    }
+
+    #[cfg(feature = "cuda")]
+    fn flat_rows(t: &Tensor) -> Vec<Vec<f32>> {
+        t.reshape((TALK.len(), 256)).unwrap().to_vec2::<f32>().unwrap()
+    }
+
+    /// Sets `ASK`'s question row so that its question is "is", the token before the place.
+    #[cfg(feature = "cuda")]
+    fn teach_the_question(read: &HammingRead, table: &Tensor, device: &Device) {
+        let points = table.to_vec2::<f32>().unwrap();
+        let mut rows = vec![0.0f32; VOCAB * 256];
+        for c in 0..256 {
+            rows[ASK as usize * 256 + c] = points[IS as usize][c] - points[ASK as usize][c];
+        }
+        let ask = read.ask.as_ref().expect("ask heads");
+        ask.set(&Tensor::from_vec(rows, (VOCAB, 256), device).unwrap()).unwrap();
+    }
+
+    /// claude-351, G2b on the pod: the forward opens the row the register opens, onto the token
+    /// at the place. With the question taught and both gains on, the readout at the value-start
+    /// row is the point of "maya", the token at position 5, at a copy weight of 1; every other
+    /// row is the row of the same read with nothing armed; and the forward's rows are the ones
+    /// the training step's own codes give the program.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_forward_opens_the_registers_row_onto_the_token_at_the_place() {
+        let device = Device::new_cuda(0).unwrap();
+        let (reads, table) = (place_reads(&device), walsh_table(&device));
+        let read = &reads.reads[1];
+        let place = read.place.as_ref().expect("a place read");
+        read.weight.set(&copy_weight(1.0, &device)).unwrap();
+        teach_the_question(read, &table, &device);
+        let out = talk_residual(&device);
+        let shut = flat_rows(&read.apply_readout(&out, &TALK, &table).unwrap());
+        {
+            let mut counts = place.counts().unwrap();
+            counts.arm[ASK as usize] = 1;
+            counts.open[ITS as usize] = 1;
+        }
+        let open = flat_rows(&read.apply_readout(&out, &TALK, &table).unwrap());
+        let points = table.to_vec2::<f32>().unwrap();
+        for c in 0..256 {
+            assert!((open[17][c] - points[MAYA as usize][c]).abs() < 1e-5, "the open row, {c}");
+        }
+        for r in (0..TALK.len()).filter(|&r| r != 17) {
+            assert_eq!(open[r], shut[r], "row {r} is closed and reads as before");
+        }
+        assert_ne!(open[17], shut[17], "the open row moved");
+        // The training step's codes give the program the same rows.
+        let (query, key) = read.place_codes(&TALK, TALK.len(), &table).unwrap();
+        let rows = read.place_rows(place, &query, &key, &TALK, TALK.len()).unwrap();
+        let offers: Vec<Option<usize>> = rows.iter().map(|r| r.offer).collect();
+        let mut want = vec![None; TALK.len()];
+        want[17] = Some(5);
+        assert_eq!(offers, want);
+        // The ask heads write nothing under the place read: on the type row alone, with nothing
+        // armed, the readout is the residual.
+        place.counts().unwrap().arm[ASK as usize] = 0;
+        let type_only: Vec<f32> = (0..512).map(|i| if i < 256 { 0.0 } else { 1.0 }).collect();
+        read.weight.set(&Tensor::from_vec(type_only, (2, 256), &device).unwrap()).unwrap();
+        let typed = flat_rows(&read.apply_readout(&out, &TALK, &table).unwrap());
+        assert_eq!(typed, flat_rows(&out), "the ask heads write nothing");
+    }
+
+    /// claude-351, G3 on the pod: the place pull. From zero rows both question rows are half a
+    /// half away from "is" (the Walsh distance), so the pull is one half exactly; its gradient
+    /// reaches the two question tokens' rows of the readout read's question table and nothing
+    /// else; descent brings the pull to zero; and then the step's own find is the labelled
+    /// place, so the question token's arm count goes up. The sign code is straight-through, so
+    /// this is a descent check, not a finite difference.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_place_pull_trains_the_question_rows_onto_the_place_and_then_the_find_votes() {
+        let device = Device::new_cuda(0).unwrap();
+        let reads = place_reads(&device);
+        let table = Var::from_tensor(&walsh_table(&device)).unwrap();
+        let read = &reads.reads[1];
+        let ask = read.ask.as_ref().expect("ask heads");
+        let kit = kit();
+        let step = || reads.place_step(&TALK, TALK.len(), table.as_tensor(), &kit, &[Some(0)]).unwrap().expect("a pull");
+        let scalar = |t: &Tensor| t.to_scalar::<f32>().unwrap();
+        let pull = step();
+        assert!((scalar(&pull) - 0.5).abs() < 1e-6, "{}", scalar(&pull));
+        assert_eq!(reads.place().unwrap().gains().unwrap().arm, vec![0; VOCAB], "nothing is found yet");
+        let grads = pull.backward().unwrap();
+        let moved = grads.get(ask.as_tensor()).expect("the question rows learn").abs().unwrap().sum(1).unwrap();
+        let moved = moved.to_vec1::<f32>().unwrap();
+        for (token, &sum) in moved.iter().enumerate() {
+            let asks = token as u32 == NAME || token as u32 == ASK;
+            assert_eq!(sum > 0.0, asks, "token {token}");
+        }
+        let still = |t: &Tensor| {
+            grads.get(t).is_none_or(|g| g.abs().unwrap().sum_all().unwrap().to_scalar::<f32>().unwrap() == 0.0)
+        };
+        assert!(still(table.as_tensor()), "the table");
+        assert!(still(read.key_rotation.as_tensor()) && still(read.query_rotation.as_tensor()), "the rotations");
+        assert!(still(read.weight.as_tensor()) && still(read.margin.as_tensor()), "the weights and margins");
+        assert!(still(reads.reads[0].ask.as_ref().unwrap().as_tensor()), "the stream read's questions");
+        // Each step moves a pulled coordinate half a unit toward the key's sign.
+        for _ in 0..4 {
+            let pull = step();
+            let grads = pull.backward().unwrap();
+            let grad = grads.get(ask.as_tensor()).expect("the question rows learn");
+            ask.set(&ask.as_tensor().sub(&grad.affine(64.0, 0.0).unwrap()).unwrap()).unwrap();
+        }
+        // The pull is zero, and this step's find at "?" is the place: one vote up, and no other.
+        let before = reads.place().unwrap().gains().unwrap().arm;
+        assert_eq!(scalar(&step()), 0.0);
+        let after = reads.place().unwrap().gains().unwrap().arm;
+        for token in 0..VOCAB {
+            let up = i16::from(token as u32 == ASK);
+            assert_eq!(after[token] - before[token], up, "token {token}");
+        }
+    }
+
+    /// claude-351, G3 on the pod: the mix at an open row, `n + w (c − n)` with `c` the point of
+    /// the token at the place. Its gradient in the copy weight is `(c − n)` times the probe and
+    /// in the row `n` is `(1 − w)` times the probe, both against a finite difference; and no
+    /// gradient passes through the register into the question rows, the margins or the table.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_open_rows_mix_has_the_gradient_of_its_weight_and_its_row() {
+        let device = Device::new_cuda(0).unwrap();
+        let reads = place_reads(&device);
+        let table = Var::from_tensor(&walsh_table(&device)).unwrap();
+        let read = &reads.reads[1];
+        teach_the_question(read, table.as_tensor(), &device);
+        {
+            let mut counts = read.place.as_ref().unwrap().counts().unwrap();
+            counts.arm[ASK as usize] = 1;
+            counts.open[ITS as usize] = 1;
+        }
+        read.weight.set(&copy_weight(0.25, &device)).unwrap();
+        let out = Var::from_tensor(&talk_residual(&device)).unwrap();
+        let probe: Vec<f32> = (0..256).map(|c| 1.0 + (c % 5) as f32 * 0.25).collect();
+        let probe_row = Tensor::from_vec(probe.clone(), (1, 256), &device).unwrap();
+        // The loss reads the open row alone.
+        let loss = |out: &Tensor| -> f32 {
+            let rows = read.apply_readout(out, &TALK, table.as_tensor()).unwrap().reshape((TALK.len(), 256)).unwrap();
+            rows.narrow(0, 17, 1).unwrap().mul(&probe_row).unwrap().sum_all().unwrap().to_scalar::<f32>().unwrap()
+        };
+        let rows = read.apply_readout(out.as_tensor(), &TALK, table.as_tensor()).unwrap().reshape((TALK.len(), 256)).unwrap();
+        let grads = rows.narrow(0, 17, 1).unwrap().mul(&probe_row).unwrap().sum_all().unwrap().backward().unwrap();
+        let points = table.as_tensor().to_vec2::<f32>().unwrap();
+        let n = flat_rows(out.as_tensor());
+        let by_weight = grads.get(read.weight.as_tensor()).expect("the weight learns").to_vec2::<f32>().unwrap();
+        let by_row = grads.get(out.as_tensor()).expect("the row learns").reshape((TALK.len(), 256)).unwrap().to_vec2::<f32>().unwrap();
+        for c in 0..256 {
+            let want = (points[MAYA as usize][c] - n[17][c]) * probe[c];
+            assert!((by_weight[0][c] - want).abs() < 1e-4, "the copy weight, {c}");
+            assert_eq!(by_weight[1][c], 0.0, "the type weight, {c}");
+            assert!((by_row[17][c] - 0.75 * probe[c]).abs() < 1e-5, "the row, {c}");
+        }
+        let still = |t: &Tensor| {
+            grads.get(t).is_none_or(|g| g.abs().unwrap().sum_all().unwrap().to_scalar::<f32>().unwrap() == 0.0)
+        };
+        assert!(still(read.ask.as_ref().unwrap().as_tensor()), "the question rows");
+        assert!(still(read.margin.as_tensor()) && still(table.as_tensor()), "the margins and the table");
+        // A finite difference in one weight coordinate and in one coordinate of the row.
+        let h = 0.125f32;
+        let bumped = |c: usize, by: f32| {
+            let mut w = vec![0.0f32; 512];
+            w[..256].fill(0.25);
+            w[c] += by;
+            read.weight.set(&Tensor::from_vec(w, (2, 256), &device).unwrap()).unwrap();
+            loss(out.as_tensor())
+        };
+        let slope = (bumped(3, h) - bumped(3, -h)) / (2.0 * h);
+        assert!((slope - by_weight[0][3]).abs() < 1e-3, "{slope} against {}", by_weight[0][3]);
+        read.weight.set(&copy_weight(0.25, &device)).unwrap();
+        let shifted = |by: f32| {
+            let mut rows = n.clone();
+            rows[17][9] += by;
+            let flat: Vec<f32> = rows.into_iter().flatten().collect();
+            loss(&Tensor::from_vec(flat, (1, TALK.len(), 256), &device).unwrap())
+        };
+        let slope = (shifted(h) - shifted(-h)) / (2.0 * h);
+        assert!((slope - by_row[17][9]).abs() < 1e-3, "{slope} against {}", by_row[17][9]);
+    }
+}

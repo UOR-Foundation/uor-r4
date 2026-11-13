@@ -83,6 +83,14 @@
 //! match in place of the mean of its nearest sixteen (`HammingReads::with_copy_latest`,
 //! claude-345), the rule the integer session serves as `CopyRule::LatestExact`; the checkpoint
 //! records it, so scoring and the export read it there.
+//! `--hamming-copy-longest A,B` (needs `--hamming-copy-latest 1` and one-token copy keys) names
+//! the reply marker, the two token ids that stand before a reply's first token, and has each copy
+//! head read the latest exact match whose token before it also agrees, the latest exact match at
+//! a reply's opening row (`HammingReads::with_copy_longest`, claude-357): the rule the integer
+//! session serves as `CopyRule::LongestAfterOpening`. The run refuses a TRAIN or DEV split, and
+//! the scoring pass a `--panel`, where the marker and the reply mask disagree at any position;
+//! the turn memory's leave rule asks the copy read by the same rule. The checkpoint records the
+//! marker, and `config.json` carries it to the export.
 //! `--hamming-ask 1` (needs `--hamming-read`) turns the type heads into ask heads, which ask with
 //! their token's point plus a learned question row against the copy key (`HammingReads::with_ask`,
 //! claude-330). With `--recall`, `--hamming-attract λ` adds λ times the found-copy pull to the loss
@@ -97,6 +105,15 @@
 //! `--hamming-carry-question H` (needs `--hamming-ask 1`) adds, at the readout read's ask heads,
 //! the question points of the H rows before each row in its window, each scaled by a learned gain
 //! per token, starting at zero (`HammingReads::with_carry`, claude-335).
+//! `--hamming-place KIT` (needs `--hamming-ask 1`, refuses `--hamming-carry-question`) turns on
+//! the place read at the readout read (`HammingReads::with_place`, claude-351): a register a
+//! conversation, set by the ask heads' two-token find over the earlier user turns, and at an open
+//! reply row the token at the place as the copy mix's source. KIT is the file
+//! `--turn-census ... --places-out KIT` writes from the corpus the run trains on: the labels,
+//! marks and stop tokens. `--hamming-place-pull λ` adds λ times the place pull to the loss
+//! (`HammingReads::place_step`). A run with the place read appends one line a checkpoint to
+//! `place.jsonl` in its output folder: the step, how many tokens arm and open, and the votes and
+//! mean pull since the line before. `--places-out` refuses a path that exists.
 //! `--score-rows` additionally accepts `[--batched-decode 0|1]`.
 //!
 //! `--score-rows` decodes equal-length prompts together on the full-scope nearest arms, except
@@ -264,7 +281,7 @@
 //! as used, and refuses a run in which one was not taken; that split's memory-pass rows are the
 //! forced forward's. Refused, before any forward: a position that is not traced and R's refusals.
 //!
-//! `train-in-space --data-root DIR --panel-prompts 1 --out DIR [--panel NAME=DIR ...] [--runs DIR] --samples 1536 --reply-tokens 64`
+//! `train-in-space --data-root DIR --panel-prompts 1 --out DIR [--panel NAME=DIR ...] [--runs DIR] --samples 1536 --reply-tokens 64 [--context N] [--sample-opening first|last]`
 //! (point-key-integer, claude-224) writes, with no model, the prompts a `--score-rows` run decodes on
 //! DEV and each panel (`prompts-{split}.json`), for `fbs-toks --replies`. With `--runs` (claude-220's
 //! `out`), it also writes each seed's prompts with its float served names, refusing a served sample
@@ -315,7 +332,8 @@
 //! names the value when it looks only inside it (`uor_r4_float_train::turn_census`); then what a
 //! read could do that finds the place where the value starts and reads on from it
 //! (`place_census`). Each argument is a folder with `tokens.u16` and `response_mask.u8`; LINED
-//! and TRAIN-LINED are the panel and TRAIN written `recall=oracle`. Needs no GPU.
+//! and TRAIN-LINED are the panel and TRAIN written `recall=oracle`. Needs no GPU. With
+//! `--places-out KIT` it also writes the place read's kit from TRAIN and TRAIN-LINED (claude-351).
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -377,6 +395,7 @@ fn main() -> Result<()> {
     let mut data_root = None;
     let mut key_oracle: Option<(PathBuf, PathBuf)> = None;
     let mut turn_census: Option<[PathBuf; 4]> = None;
+    let mut places_out: Option<PathBuf> = None;
     let mut out = None;
     let mut inspect = None;
     let mut reach = None;
@@ -462,12 +481,15 @@ fn main() -> Result<()> {
         hamming_copy_key: 1,
         hamming_copy_keys: None,
         hamming_copy_latest: false,
+        hamming_copy_longest: None,
         hamming_ask: false,
         hamming_attract: 0.0,
         hamming_attract_at_question: false,
         hamming_hold: 0,
         hamming_attract_at_both: false,
         hamming_carry_question: 0,
+        hamming_place: None,
+        hamming_place_pull: 0.0,
         samples: 6,
         reply_tokens: 48,
         micro_batch: 0,
@@ -727,6 +749,22 @@ fn main() -> Result<()> {
             "--hamming-read" => config.hamming_read = number(&value)?,
             "--hamming-copy-key" => config.hamming_copy_key = number(&value)?,
             "--hamming-copy-latest" => config.hamming_copy_latest = switch(&value)?,
+            "--hamming-copy-longest" => {
+                let ids: Vec<usize> = value.split(',').map(number).collect::<Result<_>>()?;
+                config.hamming_copy_longest = match ids[..] {
+                    [first, second] => u32::try_from(first)
+                        .ok()
+                        .zip(u32::try_from(second).ok())
+                        .map(|(first, second)| [first, second]),
+                    _ => None,
+                };
+                if config.hamming_copy_longest.is_none() {
+                    return Err(FloatTrainError::Invalid(
+                        "--hamming-copy-longest wants the reply marker's two token ids, as A,B"
+                            .to_owned(),
+                    ));
+                }
+            }
             "--hamming-copy-keys" => {
                 config.hamming_copy_keys = Some(
                     value
@@ -788,6 +826,13 @@ fn main() -> Result<()> {
             }
             "--type-spin" => config.type_spin = switch(&value)?,
             "--hamming-ask" => config.hamming_ask = switch(&value)?,
+            "--hamming-place" => config.hamming_place = Some(PathBuf::from(&value)),
+            "--hamming-place-pull" => {
+                config.hamming_place_pull = value.parse().map_err(|_| {
+                    FloatTrainError::Invalid("--hamming-place-pull wants a number".to_owned())
+                })?;
+            }
+            "--places-out" => places_out = Some(PathBuf::from(&value)),
             "--hamming-attract" => {
                 config.hamming_attract = value.parse().map_err(|_| {
                     FloatTrainError::Invalid("--hamming-attract wants a number".to_owned())
@@ -960,7 +1005,7 @@ fn main() -> Result<()> {
         decode.is_some(),
         score.is_some(),
     )?;
-    context_applies(config.context, modes[7] && recall == 0, grad_norms, score.is_some())?;
+    context_applies(config.context, modes[7] && recall == 0, grad_norms, score.is_some() || panel_prompts_on)?;
     time_without_quantizers_applies(
         time_quantizers,
         modes[7] && recall == 0,
@@ -996,11 +1041,7 @@ fn main() -> Result<()> {
             "--past-window applies to --score-rows only".to_owned(),
         ));
     }
-    if last_opening.is_some() && score.is_none() {
-        return Err(FloatTrainError::Invalid(
-            "--sample-opening applies to --score-rows only".to_owned(),
-        ));
-    }
+    prompt_cut_applies(config.context, last_opening, score.is_some(), panel_prompts_on, runs.is_some())?;
     if !panel_queries.is_empty() && score.is_none() && !census_on {
         return Err(FloatTrainError::Invalid(
             "--panel-queries applies to --score-rows and --census only".to_owned(),
@@ -1122,8 +1163,24 @@ fn main() -> Result<()> {
     if let Some((tokens, mask)) = &key_oracle {
         return copy_key_oracle(&data_root, tokens, mask);
     }
+    if places_out.is_some() && turn_census.is_none() {
+        return Err(FloatTrainError::Invalid(
+            "--places-out writes the place read's kit from --turn-census's TRAIN; give --turn-census".to_owned(),
+        ));
+    }
+    // claude-351: like the pull, the place read trains only in run_long.
+    if other_mode && (config.hamming_place.is_some() || config.hamming_place_pull != 0.0) {
+        return Err(FloatTrainError::Invalid(
+            "--hamming-place trains a run; this mode trains nothing".to_owned(),
+        ));
+    }
+    if recall > 0 && config.hamming_place.is_some() {
+        return Err(FloatTrainError::Invalid(
+            "--hamming-place trains on a corpus of conversations; --recall has none".to_owned(),
+        ));
+    }
     if let Some(folders) = &turn_census {
-        return turn_census_run(&data_root, folders);
+        return turn_census_run(&data_root, folders, places_out.as_deref());
     }
     if flock_end && score.is_none() && !grade_on {
         return Err(FloatTrainError::Invalid(
@@ -1192,7 +1249,17 @@ fn main() -> Result<()> {
     if panel_prompts_on {
         let out = out
             .ok_or_else(|| FloatTrainError::Invalid("--panel-prompts needs --out DIR".to_owned()))?;
-        for (file, rows) in panel_prompts(&data_root, &extra_panels, config.samples, config.reply_tokens, runs.as_deref(), &out)? {
+        let prompts = panel_prompts(
+            &data_root,
+            &extra_panels,
+            config.samples,
+            config.reply_tokens,
+            config.context,
+            last_opening.unwrap_or(false),
+            runs.as_deref(),
+            &out,
+        )?;
+        for (file, rows) in prompts {
             println!("{}", serde_json::json!({ "file": file, "rows": rows }));
         }
         return Ok(());
@@ -1638,11 +1705,11 @@ fn copy_key_oracle(data_root: &Path, tokens_path: &Path, mask_path: &Path) -> Re
 /// four unpinned UORT splits (TRAIN and the panel without memory lines, then the panel and TRAIN
 /// with them), read with the pinned tokenizer. The turn census's registered stop list is TRAIN's
 /// 64 most frequent tokens; the place census's label reads TRAIN's 16 (`place_census`).
-fn turn_census_run(data_root: &Path, folders: &[PathBuf; 4]) -> Result<()> {
+fn turn_census_run(data_root: &Path, folders: &[PathBuf; 4], places_out: Option<&Path>) -> Result<()> {
     use sha2::{Digest, Sha256};
     use uor_r4_float_train::hamilton_sheet as hs;
     use uor_r4_float_train::turn_census::{
-        place_census, turn_census, Codec, Corpora, Marks, Stops,
+        place_census, place_kit, turn_census, Codec, Corpora, Marks, Stops,
     };
     let bytes = std::fs::read(data_root.join("tokenizer.json"))?;
     if hex::encode(Sha256::digest(&bytes)) != hs::PINNED_TOKENIZER_SHA256 {
@@ -1668,6 +1735,7 @@ fn turn_census_run(data_root: &Path, folders: &[PathBuf; 4]) -> Result<()> {
     };
     let split = |dir: &Path| read_uort_pair(&dir.join("tokens.u16"), &dir.join("response_mask.u8"));
     let [train, panel, lined, twin] = folders;
+    let train_sha256 = hex::encode(Sha256::digest(std::fs::read(train.join("tokens.u16"))?));
     let (train, panel) = (split(train)?, split(panel)?);
     let (lined, twin) = (split(lined)?, split(twin)?);
     let decode = |ids: &[u32]| tokenizer.decode(ids);
@@ -1706,6 +1774,36 @@ fn turn_census_run(data_root: &Path, folders: &[PathBuf; 4]) -> Result<()> {
         place_census(&corpora, &marks, &codec, &stops, 200).map_err(|what| invalid(&what))?;
     for line in lines {
         println!("{line}");
+    }
+    // claude-351: the kit a trainer of the place read learns from, read from TRAIN and its twin.
+    if let Some(path) = places_out {
+        let kit = place_kit(
+            (&train.0, &train.1),
+            (&twin.0, &twin.1),
+            &marks,
+            &codec,
+            hs::SHEET_VOCAB,
+            train_sha256,
+        )
+        .map_err(|what| invalid(&what))?;
+        let bytes = serde_json::to_vec(&kit)
+            .map_err(|e| invalid(&format!("the place kit does not serialize: {e}")))?;
+        // A new file only: the path is never one of the run's inputs, or an earlier kit.
+        use std::io::Write as _;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .map_err(|e| invalid(&format!("--places-out {}: {e}", path.display())))?;
+        file.write_all(&bytes)?;
+        println!(
+            "place-kit places={} stop={} tokens_sha256={} sha256={} file={}",
+            kit.places.len(),
+            kit.stop.len(),
+            kit.tokens_sha256,
+            hex::encode(Sha256::digest(&bytes)),
+            path.display()
+        );
     }
     Ok(())
 }
@@ -1840,14 +1938,41 @@ fn served_forward_applies(
 
 /// `--context` sets the window training cuts TRAIN at and builds its model to read (claude-273),
 /// `--grad-norms 1` reads TRAIN the same way, and `--score-rows` cuts its panels at it
-/// (claude-274). Every other mode, `--recall` among them, reads 192-token windows, so another
+/// (claude-274), as `--panel-prompts` does for the prompts it writes (claude-352; `scoring` is
+/// true for either). Every other mode, `--recall` among them, reads 192-token windows, so another
 /// window there would be ignored: it is refused.
 fn context_applies(context: usize, training: bool, grad_norms: bool, scoring: bool) -> Result<()> {
     if context != uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT
         && !(training || grad_norms || scoring)
     {
         return Err(FloatTrainError::Invalid(
-            "--context applies to training with --out, --grad-norms 1 and --score-rows only"
+            "--context applies to training with --out, --grad-norms 1, --score-rows and --panel-prompts only"
+                .to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+/// claude-352: `--panel-prompts` writes the prompts `--score-rows` decodes, so it takes that
+/// mode's `--context` and `--sample-opening`, and `--sample-opening` applies to those two modes
+/// only. With `--runs DIR` each prompt is also named by a run decoded at the sheet's window and
+/// first opening, so there another window or the last opening is refused by name.
+fn prompt_cut_applies(
+    context: usize,
+    last_opening: Option<bool>,
+    scoring: bool,
+    panel_prompts: bool,
+    runs: bool,
+) -> Result<()> {
+    if last_opening.is_some() && !scoring && !panel_prompts {
+        return Err(FloatTrainError::Invalid(
+            "--sample-opening applies to --score-rows and --panel-prompts only".to_owned(),
+        ));
+    }
+    let sheet = uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT;
+    if panel_prompts && runs && (context != sheet || last_opening == Some(true)) {
+        return Err(FloatTrainError::Invalid(
+            "--panel-prompts --runs DIR names each prompt by a run decoded at the sheet's window and first opening: --context and --sample-opening last do not apply"
                 .to_owned(),
         ));
     }
@@ -1993,6 +2118,23 @@ mod tests {
         assert!(context_applies(2048, false, false, true).is_ok(), "claude-274: scoring at a window");
         assert!(context_applies(2048, false, false, false).is_err());
         assert!(context_applies(sheet + 1, false, false, false).is_err());
+    }
+
+    /// claude-352: the prompt builder takes the scorer's window and opening. The opening alone,
+    /// and either of them beside a served run, is refused by name.
+    #[test]
+    fn the_prompt_builder_takes_the_scorers_window_and_opening() {
+        let sheet = uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT;
+        assert!(prompt_cut_applies(sheet, None, false, false, false).is_ok());
+        assert!(prompt_cut_applies(256, Some(true), false, true, false).is_ok(), "the 256 retake's prompts");
+        assert!(prompt_cut_applies(256, Some(true), true, false, false).is_ok(), "scoring");
+        assert!(prompt_cut_applies(sheet, Some(false), false, true, true).is_ok(), "the sheet's cut, named by a run");
+        let alone = prompt_cut_applies(sheet, Some(false), false, false, false).unwrap_err().to_string();
+        assert!(alone.contains("--sample-opening applies"), "{alone}");
+        for (context, opening) in [(256, None), (sheet, Some(true))] {
+            let named = prompt_cut_applies(context, opening, false, true, true).unwrap_err().to_string();
+            assert!(named.contains("--panel-prompts --runs DIR"), "{named}");
+        }
     }
 
     #[test]
