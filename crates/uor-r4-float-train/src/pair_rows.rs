@@ -349,14 +349,15 @@ pub fn plan(
     })
 }
 
-/// The plan's three index vectors as tensors on `device`: `hit_row`, `hit_turn`, `turn_of`. They
-/// are built from host vectors and carry no gradient history.
-fn indices(plan: &Plan, device: &Device) -> Result<[Tensor; 3]> {
+/// The plan's hit vectors and the turn each output position adds, as tensors on `device`:
+/// `hit_row`, `hit_turn`, `turn_of`. They are built from host vectors and carry no gradient
+/// history.
+fn indices(plan: &Plan, turn_of: &[u32], device: &Device) -> Result<[Tensor; 3]> {
     let tensor = |v: &[u32]| Tensor::from_slice(v, v.len(), device).map(|t| t.detach());
     Ok([
         tensor(&plan.hit_row)?,
         tensor(&plan.hit_turn)?,
-        tensor(&plan.turn_of)?,
+        tensor(turn_of)?,
     ])
 }
 
@@ -410,23 +411,57 @@ impl PairRows {
     /// itself.
     pub fn apply(&self, x: &Tensor, ids: &[u32]) -> Result<Tensor> {
         let (batch, time, width) = x.dims3()?;
+        self.check_width(width)?;
+        let plan = plan(&self.dict, &self.marks, ids, batch, time)?;
+        self.add_bags(x, &plan, &plan.turn_of)
+    }
+
+    /// `x` (`batch × 1 × width`, each row's newest position) with the bag of the turn whose reply
+    /// that position is in added. `window` holds every row's whole window, newest id last, row
+    /// after row, all of one length. With no hit, `x` itself.
+    pub fn apply_last(&self, x: &Tensor, window: &[u32]) -> Result<Tensor> {
+        let (batch, one, width) = x.dims3()?;
+        self.check_width(width)?;
+        if one != 1 || batch == 0 || window.is_empty() || window.len() % batch != 0 {
+            return Err(invalid(format!(
+                "a pair-rows step wants {batch} rows of one position and windows of one length, \
+                 not {one} positions and {} ids",
+                window.len()
+            )));
+        }
+        let time = window.len() / batch;
+        let plan = plan(&self.dict, &self.marks, window, batch, time)?;
+        let last: Vec<u32> = (0..batch)
+            .map(|b| plan.turn_of[b * time + time - 1])
+            .collect();
+        self.add_bags(x, &plan, &last)
+    }
+
+    /// Refuse a state whose width is not the rows' own.
+    fn check_width(&self, width: usize) -> Result<()> {
         let (count, rows_width) = self.rows.as_tensor().dims2()?;
         if width != rows_width || count != self.dict.len() {
             return Err(invalid(format!(
                 "pair rows of width {rows_width} meet a state of width {width}"
             )));
         }
-        let plan = plan(&self.dict, &self.marks, ids, batch, time)?;
+        Ok(())
+    }
+
+    /// `x` with, at each output position `i`, the bag of turn `turn_of[i]` added (`plan.turns`
+    /// adds nothing): the plan's hit rows gathered, summed into one bag per turn, and scattered.
+    fn add_bags(&self, x: &Tensor, plan: &Plan, turn_of: &[u32]) -> Result<Tensor> {
         if plan.hit_row.is_empty() {
             return Ok(x.clone());
         }
-        let [hit_row, hit_turn, turn_of] = indices(&plan, x.device())?;
+        let width = x.dim(2)?;
+        let [hit_row, hit_turn, turn_of] = indices(plan, turn_of, x.device())?;
         let gathered = self.rows.as_tensor().index_select(&hit_row, 0)?;
         let bags = Tensor::zeros((plan.turns + 1, width), DType::F32, x.device())?
             .index_add(&hit_turn, &gathered, 0)?;
         let per_position = bags
             .index_select(&turn_of, 0)?
-            .reshape((batch, time, width))?
+            .reshape(x.dims())?
             .to_dtype(x.dtype())?;
         Ok(x.add(&per_position)?)
     }
@@ -733,7 +768,7 @@ mod tests {
     fn the_index_tensors_track_no_operation() {
         let device = device();
         let plan = plan(&dict(), &marks(), &batch_ids(), 2, 16).unwrap();
-        for index in indices(&plan, &device).unwrap() {
+        for index in indices(&plan, &plan.turn_of, &device).unwrap() {
             assert!(!index.track_op());
             assert_eq!(index.dtype(), DType::U32);
         }
