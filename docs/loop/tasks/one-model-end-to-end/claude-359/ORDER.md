@@ -34,11 +34,11 @@ Base: `f694d162d9b04d1226fd17c0a81825f00e9da007`.
 
 ## Files in scope
 
-- `crates/uor-r4-integer/src/place_asks.rs` (new), `crates/uor-r4-integer/src/lib.rs`, `crates/uor-r4-integer/Cargo.toml`
+- `crates/uor-r4-integer/src/place_asks.rs` (new), `crates/uor-r4-integer/src/native_geometry.rs` and `crates/uor-r4-integer/src/serving_root.rs` (the module's two declarations), `crates/uor-r4-integer/Cargo.toml`
 - `crates/uor-r4-integer/src/bin/place-asks.rs` (new: fit and census)
 - `crates/uor-r4-integer/src/fbs_snapshot.rs` (the register's caller-set find and stored reply)
 - `crates/uor-r4-integer/src/stack/**`, `crates/uor-r4-integer/src/generation.rs`, `crates/uor-r4-integer/src/bin/uor-chat.rs`
-- `docs/labs/claude/**` (the reply instrument's flag)
+- `docs/labs/one-model-end-to-end/instrument/**` (the reply instrument's flag)
 - `docs/loop/tasks/one-model-end-to-end/claude-359/**`, `docs/research/notebook/**`, `docs/harness/prep/**`
 
 ## Done when

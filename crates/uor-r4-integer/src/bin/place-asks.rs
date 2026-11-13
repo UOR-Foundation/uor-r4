@@ -86,7 +86,10 @@ fn run(args: &[String]) -> Result<(), String> {
             };
             let index = AsksIndex::new(&asks)?;
             let (counts, missed) = census(&tokens, &kit.marks, &kit.places, &index, &asks.forms, show);
-            println!("asks-census tokens={} fitted_on={} rule={} floor={} asking_floor={}", kit.tokens_sha256, asks.tokens_sha256, if asks.latest { "latest" } else { "best" }, asks.floor, asks.asking_floor);
+            println!(
+                "asks-census tokens={} fitted_on={} margin={} floor={} floor_other={} asking_floor={}",
+                kit.tokens_sha256, asks.tokens_sha256, asks.margin, asks.floor, asks.floor_other, asks.asking_floor
+            );
             for line in counts.lines("held") {
                 println!("{line}");
             }

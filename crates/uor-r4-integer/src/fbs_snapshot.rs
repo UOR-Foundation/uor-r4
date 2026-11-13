@@ -3027,7 +3027,14 @@ impl PlaceState {
                 }
                 if t + 1 >= a && !self.over {
                     row.held = self.place.map(|(place, _)| place);
-                    row.offer = row.held.filter(|_| row.stepped || image.has(token, PLACE_OPEN));
+                    // Where the asks fitted this pair of tokens, the pair says whether the value
+                    // starts next; a pair they never counted falls back to the class.
+                    let fitted = match (asks, t.checked_sub(1)) {
+                        (Some((asks, _)), Some(before)) => asks.opens(tokens[before], token),
+                        _ => None,
+                    };
+                    let open = fitted.unwrap_or_else(|| image.has(token, PLACE_OPEN));
+                    row.offer = row.held.filter(|_| row.stepped || open);
                     if let Some((asks, speak)) = asks {
                         row.speak = match self.told {
                             Some(i) => asks.not_told().get(i).copied(),
@@ -5105,6 +5112,11 @@ mod place_asked_tests {
     /// Asks that find the position after "is" when the question holds "?", and take a question
     /// that holds "what" to ask for a stored fact.
     fn asks() -> AsksIndex {
+        asks_with(Vec::new())
+    }
+
+    /// The same asks with fitted open pairs: `[token before, token, 1 or 0]`.
+    fn asks_with(opens: Vec<[i32; 3]>) -> AsksIndex {
         AsksIndex::new(&PlaceAsks {
             tokens_sha256: "test".to_owned(),
             marks: marks(),
@@ -5114,7 +5126,9 @@ mod place_asked_tests {
             unseen: vec![[0, 0]; crate::place_asks::ASKS_FRAME],
             pairs: vec![[ASK as i32, 1, IS as i32, 100]],
             floor: 50,
-            latest: false,
+            floor_other: 50,
+            margin: 0,
+            opens,
             asking: vec![[WHAT as i32, 10]],
             asking_prior: 0,
             asking_floor: 5,
@@ -5143,6 +5157,27 @@ mod place_asked_tests {
         // The step onto "." stops the read.
         assert_eq!((rows[20].held, rows[20].speak), (None, None));
         assert!(rows[21..].iter().all(|row| row.speak.is_none()));
+    }
+
+    #[test]
+    fn a_fitted_pair_decides_whether_a_row_opens_over_the_class() {
+        let read = |tokens: &[u32], opens: Vec<[i32; 3]>| -> Vec<PlaceRow> {
+            let (image, asks, mut state) = (image(), asks_with(opens), PlaceState::default());
+            (0..tokens.len()).map(|t| state.advance_asked(&tokens[..=t], &image, &asks, true)).collect()
+        };
+        // "is" after the marker has the open bit; the fitted pair says the value does not start
+        // there, so the row holds the place and speaks nothing, and no later row steps.
+        let shut = read(&TOLD, vec![[MODEL as i32, IS as i32, 0]]);
+        assert_eq!((shut[18].held, shut[18].offer), (Some(4), None));
+        assert!(shut.iter().all(|row| row.speak.is_none()));
+        // "ok" has no open bit; the fitted pair opens its row, and the read steps on from it.
+        let mut ok = TOLD;
+        ok[18] = 16;
+        let opened = read(&ok, vec![[MODEL as i32, 16, 1]]);
+        assert_eq!((opened[18].offer, opened[18].speak), (Some(4), Some(11)));
+        assert_eq!((opened[19].offer, opened[19].speak), (Some(5), Some(12)));
+        // Without the pair the same row stays shut: the class decides.
+        assert!(read(&ok, Vec::new()).iter().all(|row| row.speak.is_none()));
     }
 
     #[test]

@@ -3,11 +3,14 @@
 //! The place register ([`crate::fbs_snapshot::PlaceState`]) reads a told value from the position
 //! it holds. This module answers where that position is, from tokens alone. A candidate place is
 //! a position in a finished user turn whose token before it has stood before a true place in the
-//! fitted split. A candidate's frame is the [`ASKS_FRAME`] tokens before it. Its score is a sum of
-//! fitted integer weights: for each frame token, one weight when the question holds that token
-//! too and another when it does not; and for each pair of a question token and a frame token, how
-//! much more often the question holds that token at a true place than at any candidate. A place
-//! is found when a candidate's score reaches the fitted floor.
+//! fitted split. A candidate's frame is the five tokens before it and the last three tokens of
+//! its turn that stand after it ([`ASKS_FRAME`] in all): what a statement says its value is often
+//! comes after the value ("I like black best of all the colors"). Its score is a sum of fitted
+//! integer weights: for each frame token, one weight when the question holds that token too and
+//! another when it does not; and for each pair of a question token and a frame token, how much
+//! more often the question holds that token at a true place than at any candidate. A place is
+//! found when a candidate's score reaches the fitted floor: one floor for a question that asks
+//! for a stored fact, another for every other question.
 //!
 //! A second table scores whether a question asks for a stored fact at all. When it does and no
 //! place is found, the answer is [`Asked::NotTold`], and the register reads the stored reply.
@@ -22,8 +25,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::fbs_snapshot::{PlaceMarks, PlaceRole, PlaceTurns};
 
-/// The tokens before a candidate place that are read as its frame.
-pub const ASKS_FRAME: usize = 5;
+/// The tokens before a candidate place that are read into its frame.
+const ASKS_BEFORE: usize = 5;
+/// The last tokens of the candidate's turn, after the place, that are read into its frame.
+const ASKS_TAIL: usize = 3;
+/// A frame's offsets: 1 to [`ASKS_BEFORE`] count back from the place, the rest count back from
+/// the turn's end.
+pub const ASKS_FRAME: usize = ASKS_BEFORE + ASKS_TAIL;
 /// A token may stand before a place when it did so at least this often in the fitted split.
 const LINK_MIN: u32 = 3;
 /// A frame token has its own weights when it was counted at least this often.
@@ -40,6 +48,10 @@ const REPLY_CAP: usize = 64;
 const FORM_SHARE: u32 = 100;
 /// Scores are binned inside this bound when the floors are fitted.
 const LIM: i32 = 16_384;
+/// A pair of reply tokens says whether its row opens when it was counted at least this often.
+const OPEN_MIN: u32 = 3;
+/// The margins the fit chooses among, in [`lg`] units (16 is one bit).
+const MARGINS: [i32; 10] = [0, 8, 16, 24, 32, 48, 64, 96, 128, 192];
 
 /// A multiply-and-rotate hasher for the packed integer keys of the count tables.
 #[derive(Clone, Copy, Default)]
@@ -105,11 +117,19 @@ pub struct PlaceAsks {
     pub unseen: Vec<[i32; 2]>,
     /// `[question token, offset, frame token, weight]`.
     pub pairs: Vec<[i32; 4]>,
-    /// The least score a place needs.
+    /// The least score a place needs when the question asks for a stored fact: below it the
+    /// answer is the stored reply.
     pub floor: i32,
-    /// Whether the latest candidate at or above the floor is the place; otherwise the best one,
-    /// the later on a tie.
-    pub latest: bool,
+    /// The least score a place needs when the question does not ask for one. Such questions are
+    /// most of a conversation and almost none has a place, so this floor is fitted apart.
+    pub floor_other: i32,
+    /// When the best score reaches the floor, the place is the latest candidate within this
+    /// much of it: a fact stated again later wins when it scores nearly as well.
+    pub margin: i32,
+    /// `[token before, token, 1 or 0]`: whether a reply row with that token after that one is
+    /// open, by where the fitted split's replies start their value. A pair with no row is left
+    /// to the place read's own class.
+    pub opens: Vec<[i32; 3]>,
     /// `[question token, weight]`: whether a question asks for a stored fact.
     pub asking: Vec<[i32; 2]>,
     pub asking_prior: i32,
@@ -139,28 +159,36 @@ pub struct AsksIndex {
     unseen: [[i32; 2]; ASKS_FRAME],
     pairs: Map<u64, i32>,
     floor: i32,
-    latest: bool,
+    floor_other: i32,
+    margin: i32,
+    opens: Map<u64, bool>,
     asking: Map<u32, i32>,
     asking_prior: i32,
     asking_floor: i32,
     not_told: Vec<u32>,
 }
 
-/// The frame of a candidate place `s` in a turn whose content starts at `lo`: the token at each
-/// offset before it, nearest first, with `start` standing once for the turn's start.
-fn frame(tokens: &[u32], lo: usize, s: usize, start: u32) -> ([u32; ASKS_FRAME], usize) {
-    let mut out = [0u32; ASKS_FRAME];
-    let mut n = 0;
-    while n < ASKS_FRAME {
+/// The frame of a candidate place `s` in a turn whose content is `lo..hi`. First the token at
+/// each offset before the place, nearest first, with `start` standing once for the turn's start.
+/// Then the turn's last tokens, the last one first, as far as they stand after the place.
+/// `start + 1` fills every offset with no token, so a short statement is scored on as many
+/// offsets as a long one.
+fn frame(tokens: &[u32], lo: usize, hi: usize, s: usize, start: u32) -> ([u32; ASKS_FRAME], usize) {
+    let mut out = [start + 1; ASKS_FRAME];
+    for (n, slot) in out[..ASKS_BEFORE].iter_mut().enumerate() {
         if s < lo + n + 1 {
-            out[n] = start;
-            n += 1;
+            *slot = start;
             break;
         }
-        out[n] = tokens[s - n - 1];
-        n += 1;
+        *slot = tokens[s - n - 1];
     }
-    (out, n)
+    for (n, slot) in out[ASKS_BEFORE..].iter_mut().enumerate() {
+        match hi.checked_sub(n + 1).filter(|&at| at > s && at < tokens.len()) {
+            Some(at) => *slot = tokens[at],
+            None => break,
+        }
+    }
+    (out, ASKS_FRAME)
 }
 
 /// A question's distinct tokens, ascending.
@@ -177,7 +205,9 @@ impl AsksIndex {
         if asks.unseen.len() != ASKS_FRAME {
             return Err(format!("the asks have {} unseen rows for a frame of {ASKS_FRAME}", asks.unseen.len()));
         }
-        let token = |v: i32| u32::try_from(v).ok().filter(|&t| t <= vocab).ok_or_else(|| format!("the asks name token {v} past a vocabulary of {vocab}"));
+        // A frame token is a token, the turn's start (`vocab`) or an offset past it (`vocab + 1`).
+        let token = |v: i32| u32::try_from(v).ok().filter(|&t| t <= vocab + 1).ok_or_else(|| format!("the asks name token {v} past a vocabulary of {vocab}"));
+        let word = |v: i32| u32::try_from(v).ok().filter(|&t| t < vocab).ok_or_else(|| format!("the asks name token {v} past a vocabulary of {vocab}"));
         let offset = |v: i32| usize::try_from(v).ok().filter(|j| (1..=ASKS_FRAME).contains(j)).ok_or_else(|| format!("the asks name offset {v} outside the frame"));
         let mut link = vec![false; vocab as usize + 1];
         for &t in &asks.link {
@@ -195,6 +225,13 @@ impl AsksIndex {
         for row in &asks.asking {
             asking.insert(token(row[0])?, row[1]);
         }
+        let mut opens = Map::default();
+        for row in &asks.opens {
+            opens.insert((u64::from(word(row[0])?) << 16) | u64::from(word(row[1])?), row[2] != 0);
+        }
+        if asks.margin < 0 {
+            return Err(format!("the asks' margin is {}", asks.margin));
+        }
         if asks.not_told.last().is_some_and(|&t| t != asks.marks.eos) {
             return Err("the asks' stored reply does not end at the end mark".to_owned());
         }
@@ -207,7 +244,9 @@ impl AsksIndex {
             unseen,
             pairs,
             floor: asks.floor,
-            latest: asks.latest,
+            floor_other: asks.floor_other,
+            margin: asks.margin,
+            opens,
             asking,
             asking_prior: asks.asking_prior,
             asking_floor: asks.asking_floor,
@@ -220,10 +259,28 @@ impl AsksIndex {
         &self.not_told
     }
 
-    /// The score of the candidate place `s` in a turn whose content starts at `lo`, for a
-    /// question of the distinct tokens `q`; `None` when `s` is no candidate.
-    pub fn score(&self, tokens: &[u32], lo: usize, s: usize, q: &[u32]) -> Option<i32> {
-        let (f, n) = frame(tokens, lo, s, self.start);
+    /// Whether a reply row with `token` after `before` is open, when the tables say.
+    pub fn opens(&self, before: u32, token: u32) -> Option<bool> {
+        self.opens.get(&((u64::from(before) << 16) | u64::from(token))).copied()
+    }
+
+    /// The place among `scored` candidates, each `(score, place, ..)` in the order of the
+    /// conversation: none unless the best score reaches `floor`, and then the latest candidate
+    /// within the margin of the best.
+    fn pick<T: Copy>(&self, scored: &[(i32, T)], floor: i32) -> Option<T> {
+        let best = scored.iter().map(|c| c.0).max().filter(|&best| best >= floor)?;
+        scored.iter().rev().find(|c| c.0 >= best.saturating_sub(self.margin)).map(|c| c.1)
+    }
+
+    /// Whether a question of the distinct tokens `q` asks for a stored fact.
+    pub fn asks_a_fact(&self, q: &[u32]) -> bool {
+        self.asking(q) >= self.asking_floor
+    }
+
+    /// The score of the candidate place `s` in a turn whose content is `lo..hi`, for a question
+    /// of the distinct tokens `q`; `None` when `s` is no candidate.
+    pub fn score(&self, tokens: &[u32], lo: usize, hi: usize, s: usize, q: &[u32]) -> Option<i32> {
+        let (f, n) = frame(tokens, lo, hi, s, self.start);
         if !self.link.get(f[0] as usize).copied().unwrap_or(false) {
             return None;
         }
@@ -252,7 +309,7 @@ impl AsksIndex {
     fn candidates(&self, tokens: &[u32], prior: &[Range<usize>], q: &[u32], mut each: impl FnMut(usize, usize, i32)) {
         for turn in prior {
             for s in turn.clone() {
-                if let Some(score) = self.score(tokens, turn.start, s, q) {
+                if let Some(score) = self.score(tokens, turn.start, turn.end, s, q) {
                     each(s, turn.end, score);
                 }
             }
@@ -262,17 +319,13 @@ impl AsksIndex {
     /// What the question in `asked` finds among the finished user turns `prior`.
     pub fn find(&self, tokens: &[u32], prior: &[Range<usize>], asked: &Range<usize>) -> Asked {
         let q = question(tokens, asked);
-        let mut pick: Option<(i32, usize, usize)> = None;
-        self.candidates(tokens, prior, &q, |s, end, score| {
-            let take = if self.latest { score >= self.floor } else { pick.map_or(true, |(best, _, _)| score >= best) };
-            if take {
-                pick = Some((score, s, end));
-            }
-        });
-        match pick {
-            Some((score, s, end)) if score >= self.floor => Asked::Place(s, end),
-            _ if !self.not_told.is_empty() && self.asking(&q) >= self.asking_floor => Asked::NotTold,
-            _ => Asked::Nothing,
+        let mut scored: Vec<(i32, (usize, usize))> = Vec::new();
+        self.candidates(tokens, prior, &q, |s, end, score| scored.push((score, (s, end))));
+        let asking = self.asks_a_fact(&q);
+        match self.pick(&scored, if asking { self.floor } else { self.floor_other }) {
+            Some((s, end)) => Asked::Place(s, end),
+            None if asking && !self.not_told.is_empty() => Asked::NotTold,
+            None => Asked::Nothing,
         }
     }
 }
@@ -351,6 +404,9 @@ pub struct AskCensus {
     pub abstain: [usize; 3],
     /// Every other reply: a place set, "not told" raised, nothing.
     pub general: [usize; 3],
+    /// Replies with a place, by the row before their value: a fitted pair opens it, a fitted
+    /// pair does not, no fitted pair; and the replies where a fitted pair opens an earlier row.
+    pub opens: [usize; 4],
 }
 
 impl AskCensus {
@@ -360,6 +416,10 @@ impl AskCensus {
             format!("asks-census split={split} recall={} true_place={} wrong_place={} not_told={} nothing={}", r.iter().sum::<usize>(), r[0], r[1], r[2], r[3]),
             format!("asks-census split={split} abstain={} place_set={} not_told={} nothing={}", a.iter().sum::<usize>(), a[0], a[1], a[2]),
             format!("asks-census split={split} general={} place_set={} not_told={} nothing={}", g.iter().sum::<usize>(), g[0], g[1], g[2]),
+            format!(
+                "asks-census split={split} value_row_open={} value_row_not_open={} value_row_no_pair={} an_earlier_row_open={}",
+                self.opens[0], self.opens[1], self.opens[2], self.opens[3]
+            ),
         ]
     }
 }
@@ -372,6 +432,19 @@ pub fn census(tokens: &[u32], marks: &PlaceMarks, places: &[[u32; 4]], index: &A
     let forms: HashSet<&[u32]> = forms.iter().map(Vec::as_slice).collect();
     let mut out = AskCensus::default();
     let mut missed = Vec::new();
+    for p in places {
+        let (reply, value) = (p[0] as usize, (p[2] as usize).min(tokens.len()));
+        let rows = reply.saturating_sub(1).max(1)..value;
+        let open = |row: usize| index.opens(tokens[row - 1], tokens[row]);
+        if let Some(last) = rows.clone().last() {
+            out.opens[match open(last) {
+                Some(true) => 0,
+                Some(false) => 1,
+                None => 2,
+            }] += 1;
+            out.opens[3] += usize::from(rows.clone().any(|row| row != last && open(row) == Some(true)));
+        }
+    }
     for case in ask_cases(tokens, marks) {
         let found = index.find(tokens, &case.prior, &case.asked);
         match truth.get(&case.reply) {
@@ -385,12 +458,14 @@ pub fn census(tokens: &[u32], marks: &PlaceMarks, places: &[[u32; 4]], index: &A
                 out.recall[slot] += 1;
                 if slot != 0 && missed.len() < show {
                     let stated = case.prior.iter().find(|turn| turn.contains(&place)).cloned().unwrap_or(place..place);
+                    let at = index.score(tokens, stated.start, stated.end, place, &question(tokens, &case.asked));
                     missed.push(format!(
-                        "asks-miss {} | asked={:?} | stated={:?} | place_offset={} | got={found:?}",
+                        "asks-miss {} | asked={:?} | stated={:?} | place_offset={} | got={found:?} | place_score={at:?} floor={}",
                         ["right", "wrong", "not_told", "nothing"][slot],
                         &tokens[case.asked.clone()],
                         &tokens[stated.clone()],
-                        place - stated.start
+                        place - stated.start,
+                        index.floor
                     ));
                 }
             }
@@ -402,6 +477,19 @@ pub fn census(tokens: &[u32], marks: &PlaceMarks, places: &[[u32; 4]], index: &A
                 };
                 if reply_form(tokens, case.reply, marks).is_some_and(|form| forms.contains(form)) {
                     out.abstain[slot] += 1;
+                    // A place set where the reply says the fact was never told: the turn it
+                    // was taken from, in the same line form as a missed place.
+                    if let (Asked::Place(s, _), true) = (found, missed.len() < show) {
+                        let taken = case.prior.iter().find(|turn| turn.contains(&s)).cloned().unwrap_or(s..s);
+                        let at = index.score(tokens, taken.start, taken.end, s, &question(tokens, &case.asked));
+                        missed.push(format!(
+                            "asks-miss invented | asked={:?} | stated={:?} | place_offset={} | got={found:?} | place_score={at:?} floor={}",
+                            &tokens[case.asked.clone()],
+                            &tokens[taken.clone()],
+                            s - taken.start,
+                            index.floor
+                        ));
+                    }
                 } else {
                     out.general[slot] += 1;
                 }
@@ -414,7 +502,7 @@ pub fn census(tokens: &[u32], marks: &PlaceMarks, places: &[[u32; 4]], index: &A
 /// Fit the asks on a split by counting: `places` are its true places, `[reply start, place, ..]`
 /// in the split's positions. The second value is the fit's own account, line by line.
 pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], tokens_sha256: String) -> Result<(PlaceAsks, Vec<String>), String> {
-    if vocab >= 1 << 16 {
+    if vocab + 1 >= 1 << 16 {
         return Err(format!("a vocabulary of {vocab} does not fit the asks' keys"));
     }
     if let Some(&t) = tokens.iter().find(|&&t| t >= vocab) {
@@ -435,12 +523,32 @@ pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], 
     for case in &cases {
         let Some(&place) = truth.get(&case.reply) else { continue };
         match case.prior.iter().find(|turn| turn.contains(&place)) {
-            Some(turn) => before[frame(tokens, turn.start, place, start).0[0] as usize] += 1,
+            Some(turn) => before[frame(tokens, turn.start, turn.end, place, start).0[0] as usize] += 1,
             None => outside += 1,
         }
     }
     let link: Vec<bool> = before.iter().map(|&n| n >= LINK_MIN).collect();
     lines.push(format!("asks-fit link tokens={} place_outside_the_earlier_user_turns={outside}", link.iter().filter(|&&on| on).count()));
+
+    // Where a reply starts its value: each pair of a reply row's token and the one before it,
+    // from the role marker's last row on, by whether the value starts at the next row.
+    let mut open: Map<u64, [u32; 2]> = Map::default();
+    for p in places {
+        let (reply, value) = (p[0] as usize, p[2] as usize);
+        if value < reply || value > tokens.len() {
+            return Err(format!("the kit's reply at {reply} has its value at {value}"));
+        }
+        for row in reply.saturating_sub(1).max(1)..value {
+            open.entry((u64::from(tokens[row - 1]) << 16) | u64::from(tokens[row])).or_default()[usize::from(row + 1 == value)] += 1;
+        }
+    }
+    let mut open_rows: Vec<[i32; 3]> = open
+        .iter()
+        .filter(|(_, n)| n[0] + n[1] >= OPEN_MIN)
+        .map(|(&key, n)| [(key >> 16) as i32, (key & 0xFFFF) as i32, i32::from(n[1] > n[0])])
+        .collect();
+    open_rows.sort_unstable();
+    lines.push(format!("asks-fit open pairs={} that_open={}", open_rows.len(), open_rows.iter().filter(|row| row[2] == 1).count()));
 
     // The pairs that stand at a true place, and the questions that have one.
     let mut pair: Map<u64, [u32; 2]> = Map::default();
@@ -449,7 +557,7 @@ pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], 
         let Some(&place) = truth.get(&case.reply) else { continue };
         recall_questions.insert(&tokens[case.asked.clone()]);
         let Some(turn) = case.prior.iter().find(|turn| turn.contains(&place)) else { continue };
-        let (f, n) = frame(tokens, turn.start, place, start);
+        let (f, n) = frame(tokens, turn.start, turn.end, place, start);
         if !link[f[0] as usize] {
             continue;
         }
@@ -486,7 +594,7 @@ pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], 
         }
         for turn in &case.prior {
             for s in turn.clone() {
-                let (f, n) = frame(tokens, turn.start, s, start);
+                let (f, n) = frame(tokens, turn.start, turn.end, s, start);
                 if !link[f[0] as usize] {
                     continue;
                 }
@@ -571,7 +679,9 @@ pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], 
         unseen,
         pairs: pair_rows,
         floor: 0,
-        latest: false,
+        floor_other: 0,
+        margin: 0,
+        opens: open_rows,
         asking: asking_rows,
         asking_prior,
         asking_floor: 0,
@@ -579,48 +689,58 @@ pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], 
         forms: kept,
     };
 
-    // The floors, from every reply's candidates scored with the weights.
+    // First, which questions ask for a stored fact: the asking floor, from every reply's
+    // question scored with the asking weights.
     let index = AsksIndex::new(&asks)?;
     let bins = 2 * LIM as usize + 2;
-    // For each rule, each side's change at each bin. A pick with score `a` over a running best of
-    // `m` is kept by every floor in `(m, a]`.
-    let mut best = [vec![0i64; bins], vec![0i64; bins]];
-    let mut late = [vec![0i64; bins], vec![0i64; bins]];
     let mut asked_hist = [vec![0i64; bins], vec![0i64; bins]];
+    for case in &cases {
+        let side = usize::from(!asks_a_fact(case));
+        asked_hist[side][0] += 1;
+        asked_hist[side][bin(index.asking(&question(tokens, &case.asked))) + 1] -= 1;
+    }
+    let (asking_at, asks_right, asks_wrong) = best_floor(&asked_hist[0], &asked_hist[1]);
+    asks.asking_floor = asking_at;
+    lines.push(format!("asks-fit asking floor={asking_at} asks_a_fact_kept={asks_right} other_kept={asks_wrong}"));
+
+    // Then the two floors and the margin, from every reply's candidates scored with the
+    // weights. A question that asks for a stored fact is one group and every other question the
+    // second: the second is most of a split and almost none of it has a place, so one floor for
+    // both would be set by it and would deny plain statements to the first. For each margin and
+    // group, each side's change at each bin: a pick whose best score is `a` is kept by every
+    // floor up to `a`.
+    let mut picked = vec![[[vec![0i64; bins], vec![0i64; bins]], [vec![0i64; bins], vec![0i64; bins]]]; MARGINS.len()];
     let mut scored: Vec<(i32, bool)> = Vec::new();
     for case in &cases {
         let q = question(tokens, &case.asked);
         let place = truth.get(&case.reply).copied();
-        let side = usize::from(!asks_a_fact(case));
-        asked_hist[side][0] += 1;
-        asked_hist[side][bin(index.asking(&q)) + 1] -= 1;
+        let group = usize::from(index.asking(&q) < asking_at);
         scored.clear();
         index.candidates(tokens, &case.prior, &q, |s, _, score| scored.push((score, place == Some(s))));
-        // The later candidate wins a tie, as the find takes it.
-        if let Some(&(score, right)) = scored.iter().max_by_key(|(score, _)| *score) {
-            best[usize::from(!right)][0] += 1;
-            best[usize::from(!right)][bin(score) + 1] -= 1;
-        }
-        let mut over = -LIM - 1;
-        for &(score, right) in scored.iter().rev() {
-            let score = score.clamp(-LIM, LIM);
-            if score > over {
-                late[usize::from(!right)][(over + LIM + 1) as usize] += 1;
-                late[usize::from(!right)][bin(score) + 1] -= 1;
-                over = score;
-            }
+        let Some(best) = scored.iter().map(|c| c.0).max() else { continue };
+        for (hist, &margin) in picked.iter_mut().zip(&MARGINS) {
+            // The latest candidate within the margin of the best, as the find takes it.
+            let right = scored.iter().rev().find(|c| c.0 >= best - margin).is_some_and(|c| c.1);
+            hist[group][usize::from(!right)][0] += 1;
+            hist[group][usize::from(!right)][bin(best) + 1] -= 1;
         }
     }
-    let (best_at, best_right, best_wrong) = best_floor(&best[0], &best[1]);
-    let (late_at, late_right, late_wrong) = best_floor(&late[0], &late[1]);
-    lines.push(format!("asks-fit floor rule=best floor={best_at} right={best_right} wrong={best_wrong}"));
-    lines.push(format!("asks-fit floor rule=latest floor={late_at} right={late_right} wrong={late_wrong}"));
-    asks.latest = late_right - late_wrong > best_right - best_wrong;
-    asks.floor = if asks.latest { late_at } else { best_at };
-    let (asking_at, asks_right, asks_wrong) = best_floor(&asked_hist[0], &asked_hist[1]);
-    asks.asking_floor = asking_at;
-    lines.push(format!("asks-fit asking floor={asking_at} asks_a_fact_kept={asks_right} other_kept={asks_wrong}"));
-    lines.push(format!("asks-fit decide rule={} floor={}", if asks.latest { "latest" } else { "best" }, asks.floor));
+    let mut decided = (0i32, 0i32, 0i32, i64::MIN);
+    for (hist, &margin) in picked.iter().zip(&MARGINS) {
+        let (at, right, wrong) = best_floor(&hist[0][0], &hist[0][1]);
+        let (other_at, other_right, other_wrong) = best_floor(&hist[1][0], &hist[1][1]);
+        lines.push(format!(
+            "asks-fit margin={margin} floor={at} right={right} wrong={wrong} floor_other={other_at} right={other_right} wrong={other_wrong}"
+        ));
+        let gain = right - wrong + other_right - other_wrong;
+        if gain > decided.3 {
+            decided = (margin, at, other_at, gain);
+        }
+    }
+    asks.margin = decided.0;
+    asks.floor = decided.1;
+    asks.floor_other = decided.2;
+    lines.push(format!("asks-fit decide margin={} floor={} floor_other={}", asks.margin, asks.floor, asks.floor_other));
     Ok((asks, lines))
 }
 
