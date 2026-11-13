@@ -114,8 +114,8 @@ impl PairMarks {
                 "pair rows want a user marker and an assistant header of at least one token",
             ));
         }
-        // A turn is found by the user marker first, so a marker that begins the other would
-        // hide every header.
+        // A turn is found by the user marker first, so a user marker that begins the header
+        // would hide every header. The other order is refused too: the marks stay unambiguous.
         if self.user.starts_with(&self.assistant) || self.assistant.starts_with(&self.user) {
             return Err(invalid(
                 "pair rows want a user marker and an assistant header neither of which begins \
