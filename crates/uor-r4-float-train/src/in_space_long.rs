@@ -10148,6 +10148,20 @@ pub fn score_rows(
                     context: split.context,
                 });
             }
+            // The pair rows (claude-370): the sampled prompts, as the decode is fed them, whose
+            // reply reads a bag. Once per panel, in the memory pass.
+            if let Some(rows) = crate::pair_rows::pair_rows().filter(|_| on) {
+                let fed: Vec<&[u32]> = prompts
+                    .iter()
+                    .map(|window| &window.input_ids[..=window.scored_offsets[0]])
+                    .collect();
+                let readers = crate::pair_rows::bag_readers(rows.dict(), rows.marks(), &fed)?;
+                println!(
+                    "[pair] {}: {readers} of {} sampled replies read a bag",
+                    split.name,
+                    fed.len()
+                );
+            }
             // A chained panel's queries (claude-275), greedy at full scope with the memory on and
             // off: each from a prompt ending at its opening, graded by whether the reply states
             // its note's value.
@@ -15049,6 +15063,35 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         }
         None => None,
     };
+    // The pair rows (claude-370), when on: a zero row for each pair of turn tokens seen in at
+    // least `min` user turns of TRAIN, their own optimizer, added at every reply position.
+    let mut pair = match config.pair_rows {
+        Some(min) => {
+            let (tokens, _) = match config.train_split.as_ref() {
+                None => load_train_split(data_root)?,
+                Some(split) => load_named_split(split)?,
+            };
+            let rows = crate::pair_rows::PairRows::from_tokens(
+                model.config.vocab_size,
+                &tokens,
+                &pair_marks(),
+                min,
+                config.width,
+                device,
+            )?;
+            crate::pair_rows::set_pair_rows(Some(rows.clone()));
+            println!(
+                "[pair] min {min}: {} pairs have rows; width {}; dictionary sha256 {}",
+                rows.dict().len(),
+                config.width,
+                sha256_bytes(&rows.dict().to_bytes())
+            );
+            let vars = rows.variables();
+            let opt = crate::flock_read::FlockAdamW::for_vars(&vars.iter().collect::<Vec<_>>())?;
+            Some((rows, opt))
+        }
+        None => None,
+    };
     // The address memory's cells on the same TRAIN windows, checkpoint after checkpoint.
     let address_census = std::cell::RefCell::new(crate::e8_address::Census::default());
     // claude-337: the found-copy pull's record since the last checkpoint, when the pull is on.
@@ -15294,6 +15337,15 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             append_line(&out.join("address.jsonl"), &serde_json::to_string(&line)?)?;
             address.save(&directory)?;
         }
+        // The pair rows (claude-370), at the values this checkpoint holds.
+        if let Some(rows) = crate::pair_rows::pair_rows() {
+            rows.save(&directory)?;
+            let (nonzero, rms) = rows.census()?;
+            println!(
+                "[pair] step {step}: rows nonzero {nonzero} of {}, rms {rms:.6}",
+                rows.dict().len()
+            );
+        }
         if let Some(served) = served {
             served.restore()?;
         }
@@ -15426,6 +15478,10 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         // same gradient, so each steps at the rate over the block count.
         if let Some((address, opt)) = address.as_mut() {
             opt.step_vars(&address.variables(), &grads, lr * address.rate())?;
+        }
+        // The pair rows (claude-370), at the trainer's rate, only on a step that read a bag.
+        if let Some((rows, opt)) = pair.as_mut() {
+            rows.step(opt, &grads, lr)?;
         }
         crate::flock_read_memory::set_memory_rows(None);
         crate::flock_read_memory::set_reply_rows(None);

@@ -22,8 +22,10 @@ use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::sync::Arc;
 
+use candle_core::backprop::GradStore;
 use candle_core::{DType, Device, Tensor, Var};
 
+use crate::flock_read::FlockAdamW;
 use crate::{invalid, Result};
 
 const FILE: &str = "pair_rows.safetensors";
@@ -361,6 +363,18 @@ fn indices(plan: &Plan, turn_of: &[u32], device: &Device) -> Result<[Tensor; 3]>
     ])
 }
 
+/// How many of `prompts` (each the ids fed before a reply's first token) end inside a reply whose
+/// turn reads a bag: the turn's marker and header lie in the prompt and a pair of it has a row.
+pub fn bag_readers(dict: &PairDictionary, marks: &PairMarks, prompts: &[&[u32]]) -> Result<usize> {
+    let mut readers = 0;
+    for ids in prompts {
+        if plan(dict, marks, ids, 1, ids.len())?.open[0].is_some() {
+            readers += 1;
+        }
+    }
+    Ok(readers)
+}
+
 /// The learned rows, one per dictionary pair, `width` wide.
 #[derive(Clone, Debug)]
 pub struct PairRows {
@@ -415,6 +429,31 @@ impl PairRows {
         let nonzero = peaks.iter().filter(|&&peak| peak != 0.0).count();
         let squares = rows.sqr()?.sum_all()?.to_scalar::<f32>()? as f64;
         Ok((nonzero, (squares / rows.elem_count() as f64).sqrt()))
+    }
+
+    /// The trainer's start: the dictionary counted on `tokens` (pairs seen in at least `min` user
+    /// turns) and a zero row for each of its pairs, `width` wide.
+    pub fn from_tokens(
+        vocab: usize,
+        tokens: &[u32],
+        marks: &PairMarks,
+        min: u32,
+        width: usize,
+        device: &Device,
+    ) -> Result<Self> {
+        let dict = PairDictionary::count(vocab, tokens, marks, min)?;
+        Self::new(dict, marks.clone(), width, device)
+    }
+
+    /// One step of `opt` (built over [`PairRows::variables`]) at rate `lr`, only when `grads`
+    /// holds the rows' gradient. With none the rows and `opt`'s step count stay as they are.
+    /// Whether it stepped.
+    pub fn step(&self, opt: &mut FlockAdamW, grads: &GradStore, lr: f64) -> Result<bool> {
+        if grads.get(self.rows.as_tensor()).is_none() {
+            return Ok(false);
+        }
+        opt.step_vars(&[&self.rows], grads, lr)?;
+        Ok(true)
     }
 
     /// `x` (`batch × time × width`) with each reply position's turn bag added. With no hit, `x`
@@ -819,5 +858,50 @@ mod tests {
             .set(&Tensor::from_vec(table, (4, 4), &device).unwrap())
             .unwrap();
         assert_eq!(rows.census().unwrap(), (1, 1.25));
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn pair_start_counts_the_stream_and_holds_zero_rows() {
+        // Turns (5,6), (7,8), (5,6,7): only (5,6) is seen in two.
+        let stream = [1, 4, 5, 6, 2, 3, 1, 4, 7, 8, 2, 3, 1, 4, 5, 6, 7, 2, 3];
+        let rows = PairRows::from_tokens(20, &stream, &marks(), 2, 4, &device()).unwrap();
+        assert_eq!(rows.dict().len(), 1);
+        assert_eq!(rows.dict().row(6, 5), Some(0));
+        assert_eq!(rows.dict().row(7, 8), None);
+        assert_eq!(rows.marks(), &marks());
+        assert_eq!(rows.variables()[0].as_tensor().dims(), &[1, 4]);
+        assert_eq!(rows.census().unwrap(), (0, 0.0));
+    }
+
+    #[test]
+    fn pair_bag_readers_count_prompts_inside_a_reply_with_rows() {
+        let inside: &[u32] = &[9, 1, 4, 5, 6, 2, 3, 10];
+        let no_turn: &[u32] = &[9, 10, 11, 12, 5, 6];
+        let marker_cut: &[u32] = &[4, 5, 6, 2, 3, 10];
+        let count = |prompts: &[&[u32]]| bag_readers(&dict(), &marks(), prompts).unwrap();
+        assert_eq!(count(&[inside]), 1);
+        assert_eq!(count(&[no_turn]), 0);
+        assert_eq!(count(&[marker_cut]), 0);
+        assert_eq!(count(&[inside, no_turn, marker_cut, inside]), 2);
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn pair_step_moves_the_rows_only_with_their_gradient() {
+        let device = device();
+        let pair = PairRows::new(dict(), marks(), 4, &device).unwrap();
+        let vars = pair.variables();
+        let mut opt = FlockAdamW::for_vars(&vars.iter().collect::<Vec<_>>()).unwrap();
+        // A backward pass that never touched the rows: no step, the rows stay zero.
+        let other = Var::ones((2, 4), DType::F32, &device).unwrap();
+        let grads = other.as_tensor().sum_all().unwrap().backward().unwrap();
+        assert!(!pair.step(&mut opt, &grads, 0.1).unwrap());
+        assert_eq!(pair.census().unwrap(), (0, 0.0));
+        // One through the read: rows 0 and 3 are hit and move, rows 1 and 2 stay zero.
+        let x = Tensor::from_vec(state(1, 16, 4), (1, 16, 4), &device).unwrap();
+        let grads = pair.apply(&x, &WINDOW_A).unwrap().sum_all().unwrap().backward().unwrap();
+        assert!(pair.step(&mut opt, &grads, 0.1).unwrap());
+        assert_eq!(pair.census().unwrap().0, 2);
     }
 }
