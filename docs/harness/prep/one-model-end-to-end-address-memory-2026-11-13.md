@@ -50,7 +50,7 @@ All from the float scoring pass on each job's last checkpoint (`--score-rows`, g
 - **R2, loss:** the last `train_loss_mean` of `progress.jsonl` (all jobs) and the last `dev_loss` (m jobs only).
 - **R3, the address census (address jobs):** `address.jsonl` at each checkpoint: cells in use a block, the share of reads whose cell moved, the share inside the band.
 - **R4, held-out next token (o jobs):** over the held-out panel's reply rows, the share whose nearest token is the true one (`rows-p-memory.json`). Two reference points are read beside it: the share of those rows whose true token is the commonest one, and the same R4 on the pre stage's 64-step `o-e8` smoke, a model that has barely trained.
-- **R5, replies word for word (o jobs):** the first 20 held-out prompts with the wanted reply and the model's, read by a person. A reply counts as word-ordered when it reads as at least one grammatical English clause; the count of the 20 is given, and 10 or more is "writes word-ordered text". The share of replies that end inside 48 tokens is given with it.
+- **R5, replies word for word (o jobs):** the first 20 held-out prompts with the wanted reply and the model's, read by a person. A reply counts as word-ordered when it reads as at least one grammatical English clause; the count of the 20 is given, and 10 or more is the R5 trigger: a count that chooses the next run, not a finding about the model. The share of replies that end inside 48 tokens is given with it.
 - **R6, cost of the part:** training seconds for 64 steps, each arm.
 
 ## Bars
@@ -62,9 +62,9 @@ Question 1. `D2 = e8-s2 − b-s2` and `D3 = e8-s3 − 225` on R1, and `M` their 
 | `M ≥ +30` and both `D > 0` | adds at this size (seeds 2 and 3) |
 | `M ≤ −30` and both `D < 0` | hurts in this configuration |
 | `\|M\| < 15` | no move at this size |
-| anything else, with the two `D` of different sign and `\|M\| ≥ 15` among it | not called |
+| anything else (including `\|M\|` from 15 up to 30, and a larger `\|M\|` whose two `D` differ in sign) | not called |
 
-- **Control.** `C = e8-s2 − token-s2`. It is read only when the word is "adds". `C ≥ 30`: the control holds. `C < 15`: it fails, and the gain is a second table's size and not the state's address. Between: not called. It is one run against one run, with a standard deviation near 30, so it is a weak control: with no true difference it holds about one time in six.
+- **Control.** `C = e8-s2 − token-s2`. It is read only when the word is "adds". `C ≥ 30`: the control holds. `C < 15`: it fails, and the gain is a second table's size and not the state's address. Between: not called. It is one run against one run, with a standard deviation near 30, so it is a weak control: with no true difference `C` alone reaches 30 about one time in six. `C` is also read only after "adds", and it shares `e8-s2` with `D2`, so one lucky `e8-s2` lifts both: after a false "adds", a false "holds" comes up roughly one time in five to one in three.
 - **Pin check.** If `b-s2` is outside 188 ± 20, the two pins do not train alike. `D3` is then not paired, and the word is taken from `D2` alone: adds at `D2 ≥ +60`, hurts at `D2 ≤ −60`, no move at `|D2| < 30`, otherwise not called. The REPORT says so.
 
 Question 2 has no bar. Its rows below choose the next run's recipe; they are not findings, and nothing is claimed from them on the milestone.
@@ -77,15 +77,15 @@ Question 2 has no bar. Its rows below choose the next run's recipe; they are not
 | adds, and the control fails or is not called | `token` at seed 3 to settle the control. If it fails again, a second per-token table does the same and the state's address is not yet used: the next arm reads after a mix of the state (lexlean-r4's v9 mixes with a Hadamard transform before it codes a block). |
 | not called | `e8` and `b` at seed 1, a third pair, before any new arm. |
 | no move, and e8's train loss is below b's by 0.05 or more | The rows fit TRAIN and do not carry to the panel. Next: the `sign` arm and the band; a negative on this configuration only (§4.1). |
-| no move, and e8's train loss is within 0.05 of b's | The rows are not learning. An instrument question first (§4.2): the `lr/32` step and R3's moved share. |
+| no move, and e8's train loss is not below b's by 0.05 | The rows are not learning. An instrument question first (§4.2): the `lr/32` step and R3's moved share. |
 | hurts | This configuration is closed. Next arm: a smaller row step. |
-| Q2: o-e8's R4 is above o-b's by 1 point or more | The next real-text run carries the address memory, on OASST2 mixed with Wikipedia. |
-| Q2: the two R4 are within 1 point | Question 1's word decides whether the next real-text run carries it. If o-e8's last train loss is also below o-b's by 0.5 or more, the rows memorise 3.8 million tokens: more text and fewer passes come first. |
-| Q2: o-e8's R4 is below o-b's by 1 point or more | The next real-text run goes without it, and the row step is the next arm on real text. |
-| Q2: fewer than 10 of 20 replies are word-ordered in both o jobs (R5) | Size and context are the limit: the scale ladder comes before more data. |
-| Q2: 10 or more are word-ordered in either o job | That job's recipe goes to a longer run on OASST2 with Wikipedia. `o-b` can be exported and talked to on the laptop at once. |
+| Q2, read first, R5: fewer than 10 of 20 replies reach the R5 trigger in both o jobs | Size and context are the limit: the scale ladder comes before more data. R4 then only says whether the ladder's runs carry the address memory. |
+| Q2, R5: 10 or more reach the R5 trigger in either o job | A longer run on OASST2 with Wikipedia comes next, and R4 says whether it carries the address memory. `o-b` can be exported and talked to on the laptop at once. |
+| Q2, R4: o-e8 is above o-b by 1 point or more | The run R5 chose carries the address memory. |
+| Q2, R4: the two are less than 1 point apart | Question 1's word decides whether the run R5 chose carries it. If o-e8's last train loss is also below o-b's by 0.5 or more, the rows memorise 3.8 million tokens: more text and fewer passes come first. |
+| Q2, R4: o-e8 is below o-b by 1 point or more | The run R5 chose goes without it, and the row step is the next arm on real text. |
 
-**Prediction, written before the run** (a calibration record, not a bar): `M` between −10 and +50; e8's train loss below b's by 0.1 or more; `T` within ±20; o-e8's R4 above o-b's by 1 to 6 points; neither o job writes sentences a person would call a reply.
+**Prediction, written before the run** (a calibration record, not a bar): `M` between −10 and +50; e8's train loss below b's by 0.1 or more; `token-s2 − b-s2` within ±20; o-e8's R4 above o-b's by 1 to 6 points; neither o job writes sentences a person would call a reply.
 
 ## Instrument checks
 
@@ -146,8 +146,19 @@ A fresh reviewer who did not write the sheet (claude, fresh context) read it aga
 5. **Confounds of the `token` control** are named in Risks.
 6. **The pin check's wording** now gives each threshold by name.
 
-### Second read
+### Second read, of the sheet at `828457d76aea27e11aeaa70c4122cfce19e087a2`: FIT WITH CHANGES
 
-Pending: a fresh read of the changes only.
+A second fresh reviewer (claude, fresh context) read the changed sheet. Six smaller findings, each taken:
 
-TEST FITNESS: PENDING - research, #3407, first read FIT WITH CHANGES; the second read of the changes is awaited (claude-346)
+1. **Question 2's two readings could point at different next runs.** Now R5 is read first and chooses the run (the scale ladder, or a longer real-text run), and R4 only says whether that run carries the address memory.
+2. **No row for e8's train loss above b's.** The second "no move" row now reads "not below b's by 0.05".
+3. **The control's error rate was understated.** `C` is read only after "adds" and shares `e8-s2` with `D2`; the sheet now gives the rate of a false "holds" after a false "adds".
+4. **The prediction named `T`,** which the sheet no longer defines. It now names `token-s2 − b-s2`.
+5. **Two sets of rows overlapped or left a gap.** The last Bars row now reads "anything else" with its two cases named, and the R4 rows meet at "less than 1 point apart".
+6. **"Writes word-ordered text" read as a finding.** It is now "the R5 trigger", a count that chooses the next run.
+
+### Third read, of the second read's changes only
+
+Pending.
+
+TEST FITNESS: PENDING - research, #3407, two reads FIT WITH CHANGES, every finding taken; the third read of the last changes is awaited (claude-346)
