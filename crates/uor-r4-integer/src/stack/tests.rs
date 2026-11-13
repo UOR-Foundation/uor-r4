@@ -8979,3 +8979,154 @@ fn a_place_pick_is_inside_its_margin_exactly_when_the_copy_weight_is_positive() 
         }
     }
 }
+
+/// claude-366: a drawn address table for a trunk of `width` and `layers`, every value within
+/// `reach` of zero (`reach` 0 draws the all-zero table).
+fn drawn_address(arm: super::AddressArm, width: usize, layers: usize, reach: i64) -> super::AddressImage {
+    let mut state = 0x366_u64;
+    let rows = (0..layers)
+        .map(|_| {
+            (0..(width / super::ADDRESS_BLOCK) * super::ADDRESS_CELLS * width)
+                .map(|_| {
+                    state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+                    (((state >> 33) as i64).rem_euclid(2 * reach + 1) - reach) as i16
+                })
+                .collect()
+        })
+        .collect();
+    super::AddressImage::checked(arm, 0x0123_4567_89AB_CDEF, width, rows).expect("a table of the stack's size")
+}
+
+/// The tables and matrices of an artifact: every byte after its header.
+fn data_bytes(bytes: &[u8]) -> Vec<u8> {
+    let declared = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
+    bytes[(16 + declared).div_ceil(64) * 64..].to_vec()
+}
+
+/// claude-366: the address table round-trips. A stack without one has no record, inspects with no
+/// `address` key and reads no image. Added, the image read back is the one written, under
+/// `lut-stack/11`, with every earlier section's bytes kept; it is added once, and only at the
+/// stack's own width and depth.
+#[test]
+fn an_address_table_round_trips_and_is_added_once() {
+    let (_, plain, with_read) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    for (name, bytes) in [("no reads", &plain), ("reads", &with_read)] {
+        assert_eq!(super::read_address_uorlut01(bytes).expect("parse"), None, "{name}");
+        let before = super::inspect_uorlut01(bytes).expect("inspect");
+        assert_eq!(before.address, None, "{name}");
+        let written = serde_json::to_value(&before).expect("the metadata is written");
+        assert!(written.get("address").is_none(), "{name}: a stack without the table inspects as before");
+        for arm in [super::AddressArm::E8, super::AddressArm::Token] {
+            let image = drawn_address(arm, 64, 3, 900);
+            let out = super::add_address_uorlut01(bytes, &image).expect("the table is added");
+            assert_eq!(super::read_address_uorlut01(&out).expect("parse").as_ref(), Some(&image), "{name}");
+            let after = super::inspect_uorlut01(&out).expect("inspect");
+            assert_eq!(after.schema, super::STACK_FBS_ADDRESS_SCHEMA, "{name}");
+            assert_eq!(after.address, Some(image.record()), "{name}");
+            assert_eq!(after.shape, before.shape, "{name}");
+            let (old, new) = (data_bytes(bytes), data_bytes(&out));
+            assert_eq!(new[..old.len()], old[..], "{name}: every earlier section keeps its bytes");
+            assert_eq!(new.len() - old.len(), 3 * 8 * 240 * 64 * 2, "{name}: three layers of 16-bit rows");
+            assert!(super::add_address_uorlut01(&out, &image).is_err(), "{name}: a table is added once");
+        }
+        let narrow = drawn_address(super::AddressArm::E8, 56, 3, 9);
+        assert!(super::add_address_uorlut01(bytes, &narrow).is_err(), "{name}: rows of another width");
+        let short = drawn_address(super::AddressArm::E8, 64, 2, 9);
+        assert!(super::add_address_uorlut01(bytes, &short).is_err(), "{name}: a table of another depth");
+    }
+}
+
+/// claude-366: the record and `lut-stack/11` come together, and the record is read strictly. The
+/// record under the stack's earlier schema is refused; so are `lut-stack/11` without the record, a
+/// record of another block, cell count, exponent, depth or arm, a record with a key the reader
+/// does not know, and a stack whose record names a layer with no table.
+#[test]
+fn the_address_record_and_its_schema_come_together() {
+    let (_, plain, _) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    let earlier = super::inspect_uorlut01(&plain).expect("inspect").schema;
+    assert_ne!(earlier, super::STACK_FBS_ADDRESS_SCHEMA);
+    let image = drawn_address(super::AddressArm::E8, 64, 3, 9);
+    let out = super::add_address_uorlut01(&plain, &image).expect("the table is added");
+    assert!(IntegerStackModel::parse(&out).is_ok());
+    let refused = |what: &str, edit: &dyn Fn(&mut Value)| {
+        let bytes = with_header(&out, |h| edit(h));
+        assert!(IntegerStackModel::parse(&bytes).is_err(), "{what} is refused");
+        assert!(super::inspect_uorlut01(&bytes).is_err() || what == "a layer with no table", "{what} does not inspect");
+    };
+    refused("the record under the earlier schema", &|h| h["schema"] = json!(earlier));
+    refused("the schema without the record", &|h| {
+        h.as_object_mut().unwrap().remove("address");
+    });
+    refused("a block of 4", &|h| h["address"]["block"] = json!(4));
+    refused("239 cells", &|h| h["address"]["cells"] = json!(239));
+    refused("another exponent", &|h| h["address"]["row_exp"] = json!(-15));
+    refused("another depth", &|h| h["address"]["layers"] = json!(2));
+    refused("an arm with no served form", &|h| h["address"]["arm"] = json!("sign"));
+    refused("a key the reader does not know", &|h| h["address"]["band"] = json!(1));
+    refused("a layer with no table", &|h| {
+        h["tables"].as_array_mut().unwrap().retain(|t| t["name"] != "address.l2");
+    });
+    // The record cannot be put on a stack by its header alone: the tables are missing.
+    let bare = with_header(&plain, |h| {
+        h["address"] = json!(image.record());
+        h["schema"] = json!(super::STACK_FBS_ADDRESS_SCHEMA);
+    });
+    assert!(IntegerStackModel::parse(&bare).is_err(), "a record with no rows is refused");
+}
+
+/// claude-366: the served step adds the address rows. With an all-zero table every step is, value
+/// for value, the step of the stack without it, under both arms and with or without the Hamming
+/// reads; with drawn rows the steps differ. A stack with the table has no trunk image, since its
+/// rows are added inside every layer and the trunk evaluators do not read them.
+#[test]
+fn the_served_step_adds_the_address_rows() {
+    let (_, plain, with_read) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    let tokens = repeating_tokens();
+    let run = |bytes: &[u8]| {
+        let model = IntegerStackModel::parse(bytes).expect("served");
+        let mut session = model.session();
+        tokens.iter().map(|&token| session.step_native(token).expect("step")).collect::<Vec<_>>()
+    };
+    for (name, bytes) in [("no reads", &plain), ("reads", &with_read)] {
+        let want = run(bytes);
+        assert!(IntegerStackModel::parse(bytes).expect("served").fbs_trunk_image().is_some());
+        for arm in [super::AddressArm::E8, super::AddressArm::Token] {
+            let zero = super::add_address_uorlut01(bytes, &drawn_address(arm, 64, 3, 0)).expect("added");
+            assert_eq!(run(&zero), want, "{name}, {arm:?}: rows of zero change no step");
+            let drawn = super::add_address_uorlut01(bytes, &drawn_address(arm, 64, 3, 20_000)).expect("added");
+            let got = run(&drawn);
+            let changed = got.iter().zip(&want).filter(|(a, b)| a != b).count();
+            assert!(changed > 30, "{name}, {arm:?}: drawn rows changed {changed} of {} steps", want.len());
+            let model = IntegerStackModel::parse(&drawn).expect("served");
+            assert!(model.fbs_trunk_image().is_none(), "{name}, {arm:?}: no trunk image");
+            assert!(model.fbs_image().is_none(), "{name}, {arm:?}: no image");
+        }
+    }
+    // The two arms read different rows of the same table.
+    let e8 = super::add_address_uorlut01(&plain, &drawn_address(super::AddressArm::E8, 64, 3, 20_000)).expect("added");
+    let token = super::add_address_uorlut01(&plain, &drawn_address(super::AddressArm::Token, 64, 3, 20_000)).expect("added");
+    assert_ne!(run(&e8), run(&token));
+}
+
+/// claude-366: the stage- and part-timed steps serve the address rows as the plain step does,
+/// and leave the session in the same state.
+#[test]
+fn the_timed_fbs_steps_serve_the_address_rows() {
+    let (_, _, with_read) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    let tokens = repeating_tokens();
+    for arm in [super::AddressArm::E8, super::AddressArm::Token] {
+        let bytes = super::add_address_uorlut01(&with_read, &drawn_address(arm, 64, 3, 20_000)).expect("added");
+        let model = IntegerStackModel::parse(&bytes).expect("served");
+        let (mut plain, mut stages, mut parts) = (model.session(), model.session(), model.session());
+        let mut ns = Vec::new();
+        for (t, &token) in tokens.iter().enumerate() {
+            let want = plain.step_native(token).expect("step");
+            let (got, _) = stages.measure_fbs_step_stages(token, &mut ns).expect("stage-timed step");
+            assert_eq!(got, want, "{arm:?}: stages, position {t}");
+            let (got, _) = parts.measure_fbs_step_parts(token, &mut ns).expect("part-timed step");
+            assert_eq!(got, want, "{arm:?}: parts, position {t}");
+        }
+        assert_eq!(plain.save_state(), stages.save_state());
+        assert_eq!(plain.save_state(), parts.save_state());
+    }
+}
