@@ -496,6 +496,10 @@ mod tests {
         assert_eq!(e8_cell(&[1, -5, 5, 5, 5, 5, 5, 5]), 112 + 1 + 2);
         // An even count flips nothing.
         assert_eq!(e8_cell(&[-5, -5, 5, 5, 5, 5, 5, 1]), 112 + 1 + 2);
+        // Two coordinates tie for the smallest magnitude: equal magnitudes take their places in
+        // coordinate order, so the later one is the eighth. It flips; the earlier keeps its sign.
+        assert_eq!(e8_cell(&[-1, 1, 5, 5, 5, 5, 5, 5]), 112 + 1 + 2);
+        assert_eq!(e8_cell(&[1, -1, 5, 5, 5, 5, 5, 5]), 112);
     }
 
     #[test]
@@ -621,19 +625,24 @@ mod tests {
         let mut unknown = bytes.clone();
         unknown[8] = 7;
         assert!(AddressImage::from_bytes(&unknown).is_err());
-        let mut none = bytes.clone();
+        // Each file below is as long as its own header names, so only the header's rule refuses it.
+        let mut none = bytes[..ROWS_HEADER].to_vec();
         none[24..28].copy_from_slice(&0u32.to_le_bytes());
-        assert!(AddressImage::from_bytes(&none).is_err());
-        let mut ragged = bytes;
+        assert!(AddressImage::from_bytes(&none).unwrap_err().contains("of width 16 and 0 layers"));
+        let mut ragged = bytes[..ROWS_HEADER].to_vec();
         ragged[20..24].copy_from_slice(&12u32.to_le_bytes());
-        assert!(AddressImage::from_bytes(&ragged).is_err());
+        ragged.resize(ROWS_HEADER + 2 * 2 * ADDRESS_CELLS * 12, 0);
+        assert!(AddressImage::from_bytes(&ragged).unwrap_err().contains("of width 12 and 2 layers"));
     }
 
     #[test]
     fn a_table_of_the_wrong_size_or_past_the_bound_is_refused() {
         let good = vec![0i16; 2 * ADDRESS_CELLS * 16];
         assert!(AddressImage::checked(AddressArm::E8, 0, 16, vec![good.clone()]).is_ok());
-        assert!(AddressImage::checked(AddressArm::E8, 0, 12, vec![good.clone()]).is_err());
+        // A width that is not whole blocks, with a layer of the size that width would name: only
+        // the width's rule refuses it.
+        let ragged = vec![0i16; ADDRESS_CELLS * 12];
+        assert!(AddressImage::checked(AddressArm::E8, 0, 12, vec![ragged]).unwrap_err().contains("whole blocks"));
         assert!(AddressImage::checked(AddressArm::E8, 0, 16, vec![good[1..].to_vec()]).is_err());
         assert!(AddressImage::checked(AddressArm::E8, 0, 16, Vec::new()).is_err());
         let mut low = good;

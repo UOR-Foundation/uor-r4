@@ -9133,6 +9133,50 @@ fn the_served_step_adds_the_address_rows() {
     assert_ne!(run(&e8), run(&token));
 }
 
+/// claude-366: the token arm reads the rows its position's own input token names. The table is
+/// zero but for the rows token `b` names in every layer and block. Steps that read only token
+/// `a` are the all-zero table's steps; the step that reads `b` is not.
+#[test]
+fn the_token_arm_reads_the_rows_its_own_token_names() {
+    let (_, _, with_read) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    let (width, layers, seed) = (64usize, 3usize, 0x0123_4567_89AB_CDEF_u64);
+    let blocks = width / super::ADDRESS_BLOCK;
+    let cells = |token: u32| -> Vec<u32> {
+        (0..layers)
+            .flat_map(|l| (0..blocks).map(move |b| super::token_cell(seed, l, b, token)))
+            .collect()
+    };
+    // Two tokens of the trunk's vocabulary that share no row in any layer or block.
+    let a = 3u32;
+    let b = (4..11u32)
+        .find(|&b| cells(a).iter().zip(cells(b)).all(|(x, y)| *x != y))
+        .expect("a token that shares no row with the first");
+    let table = |reach: i16| {
+        let rows = (0..layers)
+            .map(|l| {
+                let mut table = vec![0i16; blocks * super::ADDRESS_CELLS * width];
+                for block in 0..blocks {
+                    let at = (block * super::ADDRESS_CELLS + super::token_cell(seed, l, block, b) as usize) * width;
+                    table[at..at + width].fill(reach);
+                }
+                table
+            })
+            .collect();
+        let image = super::AddressImage::checked(super::AddressArm::Token, seed, width, rows).expect("a table of the stack's size");
+        super::add_address_uorlut01(&with_read, &image).expect("added")
+    };
+    let run = |bytes: &[u8], tokens: &[u32]| {
+        let model = IntegerStackModel::parse(bytes).expect("served");
+        let mut session = model.session();
+        tokens.iter().map(|&token| session.step_native(token).expect("step")).collect::<Vec<_>>()
+    };
+    let (zero, named) = (table(0), table(20_000));
+    assert_eq!(run(&named, &[a, a, a]), run(&zero, &[a, a, a]), "no row of token a is set");
+    let (got, want) = (run(&named, &[a, a, b]), run(&zero, &[a, a, b]));
+    assert_eq!(got[..2], want[..2], "the steps before token b read no set row");
+    assert_ne!(got[2], want[2], "the step on token b reads b's rows");
+}
+
 /// claude-366: the stage- and part-timed steps serve the address rows as the plain step does,
 /// and leave the session in the same state.
 #[test]
