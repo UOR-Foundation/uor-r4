@@ -2929,6 +2929,79 @@ impl HammingRead {
         let picked = bits.flatten_all()?.index_select(&tokens(chosen)?, 0)?;
         Ok((picked.sum_all()?.affine(1.0 / half as f64, 0.0)?, n))
     }
+
+    /// claude-361: the place pull under the before-link key, over `pairs`, flat rows `(t, s)` of
+    /// `ids`' windows of `time`. The question at `t` is the ask heads' whole code of the asked
+    /// point as the forward computes it ([`Self::asked`]), so with the question carry the rows
+    /// before `t` are in it. It is pulled toward the key the find compares it with: on each ask
+    /// head's first half the code of the token two before the place, on its second half the code
+    /// of the token three before. Returns the sum over the pairs of the nearer head's
+    /// `bits / head_width`, and how many pairs. The table, the keys and the rotation are
+    /// detached, so only the question table and the carry's gains learn.
+    fn place_pull_linked(
+        &self,
+        ids: &[u32],
+        time: usize,
+        table: &Tensor,
+        pairs: &[(u32, u32)],
+    ) -> Result<(Tensor, usize)> {
+        let ask = self
+            .ask
+            .as_ref()
+            .ok_or_else(|| invalid("the place pull needs the ask heads"))?;
+        if time == 0 || pairs.iter().any(|&(_, s)| (s as usize) % time < 3) {
+            return Err(invalid("a before-link place stands at its window's fourth position or later"));
+        }
+        let (n, device) = (pairs.len(), table.device());
+        let width = table.dim(1)?;
+        let head_width = width / self.heads;
+        let half = head_width / 2;
+        let (copy_heads, asks) = (self.copy_heads(), self.heads - self.copy_heads());
+        let table = table.detach();
+        let tokens = |rows: Vec<u32>| Tensor::from_vec(rows, n, device);
+        let asking: Vec<u32> = pairs.iter().map(|&(t, _)| t).collect();
+        let before = |by: usize| -> Vec<u32> { pairs.iter().map(|&(_, s)| ids[s as usize - by]).collect() };
+        let every = table.index_select(&Tensor::from_vec(ids.to_vec(), ids.len(), device)?, 0)?;
+        let near = table.index_select(&tokens(before(2))?, 0)?;
+        let far = table.index_select(&tokens(before(3))?, 0)?;
+        let rotation = self.key_rotation.as_tensor().detach();
+        let (query, near, far) = as_trained(|| {
+            let question = self.asked(&every, ask, ids, time)?.index_select(&tokens(asking)?, 0)?;
+            Ok((
+                Self::rotate_by(&rotation, &question)?,
+                Self::rotate_by(&rotation, &near)?.detach(),
+                Self::rotate_by(&rotation, &far)?.detach(),
+            ))
+        })?;
+        let signs = |p: &Tensor| -> Result<Tensor> {
+            Ok(p.ge(0.0)?.to_dtype(DType::F32)?.affine(2.0, -1.0)?)
+        };
+        // Each ask head whole, `(n, asks, head_width)`.
+        let heads = |p: &Tensor| -> Result<Tensor> {
+            Ok(p.narrow(1, copy_heads * head_width, asks * head_width)?
+                .reshape((n, asks, head_width))?
+                .contiguous()?)
+        };
+        // The read's straight-through code on the question; the key's code is a constant.
+        let q = heads(&query)?;
+        let q = q.add(&signs(&q)?.sub(&q)?.detach())?;
+        let k = Tensor::cat(
+            &[
+                &signs(&heads(&near)?)?.narrow(2, 0, half)?,
+                &signs(&heads(&far)?)?.narrow(2, half, head_width - half)?,
+            ],
+            2,
+        )?;
+        let bits = q.mul(&k)?.sum(2)?.affine(-0.5, head_width as f64 / 2.0)?;
+        let values = bits.detach().to_vec2::<f32>()?;
+        let chosen: Vec<u32> = values
+            .iter()
+            .enumerate()
+            .map(|(i, row)| (i * asks + nearer_head(row)) as u32)
+            .collect();
+        let picked = bits.flatten_all()?.index_select(&tokens(chosen)?, 0)?;
+        Ok((picked.sum_all()?.affine(1.0 / head_width as f64, 0.0)?, n))
+    }
 }
 
 /// The head with the fewest bits, the lower head on a tie: the one a pair pulls.
@@ -3028,8 +3101,10 @@ impl HammingReads {
     /// from `kit` by each window's corpus start in `starts`: the register program runs over
     /// every window on the ask heads' own codes, the two gains take their votes, and the place
     /// pull is returned, the mean over every row of every labelled question of the nearer head's
-    /// distance to the key of the labelled place, for the caller to scale. `None` when no
-    /// question in the batch is labelled. A window with no start teaches nothing.
+    /// distance to the key of the labelled place, for the caller to scale. With link tokens
+    /// (claude-361) the mean is over each labelled question's last row alone, on the whole head
+    /// against the two tokens before the link token ([`HammingRead::place_pull_linked`]). `None`
+    /// when no question in the batch is labelled. A window with no start teaches nothing.
     ///
     /// The votes are cast here, at this forward. A training step split into several forwards
     /// therefore runs its later forwards on the counts its earlier ones moved.
@@ -3061,7 +3136,11 @@ impl HammingReads {
             place.tallied(votes, None)?;
             return Ok(None);
         }
-        let (sum, terms) = read.place_pull_bits(ids, table, &pairs)?;
+        let (sum, terms) = if place.link.iter().any(|&on| on) {
+            read.place_pull_linked(ids, time, table, &pairs)?
+        } else {
+            read.place_pull_bits(ids, table, &pairs)?
+        };
         let mean = sum.affine(1.0 / terms as f64, 0.0)?;
         place.tallied(votes, Some(f64::from(mean.to_scalar::<f32>()?)))?;
         Ok(Some(mean))
@@ -7177,6 +7256,127 @@ mod place_tests {
             let up = i16::from(token as u32 == ASK);
             assert_eq!(after[token] - before[token], up, "token {token}");
         }
+    }
+
+    /// [`place_reads`] with "is" as the one link token, so the key is the before-link key, and
+    /// the question carried `carry` rows (0, no carry).
+    #[cfg(feature = "cuda")]
+    fn linked_reads(device: &Device, carry: usize) -> HammingReads {
+        let reads = HammingReads::new(4, 256, device).unwrap().with_ask(VOCAB).unwrap();
+        let reads = if carry > 0 { reads.with_carry(carry, VOCAB).unwrap() } else { reads };
+        let reads = reads.with_place(marks(), &[DOT], &[IS]).unwrap();
+        let identity = Tensor::from_vec([1.0f32, 0.0, 0.0, 0.0].repeat(64), (64, 4), device).unwrap();
+        for read in &reads.reads {
+            read.key_rotation.set(&identity).unwrap();
+            read.query_rotation.set(&identity).unwrap();
+        }
+        reads
+    }
+
+    /// Sets the read's question table: zero, but the rows given by token.
+    #[cfg(feature = "cuda")]
+    fn set_question_rows(read: &HammingRead, rows: &[(u32, Vec<f32>)], device: &Device) {
+        let mut table = vec![0.0f32; VOCAB * 256];
+        for (token, row) in rows {
+            table[*token as usize * 256..][..256].copy_from_slice(row);
+        }
+        let ask = read.ask.as_ref().expect("ask heads");
+        ask.set(&Tensor::from_vec(table, (VOCAB, 256), device).unwrap()).unwrap();
+    }
+
+    /// The point that is `first`'s on the first half of each 64-coordinate head and `second`'s
+    /// on its second half, less the points of `less`: added to those points, the key's own code.
+    #[cfg(feature = "cuda")]
+    fn key_row(table: &Tensor, first: u32, second: u32, less: &[u32]) -> Vec<f32> {
+        let points = table.to_vec2::<f32>().unwrap();
+        (0..256)
+            .map(|c| {
+                let want = points[if c % 64 < 32 { first } else { second } as usize][c];
+                less.iter().fold(want, |left, &token| left - points[token as usize][c])
+            })
+            .collect()
+    }
+
+    /// claude-361, on the pod: the place pull under the before-link key. The kit's one labelled
+    /// question gives one pair, its last row "?" with the place after "is". From zero rows the
+    /// question is "?"'s own code, half of each half away from the key, so the pull is one half.
+    /// It is zero only when the question is "name" on each ask head's first half and "my" on its
+    /// second, the two tokens before the link token as the find reads them: "name" on both
+    /// halves is a quarter away, and the halves exchanged, or the near key's two tokens, one
+    /// half. With the pull at zero the step's own find at "?" is the labelled place, so the
+    /// question token's arm count goes up, and no other.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_before_link_pull_is_zero_on_the_two_tokens_before_the_link_and_then_the_find_votes() {
+        let device = Device::new_cuda(0).unwrap();
+        let reads = linked_reads(&device, 0);
+        let table = walsh_table(&device);
+        let read = &reads.reads[1];
+        let kit = PlaceKit { link: vec![IS], ..kit() };
+        let pull = || {
+            let step = reads.place_step(&TALK, TALK.len(), &table, &kit, &[Some(0)]).unwrap();
+            step.expect("a pull").to_scalar::<f32>().unwrap()
+        };
+        let asked = |first: u32, second: u32| {
+            set_question_rows(read, &[(ASK, key_row(&table, first, second, &[ASK]))], &device);
+            pull()
+        };
+        let arm = || reads.place().unwrap().gains().unwrap().arm;
+        assert!((pull() - 0.5).abs() < 1e-6, "the question's own token");
+        assert!((asked(NAME, NAME) - 0.25).abs() < 1e-6, "right on the first half alone");
+        assert!((asked(MY, NAME) - 0.5).abs() < 1e-6, "the halves exchanged");
+        assert!((asked(IS, NAME) - 0.5).abs() < 1e-6, "the near key's two tokens");
+        assert_eq!(arm(), vec![0; VOCAB], "nothing is found yet");
+        assert_eq!(asked(NAME, MY), 0.0, "the two tokens before the link token");
+        let found = arm();
+        for token in 0..VOCAB {
+            assert_eq!(found[token], i16::from(token as u32 == ASK), "token {token}");
+        }
+    }
+
+    /// claude-361, on the pod: the before-link pull reads the carried question. "name" is the
+    /// row before "?", and its question row is set to complete the key once it is carried. With
+    /// its gain at zero the question at "?" is "?"'s own code, one half away; with its gain at
+    /// one the row carries whole and the pull is zero. The gradient reaches the question rows of
+    /// "?" and of the carried "name", and the gain of "name"; "my" stands more than three rows
+    /// back, so its gain does not move; and the table, the rotations, the weights, the margins
+    /// and the stream read's questions do not move.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_before_link_pull_reads_the_carried_question_and_teaches_the_carry() {
+        let device = Device::new_cuda(0).unwrap();
+        let reads = linked_reads(&device, 3);
+        let table = Var::from_tensor(&walsh_table(&device)).unwrap();
+        let read = &reads.reads[1];
+        let ask = read.ask.as_ref().expect("ask heads");
+        let carry = read.carry.as_ref().expect("the carry");
+        let kit = PlaceKit { link: vec![IS], ..kit() };
+        let step = || reads.place_step(&TALK, TALK.len(), table.as_tensor(), &kit, &[Some(0)]).unwrap().expect("a pull");
+        let scalar = |t: &Tensor| t.to_scalar::<f32>().unwrap();
+        set_question_rows(read, &[(NAME, key_row(table.as_tensor(), NAME, MY, &[ASK, NAME]))], &device);
+        assert!((scalar(&step()) - 0.5).abs() < 1e-6, "no gain yet: the question is its own token's");
+        let mut gain = vec![0.0f32; VOCAB];
+        gain[NAME as usize] = 1.0;
+        carry.gain.set(&Tensor::from_vec(gain, VOCAB, &device).unwrap()).unwrap();
+        let pull = step();
+        assert_eq!(scalar(&pull), 0.0, "the carried row completes the key");
+        let grads = pull.backward().unwrap();
+        let moved = grads.get(ask.as_tensor()).expect("the question rows learn").abs().unwrap().sum(1).unwrap();
+        let moved = moved.to_vec1::<f32>().unwrap();
+        for (token, &sum) in moved.iter().enumerate() {
+            let asks = token as u32 == ASK || token as u32 == NAME;
+            assert_eq!(sum > 0.0, asks, "token {token}");
+        }
+        let gains = grads.get(carry.gain.as_tensor()).expect("the carry's gains learn").to_vec1::<f32>().unwrap();
+        assert!(gains[NAME as usize] != 0.0, "the carried row's gain");
+        assert_eq!(gains[MY as usize], 0.0, "a row out of reach");
+        let still = |t: &Tensor| {
+            grads.get(t).is_none_or(|g| g.abs().unwrap().sum_all().unwrap().to_scalar::<f32>().unwrap() == 0.0)
+        };
+        assert!(still(table.as_tensor()), "the table");
+        assert!(still(read.key_rotation.as_tensor()) && still(read.query_rotation.as_tensor()), "the rotations");
+        assert!(still(read.weight.as_tensor()) && still(read.margin.as_tensor()), "the weights and margins");
+        assert!(still(reads.reads[0].ask.as_ref().unwrap().as_tensor()), "the stream read's questions");
     }
 
     /// claude-351, G3 on the pod: the mix at an open row, `n + w (c − n)` with `c` the point of
