@@ -9,7 +9,8 @@
 //!                   [--slots 1,2,3|none] [--question-last N] [--open-reply-start 0|1]
 //! place-asks repeat --tokens TRAIN/tokens.u16 --kit train-places.json --asks asks.json --out with-pairs.json
 //! place-asks forms  --tokens TRAIN/tokens.u16 --kit train-places.json --asks asks.json \
-//!                   --rule tokens|frequent [--panel NAME=PANEL/tokens.u16,panel-places.json]...
+//!                   --rule tokens|frequent [--panel NAME=PANEL/tokens.u16,panel-places.json]... \
+//!                   [--out with-floors.json]
 //! ```
 //!
 //! `repeat` (claude-364) counts the lead-in pairs on the tokens a written table was fitted on:
@@ -26,7 +27,10 @@
 //! own split: under `tokens` a form is a question's distinct tokens, under `frequent` those of
 //! them that stand in at least 64 of the split's questions. It prints the count, then the census
 //! of that split (`fitted`) and of each panel twice: with the table as it is (`one:`) and with
-//! the form floors (`forms:`). Each panel is read with its own kit. It writes nothing.
+//! the form floors (`forms:`). Each panel is read with its own kit. With `--out` it writes a copy
+//! of the table that holds the floors: under `tokens` only, only when `--tokens` are the tokens
+//! the table was fitted on, never over a file, and never from a table that already holds floors.
+//! Without `--out` it writes nothing; the table it read is left as it is.
 //!
 //! `ablate` (claude-360) fits under a cut, which keeps the named frame offsets (1 to 5 before a
 //! place, nearest first; 6 to 8 the turn's last tokens, the last first) and the last N tokens
@@ -321,6 +325,10 @@ fn run(args: &[String]) -> Result<(), String> {
                 Some("frequent") => FormRule::Frequent,
                 _ => return Err("--rule takes tokens or frequent".to_owned()),
             };
+            // Refused before any count: a table holds no list of kept tokens.
+            if out.is_some() && matches!(rule, FormRule::Frequent) {
+                return Err("--out writes the floors of --rule tokens: a table holds no list of kept tokens".to_owned());
+            }
             // Each panel is read before any count, so a malformed one stops the run at once.
             let mut panels = Vec::new();
             for spec in args.windows(2).filter(|pair| pair[0] == "--panel").map(|pair| &pair[1]) {

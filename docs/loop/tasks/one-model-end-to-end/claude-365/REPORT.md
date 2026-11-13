@@ -62,7 +62,9 @@ S rises by 18 on all three models; V and O rise. **Adds.** Repeat rows are exact
 
 | Check | Result |
 |---|---|
-| `cargo test --locked --offline -p uor-r4-integer --features serving-wasm --no-fail-fast` | see the review paragraph |
+| `cargo test --locked --offline -p uor-r4-integer --features serving-wasm --lib --bin place-asks`, at the head | 602 passed, 1 ignored (594 at base; 8 new); the tool's 5 pass |
+| The same with `--no-fail-fast` over every target, one commit before the head | library 601 passed; 8 integration targets fail on this laptop at their first line, loading a real bundle file that is not here (`No such file or directory`); this branch changes no integration test |
+| The least count's edge: `<` changed to `<=`, the new test at exactly 16 cases | fails, as it must |
 | G1, a table of today: the new table less its floors equals the merged table (`jq -S` of both); a table with no floors is written without the list (test) | holds |
 | G1, the seed-21 replies of the three models with the merged table, read by this head's reader | equal claude-364's files, all three |
 | G2, a form under the least count takes the one floor: the test with the rule set aside | fails, as it must |
@@ -71,7 +73,9 @@ S rises by 18 on all three models; V and O rise. **Adds.** Repeat rows are exact
 | The written table through `place-asks census` on seed 21 | the count's own lines (6 of 76 with a place) |
 | G4, the fresh panel's time | after the order's commit |
 
-Head binaries (`local/claude/claude-365/bin/SHA256.txt`): reader `16a0d837…`, table tool `96a4d737…`, chat `7daf621d…`. Table with floors: SHA-256 `420e71c3b4a6fe0c1f958131f9c42f4b5064b90b49af19cb1bbc0860c33b53da`.
+**Review.** One fresh reviewer (`delegate:reviewer`, no part in the work) was given the order's rules and the code diff against `origin/main` at `d5d50acb8b71b0ba6c8b415377c70f437cb0fe13` (5 files, 399 lines added) and nothing else. It read the count against the fit's own routine line by line, the find, the order of every written and printed row, the load checks, the tool's four conditions for writing and the tests. Verdict: approve, no high or medium finding. Its three low findings are taken after the review: the tool now refuses `--rule frequent --out` before any count, the tool's header says what `--out` writes, and a test pins the least count at exactly 16 cases. It ran no test and no build, did not check whether another reader hashes a table that holds floors, and did not judge the second form rule on a form that mixes asking and other questions. The three changes after the review are small and were not reviewed again; the find is not among them, so the replies read above stand.
+
+Head binaries (`local/claude/claude-365/bin/SHA256.txt`, built before the review's three changes; the find and the reader are the same code): reader `16a0d837…`, table tool `96a4d737…`, chat `7daf621d…`. Table with floors: SHA-256 `420e71c3b4a6fe0c1f958131f9c42f4b5064b90b49af19cb1bbc0860c33b53da`.
 
 ## Skills used
 

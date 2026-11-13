@@ -1795,6 +1795,19 @@ mod tests {
     }
 
     #[test]
+    fn a_form_at_the_least_count_gets_a_floor() {
+        let (mut x, mut places, _, index) = low_floor();
+        rare_docs(&mut x, &mut places, FORM_MIN);
+        let (floors, lines) = fit_forms(&x, &marks(), &places, &index, FormRule::Tokens);
+        let truth: HashSet<usize> = places.iter().map(|p| p[0] as usize).collect();
+        let rare: Vec<AskCase> = ask_cases(&x, &marks()).into_iter().filter(|c| truth.contains(&c.reply) && x[c.asked.clone()].contains(&19)).collect();
+        assert_eq!(rare.len(), FORM_MIN);
+        for case in &rare {
+            assert!(floors.floor(&index.asked(&x, &case.asked)).is_some(), "{lines:#?}");
+        }
+    }
+
+    #[test]
     fn a_form_floor_is_read_for_its_own_form_only() {
         let (x, places, _, index) = low_floor();
         let (mut floors, _) = fit_forms(&x, &marks(), &places, &index, FormRule::Tokens);
