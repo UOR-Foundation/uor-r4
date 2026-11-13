@@ -91,16 +91,39 @@ fn cut(args: &[String]) -> Result<Cut, String> {
     let value = |name: &str| args.iter().position(|a| a == name).map(|i| args.get(i + 1).map(String::as_str).ok_or_else(|| format!("{name} takes a value")));
     let mut cut = Cut::ALL;
     if let Some(text) = value("--slots") {
+        let text = text?;
         cut.slots = 0;
-        for part in text?.split(',').filter(|&part| part != "none") {
-            let offset: usize = part.parse().ok().filter(|n| (1..=ASKS_FRAME).contains(n)).ok_or_else(|| format!("--slots {part}: an offset is 1 to {ASKS_FRAME}, or none"))?;
-            cut.slots |= 1 << (offset - 1);
+        // `none` is the whole value or an error: `none,6` would run a cut nobody named.
+        for part in text.split(',').filter(|_| text != "none") {
+            let offset: usize = part.parse().ok().filter(|n| (1..=ASKS_FRAME).contains(n)).ok_or_else(|| format!("--slots {part}: an offset is 1 to {ASKS_FRAME}, or the one word none"))?;
+            let bit = 1 << (offset - 1);
+            if cut.slots & bit != 0 {
+                return Err(format!("--slots names offset {offset} twice"));
+            }
+            cut.slots |= bit;
         }
     }
     if let Some(text) = value("--question-last") {
         cut.question_last = text?.parse().map_err(|_| "--question-last N".to_owned())?;
     }
     Ok(cut)
+}
+
+/// The held splits of `ablate`: each `--held` with the `--held-kit` at the same place.
+fn held(args: &[String]) -> Result<Vec<(PathBuf, PathBuf)>, String> {
+    let (tokens, kits) = (flags(args, "--held"), flags(args, "--held-kit"));
+    if tokens.is_empty() || tokens.len() != kits.len() {
+        return Err("ablate takes one --held-kit for each --held, and at least one".to_owned());
+    }
+    Ok(tokens.into_iter().zip(kits).collect())
+}
+
+/// A held split is counted with the fitted split's marks and vocabulary, or not at all.
+fn same_marks(fitted: (&PlaceMarks, u32), held: (&PlaceMarks, u32), kit: &Path) -> Result<(), String> {
+    if fitted == held {
+        return Ok(());
+    }
+    Err(format!("{}: other marks or another vocabulary than the fitted split's", kit.display()))
 }
 
 /// The offsets a cut keeps, as `--slots` takes them.
@@ -119,10 +142,7 @@ fn run(args: &[String]) -> Result<(), String> {
     match mode {
         "ablate" => {
             let cut = cut(args)?;
-            let (held, kits) = (flags(args, "--held"), flags(args, "--held-kit"));
-            if held.is_empty() || held.len() != kits.len() {
-                return Err("ablate takes one --held-kit for each --held, and at least one".to_owned());
-            }
+            let held = held(args)?;
             let (asks, _) = fit_cut(&tokens, &kit.marks, vocab, &kit.places, kit.tokens_sha256.clone(), cut)?;
             let index = AsksIndex::new(&asks)?.with_cut(cut);
             println!(
@@ -137,11 +157,9 @@ fn run(args: &[String]) -> Result<(), String> {
                 asks.floor_other,
                 asks.asking_floor
             );
-            for (n, (tokens, kit_path)) in held.iter().zip(&kits).enumerate() {
+            for (n, (tokens, kit_path)) in held.iter().enumerate() {
                 let (tokens, held_vocab, held_kit) = split(tokens, kit_path)?;
-                if held_kit.marks != kit.marks || held_vocab != vocab {
-                    return Err(format!("{}: other marks or another vocabulary than the fitted split's", kit_path.display()));
-                }
+                same_marks((&kit.marks, vocab), (&held_kit.marks, held_vocab), kit_path)?;
                 let (counts, _) = census(&tokens, &held_kit.marks, &held_kit.places, &index, &asks.forms, 0);
                 for line in counts.lines(&format!("held{}", n + 1)) {
                     println!("{line}");
@@ -220,10 +238,24 @@ mod tests {
         assert_eq!(slots(Cut { slots: 0b1010_0001, question_last: 0 }), "1,6,8");
         assert_eq!(slots(Cut { slots: 0, question_last: 0 }), "none");
         assert_eq!(slots(Cut::ALL), "1,2,3,4,5,6,7,8");
-        for refused in ["ablate --slots 0", "ablate --slots 9", "ablate --slots 1,x", "ablate --slots", "ablate --question-last x", "ablate --question-last"] {
+        for refused in ["ablate --slots 0", "ablate --slots 9", "ablate --slots 1,x", "ablate --slots", "ablate --slots none,6", "ablate --slots 1,1", "ablate --question-last x", "ablate --question-last"] {
             assert!(cut(&args(refused)).is_err(), "{refused}");
         }
         assert_eq!(flags(&args("ablate --held a --held-kit k --held b"), "--held"), vec![PathBuf::from("a"), PathBuf::from("b")]);
+    }
+
+    #[test]
+    fn the_held_splits_come_in_pairs_with_the_marks_of_the_fitted_split() {
+        let args = |text: &str| text.split(' ').map(str::to_owned).collect::<Vec<String>>();
+        let pair = |tokens: &str, kit: &str| (PathBuf::from(tokens), PathBuf::from(kit));
+        assert_eq!(held(&args("ablate --held a --held-kit ka --held b --held-kit kb")), Ok(vec![pair("a", "ka"), pair("b", "kb")]));
+        assert!(held(&args("ablate")).is_err());
+        assert!(held(&args("ablate --held a --held-kit ka --held b")).is_err());
+        let marks = |user: u32| -> PlaceMarks { serde_json::from_str(&format!(r#"{{"bos":0,"eos":1,"sep":[2],"system":[3],"user":[{user}],"assistant":[5]}}"#)).expect("marks") };
+        let kit = Path::new("kit.json");
+        assert_eq!(same_marks((&marks(4), 9), (&marks(4), 9), kit), Ok(()));
+        assert!(same_marks((&marks(4), 9), (&marks(6), 9), kit).is_err());
+        assert!(same_marks((&marks(4), 9), (&marks(4), 10), kit).is_err());
     }
 
     /// A token file of `ids` whose header counts `count` tokens in a vocabulary of 9.
