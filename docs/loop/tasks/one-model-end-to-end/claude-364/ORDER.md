@@ -60,3 +60,22 @@ Written by hand: claude-361 (PR #3951, a draft whose runs are being read) holds 
 
 - The three saved models: `local/claude/claude-358/`. The table: claude-359's fit (`local/claude/claude-362/asks-off.json`). TRAIN: the tokens that table was fitted on.
 - The reader binaries are rebuilt at this unit's head; the scorer is `local/claude/claude-361/bin-pin/whole-word-recall`.
+
+## Addendum, 13 Nov: a longer key where the pair fails its share
+
+Written after the two reads of the seed-20 panel and before the seed-21 panel exists. The bar above was read as written and its row stands; nothing in it is changed here.
+
+**What the first read showed.** The count kept three pairs, not the four predicted. The pair that ends "exactly this:" is followed by the rest of its turn in 1,576 of 2,000 TRAIN turns, under 7 in 8: "Please repeat this:" shares the pair, and its reply starts with a capital. The 18 repeat rows of the seed-20 panel with that lead-in are not found, and the conversation's turn 4, worded that way, is unchanged.
+
+**What is added.** The count also takes every three neighbouring tokens of a user turn, counted as the pairs are: once in each turn at the first place with a token after it, `turns` such turns, and `replies` of them answered with the rest of the turn. A triple is kept by the same two counts (16 replies or more, 7 in 8 or more) when the pair it ends on is not kept. The table takes the kept triples as a second list, `repeat3`, absent from a table that holds none. The find takes the first place in the turn where a kept pair or a kept triple ends.
+
+**Bar.** Arms *repeat* (the table with the three pairs, as read above) and *longer* (the same with the kept triples), on p-s2, p-s1 and p-s3, on a seed-21 panel written after this addendum, each read once. X, O and V as above.
+
+- **Adds:** on all three models X(longer) is 90% of the repeat rows or more and at least 5 over X(repeat), O is not down by more than 2, and V is not down by more than 3.
+- **Costs:** O down by more than 2 or V down by more than 3 on any model.
+- **Does not add at this configuration:** neither, and X(longer) − X(repeat) under 3 on any model.
+- Otherwise not called.
+
+**Prediction.** The count keeps one triple, the one that ends "exactly this:", with every one of its turns answered by the rest; the triple that ends "repeat this:" is not kept. On the panel it fires on 15 to 25 more rows, each exact; X(longer) is 93% to 99% of the repeat rows; the gain is 15 to 22 on p-s2 and p-s1 and 6 to 14 on p-s3; O moves by 0 to 2; V is unchanged. The conversation's turn 4 is the phrase and the end mark.
+
+**Gates.** G7: a table with no triple list reads as before: the seed-20 *repeat* arm read again on the new reader equals the files above byte for byte, and a table's bytes are unchanged by read and write. G8: the find and the count, with a set-aside for each new condition. G9: the seed-21 panel is written after this addendum's commit and read once per arm.
