@@ -11,10 +11,10 @@ Every figure below is in `local/claude/claude-362/` in the main checkout (kit fi
 1. **With the switch on, no recall reply keeps the reference's sentence.** Replies equal to the reference, of 582 recall questions: 182, 178 and 176 with the switch off; 0, 0 and 0 with it on. The reply is the bare value ("jelbreekzurk.", "859.") and never "That's jelbreekzurk." or "It's 859.". Of the 543 right replies, 438, 350 and 452 are the value and a full stop alone; the rest carry extra words ("14, 14."). The switch buys the value at the price of the model's own wording on every recall reply, including the ones the model already worded right.
 2. **The value is said by the table and the register, not by what the model learned.** With the switch on the count is 543 on all three models and 542 questions are right on all three. The table's census on this panel finds the true place on 547 of 582; the models add nothing to the find and only end the reply. The table is counted, not geometry (CHARTER §3.1); whether it may be served in the product is the owner's open question, and nothing here assumes it.
 3. **The conversation's turn 4 is worse.** "Say exactly this: trelvon dask pimmerholt zane" now answers "18.". The table made that false find before; with the switch it is spoken. Turns 2, 5, 7 and 9 are right; turn 8 ("What is two plus three?" gives "It's blue.") is wrong with and without the switch.
-4. **Never-told questions the table answers stay wrong.** The table sets a place on 26 of the 81 never-told questions. Those 26 replies change and none becomes right: "You live in Kloudstead." becomes "Kloudstead. You haven't told me yet." or "Kloudstead.", and one now loops ("jacket! That's's's's…"). Replies equal to the reference on never-told rows: 15 of 81 before and after.
+4. **Never-told questions the table answers stay wrong.** The table sets a place on 26 of the 81 never-told questions. Those 26 replies change and none becomes right: "You live in Kloudstead." becomes "Kloudstead. You haven't told me yet." or "Kloudstead.", and one now loops ("jacket! That's's's's…"). Replies equal to the reference on never-told rows: 15 of 81 before and after, on each model.
 5. **Replies lost.** Seed 2 loses 4 (46 gained), seeds 1 and 3 lose 2 each (56 gained). The lost replies run past the value: "Drarktrarktrarktrark…", "shaikjaikjaikjaikjaik.", "7049." for 704, "dasstairkon care.".
 6. **What is still wrong is the table's.** Of the 39 wrong recall replies per model, 14 or 15 say "not told" (the table's census: 11 questions wrongly found not told) and 24 or 25 state another value (the census: 24 wrong places). On seed 2, 16 of the 24 come from a conversation with a correction turn, and the two read in full state the value the correction replaced: "What's my friend called?" answered "Gortreek." after "Sorry, my best friend is Stutplimmost.".
-7. **The prediction missed high on two models.** Predicted +6% to +9% of the recall questions; read +7.2%, +9.3% and +9.3%.
+7. **The prediction missed in two places.** The gain landed above the predicted range on two models: predicted +6% to +9% of the recall questions; read +7.2%, +9.3% and +9.3%. And "never-told rows unchanged" was wrong: 26 never-told replies changed on each model, and the replies that hold a not-told wording rose by 3, 2 and 2 (a value followed by "You haven't told me yet."). The other rows' exact count was unchanged, as predicted.
 8. **Replies that do not end** move both ways: 42, 57 and 41 of 984 with the switch off; 47, 51 and 29 with it on.
 9. **The scorer's rule is whole-word.** It counts "14, 14." as holding 14. The count is the order's; the replies are quoted below so the reader can judge.
 10. **Both older panels were read before the idea existed**, and the idea came from reading one of them. They are reported, not relied on.
@@ -41,7 +41,7 @@ Every figure below is in `local/claude/claude-362/` in the main checkout (kit fi
 | Other counts, off → on | p-s2 | p-s1 | p-s3 |
 |---|---|---|---|
 | Replies equal to the reference, other rows (of 402) | 78 → 78 | 80 → 80 | 104 → 104 |
-| Other rows whose reply changed | 26, all never-told | | |
+| Other rows whose reply changed | 26, all never-told | 26, all never-told | 26, all never-told |
 | Never-told replies that hold a not-told wording (of 81) | 56 → 59 | 56 → 58 | 56 → 58 |
 | Recall replies equal to the reference (of 582) | 182 → 0 | 178 → 0 | 176 → 0 |
 | Replies that end on the end mark (of 984) | 942 → 937 | 927 → 933 | 943 → 955 |
@@ -113,6 +113,8 @@ Run at `6b934a4d832222fdb07e24e7f524fc7539543952`, the last commit that changes 
 
 G1: the table test and the byte compare. G2: the reader tests. G3: the kit's logs with times. G4: this report. G5: the notebook row.
 
+**Reviews, both fresh, 13 Nov.** The code review approved with three low findings, left as they are: with the switch on, the fit log's `open pairs=… that_open=…` line counts the table before the switch (the `open_reply_start … was=` line after it says what changed); a flag given twice takes the first, as the binary's other flags do; and no test runs the binary's own `fit` path with the flag off, the refusal in `census`, or the printed line (the byte compare on TRAIN covers the first of these). The report review asked for four changes, all made: the never-told clause of the prediction (negative 7), the plain summary's claim about other replies, the wording of the miss, and two empty table cells.
+
 ## Skills used
 
 None.
@@ -127,4 +129,4 @@ None.
 
 ## Plain summary
 
-A switch on the table's fitter makes a reply start on the value the table found. On a panel written after the order, the reply then holds the told value on 543 of 582 recall questions on all three saved models (501, 489, 489 without it), and no other kind of reply gets worse. The price is the wording: every recall reply becomes the bare value, and none equals the reference sentence, where 176 to 182 did before. The find is the counted table's, not the model's.
+A switch on the table's fitter makes a reply start on the value the table found. On a panel written after the order, the reply then holds the told value on 543 of 582 recall questions on all three saved models (501, 489, 489 without it), and the other rows' exact replies are unchanged. Two to four recall replies per model are lost to a value that runs on, 26 never-told replies change without becoming right, and one of them now loops. The price is the wording: every recall reply becomes the bare value, and none equals the reference sentence, where 176 to 182 did before. The find is the counted table's, not the model's.
