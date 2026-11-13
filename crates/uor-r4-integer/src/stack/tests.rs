@@ -8791,11 +8791,23 @@ fn a_session_with_the_asks_serves_the_token_at_the_asked_place() {
     assert_eq!(offered[17].1, (Some(5), None));
     assert_eq!(offered[18].1, (Some(5), Some(5)));
     assert!(offered.iter().all(|row| row.2.is_none()));
+    // The offer alone does not choose the place's token on that row, so the 31 served below is
+    // the speak's doing and not the vote's.
+    assert_ne!(offered[18].0, 31);
     // With `speak` the open row serves the token at the place, and only that row speaks: the
     // step onto it reaches `PLACE_DOT`, which stops the read.
     assert_eq!(spoken[18], (31, (Some(5), Some(5)), Some((31, None))));
     assert_eq!((spoken[19].1, spoken[19].2), ((None, None), None));
     assert!(spoken[..18].iter().all(|row| row.2.is_none()));
+    // Every caller of a step is served the spoken token: the browser's step and the timed step
+    // choose what the plain step chose, row by row.
+    let mut model = IntegerStackModel::parse(&placed).expect("served");
+    model.set_place_asks(&place_asks(&place, 30), true).expect("the asks are set");
+    let (mut browser, mut timed, mut ns) = (model.session(), model.session(), Vec::new());
+    for (t, &token) in talk.iter().enumerate() {
+        assert_eq!(browser.serve_step(token).expect("serve").0, spoken[t].0, "step {t}: the browser's step");
+        assert_eq!(timed.measure_fbs_step_stages(token, &mut ns).expect("timed").0.token, spoken[t].0, "step {t}: the timed step");
+    }
 }
 
 /// claude-359: a question that asks for a fact no finished user turn states is answered with the

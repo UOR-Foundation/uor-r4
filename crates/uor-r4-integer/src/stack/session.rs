@@ -2805,6 +2805,8 @@ impl IntegerStackSession<'_> {
         // Restore tokens
         self.tokens.clear();
         self.tokens.extend_from_slice(&saved.tokens);
+        // No step of the restored session has spoken yet.
+        self.spoken = None;
 
         // Restore snap trace
         if let Some(ref trace_entries) = saved.snap_trace {

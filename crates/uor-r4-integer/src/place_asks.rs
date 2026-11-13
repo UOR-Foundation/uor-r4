@@ -90,7 +90,17 @@ pub fn lg(n: u64) -> i32 {
 /// How much likelier a count is on the true side than on the other, in [`lg`] units: `t` of
 /// `true_total` against `o` of `other_total`, each count raised by one.
 fn odds(t: u32, true_total: u64, o: u32, other_total: u64) -> i32 {
-    lg((u64::from(t) + 1) * (other_total + 1)) - lg((u64::from(o) + 1) * (true_total + 1))
+    lg((u64::from(t) + 1).saturating_mul(other_total.saturating_add(1))) - lg((u64::from(o) + 1).saturating_mul(true_total.saturating_add(1)))
+}
+
+/// One more in a count that stops at its type's top and never wraps.
+fn bump(n: &mut u32) {
+    *n = n.saturating_add(1);
+}
+
+/// Whether a vocabulary, with the two frame values past it, fits the 16 bits a key gives a token.
+fn fits_the_keys(vocab: u32) -> bool {
+    vocab < u32::from(u16::MAX)
 }
 
 fn key2(j: usize, c: u32) -> u64 {
@@ -180,7 +190,11 @@ fn frame(tokens: &[u32], lo: usize, hi: usize, s: usize, start: u32) -> ([u32; A
             *slot = start;
             break;
         }
-        *slot = tokens[s - n - 1];
+        // A position past the tokens has no token before it to read.
+        match tokens.get(s - n - 1) {
+            Some(&token) => *slot = token,
+            None => break,
+        }
     }
     for (n, slot) in out[ASKS_BEFORE..].iter_mut().enumerate() {
         match hi.checked_sub(n + 1).filter(|&at| at > s && at < tokens.len()) {
@@ -191,9 +205,9 @@ fn frame(tokens: &[u32], lo: usize, hi: usize, s: usize, start: u32) -> ([u32; A
     (out, ASKS_FRAME)
 }
 
-/// A question's distinct tokens, ascending.
+/// A question's distinct tokens, ascending; none when the range is not inside the tokens.
 fn question(tokens: &[u32], asked: &Range<usize>) -> Vec<u32> {
-    let mut q = tokens[asked.clone()].to_vec();
+    let mut q = tokens.get(asked.clone()).unwrap_or(&[]).to_vec();
     q.sort_unstable();
     q.dedup();
     q
@@ -202,6 +216,9 @@ fn question(tokens: &[u32], asked: &Range<usize>) -> Vec<u32> {
 impl AsksIndex {
     pub fn new(asks: &PlaceAsks) -> Result<Self, String> {
         let vocab = asks.vocab;
+        if !fits_the_keys(vocab) {
+            return Err(format!("a vocabulary of {vocab} does not fit the asks' keys"));
+        }
         if asks.unseen.len() != ASKS_FRAME {
             return Err(format!("the asks have {} unseen rows for a frame of {ASKS_FRAME}", asks.unseen.len()));
         }
@@ -261,6 +278,10 @@ impl AsksIndex {
 
     /// Whether a reply row with `token` after `before` is open, when the tables say.
     pub fn opens(&self, before: u32, token: u32) -> Option<bool> {
+        // A value past the vocabulary is no token, and its key would be another pair's.
+        if before >= self.start || token >= self.start {
+            return None;
+        }
         self.opens.get(&((u64::from(before) << 16) | u64::from(token))).copied()
     }
 
@@ -280,19 +301,24 @@ impl AsksIndex {
     /// The score of the candidate place `s` in a turn whose content is `lo..hi`, for a question
     /// of the distinct tokens `q`; `None` when `s` is no candidate.
     pub fn score(&self, tokens: &[u32], lo: usize, hi: usize, s: usize, q: &[u32]) -> Option<i32> {
+        // A place is a token of the turn: a position outside the turn or the tokens is none.
+        if s < lo || s >= hi || s >= tokens.len() {
+            return None;
+        }
         let (f, n) = frame(tokens, lo, hi, s, self.start);
         if !self.link.get(f[0] as usize).copied().unwrap_or(false) {
             return None;
         }
+        // The weights are a file's: the sum stops at the type's ends and never wraps.
         let mut score = 0i32;
         for (j, &c) in f[..n].iter().enumerate() {
             let held = q.binary_search(&c).is_ok();
             let side = usize::from(!held);
-            score += self.shared.get(&key2(j + 1, c)).map_or(self.unseen[j][side], |w| w[side]);
+            score = score.saturating_add(self.shared.get(&key2(j + 1, c)).map_or(self.unseen[j][side], |w| w[side]));
             for &qt in q {
                 if qt != c {
-                    if let Some(w) = self.pairs.get(&key3(qt, j + 1, c)) {
-                        score += w;
+                    if let Some(&w) = self.pairs.get(&key3(qt, j + 1, c)) {
+                        score = score.saturating_add(w);
                     }
                 }
             }
@@ -302,7 +328,7 @@ impl AsksIndex {
 
     /// The score that a question of the distinct tokens `q` asks for a stored fact.
     pub fn asking(&self, q: &[u32]) -> i32 {
-        self.asking_prior + q.iter().filter_map(|t| self.asking.get(t)).sum::<i32>()
+        q.iter().filter_map(|t| self.asking.get(t)).fold(self.asking_prior, |sum, &w| sum.saturating_add(w))
     }
 
     /// Every candidate of the finished user turns `prior`, in order, with its score.
@@ -388,7 +414,9 @@ fn best_floor(right: &[i64], wrong: &[i64]) -> (i32, i64, i64) {
     for (i, (dr, dw)) in right.iter().zip(wrong).enumerate() {
         r += dr;
         w += dw;
-        if i <= 2 * LIM as usize && r - w >= best.1 - best.2 {
+        // Bin 0 holds every score at or under the least one, which no floor the find reads keeps:
+        // the floors start one above it.
+        if (1..=2 * LIM as usize).contains(&i) && r - w >= best.1 - best.2 {
             best = (i as i32 - LIM, r, w);
         }
     }
@@ -463,7 +491,8 @@ pub fn census(tokens: &[u32], marks: &PlaceMarks, places: &[[u32; 4]], index: &A
                         "asks-miss {} | asked={:?} | stated={:?} | place_offset={} | got={found:?} | place_score={at:?} floor={}",
                         ["right", "wrong", "not_told", "nothing"][slot],
                         &tokens[case.asked.clone()],
-                        &tokens[stated.clone()],
+                        // A kit's place may lie past the tokens: then no statement is shown.
+                        tokens.get(stated.clone()).unwrap_or(&[]),
                         place - stated.start,
                         index.floor
                     ));
@@ -502,11 +531,14 @@ pub fn census(tokens: &[u32], marks: &PlaceMarks, places: &[[u32; 4]], index: &A
 /// Fit the asks on a split by counting: `places` are its true places, `[reply start, place, ..]`
 /// in the split's positions. The second value is the fit's own account, line by line.
 pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], tokens_sha256: String) -> Result<(PlaceAsks, Vec<String>), String> {
-    if vocab + 1 >= 1 << 16 {
+    if !fits_the_keys(vocab) {
         return Err(format!("a vocabulary of {vocab} does not fit the asks' keys"));
     }
     if let Some(&t) = tokens.iter().find(|&&t| t >= vocab) {
         return Err(format!("token {t} is past a vocabulary of {vocab}"));
+    }
+    if places.is_empty() {
+        return Err("the kit holds no place: there is nothing to fit".to_owned());
     }
     let start = vocab;
     let truth: Map<usize, usize> = places.iter().map(|p| (p[0] as usize, p[1] as usize)).collect();
@@ -523,7 +555,7 @@ pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], 
     for case in &cases {
         let Some(&place) = truth.get(&case.reply) else { continue };
         match case.prior.iter().find(|turn| turn.contains(&place)) {
-            Some(turn) => before[frame(tokens, turn.start, turn.end, place, start).0[0] as usize] += 1,
+            Some(turn) => bump(&mut before[frame(tokens, turn.start, turn.end, place, start).0[0] as usize]),
             None => outside += 1,
         }
     }
@@ -539,12 +571,12 @@ pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], 
             return Err(format!("the kit's reply at {reply} has its value at {value}"));
         }
         for row in reply.saturating_sub(1).max(1)..value {
-            open.entry((u64::from(tokens[row - 1]) << 16) | u64::from(tokens[row])).or_default()[usize::from(row + 1 == value)] += 1;
+            bump(&mut open.entry((u64::from(tokens[row - 1]) << 16) | u64::from(tokens[row])).or_default()[usize::from(row + 1 == value)]);
         }
     }
     let mut open_rows: Vec<[i32; 3]> = open
         .iter()
-        .filter(|(_, n)| n[0] + n[1] >= OPEN_MIN)
+        .filter(|(_, n)| n[0].saturating_add(n[1]) >= OPEN_MIN)
         .map(|(&key, n)| [(key >> 16) as i32, (key & 0xFFFF) as i32, i32::from(n[1] > n[0])])
         .collect();
     open_rows.sort_unstable();
@@ -565,7 +597,7 @@ pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], 
         for (j, &c) in f[..n].iter().enumerate() {
             for &qt in &q {
                 if qt != c {
-                    pair.entry(key3(qt, j + 1, c)).or_default()[0] += 1;
+                    bump(&mut pair.entry(key3(qt, j + 1, c)).or_default()[0]);
                 }
             }
         }
@@ -585,11 +617,11 @@ pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], 
         let side = usize::from(!asks_a_fact(case));
         asking_total[side] += 1;
         for &qt in &q {
-            asking.entry(qt).or_default()[side] += 1;
+            bump(&mut asking.entry(qt).or_default()[side]);
         }
         if place.is_none() && side == 0 {
             if let Some(form) = reply_form(tokens, case.reply, marks) {
-                *forms.entry(form).or_default() += 1;
+                bump(forms.entry(form).or_default());
             }
         }
         for turn in &case.prior {
@@ -606,12 +638,12 @@ pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], 
                 }
                 for (j, &c) in f[..n].iter().enumerate() {
                     let held = q.binary_search(&c).is_ok();
-                    shared.entry(key2(j + 1, c)).or_default()[usize::from(!held) + 2 * usize::from(!is_true)] += 1;
+                    bump(&mut shared.entry(key2(j + 1, c)).or_default()[usize::from(!held) + 2 * usize::from(!is_true)]);
                     if !is_true {
                         for &qt in &q {
                             if qt != c {
                                 if let Some(seen) = pair.get_mut(&key3(qt, j + 1, c)) {
-                                    seen[1] += 1;
+                                    bump(&mut seen[1]);
                                 }
                             }
                         }
@@ -627,11 +659,11 @@ pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], 
     let mut low = [[0u32; 4]; ASKS_FRAME];
     for (&key, n) in &shared {
         let (j, c) = ((key >> 16) as usize, (key & 0xFFFF) as i32);
-        if n.iter().sum::<u32>() >= SHARED_MIN {
+        if n.iter().fold(0u32, |sum, &count| sum.saturating_add(count)) >= SHARED_MIN {
             shared_rows.push([j as i32, c, odds(n[0], true_total, n[2], other_total), odds(n[1], true_total, n[3], other_total)]);
         } else {
-            for (sum, count) in low[j - 1].iter_mut().zip(n) {
-                *sum += count;
+            for (sum, &count) in low[j - 1].iter_mut().zip(n) {
+                *sum = sum.saturating_add(count);
             }
         }
     }
@@ -643,7 +675,7 @@ pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], 
             continue;
         }
         let base = shared.get(&(key & 0xFF_FFFF)).copied().unwrap_or_default();
-        let weight = odds(seen[0], u64::from(base[0] + base[1]) + 1, seen[1], u64::from(base[2] + base[3]) + 1);
+        let weight = odds(seen[0], u64::from(base[0]) + u64::from(base[1]) + 1, seen[1], u64::from(base[2]) + u64::from(base[3]) + 1);
         if weight.abs() >= PAIR_KEEP {
             pair_rows.push([(key >> 24) as i32, ((key >> 16) & 0xFF) as i32, (key & 0xFFFF) as i32, weight]);
         }
@@ -651,15 +683,15 @@ pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], 
     pair_rows.sort_unstable();
     let mut asking_rows: Vec<[i32; 2]> = asking
         .iter()
-        .filter(|(_, n)| n[0] + n[1] >= ASKING_MIN)
+        .filter(|(_, n)| n[0].saturating_add(n[1]) >= ASKING_MIN)
         .map(|(&t, n)| [t as i32, odds(n[0], asking_total[0], n[1], asking_total[1])])
         .collect();
     asking_rows.sort_unstable();
     let asking_prior = lg(asking_total[0] + 1) - lg(asking_total[1] + 1);
     let mut ranked: Vec<(&[u32], u32)> = forms.into_iter().collect();
     ranked.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
-    let said: u32 = ranked.iter().map(|(_, n)| n).sum();
-    let kept: Vec<Vec<u32>> = ranked.iter().filter(|(_, n)| n * FORM_SHARE >= said).map(|(form, _)| form.to_vec()).collect();
+    let said: u64 = ranked.iter().map(|&(_, n)| u64::from(n)).sum();
+    let kept: Vec<Vec<u32>> = ranked.iter().filter(|&&(_, n)| u64::from(n) * u64::from(FORM_SHARE) >= said).map(|(form, _)| form.to_vec()).collect();
     lines.push(format!(
         "asks-fit weights shared={} pairs={} asking={} asks_a_fact={} other={} not_told_replies={said} forms_kept={} top_forms={:?}",
         shared_rows.len(),
@@ -720,7 +752,7 @@ pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], 
         let Some(best) = scored.iter().map(|c| c.0).max() else { continue };
         for (hist, &margin) in picked.iter_mut().zip(&MARGINS) {
             // The latest candidate within the margin of the best, as the find takes it.
-            let right = scored.iter().rev().find(|c| c.0 >= best - margin).is_some_and(|c| c.1);
+            let right = scored.iter().rev().find(|c| c.0 >= best.saturating_sub(margin)).is_some_and(|c| c.1);
             hist[group][usize::from(!right)][0] += 1;
             hist[group][usize::from(!right)][bin(best) + 1] -= 1;
         }
@@ -775,8 +807,14 @@ mod tests {
     /// Documents that each state two keyed values in two user turns and then ask for one key:
     /// a stated one, an unstated one, or a general question. Returns the tokens and the places.
     fn corpus(docs: usize) -> (Vec<u32>, Vec<[u32; 4]>) {
+        corpus_from(0, docs)
+    }
+
+    /// The documents numbered `first..first + docs`. A document's keys, values and kind repeat
+    /// only every 420, so two ranges inside one period share no document.
+    fn corpus_from(first: usize, docs: usize) -> (Vec<u32>, Vec<[u32; 4]>) {
         let (mut x, mut places) = (Vec::new(), Vec::new());
-        for d in 0..docs {
+        for d in first..first + docs {
             let keys = [20 + (d % 5) as u32, 20 + ((d + 2) % 5) as u32];
             let values = [30 + (d % 7) as u32, 40 + (d % 3) as u32];
             x.push(BOS);
@@ -818,11 +856,92 @@ mod tests {
         let (asks, lines) = fit(&x, &marks(), VOCAB, &places, "test".to_owned()).expect("the fit");
         assert_eq!(asks.not_told, vec![NOT, TOLD, EOS], "{lines:#?}");
         let index = AsksIndex::new(&asks).expect("the index");
-        let (held, held_places) = corpus(60);
+        // Documents the fit never counted.
+        let (held, held_places) = corpus_from(240, 60);
         let (counts, missed) = census(&held, &marks(), &held_places, &index, &asks.forms, 4);
         assert_eq!(counts.recall, [30, 0, 0, 0], "{missed:#?} {lines:#?}");
         assert_eq!(counts.abstain, [0, 15, 0]);
         assert_eq!(counts.general, [0, 0, 15 + 120]);
+    }
+
+    #[test]
+    fn a_fit_writes_the_same_bytes_twice() {
+        let (x, places) = corpus(240);
+        let text = || serde_json::to_string(&fit(&x, &marks(), VOCAB, &places, "test".to_owned()).expect("the fit").0).expect("written");
+        assert_eq!(text(), text());
+    }
+
+    #[test]
+    fn a_fit_refuses_what_it_cannot_count() {
+        let (x, places) = corpus(240);
+        let refused = |vocab: u32, places: &[[u32; 4]]| fit(&x, &marks(), vocab, places, "test".to_owned()).is_err();
+        assert!(!refused(VOCAB, &places));
+        // A vocabulary whose tokens do not fit a key, a token past the vocabulary, a kit with no
+        // place, a place that starts no reply, a value before its reply.
+        assert!(refused(u32::from(u16::MAX), &places));
+        assert!(refused(u32::MAX, &places));
+        assert!(refused(30, &places));
+        assert!(refused(VOCAB, &[]));
+        let mut moved = places.clone();
+        moved[0][0] += 1;
+        assert!(refused(VOCAB, &moved));
+        let mut early = places.clone();
+        early[0][2] = early[0][0] - 1;
+        assert!(refused(VOCAB, &early));
+    }
+
+    #[test]
+    fn the_read_takes_any_table_and_any_range_without_a_wrap_or_a_panic() {
+        let (x, places) = corpus(240);
+        let (asks, _) = fit(&x, &marks(), VOCAB, &places, "test".to_owned()).expect("the fit");
+        // Weights at the type's top: the sums stop there.
+        let mut heavy = asks.clone();
+        heavy.unseen = vec![[i32::MAX; 2]; ASKS_FRAME];
+        heavy.shared.clear();
+        heavy.asking_prior = i32::MAX;
+        heavy.asking = vec![[SAYS as i32, i32::MAX], [WHAT as i32, i32::MAX]];
+        let index = AsksIndex::new(&heavy).expect("the index");
+        let case = ask_cases(&x, &marks()).into_iter().find(|c| !c.prior.is_empty()).expect("a reply with an earlier turn");
+        assert_eq!(index.asking(&question(&x, &case.asked)), i32::MAX);
+        assert!(matches!(index.find(&x, &case.prior, &case.asked), Asked::Place(..)));
+        // Ranges past the tokens, and one that runs backwards: no place is found and nothing is
+        // read past the end.
+        let index = AsksIndex::new(&asks).expect("the index");
+        assert!(!matches!(index.find(&x[..3], &[0..50], &(2..90)), Asked::Place(..)));
+        assert!(!matches!(index.find(&x[..3], &[0..5], &(3..1)), Asked::Place(..)));
+        assert_eq!(index.score(&x[..3], 0, 9, 4, &[]), None);
+        // A candidate place of the whole tokens is none when the tokens end just before it: the
+        // token before it is still a link token, and the place itself is not there to be read.
+        let q = question(&x, &case.asked);
+        let (turn, p) = case
+            .prior
+            .iter()
+            .flat_map(|turn| turn.clone().map(move |s| (turn.clone(), s)))
+            .find(|(turn, s)| index.score(&x, turn.start, turn.end, *s, &q).is_some())
+            .expect("a candidate place");
+        assert_eq!(index.score(&x[..p], turn.start, turn.end, p, &q), None, "a place one past the tokens");
+        // A vocabulary past the keys is refused, and a value past the vocabulary opens nothing.
+        let mut wide = asks.clone();
+        wide.vocab = u32::from(u16::MAX);
+        assert!(AsksIndex::new(&wide).is_err());
+        let mut pair = asks;
+        pair.opens = vec![[1, 7, 1]];
+        let index = AsksIndex::new(&pair).expect("the index");
+        assert_eq!(index.opens(1, 7), Some(true));
+        assert_eq!(index.opens(0, (1 << 16) + 7), None);
+    }
+
+    #[test]
+    fn the_census_reads_a_kit_whose_place_lies_past_the_tokens() {
+        let (x, places) = corpus(240);
+        let (asks, _) = fit(&x, &marks(), VOCAB, &places, "test".to_owned()).expect("the fit");
+        let index = AsksIndex::new(&asks).expect("the index");
+        let (held, mut held_places) = corpus_from(240, 60);
+        held_places[0][1] = held.len() as u32 + 9;
+        let (counts, missed) = census(&held, &marks(), &held_places, &index, &asks.forms, 4);
+        assert_eq!(counts.recall.iter().sum::<usize>(), 30);
+        assert_eq!(counts.recall[0], 29, "{missed:#?}");
+        assert!(missed.iter().any(|line| line.contains("stated=[]")), "{missed:#?}");
     }
 
     #[test]
