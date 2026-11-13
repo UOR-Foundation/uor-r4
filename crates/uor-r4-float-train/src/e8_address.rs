@@ -290,23 +290,7 @@ impl AddressMemory {
                 wall: None,
             },
         };
-        // Block b's cell c is row b × cells + c. Whole numbers below 2^24 are exact in f32.
-        let offsets: Vec<f32> = (0..entries)
-            .map(|entry| ((entry % blocks) * cells) as f32)
-            .collect();
-        let offsets = Tensor::from_vec(offsets, entries, device)?;
-        // The index is cut from the graph. candle gives an op to anything computed from a tensor
-        // that has one, the gradient's own `index_add` included: an index that kept the decode's
-        // history gave the rows' gradient the whole forward pass to hold, and the optimizer's
-        // running means then held every step's forward pass for the rest of the run.
-        let index = address
-            .cell
-            .add(&offsets)?
-            .to_dtype(DType::U32)?
-            .detach();
-        let read = table
-            .index_select(&index, 0)?
-            .reshape((positions, blocks, width))?;
+        let read = read_rows(table, &address.cell, positions, blocks, cells)?;
         let mut added = read.sum(1)?;
         let mut in_band = None;
         if let (Some(wall), true) = (&address.wall, self.band > 0.0) {
@@ -327,14 +311,7 @@ impl AddressMemory {
                 .relu()?;
             // λ − λ̄ is exactly 0 forward, and its gradient is λ's.
             let live = credit.sub(&credit.detach())?;
-            let across = wall
-                .across
-                .add(&offsets)?
-                .to_dtype(DType::U32)?
-                .detach();
-            let swing = table
-                .index_select(&across, 0)?
-                .reshape((positions, blocks, width))?
+            let swing = read_rows(table, &wall.across, positions, blocks, cells)?
                 .sub(&read)?
                 .detach();
             added = added.add(&swing.broadcast_mul(&live.unsqueeze(2)?)?.sum(1)?)?;
@@ -349,9 +326,18 @@ impl AddressMemory {
                     .to_scalar::<f32>()? as usize,
                 None => 0,
             };
+            // Block b's cell c is row b × cells + c. Whole numbers below 2^24 are exact in f32.
+            let offsets: Vec<f32> = (0..entries)
+                .map(|entry| ((entry % blocks) * cells) as f32)
+                .collect();
+            let offsets = Tensor::from_vec(offsets, entries, device)?;
             let reading = Reading {
                 layer,
-                index: index.to_vec1::<u32>()?,
+                index: address
+                    .cell
+                    .add(&offsets)?
+                    .to_dtype(DType::U32)?
+                    .to_vec1::<u32>()?,
                 in_band,
             };
             CAPTURE.with(|cell| {
@@ -771,6 +757,43 @@ fn sign_address(blocks: &Tensor) -> Result<Address> {
         cell,
         wall: Some(Wall { across, distance }),
     })
+}
+
+/// `(positions, blocks, width)`: block b of position p reads row `cell[p × blocks + b]` of block
+/// b's own `cells` rows; in the flat table that is row `b × cells + c`.
+///
+/// The table is read as `(blocks, cells, width)` and gathered along its cells. candle's kernels
+/// for the gradient of an indexed read run one serial loop over the indexed dimension for every
+/// element of the others. Indexed flat by row, that was `width` loops over every block entry of
+/// the batch, and a training step took four times as long as without the memory (measured 13 Nov
+/// 2026). Gathered a block, it is `blocks × width` loops over the positions, summed in the same
+/// order.
+///
+/// The index is cut from the graph: it never takes a gradient. Read flat with `index_select`, an
+/// index that kept the decode's history gave the rows' gradient an op (candle's `index_add` takes
+/// one from its index), and the optimizer's running means then held every step's forward pass for
+/// the rest of the run: the first training run ran out of GPU memory in a few steps. The gathered
+/// read's scatter takes no op from its index; the cut stays so that no path of that shape returns.
+fn read_rows(
+    table: &Tensor,
+    cell: &Tensor,
+    positions: usize,
+    blocks: usize,
+    cells: usize,
+) -> Result<Tensor> {
+    let width = table.dim(1)?;
+    let index = cell
+        .reshape((positions, blocks))?
+        .transpose(0, 1)?
+        .to_dtype(DType::U32)?
+        .detach()
+        .unsqueeze(2)?
+        .broadcast_as((blocks, positions, width))?
+        .contiguous()?;
+    Ok(table
+        .reshape((blocks, cells, width))?
+        .gather(&index, 1)?
+        .transpose(0, 1)?)
 }
 
 /// `(positions × blocks)`: each block's cell under [`AddressArm::Token`], a hash of the seed, the
