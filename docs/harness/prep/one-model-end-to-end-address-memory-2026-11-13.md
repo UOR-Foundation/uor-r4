@@ -182,4 +182,19 @@ None of these changes what the run does or how Question 1's result is called: th
 
 A fourth fresh reviewer (claude, fresh context) read the Readings, Bars and outcome sections and the last delta: every outcome gets one word and one next step that conflicts with no other, and the third read's points are taken. Its one optional note is taken too: a later run carries the address memory on "adds" until seed 1 says otherwise.
 
-TEST FITNESS: FIT - research, #3407, a fresh non-author read at 781f20a6, after three reads FIT WITH CHANGES with every finding taken (claude-346)
+### Fifth read, of the 13 Nov amendment and its code, at `9bd036446f355b1d87093c9836160c202809e75e`: FIT
+
+A fifth fresh reviewer (claude, fresh context, 13 Nov 2026) read the code change from the old pin to `f941a33fd1a4eea751705d1cd6021af35452a4b7` in `e8_address.rs` and `flock_read.rs`, and this sheet's amendment. It read code only and ran nothing. Its five checks all passed:
+
+1. **The read picks the same rows.** Block `b`'s cell `c` is still row `b × cells + c`, for every arm, the one-cell collapse arm included.
+2. **The gradient is the same.** Each row receives the same contributions in the same order of positions as before; no gradient ever went through the index, before or after.
+3. **The GPU layouts are ones the kernels accept.**
+4. **The census counts the same row index as before.**
+5. **The amendment changes no question, arm, reading or bar**, and nothing in the code contradicts that.
+
+Its two notes, both low:
+
+- The new history test has one block, so it does not itself read through more than one block. The exact-value read and gradient tests do: they run at two blocks and six positions, and passed on pod a with the rest (54 passed, 0 failed, log `fix2-try-1.log` in the memory-check record). Both smokes also trained at the run's 32 blocks.
+- It asked that the optimizer's test be shown to fail with its fix set aside. It was, on pod a: that test FAILED with the fix set aside and passed with it in place (same log).
+
+TEST FITNESS: FIT - research, #3407, a fresh non-author read at 9bd03644 of the 13 Nov instrument repair, after four earlier reads with every finding taken (claude-346)
