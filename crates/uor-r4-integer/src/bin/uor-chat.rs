@@ -1054,6 +1054,7 @@ fn pair_verdict_name(verdict: Verdict) -> &'static str {
         Verdict::Checked(Check::Stands { .. }) => "stands",
         Verdict::Checked(Check::Unsure { .. }) => "unsure",
         Verdict::Checked(Check::Replaced { .. }) => "replaced",
+        Verdict::NoRoom => "noroom",
     }
 }
 
@@ -1569,6 +1570,7 @@ mod tests {
             (Verdict::Checked(Check::Stands { vote: 9, top: 9 }), "stands"),
             (Verdict::Checked(Check::Unsure { vote: 1, top: 3 }), "unsure"),
             (Verdict::Checked(Check::Replaced { reply: 2, vote: 0, top: 5 }), "replaced"),
+            (Verdict::NoRoom, "noroom"),
         ];
         for (verdict, name) in names {
             assert_eq!(pair_verdict_name(verdict), name, "{verdict:?}");

@@ -327,7 +327,7 @@ impl<'m> StackChat<'m> {
     }
 
     /// The pair experts' verdict on the reply produced last ([`Self::set_pair_experts`]); `None`
-    /// with the check off, or when the last serve failed.
+    /// with the check off, or when the model's serve failed before the check.
     pub fn pair_verdict(&self) -> Option<Verdict> {
         self.pair_verdict
     }
@@ -463,12 +463,19 @@ impl<'m> StackChat<'m> {
                 _ => &reply.ids[..],
             };
             let verdict = check.table.check_prompt(Some(check.asks), check.marks, history, words, check.setting);
-            self.pair_verdict = Some(verdict);
+            let replaced = matches!(verdict, Verdict::Checked(Check::Replaced { .. }));
+            // The experts' reply is given only when it and the end mark fit in the tokens the
+            // caller asked for, which the context holds by the serve's own guard. Otherwise the
+            // model's reply stands and the verdict says there was no room.
             let given = match verdict {
                 Verdict::Checked(Check::Replaced { reply: r, .. }) => check.table.reply(r),
                 _ => None,
-            };
+            }
+            .filter(|words| words.len() < max_new_tokens);
+            self.pair_verdict = Some(if replaced && given.is_none() { Verdict::NoRoom } else { verdict });
             if let Some(words) = given {
+                // The reply given is the table's, not one the model served again.
+                self.served_again = false;
                 let mut ids = words.to_vec();
                 ids.push(eos);
                 let decoded = self.tokenizer.decode(words);

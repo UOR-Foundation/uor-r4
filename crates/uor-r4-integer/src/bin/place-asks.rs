@@ -327,6 +327,7 @@ fn verdict_name(verdict: Verdict) -> &'static str {
         Verdict::Checked(Check::Stands { .. }) => "stands",
         Verdict::Checked(Check::Unsure { .. }) => "unsure",
         Verdict::Checked(Check::Replaced { .. }) => "replaced",
+        Verdict::NoRoom => "noroom",
     }
 }
 
@@ -419,7 +420,7 @@ fn replay(table: &PairExperts, asks: Option<&AsksIndex>, marks: &PlaceMarks, pro
                     Verdict::NoTurn => tally.noturn += 1,
                     Verdict::LeftAlone => tally.alone += 1,
                     Verdict::Checked(Check::NoExpert) => tally.noexpert += 1,
-                    Verdict::Checked(Check::Stands { .. }) => tally.stands += 1,
+                    Verdict::Checked(Check::Stands { .. }) | Verdict::NoRoom => tally.stands += 1,
                     Verdict::Checked(Check::Unsure { .. }) => tally.unsure += 1,
                     Verdict::Checked(Check::Replaced { .. }) => tally.replaced += 1,
                 }

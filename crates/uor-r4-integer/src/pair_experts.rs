@@ -340,8 +340,8 @@ impl PairExperts {
     /// The experts' votes for a turn. With `hold_out`, the exact turn's own counts are taken
     /// out of every total and count first. A pair is an expert when what is left of its total
     /// is at least 1 and at most `cap`: the cap is read after the hold-out. A count is never
-    /// read as more than what is left of its expert's total, so one expert gives at most one
-    /// whole vote whatever a file holds.
+    /// read as more than what is left of its expert's total, so one expert gives any one reply
+    /// at most one whole vote whatever a file holds.
     pub fn votes(&self, turn: &[u32], hold_out: bool, cap: u32) -> Votes {
         let own: &[Count] = if hold_out {
             self.turns
@@ -769,6 +769,10 @@ pub enum Verdict {
     LeftAlone,
     /// The experts' check of the reply against the turn.
     Checked(Check),
+    /// The experts hold another reply and it does not fit in the tokens the caller asked for:
+    /// the reply stands. Only a caller that gives replies sets this; [`PairExperts::check_prompt`]
+    /// never does.
+    NoRoom,
 }
 
 /// The user turn a prompt asks the model to answer: its content and the finished user turns
@@ -1192,7 +1196,7 @@ mod tests {
     }
 
     #[test]
-    fn one_expert_never_gives_more_than_one_whole_vote_whatever_a_file_holds() {
+    fn one_expert_never_gives_one_reply_more_than_one_whole_vote_whatever_a_file_holds() {
         // A table no count could give: the turn {0, 1} was seen with B almost 2^32 times, while
         // its one expert, 6, holds A almost 2^32 times and B once.
         let mut t = table(&[occ(&[0, 1], A), occ(&[0, 1], B)]);

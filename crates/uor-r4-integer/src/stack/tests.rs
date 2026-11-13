@@ -9039,6 +9039,35 @@ fn stack_chat_pair_experts_leave_a_told_or_repeat_ask_alone() -> ChatTest {
     Ok(())
 }
 
+/// claude-367: the experts' reply is given only when it and the end mark fit in the tokens the
+/// caller asked for. At two tokens the reply `44 45` and its end mark do not: the model's own
+/// reply stands id for id, the history is the plain chat's, and the verdict says there was no
+/// room. At three tokens it fits and is given.
+#[test]
+fn stack_chat_pair_experts_reply_that_does_not_fit_is_not_given() -> ChatTest {
+    let (_, placed, place) = place_trunk();
+    let mut model = IntegerStackModel::parse(&placed)?;
+    model.set_place_asks(&place_asks(&place, 30), true).expect("the asks are set");
+    let json = merged_tokenizer_json(model.shape().vocab);
+    let history = pair_untold();
+    let mut plain = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    let (want, want_emitted) = pair_reply(&mut plain, &history, 2)?;
+    let mut chat = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    chat.set_pair_experts(Some(pair_experts(&[&[20, 22]])))?;
+    let (got, emitted) = pair_reply(&mut chat, &history, 2)?;
+    assert_eq!(chat.pair_verdict(), Some(crate::pair_experts::Verdict::NoRoom));
+    assert_eq!((got.ids, emitted), (want.ids, want_emitted));
+    assert_eq!(chat.tokens(), plain.tokens());
+
+    let mut roomy = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    roomy.set_pair_experts(Some(pair_experts(&[&[20, 22]])))?;
+    let eos = roomy.protocol().eos_id;
+    let (given, emitted) = pair_reply(&mut roomy, &history, 3)?;
+    assert_eq!(given.ids, [44, 45, eos]);
+    assert_eq!(emitted, [44, 45, eos]);
+    Ok(())
+}
+
 /// claude-367: a model with no counted table refuses the pair experts, and the refusal changes
 /// nothing: the chat serves and emits the plain chat's reply with no verdict.
 #[test]
