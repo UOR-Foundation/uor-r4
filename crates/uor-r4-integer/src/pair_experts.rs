@@ -176,7 +176,7 @@ pub struct PairExperts {
     experts: Vec<Expert>,
 }
 
-/// The first `vocab` primes, refused when the two largest multiply past 32 bits.
+/// The first `vocab` primes, refused when the two largest multiply to 2^31 or more.
 fn primes(vocab: u32) -> Result<Vec<u32>, String> {
     if vocab < 2 {
         return Err(format!("a vocabulary of {vocab} tokens holds no pair"));
@@ -190,9 +190,9 @@ fn primes(vocab: u32) -> Result<Vec<u32>, String> {
             .all(|p| n % p != 0);
         if prime {
             if let Some(last) = primes.last() {
-                if u64::from(*last) * u64::from(n) > u64::from(u32::MAX) {
+                if u64::from(*last) * u64::from(n) >= 1 << 31 {
                     return Err(format!(
-                        "a vocabulary of {vocab} tokens: the address of its two last tokens is past 32 bits"
+                        "a vocabulary of {vocab} tokens: the address of its two last tokens is past 31 bits"
                     ));
                 }
             }
@@ -339,7 +339,9 @@ impl PairExperts {
 
     /// The experts' votes for a turn. With `hold_out`, the exact turn's own counts are taken
     /// out of every total and count first. A pair is an expert when what is left of its total
-    /// is at least 1 and at most `cap`.
+    /// is at least 1 and at most `cap`: the cap is read after the hold-out. A count is never
+    /// read as more than what is left of its expert's total, so one expert gives at most one
+    /// whole vote whatever a file holds.
     pub fn votes(&self, turn: &[u32], hold_out: bool, cap: u32) -> Votes {
         let own: &[Count] = if hold_out {
             self.turns
@@ -365,9 +367,10 @@ impl PairExperts {
                 let mine = own
                     .binary_search_by_key(&held.reply, |c| c.reply)
                     .map_or(0, |i| own[i].count);
-                let c = u64::from(held.count.saturating_sub(mine));
+                let c = u64::from(held.count.saturating_sub(mine)).min(t);
                 if c > 0 {
-                    *scores.entry(held.reply).or_insert(0) += (c << VOTE_SHIFT) / t;
+                    let score = scores.entry(held.reply).or_insert(0);
+                    *score = score.saturating_add((c << VOTE_SHIFT) / t);
                 }
             }
         }
@@ -554,7 +557,9 @@ impl PairExperts {
         out
     }
 
-    /// The table a file holds, refused unless every rule of the counted form holds again.
+    /// The table a file holds, refused unless its header, its lengths, the order of every list
+    /// and the body's sum hold. Whether the counts agree with each other (a turn's counts inside
+    /// its pairs' counts) is not checked here; [`Self::votes`] bounds what such a file can do.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, String> {
         if bytes.len() < HEADER || &bytes[..8] != MAGIC {
             return Err("not a pair experts file".to_owned());
@@ -1055,13 +1060,14 @@ mod tests {
         assert_eq!(experts.address(2, 7), Some(5 * 19));
         assert_eq!(experts.address(1, 1), None);
         assert_eq!(experts.address(0, 8), None);
-        // The 6543rd prime is 65_537 and the 6544th is 65_539: 65_521 * 65_537 fits 32 bits and
-        // 65_537 * 65_539 does not.
-        let widest = PairExperts::count(6_543, TAG, &[]).unwrap();
-        assert_eq!(widest.address(6_541, 6_542), Some(65_521 * 65_537));
-        assert!(PairExperts::count(6_544, TAG, &[])
+        // The 4792nd prime is 46_337 and the 4793rd is 46_349: 46_327 * 46_337 is under 2^31 and
+        // 46_337 * 46_349 is not.
+        let widest = PairExperts::count(4_792, TAG, &[]).unwrap();
+        assert_eq!(widest.address(4_790, 4_791), Some(46_327 * 46_337));
+        assert!(46_327u64 * 46_337 < 1 << 31 && 46_337u64 * 46_349 >= 1 << 31);
+        assert!(PairExperts::count(4_793, TAG, &[])
             .unwrap_err()
-            .contains("past 32 bits"));
+            .contains("past 31 bits"));
         assert!(PairExperts::count(8, TAG, &[occ(&[0, 8], A)])
             .unwrap_err()
             .contains("outside the vocabulary"));
@@ -1147,6 +1153,66 @@ mod tests {
         assert!(PairExperts::from_bytes(&turns)
             .unwrap_err()
             .contains("turns are not strictly increasing"));
+        // The first reply [5] made [8]: a token outside the vocabulary of 8.
+        let mut token = bytes.clone();
+        put(&mut token, HEADER + 4, 8);
+        reseal(&mut token);
+        assert!(PairExperts::from_bytes(&token)
+            .unwrap_err()
+            .contains("token 8, outside the vocabulary of 8"));
+        // The first reply's length made 0.
+        let mut empty = bytes.clone();
+        put(&mut empty, HEADER, 0);
+        reseal(&mut empty);
+        assert!(PairExperts::from_bytes(&empty)
+            .unwrap_err()
+            .contains("an empty reply or turn"));
+        // The first expert's counts are (reply 0, 2) (reply 1, 1): a count of 0, then the second
+        // reply index made 0 again.
+        let mut zero = bytes.clone();
+        put(&mut zero, experts_at + 16, 0);
+        reseal(&mut zero);
+        assert!(PairExperts::from_bytes(&zero)
+            .unwrap_err()
+            .contains("a count of 0"));
+        let mut order = bytes.clone();
+        put(&mut order, experts_at + 20, 0);
+        reseal(&mut order);
+        assert!(PairExperts::from_bytes(&order)
+            .unwrap_err()
+            .contains("reply indices are not strictly increasing"));
+        // One word moved in the header from the turns' tokens to the replies': the body is as
+        // long as the header says and no section is.
+        let mut moved = bytes.clone();
+        put(&mut moved, 20, word(&bytes, 20) + 1);
+        put(&mut moved, 28, word(&bytes, 28) - 1);
+        assert!(PairExperts::from_bytes(&moved)
+            .unwrap_err()
+            .contains("are not the lengths the header names"));
+    }
+
+    #[test]
+    fn one_expert_never_gives_more_than_one_whole_vote_whatever_a_file_holds() {
+        // A table no count could give: the turn {0, 1} was seen with B almost 2^32 times, while
+        // its one expert, 6, holds A almost 2^32 times and B once.
+        let mut t = table(&[occ(&[0, 1], A), occ(&[0, 1], B)]);
+        let big = u32::MAX - 1;
+        t.turns[0].counts = vec![Count {
+            reply: 1,
+            count: big,
+        }];
+        t.experts[0].total = u32::MAX;
+        t.experts[0].counts = vec![
+            Count {
+                reply: 0,
+                count: big,
+            },
+            Count { reply: 1, count: 1 },
+        ];
+        // Held out, 1 is left of the expert's total: A's count is read as that 1.
+        let votes = t.votes(&[0, 1], true, u32::MAX);
+        assert_eq!(votes.experts, 1);
+        assert_eq!(votes.scores, scores(&[[0, 1 << 20]]));
     }
 
     #[test]
@@ -1187,6 +1253,23 @@ mod tests {
             Check::Stands { vote: top, top }
         );
         assert_eq!(t.check_setting(&[4, 5], B, at(u32::MAX)), Check::NoExpert);
+        // A top vote equal to the floor answers: the turn {2, 3} has one expert, which saw only A.
+        let whole = 1u64 << 20;
+        assert_eq!(
+            t.check_setting(&[2, 3], B, at(1000)),
+            Check::Replaced {
+                reply: 0,
+                vote: 0,
+                top: whole
+            }
+        );
+        assert_eq!(
+            t.check_setting(&[2, 3], B, at(1001)),
+            Check::Unsure {
+                vote: 0,
+                top: whole
+            }
+        );
     }
 
     const BOS: u32 = 100;

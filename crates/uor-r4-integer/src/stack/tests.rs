@@ -8976,6 +8976,11 @@ fn stack_chat_pair_experts_replace_a_reply_their_turn_holds_another_for() -> Cha
     assert_ne!(served.ids, [44, 45, eos], "the model's own reply is another");
 
     let mut chat = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    // Experts counted on another vocabulary than the model's 512 tokens are refused.
+    let (_, setting) = pair_experts(&[&[20, 22]]);
+    let other = crate::pair_experts::PairExperts::count(513, [0; 32], &[]).expect("the experts are counted");
+    let err = chat.set_pair_experts(Some((other, setting))).unwrap_err();
+    assert!(err.contains("a vocabulary of 513 tokens; the model's is 512"), "{err}");
     chat.set_pair_experts(Some(pair_experts(&[&[20, 22]])))?;
     let (given, emitted) = pair_reply(&mut chat, &history, 4)?;
     assert!(matches!(chat.pair_verdict(), Some(crate::pair_experts::Verdict::Checked(crate::pair_experts::Check::Replaced { reply: 0, .. }))), "{:?}", chat.pair_verdict());

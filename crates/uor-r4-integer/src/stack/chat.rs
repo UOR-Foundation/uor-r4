@@ -310,6 +310,13 @@ impl<'m> StackChat<'m> {
             .model
             .place_asks_index()
             .ok_or("the model has no counted table to read the turns the pair experts check")?;
+        let vocab = self.model.shape().vocab;
+        if table.vocab() as usize != vocab {
+            return Err(format!(
+                "the pair experts were counted on a vocabulary of {} tokens; the model's is {vocab}",
+                table.vocab()
+            ));
+        }
         self.pair_check = Some(PairCheck {
             table,
             setting,

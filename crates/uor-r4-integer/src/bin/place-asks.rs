@@ -295,8 +295,12 @@ fn parse_row(line: &str, n: usize) -> Result<Row, String> {
 /// Every row names a prompt, and where the prompt opens a model turn its last user turn is the
 /// row's turn column: the first row that breaks either is refused.
 fn check_rows(rows: &[Row], prompts: &[Vec<u32>], marks: &PlaceMarks) -> Result<(), String> {
+    let mut named = std::collections::BTreeSet::new();
     for (n, row) in rows.iter().enumerate() {
         let prompt = prompts.get(row.i).ok_or_else(|| format!("rows line {}: prompt {} of {}", n + 1, row.i, prompts.len()))?;
+        if !named.insert(row.i) {
+            return Err(format!("rows line {}: prompt {} is named twice", n + 1, row.i));
+        }
         if let Some((asked, _)) = asked_turn(prompt, marks) {
             if prompt[asked] != row.turn[..] {
                 return Err(format!("rows line {} (prompt {}): the turn column is not the prompt's last user turn", n + 1, row.i));
@@ -411,13 +415,13 @@ fn replay(table: &PairExperts, asks: Option<&AsksIndex>, marks: &PlaceMarks, pro
                 tally.good_after += usize::from(after);
                 tally.newly_good += usize::from(after && !before);
                 tally.lost += usize::from(before && !after);
-                match verdict_name(verdict) {
-                    "noturn" => tally.noturn += 1,
-                    "alone" => tally.alone += 1,
-                    "noexpert" => tally.noexpert += 1,
-                    "stands" => tally.stands += 1,
-                    "unsure" => tally.unsure += 1,
-                    _ => tally.replaced += 1,
+                match verdict {
+                    Verdict::NoTurn => tally.noturn += 1,
+                    Verdict::LeftAlone => tally.alone += 1,
+                    Verdict::Checked(Check::NoExpert) => tally.noexpert += 1,
+                    Verdict::Checked(Check::Stands { .. }) => tally.stands += 1,
+                    Verdict::Checked(Check::Unsure { .. }) => tally.unsure += 1,
+                    Verdict::Checked(Check::Replaced { .. }) => tally.replaced += 1,
                 }
             }
             Kind::Recall => tally.recall_replaced += usize::from(replaced),
@@ -457,8 +461,8 @@ fn grid(args: &[String]) -> Result<(Vec<u32>, Vec<Ratio>, Vec<u32>, bool), Strin
         .map(|keep| {
             let (num, den) = keep.split_once('/').ok_or_else(|| format!("--keeps {keep}: NUM/DEN"))?;
             match (num.parse(), den.parse()) {
-                (Ok(num), Ok(den)) if den > 0 => Ok(Ratio { num, den }),
-                _ => Err(format!("--keeps {keep}: NUM/DEN with DEN at least 1")),
+                (Ok(num), Ok(den)) if den > 0 && num <= den => Ok(Ratio { num, den }),
+                _ => Err(format!("--keeps {keep}: NUM/DEN with DEN at least 1 and NUM at most DEN")),
             }
         })
         .collect::<Result<Vec<Ratio>, String>>()?;
@@ -873,9 +877,10 @@ mod tests {
         PairExperts::count(16, [3; 32], &occurrences).expect("count")
     }
 
-    /// Prompt 0 asks turn [6, 7, 8]; prompt 1 opens no model turn.
+    /// Prompts 0, 2, 3 and 4 ask turn [6, 7, 8]; prompt 1 opens no model turn.
     fn replay_prompts() -> Vec<Vec<u32>> {
-        vec![vec![0, 4, 6, 7, 8, 2, 5], vec![0, 4, 6, 7]]
+        let ask = vec![0, 4, 6, 7, 8, 2, 5];
+        vec![ask.clone(), vec![0, 4, 6, 7], ask.clone(), ask.clone(), ask]
     }
 
     fn rows(lines: &[&str]) -> Vec<Row> {
@@ -889,10 +894,10 @@ mod tests {
         let (table, m, prompts) = (replay_table(), chat_marks(), replay_prompts());
         let rows = rows(&[
             "0\tgeneral\t6 7 8\t11\t1\t13", // replaced by [9], which the turn holds
-            "0\tgeneral\t6 7 8\t9\t1\t9",   // good, and stands
+            "2\tgeneral\t6 7 8\t9\t1\t9",   // good, and stands
             "1\tgeneral\t6 7\t10\t1\t10",   // no model turn: left as it is, good
-            "0\trecall\t6 7 8\t11\t0\t12",  // replaced
-            "0\tnevertold\t6 7 8\t9\t1\t9", // stands
+            "3\trecall\t6 7 8\t11\t0\t12",  // replaced
+            "4\tnevertold\t6 7 8\t9\t1\t9", // stands
         ]);
         assert_eq!(check_rows(&rows, &prompts, &m), Ok(()));
         let (tally, outcomes) = replay(&table, None, &m, &prompts, &rows, KEEP_HALF);
@@ -928,7 +933,9 @@ mod tests {
         let (m, prompts) = (chat_marks(), replay_prompts());
         let refused = check_rows(&rows(&["1\tgeneral\t6 7\t10\t1\t10", "0\tgeneral\t6 7\t9\t1\t9", "0\tgeneral\t6 8\t9\t1\t9"]), &prompts, &m).expect_err("refused");
         assert!(refused.contains("rows line 2 (prompt 0)"), "{refused}");
-        assert!(check_rows(&rows(&["2\tgeneral\t6 7\t10\t1\t10"]), &prompts, &m).is_err());
+        assert!(check_rows(&rows(&["5\tgeneral\t6 7\t10\t1\t10"]), &prompts, &m).is_err());
+        let twice = check_rows(&rows(&["0\tgeneral\t6 7 8\t9\t1\t9", "0\tgeneral\t6 7 8\t9\t1\t9"]), &prompts, &m).expect_err("refused");
+        assert!(twice.contains("rows line 2: prompt 0 is named twice"), "{twice}");
         for bad in ["0\tgeneral\t6 7 8\t9\t1", "0\tother\t6 7 8\t9\t1\t9", "0\tgeneral\t6 7 8\t9\t2\t9", "0\tgeneral\t6 x\t9\t1\t9", "x\tgeneral\t6\t9\t1\t9"] {
             assert!(parse_row(bad, 1).is_err(), "{bad}");
         }

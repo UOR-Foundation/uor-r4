@@ -989,8 +989,8 @@ fn parse_pair_flag(args: &mut CliArgs, flag: &str, value: Option<&str>) -> std::
             let keep = value
                 .and_then(|text| text.split_once('/'))
                 .and_then(|(num, den)| Some(Ratio { num: num.parse().ok()?, den: den.parse().ok()? }))
-                .filter(|keep| keep.den >= 1)
-                .ok_or("'--pair-keep' takes NUM/DEN: two whole numbers, DEN at least 1")?;
+                .filter(|keep| keep.den >= 1 && keep.num <= keep.den)
+                .ok_or("'--pair-keep' takes NUM/DEN: two whole numbers, DEN at least 1 and NUM at most DEN")?;
             args.pair_keep = Some(keep);
         }
         "--pair-hold-out" => {
@@ -1546,7 +1546,7 @@ mod tests {
 
         let zero_den = pair_args(true, true, &[("--pair-keep", "1/0")]).err().expect("DEN 0 is refused");
         assert!(zero_den.starts_with("'--pair-keep' takes NUM/DEN"), "{zero_den}");
-        for bad in ["1", "1/x", "-1/2", "1/2/3"] {
+        for bad in ["1", "1/x", "-1/2", "1/2/3", "3/2"] {
             let error = pair_args(true, true, &[("--pair-keep", bad)]).err().expect("a malformed share is refused");
             assert!(error.starts_with("'--pair-keep' takes NUM/DEN"), "{bad}: {error}");
         }
@@ -2258,12 +2258,15 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
         }
     }
     // The asks (claude-359): a fitted table the place read is served from, set only here.
+    // The vocabulary and the tokens the asks were counted on: the pair experts must name the same.
+    let mut asks_counted_on: Option<(u32, String)> = None;
     match (cli.place_asks.as_deref(), cli.place_speak) {
         (Some(path), speak) => {
             let asks: uor_r4_integer::place_asks::PlaceAsks = std::fs::read_to_string(path)
                 .map_err(|e| e.to_string())
                 .and_then(|text| serde_json::from_str(&text).map_err(|e| e.to_string()))
                 .map_err(|e| StackCliError::Usage(format!("--place-asks {}: {e}", path.display())))?;
+            asks_counted_on = Some((asks.vocab, asks.tokens_sha256.clone()));
             let speak = speak.unwrap_or(true);
             model
                 .set_place_asks(&asks, speak)
@@ -2362,6 +2365,15 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
                     model.shape().vocab
                 )));
             }
+            // The experts and the asks are counted on one corpus: the same vocabulary and tokens.
+            let (asks_vocab, asks_tokens) = asks_counted_on
+                .as_ref()
+                .ok_or_else(|| refused("needs --place-asks".into()))?;
+            let tag = hex::decode(asks_tokens)
+                .ok()
+                .and_then(|bytes| <[u8; 32]>::try_from(bytes).ok())
+                .ok_or_else(|| refused(format!("the asks name their tokens as {asks_tokens}, not a SHA-256")))?;
+            table.expect(*asks_vocab, &tag).map_err(refused)?;
             let (Some(cap), Some(keep), Some(floor)) = (cli.pair_cap, cli.pair_keep, cli.pair_floor) else {
                 return Err(refused("needs --pair-cap, --pair-keep and --pair-floor".into()));
             };
