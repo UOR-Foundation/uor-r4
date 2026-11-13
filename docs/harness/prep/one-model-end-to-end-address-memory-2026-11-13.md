@@ -85,7 +85,7 @@ Question 2 has no bar. Its rows below choose the next run's recipe; they are not
 | Q2, R4: the two are less than 1 point apart | With Question 1 at "no move" or "not called", the run R5 chose goes without it. If o-e8's last train loss is also below o-b's by 0.5 or more, the REPORT says the rows memorise 3.8 million tokens. |
 | Q2, R4: o-e8 is below o-b by 1 point or more | With Question 1 at "no move" or "not called", the run R5 chose goes without it, and the row step is the next arm on real text. |
 
-Who decides whether a later run carries the address memory: Question 1's word, when it is "adds" (the run carries it) or "hurts" (it does not). R4 decides only otherwise, and under 1 point apart the run goes without it.
+Who decides whether a later run carries the address memory: Question 1's word, when it is "adds" (the run carries it, until seed 1 says otherwise) or "hurts" (it does not). R4 decides only otherwise, and under 1 point apart the run goes without it.
 
 **Prediction, written before the run** (a calibration record, not a bar): `M` between −10 and +50; e8-s2's train loss below b-s2's by 0.1 or more; `token-s2 − b-s2` within ±20; o-e8's R4 above o-b's by 1 to 6 points; neither o job writes sentences a person would call a reply.
 
@@ -170,4 +170,8 @@ A third fresh reviewer (claude, fresh context) read the delta. It found findings
 
 None of these changes what the run does or how Question 1's result is called: they are all in the rows that choose the next run.
 
-TEST FITNESS: PENDING - research, #3407, three reads FIT WITH CHANGES, every finding taken; the third reader's word on its own fixes is awaited (claude-346)
+### Fourth read, of the third read's changes, at `781f20a6df5f16f9dd905accef93c0efdde14b4a`: FIT
+
+A fourth fresh reviewer (claude, fresh context) read the Readings, Bars and outcome sections and the last delta: every outcome gets one word and one next step that conflicts with no other, and the third read's points are taken. Its one optional note is taken too: a later run carries the address memory on "adds" until seed 1 says otherwise.
+
+TEST FITNESS: FIT - research, #3407, a fresh non-author read at 781f20a6, after three reads FIT WITH CHANGES with every finding taken (claude-346)
