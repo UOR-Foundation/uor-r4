@@ -19,7 +19,7 @@ use uor_r4_integer::generation::Stop;
 use uor_r4_integer::loopback::{serve_loopback, LoopbackConfig};
 use uor_r4_integer::model::{IntegerModel, IntegerSession, IntegerStep};
 use uor_r4_integer::openai::OpenAiServing;
-use uor_r4_integer::pair_experts::{Check, PairExperts, Ratio, Setting, Verdict, Weigh};
+use uor_r4_integer::pair_experts::{Check, PairExperts, Ratio, Setting, Verdict};
 use uor_r4_integer::sampling::SamplePolicy;
 use uor_r4_integer::stack::{
     is_dialogue_query, recall_from_dialogue, ContentReadout, CopyRule, IntegerStackModel,
@@ -82,11 +82,6 @@ struct CliArgs {
     pair_floor: Option<u32>,
     /// Whether a turn's own counts are taken out first (`--pair-hold-out 0|1`, default 0).
     pair_hold_out: Option<bool>,
-    /// How an expert shares its vote (`--pair-weigh even|sure`, default even; claude-368).
-    pair_weigh: Option<Weigh>,
-    /// From how many sightings a sure expert refuses a reply it never saw (`--pair-refuse N`,
-    /// default 0: never; claude-368).
-    pair_refuse: Option<u32>,
     /// Serve the stack without its turn memory (`--no-turn-memory`).
     no_turn_memory: bool,
     /// One-shot turn: answer this message, print the record and exit.
@@ -313,8 +308,6 @@ impl Default for CliArgs {
             pair_keep: None,
             pair_floor: None,
             pair_hold_out: None,
-            pair_weigh: None,
-            pair_refuse: None,
             no_turn_memory: false,
             say: None,
             prompt_ids: None,
@@ -403,12 +396,6 @@ fn print_usage() {
     );
     eprintln!(
         "      --pair-hold-out <0|1>   take a turn's own counts out before the vote (default: 0)"
-    );
-    eprintln!(
-        "      --pair-weigh <even|sure> an expert's share of its vote: its count over its total, or\n                              that weighed by its largest count over its total (default: even)"
-    );
-    eprintln!(
-        "      --pair-refuse <INT>     an expert seen at least this many times, 7/8 of them with one\n                              reply, refuses a reply it never saw (default: 0, never)"
     );
     eprintln!(
         "  -t, --temperature <FLOAT>   Sampling temperature (0.0 = greedy, >0.0 = categorical)"
@@ -628,7 +615,7 @@ fn parse_cli_args() -> CliArgs {
                     }
                 }
             }
-            flag @ ("--pair-experts" | "--pair-cap" | "--pair-keep" | "--pair-floor" | "--pair-hold-out" | "--pair-weigh" | "--pair-refuse") => {
+            flag @ ("--pair-experts" | "--pair-cap" | "--pair-keep" | "--pair-floor" | "--pair-hold-out") => {
                 idx += 1;
                 if let Err(message) = parse_pair_flag(&mut args, flag, raw.get(idx).map(String::as_str)) {
                     eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} {message}");
@@ -1013,16 +1000,6 @@ fn parse_pair_flag(args: &mut CliArgs, flag: &str, value: Option<&str>) -> std::
                 _ => return Err("'--pair-hold-out' takes 0 or 1".into()),
             });
         }
-        "--pair-weigh" => {
-            args.pair_weigh = Some(match value {
-                Some("even") => Weigh::Even,
-                Some("sure") => Weigh::Sure,
-                _ => return Err("'--pair-weigh' takes even or sure".into()),
-            });
-        }
-        "--pair-refuse" => {
-            args.pair_refuse = Some(whole(value).ok_or("'--pair-refuse' takes a whole number")?);
-        }
         _ => return Err(format!("'{flag}' is not a pair experts flag")),
     }
     Ok(())
@@ -1036,8 +1013,6 @@ fn check_pair_args(args: &CliArgs) -> std::result::Result<(), String> {
             (args.pair_keep.is_some(), "--pair-keep"),
             (args.pair_floor.is_some(), "--pair-floor"),
             (args.pair_hold_out.is_some(), "--pair-hold-out"),
-            (args.pair_weigh.is_some(), "--pair-weigh"),
-            (args.pair_refuse.is_some(), "--pair-refuse"),
         ] {
             if set {
                 return Err(format!("'{flag}' requires '--pair-experts'"));
@@ -1070,35 +1045,6 @@ fn check_pair_args(args: &CliArgs) -> std::result::Result<(), String> {
     Ok(())
 }
 
-/// The pair experts' setting the flags name: `None` without a cap, a keep share and a floor.
-/// The hold-out is off, the weighing even and the refusal off unless a flag says otherwise.
-fn pair_setting(cli: &CliArgs) -> Option<Setting> {
-    Some(Setting {
-        cap: cli.pair_cap?,
-        keep: cli.pair_keep?,
-        hold_out: cli.pair_hold_out == Some(true),
-        floor: cli.pair_floor?,
-        weigh: cli.pair_weigh.unwrap_or(Weigh::Even),
-        refuse_from: cli.pair_refuse.unwrap_or(0),
-    })
-}
-
-/// The pair experts' table and whole setting as a script transcript records them.
-fn pair_record(sha256: &impl serde::Serialize, setting: Setting) -> serde_json::Value {
-    serde_json::json!({
-        "sha256": sha256,
-        "cap": setting.cap,
-        "keep": format!("{}/{}", setting.keep.num, setting.keep.den),
-        "floor": setting.floor,
-        "hold_out": setting.hold_out,
-        "weigh": match setting.weigh {
-            Weigh::Even => "even",
-            Weigh::Sure => "sure",
-        },
-        "refuse_from": setting.refuse_from,
-    })
-}
-
 /// The word a pair experts verdict is recorded as in a script transcript (claude-367).
 fn pair_verdict_name(verdict: Verdict) -> &'static str {
     match verdict {
@@ -1107,7 +1053,6 @@ fn pair_verdict_name(verdict: Verdict) -> &'static str {
         Verdict::Checked(Check::NoExpert) => "noexpert",
         Verdict::Checked(Check::Stands { .. }) => "stands",
         Verdict::Checked(Check::Unsure { .. }) => "unsure",
-        Verdict::Checked(Check::Replaced { refused: true, .. }) => "refused",
         Verdict::Checked(Check::Replaced { .. }) => "replaced",
         Verdict::NoRoom => "noroom",
     }
@@ -1582,52 +1527,6 @@ mod tests {
     }
 
     #[test]
-    fn pair_weigh_and_refuse_parse_and_are_even_and_never_when_left_out() {
-        let plain = pair_args(true, true, &PAIR_FLAGS).expect("accepted");
-        assert_eq!((plain.pair_weigh, plain.pair_refuse), (None, None));
-        let mut flags = PAIR_FLAGS.to_vec();
-        flags.extend([("--pair-weigh", "sure"), ("--pair-refuse", "4")]);
-        let set = pair_args(true, true, &flags).expect("the two flags are accepted");
-        assert_eq!((set.pair_weigh, set.pair_refuse), (Some(Weigh::Sure), Some(4)));
-        flags[5] = ("--pair-weigh", "even");
-        assert_eq!(pair_args(true, true, &flags).expect("accepted").pair_weigh, Some(Weigh::Even));
-
-        for (flag, bad, message) in [
-            ("--pair-weigh", "odd", "'--pair-weigh' takes even or sure"),
-            ("--pair-weigh", "Sure", "'--pair-weigh' takes even or sure"),
-            ("--pair-refuse", "x", "'--pair-refuse' takes a whole number"),
-            ("--pair-refuse", "-1", "'--pair-refuse' takes a whole number"),
-        ] {
-            let mut flags = PAIR_FLAGS.to_vec();
-            flags.push((flag, bad));
-            assert_eq!(pair_args(true, true, &flags).err().expect("refused"), message, "{flag} {bad}");
-        }
-        for flag in [("--pair-weigh", "sure"), ("--pair-refuse", "4")] {
-            let alone = pair_args(true, true, &[flag]).err().expect("needs the table");
-            assert_eq!(alone, format!("'{}' requires '--pair-experts'", flag.0));
-        }
-
-        // The flags reach the setting the chat is given, and the record names all of it.
-        let setting = Setting {
-            cap: 8,
-            keep: Ratio { num: 1, den: 32 },
-            hold_out: true,
-            floor: 250,
-            weigh: Weigh::Sure,
-            refuse_from: 4,
-        };
-        assert_eq!(pair_setting(&set), Some(setting));
-        assert_eq!(pair_setting(&plain), Some(Setting { weigh: Weigh::Even, refuse_from: 0, ..setting }));
-        let no_floor = pair_args(false, false, &[]).expect("no pair flags");
-        assert_eq!(pair_setting(&no_floor), None);
-        let record = pair_record(&"ab", setting);
-        let want = serde_json::json!({"sha256": "ab", "cap": 8, "keep": "1/32", "floor": 250, "hold_out": true, "weigh": "sure", "refuse_from": 4});
-        assert_eq!(record, want);
-        let even = pair_record(&"ab", Setting { weigh: Weigh::Even, refuse_from: 0, ..setting });
-        assert_eq!((&even["weigh"], &even["refuse_from"]), (&serde_json::json!("even"), &serde_json::json!(0)));
-    }
-
-    #[test]
     fn pair_experts_flags_are_refused_without_what_they_need() {
         let no_stack = pair_args(false, true, &PAIR_FLAGS).err().expect("refused without --stack");
         assert_eq!(no_stack, "'--pair-experts' requires '--stack'");
@@ -1670,8 +1569,7 @@ mod tests {
             (Verdict::Checked(Check::NoExpert), "noexpert"),
             (Verdict::Checked(Check::Stands { vote: 9, top: 9 }), "stands"),
             (Verdict::Checked(Check::Unsure { vote: 1, top: 3 }), "unsure"),
-            (Verdict::Checked(Check::Replaced { reply: 2, vote: 0, top: 5, refused: false }), "replaced"),
-            (Verdict::Checked(Check::Replaced { reply: 2, vote: 5, top: 5, refused: true }), "refused"),
+            (Verdict::Checked(Check::Replaced { reply: 2, vote: 0, top: 5 }), "replaced"),
             (Verdict::NoRoom, "noroom"),
         ];
         for (verdict, name) in names {
@@ -2478,8 +2376,14 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
                 .and_then(|bytes| <[u8; 32]>::try_from(bytes).ok())
                 .ok_or_else(|| refused(format!("the asks name their tokens as {asks_tokens}, not a SHA-256")))?;
             table.expect(*asks_vocab, &tag).map_err(refused)?;
-            let Some(setting) = pair_setting(cli) else {
+            let (Some(cap), Some(keep), Some(floor)) = (cli.pair_cap, cli.pair_keep, cli.pair_floor) else {
                 return Err(refused("needs --pair-cap, --pair-keep and --pair-floor".into()));
+            };
+            let setting = Setting {
+                cap,
+                keep,
+                hold_out: cli.pair_hold_out == Some(true),
+                floor,
             };
             let sha256 = table.sha256();
             chat.set_pair_experts(Some((table, setting))).map_err(refused)?;
@@ -2675,7 +2579,13 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
             "transcript": transcript,
         });
         if let Some((sha256, setting)) = &pair_identity {
-            record["pair_experts"] = pair_record(sha256, *setting);
+            record["pair_experts"] = serde_json::json!({
+                "sha256": sha256,
+                "cap": setting.cap,
+                "keep": format!("{}/{}", setting.keep.num, setting.keep.den),
+                "floor": setting.floor,
+                "hold_out": setting.hold_out,
+            });
         }
         println!("{}", serde_json::to_string_pretty(&record)?);
         return Ok(());

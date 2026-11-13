@@ -14,8 +14,7 @@
 //! place-asks experts --tokens TRAIN/tokens.u16 --kit train-places.json --out pairs.uorpex
 //! place-asks experts-check --tokens TRAIN/tokens.u16 --kit train-places.json --experts pairs.uorpex \
 //!                   --asks asks.json --prompts samples.json --rows rows.tsv --hold-out 0|1 \
-//!                   --caps 300,2000 --keeps 1/2,1/4 --floors 0,1500 \
-//!                   [--weighs even,sure] [--refusals 0,8] [--out PREFIX]
+//!                   --caps 300,2000 --keeps 1/2,1/4 --floors 0,1500 [--out PREFIX]
 //! ```
 //!
 //! `experts` (claude-367) counts the pair experts' table on a split: each reply the place
@@ -29,17 +28,10 @@
 //! after the check. The table must be counted on `--tokens`; the asks are read whole, as the
 //! served model reads them. `--rows` holds six columns: the prompt's index in `--prompts`, the
 //! kind (general, recall, nevertold or repeat), the last user turn's ids, the reply's ids without
-//! its end mark, whether it ends (1 or 0) and the reference's ids. With one setting and
+//! its end mark, whether it ends (1 or 0) and the reference's ids. With one cap, one keep and
 //! `--out` it writes `PREFIX.jsonl`, each final reply's ids with the end mark when it ends, and
 //! `PREFIX.rows.tsv`, the rows with the final reply and three more columns: the verdict, the
-//! reply's vote and the top vote (0 and 0 when the experts were not asked). A replaced reply
-//! that kept its share and was refused has the verdict `refused`.
-//!
-//! `--weighs` and `--refusals` (claude-368) add two sides to the grid. `even` is the count over
-//! the expert's total; `sure` weighs that share by the expert's largest count over its total. A
-//! refusal `N` above 0 lets an expert seen at least `N` times, 7/8 of them with one reply, refuse
-//! a reply it never saw. Left out, they are `even` and 0: the check of claude-367. The last
-//! column of a grid line counts the general replies that kept their share and were refused.
+//! reply's vote and the top vote (0 and 0 when the experts were not asked).
 //!
 //! `repeat` (claude-364) counts the lead-in pairs on the tokens a written table was fitted on:
 //! the pairs of neighbouring tokens in a user turn after which the rest of the turn is the
@@ -77,7 +69,7 @@ use std::process::ExitCode;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use uor_r4_integer::fbs_snapshot::PlaceMarks;
-use uor_r4_integer::pair_experts::{asked_turn, Check, Occurrence, PairExperts, Ratio, Setting, Verdict, Weigh};
+use uor_r4_integer::pair_experts::{asked_turn, Check, Occurrence, PairExperts, Ratio, Setting, Verdict};
 use uor_r4_integer::place_asks::{ask_cases, census, fit, fit_cut, fit_forms, fit_repeat, AsksIndex, Cut, FormRule, PlaceAsks, ASKS_FRAME};
 
 const HEADER: usize = 64;
@@ -334,7 +326,6 @@ fn verdict_name(verdict: Verdict) -> &'static str {
         Verdict::Checked(Check::NoExpert) => "noexpert",
         Verdict::Checked(Check::Stands { .. }) => "stands",
         Verdict::Checked(Check::Unsure { .. }) => "unsure",
-        Verdict::Checked(Check::Replaced { refused: true, .. }) => "refused",
         Verdict::Checked(Check::Replaced { .. }) => "replaced",
         Verdict::NoRoom => "noroom",
     }
@@ -372,19 +363,9 @@ struct Tally {
     recall_replaced: usize,
     nevertold_replaced: usize,
     repeat_replaced: usize,
-    /// General replies that kept their share of the top vote and were refused by a sure expert.
-    refused: usize,
 }
 
-const GRID_HEADER: &str = "cap\tkeep\tfloor\tweigh\trefuse_from\tgeneral\tgood_before\tgood_after\tnewly_good\tlost\tnoturn\talone\tnoexpert\tstands\tunsure\treplaced\trecall_replaced\tnevertold_replaced\trepeat_replaced\trefused";
-
-/// A weighing as `--weighs` names it.
-fn weigh_name(weigh: Weigh) -> &'static str {
-    match weigh {
-        Weigh::Even => "even",
-        Weigh::Sure => "sure",
-    }
-}
+const GRID_HEADER: &str = "cap\tkeep\tfloor\tgeneral\tgood_before\tgood_after\tnewly_good\tlost\tnoturn\talone\tnoexpert\tstands\tunsure\treplaced\trecall_replaced\tnevertold_replaced\trepeat_replaced";
 
 impl Tally {
     fn line(&self, setting: Setting) -> String {
@@ -403,10 +384,9 @@ impl Tally {
             self.recall_replaced,
             self.nevertold_replaced,
             self.repeat_replaced,
-            self.refused,
         ];
         let counts: Vec<String> = counts.iter().map(usize::to_string).collect();
-        format!("{}\t{}/{}\t{}\t{}\t{}\t{}", setting.cap, setting.keep.num, setting.keep.den, setting.floor, weigh_name(setting.weigh), setting.refuse_from, counts.join("\t"))
+        format!("{}\t{}/{}\t{}\t{}", setting.cap, setting.keep.num, setting.keep.den, setting.floor, counts.join("\t"))
     }
 }
 
@@ -442,10 +422,7 @@ fn replay(table: &PairExperts, asks: Option<&AsksIndex>, marks: &PlaceMarks, pro
                     Verdict::Checked(Check::NoExpert) => tally.noexpert += 1,
                     Verdict::Checked(Check::Stands { .. }) | Verdict::NoRoom => tally.stands += 1,
                     Verdict::Checked(Check::Unsure { .. }) => tally.unsure += 1,
-                    Verdict::Checked(Check::Replaced { refused, .. }) => {
-                        tally.replaced += 1;
-                        tally.refused += usize::from(refused);
-                    }
+                    Verdict::Checked(Check::Replaced { .. }) => tally.replaced += 1,
                 }
             }
             Kind::Recall => tally.recall_replaced += usize::from(replaced),
@@ -475,57 +452,10 @@ fn outputs(rows: &[Row], outcomes: &[Outcome], eos: u32) -> (String, String) {
     (jsonl, tsv)
 }
 
-/// The sides of the grid of `experts-check`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct Grid {
-    caps: Vec<u32>,
-    keeps: Vec<Ratio>,
-    floors: Vec<u32>,
-    weighs: Vec<Weigh>,
-    refusals: Vec<u32>,
-    hold_out: bool,
-}
-
-impl Grid {
-    /// Every setting of the grid, in the order its lines are printed.
-    fn settings(&self) -> Vec<Setting> {
-        let mut settings = Vec::new();
-        for &cap in &self.caps {
-            for &keep in &self.keeps {
-                for &floor in &self.floors {
-                    for &weigh in &self.weighs {
-                        for &refuse_from in &self.refusals {
-                            settings.push(Setting { cap, keep, hold_out: self.hold_out, floor, weigh, refuse_from });
-                        }
-                    }
-                }
-            }
-        }
-        settings
-    }
-}
-
-/// The grid of `experts-check`: `--caps`, `--keeps`, `--floors` and `--hold-out`, and when they
-/// are given `--weighs` (left out: `even`) and `--refusals` (left out: 0, no refusal). A floor is
-/// in thousandths of one expert's whole vote.
-fn grid(args: &[String]) -> Result<Grid, String> {
-    let given = |name: &str| args.iter().any(|a| a == name);
+/// The grid of `experts-check`: `--caps`, `--keeps`, `--floors` and `--hold-out`. A floor is in
+/// thousandths of one expert's whole vote.
+fn grid(args: &[String]) -> Result<(Vec<u32>, Vec<Ratio>, Vec<u32>, bool), String> {
     let value = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).map(String::as_str).ok_or_else(|| format!("{name} takes a value"));
-    let weighs = match given("--weighs") {
-        false => vec![Weigh::Even],
-        true => value("--weighs")?
-            .split(',')
-            .map(|weigh| match weigh {
-                "even" => Ok(Weigh::Even),
-                "sure" => Ok(Weigh::Sure),
-                other => Err(format!("--weighs {other}: even or sure")),
-            })
-            .collect::<Result<Vec<Weigh>, String>>()?,
-    };
-    let refusals = match given("--refusals") {
-        false => vec![0],
-        true => value("--refusals")?.split(',').map(|n| n.parse().map_err(|_| format!("--refusals {n}: not a count"))).collect::<Result<Vec<u32>, String>>()?,
-    };
     let caps = value("--caps")?.split(',').map(|cap| cap.parse().map_err(|_| format!("--caps {cap}: not a count"))).collect::<Result<Vec<u32>, String>>()?;
     let keeps = value("--keeps")?
         .split(',')
@@ -543,7 +473,7 @@ fn grid(args: &[String]) -> Result<Grid, String> {
         other => return Err(format!("--hold-out {other}: 0 or 1")),
     };
     let floors = value("--floors")?.split(',').map(|floor| floor.parse().map_err(|_| format!("--floors {floor}: not a count of thousandths"))).collect::<Result<Vec<u32>, String>>()?;
-    Ok(Grid { caps, keeps, floors, weighs, refusals, hold_out })
+    Ok((caps, keeps, floors, hold_out))
 }
 
 /// The file made from `path` with `suffix` added, refused when one is there.
@@ -792,11 +722,11 @@ fn run(args: &[String]) -> Result<(), String> {
             let text = std::fs::read_to_string(&rows_path).map_err(|e| format!("{}: {e}", rows_path.display()))?;
             let rows = text.lines().enumerate().map(|(n, line)| parse_row(line, n + 1)).collect::<Result<Vec<Row>, String>>().map_err(|e| format!("{}: {e}", rows_path.display()))?;
             check_rows(&rows, &prompts, &kit.marks).map_err(|e| format!("{}: {e}", rows_path.display()))?;
-            let settings = grid(args)?.settings();
+            let (caps, keeps, floors, hold_out) = grid(args)?;
             let out = match args.iter().position(|a| a == "--out") {
                 Some(_) => {
-                    if settings.len() != 1 {
-                        return Err("--out writes one setting's replies: give one cap, one keep, one floor, one weigh and one refusal".to_owned());
+                    if caps.len() != 1 || keeps.len() != 1 || floors.len() != 1 {
+                        return Err("--out writes one setting's replies: give one cap, one keep and one floor".to_owned());
                     }
                     let prefix = flag(args, "--out")?;
                     Some((new_file(&prefix, ".jsonl")?, new_file(&prefix, ".rows.tsv")?))
@@ -804,13 +734,18 @@ fn run(args: &[String]) -> Result<(), String> {
                 None => None,
             };
             println!("{GRID_HEADER}");
-            for setting in settings {
-                let (tally, outcomes) = replay(&table, Some(&index), &kit.marks, &prompts, &rows, setting);
-                println!("{}", tally.line(setting));
-                if let Some((jsonl_path, tsv_path)) = &out {
-                    let (jsonl, tsv) = outputs(&rows, &outcomes, kit.marks.eos);
-                    write_new(jsonl_path, jsonl.as_bytes())?;
-                    write_new(tsv_path, tsv.as_bytes())?;
+            for &cap in &caps {
+                for &keep in &keeps {
+                    for &floor in &floors {
+                        let setting = Setting { cap, keep, hold_out, floor };
+                        let (tally, outcomes) = replay(&table, Some(&index), &kit.marks, &prompts, &rows, setting);
+                        println!("{}", tally.line(setting));
+                        if let Some((jsonl_path, tsv_path)) = &out {
+                            let (jsonl, tsv) = outputs(&rows, &outcomes, kit.marks.eos);
+                            write_new(jsonl_path, jsonl.as_bytes())?;
+                            write_new(tsv_path, tsv.as_bytes())?;
+                        }
+                    }
                 }
             }
         }
@@ -953,7 +888,7 @@ mod tests {
         lines.iter().enumerate().map(|(n, line)| parse_row(line, n + 1).expect("row")).collect()
     }
 
-    const KEEP_HALF: Setting = Setting { cap: 100, keep: Ratio { num: 1, den: 2 }, hold_out: false, floor: 0, weigh: Weigh::Even, refuse_from: 0 };
+    const KEEP_HALF: Setting = Setting { cap: 100, keep: Ratio { num: 1, den: 2 }, hold_out: false, floor: 0 };
 
     #[test]
     fn the_replay_replaces_a_reply_the_turns_experts_do_not_hold_and_counts_it_newly_good() {
@@ -967,7 +902,7 @@ mod tests {
         ]);
         assert_eq!(check_rows(&rows, &prompts, &m), Ok(()));
         let (tally, outcomes) = replay(&table, None, &m, &prompts, &rows, KEEP_HALF);
-        let want = Tally { general: 3, good_before: 2, good_after: 3, newly_good: 1, lost: 0, noturn: 1, alone: 0, noexpert: 0, stands: 1, unsure: 0, replaced: 1, recall_replaced: 1, nevertold_replaced: 0, repeat_replaced: 0, refused: 0 };
+        let want = Tally { general: 3, good_before: 2, good_after: 3, newly_good: 1, lost: 0, noturn: 1, alone: 0, noexpert: 0, stands: 1, unsure: 0, replaced: 1, recall_replaced: 1, nevertold_replaced: 0, repeat_replaced: 0 };
         assert_eq!(tally, want);
         assert_eq!(tally.general, tally.noturn + tally.alone + tally.noexpert + tally.stands + tally.unsure + tally.replaced);
         assert_eq!(tally.good_after + tally.lost, tally.good_before + tally.newly_good);
@@ -978,53 +913,7 @@ mod tests {
         assert_eq!(jsonl.lines().next(), Some(r#"{"i":0,"ids":[9,1]}"#));
         assert_eq!(tsv.lines().next(), Some("0\tgeneral\t6 7 8\t9\t1\t13\treplaced\t0\t2796202"));
         assert_eq!(tsv.lines().nth(2), Some("1\tgeneral\t6 7\t10\t1\t10\tnoturn\t0\t0"));
-        assert_eq!(tally.line(KEEP_HALF), "100\t1/2\t0\teven\t0\t3\t2\t3\t1\t0\t1\t0\t0\t1\t0\t1\t1\t0\t0\t0");
-        assert_eq!(GRID_HEADER.split('\t').count(), tally.line(KEEP_HALF).split('\t').count());
-    }
-
-    #[test]
-    fn the_replay_counts_a_reply_that_kept_its_share_and_was_refused() {
-        // Pair {6, 7} saw [9] 8 times and pair {6, 8} saw [10] twice: on turn [6, 7, 8] the two
-        // replies tie at one whole vote, so [10] keeps its share.
-        let mut occurrences = vec![Occurrence { turn: &[6, 7], reply: &[9] }; 8];
-        occurrences.extend(vec![Occurrence { turn: &[6, 8], reply: &[10] }; 2]);
-        let table = PairExperts::count(16, [3; 32], &occurrences).expect("count");
-        let (m, prompts) = (chat_marks(), replay_prompts());
-        let rows = rows(&["0\tgeneral\t6 7 8\t10\t1\t10"]);
-        let (tally, outcomes) = replay(&table, None, &m, &prompts, &rows, KEEP_HALF);
-        assert!(matches!(outcomes[0].verdict, Verdict::Checked(Check::Stands { .. })));
-        assert_eq!((tally.stands, tally.replaced, tally.refused), (1, 0, 0));
-        // From 8 on, pair {6, 7} is sure and never saw [10]: the reply is refused and [9] is given.
-        let refusing = Setting { refuse_from: 8, ..KEEP_HALF };
-        let (tally, outcomes) = replay(&table, None, &m, &prompts, &rows, refusing);
-        assert_eq!(outcomes[0].verdict, Verdict::Checked(Check::Replaced { reply: 0, vote: 1 << 20, top: 1 << 20, refused: true }));
-        assert_eq!(outcomes[0].reply, vec![9]);
-        assert_eq!(outputs(&rows, &outcomes, m.eos).1, "0\tgeneral\t6 7 8\t9\t1\t10\trefused\t1048576\t1048576\n");
-        assert_eq!((tally.stands, tally.replaced, tally.refused, tally.lost), (0, 1, 1, 1));
-        assert_eq!(tally.line(refusing), "100\t1/2\t0\teven\t8\t1\t1\t0\t0\t1\t0\t0\t0\t0\t0\t1\t0\t0\t0\t1");
-        // The line names the weighing of its own setting.
-        assert!(tally.line(Setting { weigh: Weigh::Sure, ..refusing }).starts_with("100\t1/2\t0\tsure\t8\t"));
-        // A pair seen fewer than 9 times refuses nothing.
-        let (tally, _) = replay(&table, None, &m, &prompts, &rows, Setting { refuse_from: 9, ..KEEP_HALF });
-        assert_eq!((tally.stands, tally.refused), (1, 0));
-    }
-
-    #[test]
-    fn the_grid_takes_weighs_and_refusals_and_is_the_grid_of_before_without_them() {
-        let args = |text: &str| text.split(' ').map(str::to_owned).collect::<Vec<String>>();
-        let plain = grid(&args("experts-check --caps 7 --keeps 1/2,1/4 --floors 0,1500 --hold-out 1")).expect("grid");
-        assert_eq!((plain.weighs.clone(), plain.refusals.clone()), (vec![Weigh::Even], vec![0]));
-        let settings = plain.settings();
-        assert!(settings.iter().all(|s| s.weigh == Weigh::Even && s.refuse_from == 0 && s.hold_out && s.cap == 7));
-        // The lines keep their order: floors inside keeps.
-        assert_eq!(settings.iter().map(|s| (s.keep.den, s.floor)).collect::<Vec<_>>(), vec![(2, 0), (2, 1500), (4, 0), (4, 1500)]);
-        let wide = grid(&args("experts-check --caps 7 --keeps 1/2 --floors 0 --hold-out 0 --weighs even,sure --refusals 0,2,8")).expect("grid");
-        let sides: Vec<(Weigh, u32)> = wide.settings().iter().map(|s| (s.weigh, s.refuse_from)).collect();
-        assert_eq!(sides, vec![(Weigh::Even, 0), (Weigh::Even, 2), (Weigh::Even, 8), (Weigh::Sure, 0), (Weigh::Sure, 2), (Weigh::Sure, 8)]);
-        assert_eq!(wide.settings().iter().map(|s| weigh_name(s.weigh)).collect::<Vec<_>>(), vec!["even", "even", "even", "sure", "sure", "sure"]);
-        for refused in ["--weighs", "--weighs odd", "--weighs even,", "--refusals", "--refusals x", "--refusals 2,", "--refusals -1"] {
-            assert!(grid(&args(&format!("experts-check --caps 7 --keeps 1/2 --floors 0 --hold-out 0 {refused}"))).is_err(), "{refused}");
-        }
+        assert_eq!(tally.line(KEEP_HALF), "100\t1/2\t0\t3\t2\t3\t1\t0\t1\t0\t0\t1\t0\t1\t1\t0\t0");
     }
 
     #[test]
