@@ -295,9 +295,26 @@ fn run(args: &[String]) -> Result<(), String> {
             if open {
                 return Err("forms reads a written table: --open-reply-start 1 is for fit or ablate".to_owned());
             }
-            let asks: PlaceAsks = read_json(&flag(args, "--asks")?)?;
+            let mut asks: PlaceAsks = read_json(&flag(args, "--asks")?)?;
             if asks.marks != kit.marks || asks.vocab != vocab {
                 return Err("the asks were fitted with other marks or another vocabulary than this split's".to_owned());
+            }
+            // The count reads the table's one floor: a table that holds form floors has none to add.
+            if !asks.ask_floors.is_empty() {
+                return Err(format!("the asks already hold {} question-form floors", asks.ask_floors.len()));
+            }
+            let out = match args.iter().position(|a| a == "--out") {
+                Some(_) => Some(flag(args, "--out")?),
+                None => None,
+            };
+            if let Some(out) = &out {
+                if out.exists() {
+                    return Err(format!("{}: exists; a table is never written over", out.display()));
+                }
+                // The floors are counted on the tokens the table was fitted on, or not written.
+                if asks.tokens_sha256 != kit.tokens_sha256 {
+                    return Err(format!("the asks were fitted on tokens {} and --tokens holds {}", asks.tokens_sha256, kit.tokens_sha256));
+                }
             }
             let rule = match args.iter().position(|a| a == "--rule").and_then(|i| args.get(i + 1)).map(String::as_str) {
                 Some("tokens") => FormRule::Tokens,
@@ -318,6 +335,7 @@ fn run(args: &[String]) -> Result<(), String> {
             for line in &lines {
                 println!("{line}");
             }
+            let rows = floors.rows();
             let with = index.clone().with_form_floors(floors);
             let splits = std::iter::once(("fitted".to_owned(), &tokens, &kit)).chain(panels.iter().map(|(name, t, k)| (name.clone(), t, k)));
             for (name, tokens, kit) in splits {
@@ -327,6 +345,14 @@ fn run(args: &[String]) -> Result<(), String> {
                         println!("{line}");
                     }
                 }
+            }
+            if let Some(out) = out {
+                asks.ask_floors = rows.ok_or("--out writes the floors of --rule tokens: a table holds no list of kept tokens")?;
+                AsksIndex::new(&asks)?;
+                let text = serde_json::to_string(&asks).map_err(|e| e.to_string())?;
+                let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&out).map_err(|e| format!("{}: {e}; a table is never written over", out.display()))?;
+                file.write_all(text.as_bytes()).map_err(|e| format!("{}: {e}", out.display()))?;
+                println!("asks-forms wrote {} floors={} fitted_on={}", out.display(), asks.ask_floors.len(), asks.tokens_sha256);
             }
         }
         other => return Err(format!("unknown mode {other}: fit, census, ablate, repeat or forms")),
