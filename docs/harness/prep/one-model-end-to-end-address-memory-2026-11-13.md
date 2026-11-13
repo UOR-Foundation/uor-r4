@@ -24,7 +24,7 @@ Why now. Today's model has about 1.1 million learned values, 1,048,576 of them t
 | TRAIN o (OASST2, train) | `results/claude/real-text-corpus-2026-11-05/oasst2/train` | 3,773,419 | `8bdcabfb41284a54575ea2f730f532a896b29dc69250098957b46c6bcae40b90` | `a2b0b2a3ce8cc7491b8ced86eda487353ba4e70da0f9aa5a63161ca6802de7a1` |
 | Scoring panel o (OASST2, held out) | `results/claude/real-text-corpus-2026-11-05/oasst2/heldout` | 214,758 | `02a04e97bbb8936c993bf5eff0f29c171ebeae88988217a4100fdc77701f169e` | `9c5bb6567c6a4cded2dfb2280ae4acdc798e283a3beae8aaebc695656e1b4833` |
 
-The place kit is `results/claude/one-model-end-to-end-place-read-2026-11-11/kit/train-places.json` (`8d28571a614e4e038fcb52e2661787f38af62933dbf7ddad2ad64582c8a0a9b3`). The tokenizer is the w2 driver data's (`d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`), with its `ft/dev` as the trainer's DEV. On the OASST2 jobs the trainer's DEV lines are still that DEV and are not a reading. OASST2 is conversations people wrote; no model-written text is in this run (§3.10).
+The place kit is `results/claude/one-model-end-to-end-place-read-2026-11-11/kit/train-places.json` (`8d28571a614e4e038fcb52e2661787f38af62933dbf7ddad2ad64582c8a0a9b3`). The tokenizer is the w2 driver data's (`d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89`), with its `ft/dev` as the trainer's DEV. On the OASST2 jobs the trainer's DEV lines are still that DEV and are not a reading. OASST2 is conversations people wrote; its manifest's filter drops every message marked synthetic, and no model-written text is in this run (§3.10). A conversation tree is held out whole: the side depends only on a hash of the tree's id (50 per mille; 278 held-out threads against 5,071), so no held-out prompt has its own thread in TRAIN.
 
 ## Arms
 
@@ -47,10 +47,10 @@ The place kit is `results/claude/one-model-end-to-end-place-read-2026-11-11/kit/
 All from the float scoring pass on each job's last checkpoint (`--score-rows`, greedy, turn memory on, context 192, 48 reply tokens), and from the job's own logs. Counts are made by kit scripts that write logs.
 
 - **R1, exact replies (m jobs):** of the 1,108 panel prompts, replies equal to the wanted reply up to the end token.
-- **R2, loss (all jobs):** the last `train_loss_mean` and `dev_loss` of `progress.jsonl`.
+- **R2, loss:** the last `train_loss_mean` of `progress.jsonl` (all jobs) and the last `dev_loss` (m jobs only).
 - **R3, the address census (address jobs):** `address.jsonl` at each checkpoint: cells in use a block, the share of reads whose cell moved, the share inside the band.
-- **R4, held-out next token (o jobs):** over the held-out panel's reply rows, the share whose nearest token is the true one (`rows-p-memory.json`).
-- **R5, replies word for word (o jobs):** the first 20 held-out prompts with the wanted reply and the model's, read by a person; the share of replies that end inside 48 tokens.
+- **R4, held-out next token (o jobs):** over the held-out panel's reply rows, the share whose nearest token is the true one (`rows-p-memory.json`). Two reference points are read beside it: the share of those rows whose true token is the commonest one, and the same R4 on the pre stage's 64-step `o-e8` smoke, a model that has barely trained.
+- **R5, replies word for word (o jobs):** the first 20 held-out prompts with the wanted reply and the model's, read by a person. A reply counts as word-ordered when it reads as at least one grammatical English clause; the count of the 20 is given, and 10 or more is "writes word-ordered text". The share of replies that end inside 48 tokens is given with it.
 - **R6, cost of the part:** training seconds for 64 steps, each arm.
 
 ## Bars
@@ -61,26 +61,29 @@ Question 1. `D2 = e8-s2 − b-s2` and `D3 = e8-s3 − 225` on R1, and `M` their 
 |---|---|
 | `M ≥ +30` and both `D > 0` | adds at this size (seeds 2 and 3) |
 | `M ≤ −30` and both `D < 0` | hurts in this configuration |
-| `\|M\| < 15`, or the two `D` differ in sign | no move at this size |
-| anything else | not called: keep and iterate |
+| `\|M\| < 15` | no move at this size |
+| anything else, with the two `D` of different sign and `\|M\| ≥ 15` among it | not called |
 
-- **Control.** `T = token-s2 − b-s2`. If the word is "adds" and `D2 − T < 15`, the gain is the table's size and not the state's address.
-- **Pin check.** If `b-s2` is outside 188 ± 20, the two pins do not train alike: `D3` is then not paired, the word is taken from `D2` alone at twice the thresholds (±60, ±30), and the REPORT says so.
+- **Control.** `C = e8-s2 − token-s2`. It is read only when the word is "adds". `C ≥ 30`: the control holds. `C < 15`: it fails, and the gain is a second table's size and not the state's address. Between: not called. It is one run against one run, with a standard deviation near 30, so it is a weak control: with no true difference it holds about one time in six.
+- **Pin check.** If `b-s2` is outside 188 ± 20, the two pins do not train alike. `D3` is then not paired, and the word is taken from `D2` alone: adds at `D2 ≥ +60`, hurts at `D2 ≤ −60`, no move at `|D2| < 30`, otherwise not called. The REPORT says so.
 
-Question 2 has no bar. It is a first reading, and nothing is claimed from it beyond its numbers and its replies.
+Question 2 has no bar. Its rows below choose the next run's recipe; they are not findings, and nothing is claimed from them on the milestone.
 
 ## What each outcome unlocks
 
 | Outcome | Next |
 |---|---|
-| adds, and the control holds | The address memory joins the base recipe. Its integer form and export (the exporter refuses it today), then seed 1, then the state-keyed read on top of it. |
-| adds, and the control fails | A per-token table does the same: the state's address is not yet used. Next arm: the read after a mix of the state (lexlean-r4's v9 mixes with a Hadamard transform before it codes a block). |
+| adds, and the control holds | Seed 1 of `e8` and of `b` first. If it repeats, the address memory joins the base recipe; then its integer form and export (the exporter refuses it today); then the state-keyed read on top of it. |
+| adds, and the control fails or is not called | `token` at seed 3 to settle the control. If it fails again, a second per-token table does the same and the state's address is not yet used: the next arm reads after a mix of the state (lexlean-r4's v9 mixes with a Hadamard transform before it codes a block). |
+| not called | `e8` and `b` at seed 1, a third pair, before any new arm. |
 | no move, and e8's train loss is below b's by 0.05 or more | The rows fit TRAIN and do not carry to the panel. Next: the `sign` arm and the band; a negative on this configuration only (§4.1). |
 | no move, and e8's train loss is within 0.05 of b's | The rows are not learning. An instrument question first (§4.2): the `lr/32` step and R3's moved share. |
 | hurts | This configuration is closed. Next arm: a smaller row step. |
-| o-e8's R4 is above o-b's by 1 point or more | Real text joins TRAIN with the address memory, and the next run mixes OASST2 with Wikipedia. |
-| R4 is within 1 point, and o-e8's train loss is far below o-b's | The rows memorise 3.8 million tokens. More text and fewer passes come first. |
-| neither o job writes word-ordered text (R5) | Size and context are the limit: the scale ladder comes before more data. |
+| Q2: o-e8's R4 is above o-b's by 1 point or more | The next real-text run carries the address memory, on OASST2 mixed with Wikipedia. |
+| Q2: the two R4 are within 1 point | Question 1's word decides whether the next real-text run carries it. If o-e8's last train loss is also below o-b's by 0.5 or more, the rows memorise 3.8 million tokens: more text and fewer passes come first. |
+| Q2: o-e8's R4 is below o-b's by 1 point or more | The next real-text run goes without it, and the row step is the next arm on real text. |
+| Q2: fewer than 10 of 20 replies are word-ordered in both o jobs (R5) | Size and context are the limit: the scale ladder comes before more data. |
+| Q2: 10 or more are word-ordered in either o job | That job's recipe goes to a longer run on OASST2 with Wikipedia. `o-b` can be exported and talked to on the laptop at once. |
 
 **Prediction, written before the run** (a calibration record, not a bar): `M` between −10 and +50; e8's train loss below b's by 0.1 or more; `T` within ±20; o-e8's R4 above o-b's by 1 to 6 points; neither o job writes sentences a person would call a reply.
 
@@ -107,10 +110,12 @@ Each long job repeats I-n (m jobs) and I-a on its own log and files; a failure i
 - The o jobs make about 4.4 passes over 3.8 million tokens, and the address memory has 11.8 million values: it can memorise. R4 and R5 are read on held-out conversations for that reason.
 - GPU training is not bit-exact between runs or pins. The pin check covers the comparison with claude-358's seed 3.
 - R5 is read by one person.
+- The `token` control leaves three things open. A position's token already has its own row in the token table, so a control that holds shows the state's address beats a second per-token table, not that it beats size in general. The two arms fill their rows differently (a token's cell is read each time the token occurs; an E8 cell by whichever states fall in it), so the step a row effectively takes differs. And `token` has no band (0): no wall gradient reaches the state.
+- The job script also knows a `sign-s2` stage. No pod runs it in this sheet.
 
 ## Minimum test power
 
-The three same-recipe seeds of claude-358 gave 188, 188 and 225: a standard deviation of about 21. Whether pairing by seed removes that swing is not known. If it does not, `M` has a standard deviation of about 21, so `M ≥ 30` with both differences positive comes up by chance in under one run in ten. That is enough to choose the next unit and not enough for a milestone claim: a result called "adds" is repeated at seed 1 before any claim rests on it.
+The three same-recipe seeds of claude-358 gave 188, 188 and 225: a standard deviation of about 21, from three runs only, so it is itself loosely known. Whether pairing by seed removes that swing is not known. If it does not, `M` has a standard deviation of about 21, so `M ≥ 30` with both differences positive comes up by chance in under one run in ten. That is enough to choose the next unit and not enough for a milestone claim: a result called "adds" is repeated at seed 1 before any claim rests on it.
 
 ## Steps
 
@@ -130,6 +135,19 @@ Vast through `scripts/pod/uor-pod`, sessions `claude-346-a` and `claude-346-b`. 
 
 ## FIT
 
-Pending: a fresh reviewer who did not write this sheet reads it before any pod goes up.
+### First read, of the sheet at `50766bf56e36679f88ffed5d8e023f6c638256d0`: FIT WITH CHANGES
 
-TEST FITNESS: PENDING - research, #3407, awaiting a fresh non-author read (claude-346)
+A fresh reviewer who did not write the sheet (claude, fresh context) read it against the job script and claude-358's three sample files. It confirmed 188, 188 and 225 of 1,108, a standard deviation of 21.4, the stated chance for `M ≥ 30` (about 0.08 with no pairing), the Arms table against `job-346.sh` and `chain-346.sh`, and no conflict with CHARTER §3. Its six findings, each taken:
+
+1. **The control could not decide.** `e8-s2 − token-s2` is one run against one run (standard deviation near 30), and a cut at 15 is half of that. Now: holds at 30 or more, fails below 15, not called between, and the sheet says it is weak.
+2. **Next steps out of order, and outcomes with no row.** Seed 1 now comes before the part joins the base recipe; "not called" has a row; question 2 has a row for each case.
+3. **A large `M` could be called "no move"** when the two differences had different signs. Now that case is "not called" unless `|M| < 15`.
+4. **Question 2 had a bar in practice, and no reference point.** Its rows are now named as recipe choices and not findings; R4 is read beside the commonest-token share and a barely trained model; R5 has a written criterion; the held-out split by conversation tree is stated; `dev_loss` is no longer read on the o jobs.
+5. **Confounds of the `token` control** are named in Risks.
+6. **The pin check's wording** now gives each threshold by name.
+
+### Second read
+
+Pending: a fresh read of the changes only.
+
+TEST FITNESS: PENDING - research, #3407, first read FIT WITH CHANGES; the second read of the changes is awaited (claude-346)
