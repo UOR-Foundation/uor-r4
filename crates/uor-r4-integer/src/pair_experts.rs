@@ -14,8 +14,12 @@
 //! when a file is read.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Range;
 
 use sha2::{Digest, Sha256};
+
+use crate::fbs_snapshot::{PlaceMarks, PlaceRole, PlaceTurns};
+use crate::place_asks::{Asked, AsksIndex};
 
 /// The first bytes of a table file.
 const MAGIC: &[u8; 8] = b"UORPEX01";
@@ -712,6 +716,87 @@ impl Cursor<'_> {
     }
 }
 
+/// How a served reply is checked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Setting {
+    /// An expert seen more than this many times does not vote.
+    pub cap: u32,
+    /// The share of the top vote a reply keeps to stand.
+    pub keep: Ratio,
+    /// Whether the turn's own counts are taken out before the vote.
+    pub hold_out: bool,
+}
+
+/// What the experts decide about the reply to a prompt.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Verdict {
+    /// The prompt does not end where a model turn answers a user turn: the reply stands.
+    NoTurn,
+    /// The counted table finds a told value, an ask for one never told, or a repeat ask: the
+    /// experts are not asked and the reply stands.
+    LeftAlone,
+    /// The experts' check of the reply against the turn.
+    Checked(Check),
+}
+
+/// The user turn a prompt asks the model to answer: its content and the finished user turns
+/// before it, as the place register cuts them. `Some` only when the prompt's last token opens
+/// the first model turn after a user turn, which is where [`crate::place_asks::ask_cases`]
+/// counts a reply.
+pub fn asked_turn(prompt: &[u32], marks: &PlaceMarks) -> Option<(Range<usize>, Vec<Range<usize>>)> {
+    let mut turns = PlaceTurns::default();
+    let mut answered = false;
+    let mut opens = false;
+    for (t, &token) in prompt.iter().enumerate() {
+        if token == marks.bos {
+            answered = false;
+        }
+        opens = false;
+        match turns.push(&prompt[..=t], marks) {
+            Some(PlaceRole::User) => answered = false,
+            Some(PlaceRole::Assistant) => {
+                opens = !answered;
+                answered = true;
+            }
+            Some(PlaceRole::System) | None => {}
+        }
+    }
+    if !opens {
+        return None;
+    }
+    let (asked, prior) = turns.users().split_last()?;
+    Some((asked.clone(), prior.to_vec()))
+}
+
+impl PairExperts {
+    /// Checks the finished reply to a whole prompt: the one rule the served chat and the panel
+    /// replay both apply. `reply` is the reply's ids without its end mark. A prompt with no
+    /// turn to answer, and a turn the counted table `asks` finds something for, are left alone;
+    /// every other reply is checked against the experts of the prompt's last user turn.
+    pub fn check_prompt(
+        &self,
+        asks: Option<&AsksIndex>,
+        marks: &PlaceMarks,
+        prompt: &[u32],
+        reply: &[u32],
+        setting: Setting,
+    ) -> Verdict {
+        let Some((asked, prior)) = asked_turn(prompt, marks) else {
+            return Verdict::NoTurn;
+        };
+        if asks.is_some_and(|asks| asks.find(prompt, &prior, &asked) != Asked::Nothing) {
+            return Verdict::LeftAlone;
+        }
+        Verdict::Checked(self.check(
+            &prompt[asked],
+            reply,
+            setting.hold_out,
+            setting.cap,
+            setting.keep,
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1010,5 +1095,92 @@ mod tests {
         assert!(PairExperts::from_bytes(&turns)
             .unwrap_err()
             .contains("turns are not strictly increasing"));
+    }
+
+    const BOS: u32 = 100;
+    const EOS: u32 = 101;
+    const SEP: u32 = 102;
+    const SYSTEM: u32 = 103;
+    const USER: u32 = 104;
+    const MODEL: u32 = 105;
+
+    fn marks() -> PlaceMarks {
+        PlaceMarks {
+            bos: BOS,
+            eos: EOS,
+            sep: vec![SEP],
+            system: vec![SYSTEM],
+            user: vec![USER],
+            assistant: vec![MODEL],
+        }
+    }
+
+    #[test]
+    fn the_asked_turn_is_the_user_turn_the_prompts_last_model_turn_answers() {
+        let m = marks();
+        // One user turn, then the model turn's opening.
+        let one = [BOS, USER, 0, 1, 2, SEP, MODEL];
+        assert_eq!(asked_turn(&one, &m), Some((2..5, vec![])));
+        // A second user turn: the first is a finished turn before it.
+        let two = [
+            BOS, USER, 0, 1, SEP, MODEL, 5, EOS, SEP, USER, 1, 2, 3, SEP, MODEL,
+        ];
+        assert_eq!(asked_turn(&two, &m), Some((10..13, vec![2..4])));
+        // A system turn between the user turn and the model turn keeps the user turn.
+        let memory = [BOS, USER, 0, 1, SEP, SYSTEM, 3, SEP, MODEL];
+        assert_eq!(asked_turn(&memory, &m), Some((2..4, vec![])));
+        // No model turn opened; a model turn opened inside the reply's own text; a second
+        // model turn with no user turn between.
+        assert_eq!(asked_turn(&[BOS, USER, 0, 1], &m), None);
+        assert_eq!(asked_turn(&[BOS, USER, 0, 1, SEP, MODEL, 5], &m), None);
+        let twice = [BOS, USER, 0, 1, SEP, MODEL, 5, EOS, SEP, MODEL];
+        assert_eq!(asked_turn(&twice, &m), None);
+        assert_eq!(asked_turn(&[], &m), None);
+    }
+
+    #[test]
+    fn a_prompts_reply_is_checked_against_its_last_user_turn_only() {
+        let t = table(&sample());
+        let m = marks();
+        let setting = Setting {
+            cap: 100,
+            keep: Ratio { num: 1, den: 2 },
+            hold_out: false,
+        };
+        // The earlier turn {0, 1} holds reply B; the asked turn {0, 1, 2} holds A three ways.
+        let prompt = [
+            BOS, USER, 0, 1, SEP, MODEL, 6, EOS, SEP, USER, 0, 1, 2, SEP, MODEL,
+        ];
+        let turn = [0, 1, 2];
+        assert_eq!(
+            t.check_prompt(None, &m, &prompt, A, setting),
+            Verdict::Checked(t.check(&turn, A, false, 100, setting.keep))
+        );
+        assert!(matches!(
+            t.check_prompt(None, &m, &prompt, A, setting),
+            Verdict::Checked(Check::Stands { .. })
+        ));
+        assert!(matches!(
+            t.check_prompt(None, &m, &prompt, B, setting),
+            Verdict::Checked(Check::Replaced { reply: 0, .. })
+        ));
+        // The hold-out reaches the check: turn {0, 1, 2} was counted twice, both with A.
+        let held = Setting {
+            hold_out: true,
+            ..setting
+        };
+        assert_eq!(
+            t.check_prompt(None, &m, &prompt, A, held),
+            Verdict::Checked(t.check(&turn, A, true, 100, setting.keep))
+        );
+        assert_ne!(
+            t.check_prompt(None, &m, &prompt, A, held),
+            t.check_prompt(None, &m, &prompt, A, setting)
+        );
+        // A prompt that opens no model turn is not checked.
+        assert_eq!(
+            t.check_prompt(None, &m, &[BOS, USER, 0, 1, 2], A, setting),
+            Verdict::NoTurn
+        );
     }
 }
