@@ -107,8 +107,8 @@ impl Votes {
         best
     }
 
-    /// The replies every sure expert holds, by reply index. Empty when no expert is sure or the
-    /// sure experts share no reply: then the refusal is void.
+    /// The replies every sure expert holds that have a score, by reply index. Empty when no
+    /// expert is sure or the sure experts share no such reply: then the refusal is void.
     fn agreed(&self) -> Vec<u32> {
         let Some((first, rest)) = self.sure.split_first() else {
             return Vec::new();
@@ -116,6 +116,7 @@ impl Votes {
         first
             .iter()
             .copied()
+            .filter(|r| self.score(*r) > 0)
             .filter(|r| rest.iter().all(|list| list.binary_search(r).is_ok()))
             .collect()
     }
@@ -128,14 +129,13 @@ impl Votes {
     }
 
     /// The top reply among those the sure experts let through. It is [`Self::top`] when the
-    /// refusal is void, and also when no reply they let through has a score.
+    /// refusal is void.
     pub fn top_allowed(&self) -> Option<ReplyScore> {
         let agreed = self.agreed();
         if agreed.is_empty() {
             return self.top();
         }
         self.top_of(|r| agreed.binary_search(&r).is_ok())
-            .or_else(|| self.top())
     }
 
     /// The score of one reply; 0 when it has none.
@@ -1576,6 +1576,42 @@ mod tests {
             t.check_setting(&turn, B, with(Weigh::Even, 8)),
             Check::Stands { .. }
         ));
+    }
+
+    #[test]
+    fn the_refusal_is_void_when_the_reply_the_sure_experts_share_has_no_vote() {
+        // A table no small count gives: experts 6 = {0, 1} and 35 = {2, 3} each saw their own
+        // reply 2^21 times and C once. Both are sure and C is the one reply they share, but one
+        // count in 2^21 + 1 is under a millionth of a vote: C has no score.
+        let mut all = vec![occ(&[0, 1], A), occ(&[0, 1], C)];
+        all.extend([occ(&[2, 3], B), occ(&[2, 3], C)]);
+        let mut t = table(&all);
+        let many = 1u32 << 21;
+        for (at, reply) in [(0, 0), (1, 1)] {
+            t.experts[at].total = many + 1;
+            t.experts[at].counts = vec![Count { reply, count: many }, Count { reply: 2, count: 1 }];
+        }
+        let setting = Setting {
+            cap: u32::MAX,
+            ..with(Weigh::Even, 8)
+        };
+        let turn = [0, 1, 2, 3];
+        let votes = t.votes_setting(&turn, setting);
+        assert_eq!(votes.sure, vec![vec![0, 2], vec![1, 2]]);
+        let nearly = (u64::from(many) << 20) / (u64::from(many) + 1);
+        assert_eq!(votes.scores, scores(&[[0, nearly], [1, nearly]]));
+        // Nothing is refused: A, the top, stands, and so does B at the same vote.
+        assert!(votes.allows(0) && votes.allows(1));
+        assert_eq!(votes.top_allowed(), votes.top());
+        for reply in [A, B] {
+            assert_eq!(
+                t.check_setting(&turn, reply, setting),
+                Check::Stands {
+                    vote: nearly,
+                    top: nearly
+                }
+            );
+        }
     }
 
     #[test]
