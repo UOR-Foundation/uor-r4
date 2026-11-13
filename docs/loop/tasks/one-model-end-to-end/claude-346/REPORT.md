@@ -18,6 +18,7 @@ Every figure below is in `local/claude/claude-346/` in the main checkout (`read-
 8. **The laptop cannot run the address tests at this head.** Done-when item 1 says the decode tests run on the laptop. The crate's test binary does not link here (`ld: library 'cuda' not found`), so they ran on the pod only (below).
 9. **Two readings the sheet names were not taken:** the commonest-token share and the 64-step smoke's hit rate, the two reference points for the real-text reading.
 10. **The seed-1 pair the sheet unlocks on "not called" was not run in this unit.**
+11. **The fresh review of the tests found five gaps in what they would catch** (no defect in the code they test was found by the two reviews of that code). They are not repaired here, because a repair can only be shown on a pod and the part is off unless its flag is given; they are listed under Still open.
 
 ## What changed
 
@@ -85,6 +86,13 @@ None.
 3. The run-on replies under the E8 address. The token arm has the same gain with fewer of them than no address at all (56 against 99), which is the cheaper table to carry forward if a table is carried at all.
 4. The served form: the integer runtime's section for the rows and the exporter.
 5. Real text: by this run, the next real-text job goes without the part; the limit there is size and context.
+6. Test gaps from the review of 13 Nov, to close before the part is trained again:
+   - The wall gradient's hand-worked value is checked on one position with one block, where the block's, the position's and the batch's RMS are the same number. A test with two blocks of different sizes and two positions would pin that the scale is the position's.
+   - The wall gradient is pinned for the `e8` arm across a wall between two integer roots only: not for the `sign` arm, and not across a half-root wall.
+   - For trained rows the trunk test asserts only that the output changed, so the layer a table belongs to and the place of the read after the Hamilton block are not pinned.
+   - The telemetry's in-band share and mean row size are checked at zero only.
+   - `the_rows_gradient_carries_no_history_of_the_forward_pass` pins the property that caused the lost try (the rows' gradient has no history) and fails when the read goes back to a flat indexed read. It does not separately pin the `detach` on the index, which the read by block makes a second guard.
+7. `AddressMemory::load` checks each table's shape and not the count of tables against the trunk's layers (a short checkpoint fails at the first read, loudly); under `--train-as-served` the rows are held inside the 16-bit range on every forward, which the design text does not say; a band given to the `collapse` or `token` arm is stored though those arms have no wall.
 
 ## Plain summary
 
