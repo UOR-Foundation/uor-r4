@@ -407,6 +407,16 @@ impl PairRows {
         vec![self.rows.clone()]
     }
 
+    /// How many rows hold a non-zero entry, and the root mean square over every entry. Reduced
+    /// on the device: one value per row and one sum come back.
+    pub fn census(&self) -> Result<(usize, f64)> {
+        let rows = self.rows.as_tensor();
+        let peaks = rows.abs()?.max(1)?.to_vec1::<f32>()?;
+        let nonzero = peaks.iter().filter(|&&peak| peak != 0.0).count();
+        let squares = rows.sqr()?.sum_all()?.to_scalar::<f32>()? as f64;
+        Ok((nonzero, (squares / rows.elem_count() as f64).sqrt()))
+    }
+
     /// `x` (`batch × time × width`) with each reply position's turn bag added. With no hit, `x`
     /// itself.
     pub fn apply(&self, x: &Tensor, ids: &[u32]) -> Result<Tensor> {
@@ -794,5 +804,20 @@ mod tests {
         let back = loaded.rows.as_tensor().flatten_all().unwrap();
         assert_eq!(back.to_vec1::<f32>().unwrap(), table);
         std::fs::remove_dir_all(&directory).unwrap();
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_census_counts_rows_that_hold_a_value() {
+        let device = device();
+        let rows = PairRows::new(dict(), marks(), 4, &device).unwrap();
+        assert_eq!(rows.census().unwrap(), (0, 0.0));
+        // Row 1 holds (3, 4, 0, 0): the squares sum to 25 over 16 entries, a mean of 25/16.
+        let mut table = vec![0f32; 16];
+        (table[4], table[5]) = (3.0, 4.0);
+        rows.variables()[0]
+            .set(&Tensor::from_vec(table, (4, 4), &device).unwrap())
+            .unwrap();
+        assert_eq!(rows.census().unwrap(), (1, 1.25));
     }
 }
