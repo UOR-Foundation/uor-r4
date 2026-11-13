@@ -2382,6 +2382,9 @@ pub struct PlaceCounts {
 pub struct PlaceRead {
     marks: PlaceMarks,
     stop: Vec<bool>,
+    /// The tokens that may stand just before a place (claude-361), by token; none on, the near
+    /// key.
+    link: Vec<bool>,
     counts: std::sync::Arc<std::sync::Mutex<PlaceCounts>>,
     tally: std::sync::Arc<std::sync::Mutex<PlaceTally>>,
 }
@@ -2417,12 +2420,18 @@ pub struct PlaceReading {
 struct PlaceSaved {
     marks: PlaceMarks,
     stop: Vec<u32>,
+    /// claude-361: a state saved before the link tokens has none, the near key.
+    #[serde(default)]
+    link: Vec<u32>,
     counts: PlaceCounts,
 }
 
 impl PlaceRead {
-    fn new(marks: PlaceMarks, stop: Vec<bool>, counts: PlaceCounts) -> Result<Self> {
+    fn new(marks: PlaceMarks, stop: Vec<bool>, link: Vec<bool>, counts: PlaceCounts) -> Result<Self> {
         let vocab = stop.len();
+        if link.len() != vocab {
+            return Err(invalid(format!("the place read has {} link flags for {vocab} tokens", link.len())));
+        }
         if counts.arm.len() != vocab || counts.open.len() != vocab {
             return Err(invalid(format!(
                 "the place read has {} arm and {} open counts for {vocab} tokens",
@@ -2433,6 +2442,7 @@ impl PlaceRead {
         let place = Self {
             marks,
             stop,
+            link,
             counts: std::sync::Arc::new(std::sync::Mutex::new(counts)),
             tally: std::sync::Arc::default(),
         };
@@ -2446,13 +2456,16 @@ impl PlaceRead {
     }
 
     /// The tables the register program reads, as the artifact carries them: each token's stop,
-    /// arm and open bits, the last two from the counts' signs as they stand now.
+    /// arm, open and link bits, the arm and open bits from the counts' signs as they stand now.
     pub fn image(&self) -> Result<PlaceImage> {
         let counts = self.counts()?;
         let class = (0..self.stop.len())
             .map(|v| {
                 let bit = |on: bool, bit: i16| if on { bit } else { 0 };
-                bit(self.stop[v], PLACE_STOP) | bit(counts.arm[v] > 0, PLACE_ARM) | bit(counts.open[v] > 0, PLACE_OPEN)
+                bit(self.stop[v], PLACE_STOP)
+                    | bit(counts.arm[v] > 0, PLACE_ARM)
+                    | bit(counts.open[v] > 0, PLACE_OPEN)
+                    | bit(self.link[v], PLACE_LINK)
             })
             .collect();
         PlaceImage::checked(self.marks.clone(), class, self.stop.len()).map_err(invalid)
@@ -2490,10 +2503,12 @@ impl PlaceRead {
         })
     }
 
-    /// Whether this read frames a conversation and stops as a kit with `marks` and `stop` does.
-    pub fn framed_as(&self, marks: &PlaceMarks, stop: &[u32]) -> bool {
-        let flags = stop_flags(stop, self.stop.len());
-        self.marks == *marks && flags.is_ok_and(|flags| flags == self.stop)
+    /// Whether this read frames a conversation, stops and keys as a kit with `marks`, `stop` and
+    /// `link` does.
+    pub fn framed_as(&self, marks: &PlaceMarks, stop: &[u32], link: &[u32]) -> bool {
+        let stops = stop_flags(stop, self.stop.len());
+        let links = link_flags(link, self.link.len());
+        self.marks == *marks && stops.is_ok_and(|flags| flags == self.stop) && links.is_ok_and(|flags| flags == self.link)
     }
 
     /// The two gains as they stand, for a sheet's reading.
@@ -2511,18 +2526,32 @@ impl PlaceRead {
     }
 
     fn saved(&self) -> Result<PlaceSaved> {
-        let stop = (0..self.stop.len() as u32).filter(|&v| self.stop[v as usize]).collect();
-        Ok(PlaceSaved { marks: self.marks.clone(), stop, counts: self.counts()?.clone() })
+        let on = |flags: &[bool]| (0..flags.len() as u32).filter(|&v| flags[v as usize]).collect();
+        Ok(PlaceSaved {
+            marks: self.marks.clone(),
+            stop: on(&self.stop),
+            link: on(&self.link),
+            counts: self.counts()?.clone(),
+        })
     }
 }
 
 /// The tokens a read stops at as flags over `vocab` tokens; a token past the vocabulary is refused.
 fn stop_flags(stop: &[u32], vocab: usize) -> Result<Vec<bool>> {
+    token_flags(stop, vocab, "stop")
+}
+
+/// claude-361: the link tokens as flags over `vocab` tokens; a token past the vocabulary is refused.
+fn link_flags(link: &[u32], vocab: usize) -> Result<Vec<bool>> {
+    token_flags(link, vocab, "link")
+}
+
+fn token_flags(tokens: &[u32], vocab: usize, what: &str) -> Result<Vec<bool>> {
     let mut flags = vec![false; vocab];
-    for &token in stop {
+    for &token in tokens {
         *flags
             .get_mut(token as usize)
-            .ok_or_else(|| invalid(format!("stop token {token} is past the {vocab}-token vocabulary")))? = true;
+            .ok_or_else(|| invalid(format!("{what} token {token} is past the {vocab}-token vocabulary")))? = true;
     }
     Ok(flags)
 }
@@ -2553,6 +2582,11 @@ pub struct PlaceKit {
     pub marks: PlaceMarks,
     pub stop: Vec<u32>,
     pub places: Vec<[u32; 4]>,
+    /// claude-361: the tokens that may stand just before a place, in ascending order. With
+    /// none, the near key (the two tokens before a place); with some, the before-link key (the
+    /// two tokens before the link token).
+    #[serde(default)]
+    pub link: Vec<u32>,
 }
 
 impl PlaceKit {
@@ -2571,16 +2605,21 @@ impl PlaceKit {
         if !ordered || !whole {
             return Err(invalid("the place kit's labels are out of order, or a place does not stand before its reply"));
         }
+        if !self.link.windows(2).all(|w| w[0] < w[1]) {
+            return Err(invalid("the place kit's link tokens are not in strictly ascending order"));
+        }
         Ok(())
     }
 
     /// The labels of the windows that start at the corpus positions `starts`, each `time` long.
     /// A reply that starts at corpus position `r` is reported at the row before it. Its place is
-    /// a candidate only from the window's third position on, so an earlier one is [`Outside`].
+    /// a candidate only from the window's third position on (its fourth with link tokens, whose
+    /// key reads three tokens before the place), so an earlier one is [`Outside`].
     ///
     /// [`Outside`]: PlaceLabel::Outside
     pub fn labels(&self, starts: &[Option<usize>], time: usize) -> PlaceLabels {
         let mut out = PlaceLabels::new();
+        let before = if self.link.is_empty() { 2 } else { 3 };
         for (b, start) in starts.iter().enumerate() {
             // A window with no corpus start is labelled with nothing.
             let Some(start) = *start else { continue };
@@ -2588,7 +2627,7 @@ impl PlaceKit {
             let inside = self.places[from..].iter().take_while(|p| (p[0] as usize) <= start + time);
             for &[reply, s, p, _] in inside {
                 let (reply, s, p) = (reply as usize, s as usize, p as usize);
-                let label = if s >= start + 2 {
+                let label = if s >= start + before {
                     PlaceLabel::At { place: s - start, value_row: p - 1 - start }
                 } else {
                     PlaceLabel::Outside
@@ -2695,15 +2734,20 @@ fn place_vote(counts: &mut [i16], token: u32, up: bool) {
 ///
 /// Returns the pull's pairs, flat rows `(t, s)`: every row `t` of a labelled question, from the
 /// window's second, with the labelled place `s`; and the votes cast, arm then open, each up then
-/// down.
+/// down. Under the before-link key (`link`, by token, has a token on; claude-361) a labelled
+/// question gives one pair, its last row with the place, and only when that row is from the
+/// window's second and the token before the place is a link token: the question there carries
+/// the whole question, and a place no link token stands before is no candidate.
 fn place_learn(
     rows: &[PlaceRow],
     ids: &[u32],
     time: usize,
     labels: &PlaceLabels,
     placed: &[bool],
+    link: &[bool],
     counts: &mut PlaceCounts,
 ) -> (Vec<(u32, u32)>, [[u64; 2]; 2]) {
+    let linked = link.iter().any(|&on| on);
     // The votes cast, arm then open, each up then down.
     let mut votes = [[0u64; 2]; 2];
     let mut vote = |counts: &mut [i16], gain: usize, token: u32, up: bool| {
@@ -2728,8 +2772,15 @@ fn place_learn(
                         for &(at, pos) in found {
                             vote(&mut counts.arm, 0, ids[base + at], pos == place);
                         }
-                        let asking = content.clone().filter(|&at| at >= 1);
-                        pairs.extend(asking.map(|at| ((base + at) as u32, (base + place) as u32)));
+                        let pair = |at: usize| ((base + at) as u32, (base + place) as u32);
+                        if linked {
+                            let before = place.checked_sub(1).map(|p| ids[base + p] as usize);
+                            let after_link = before.is_some_and(|v| link.get(v).copied().unwrap_or(false));
+                            let last = content.clone().last().filter(|&at| at >= 1);
+                            pairs.extend(last.filter(|_| after_link).map(pair));
+                        } else {
+                            pairs.extend(content.clone().filter(|&at| at >= 1).map(pair));
+                        }
                     }
                     None => {
                         for &(at, _) in found {
@@ -2896,10 +2947,13 @@ impl HammingReads {
     /// without it, less the readout read's ask write, which the place read replaces. The readout
     /// read's ask heads take a margin of an eighth of a head's bits: a find is a match on both
     /// tokens of the question, and a quarter would pass half of the candidates that match one.
-    pub fn with_place(self, marks: PlaceMarks, stop: &[u32]) -> Result<Self> {
-        let vocab = self.place_vocab()?;
+    /// `link` (claude-361) are the tokens that may stand just before a place: with none the key
+    /// is the near key and the question carry is refused; with some it is the before-link key,
+    /// whose question is the carried question, so the carry is allowed.
+    pub fn with_place(self, marks: PlaceMarks, stop: &[u32], link: &[u32]) -> Result<Self> {
+        let vocab = self.place_vocab(!link.is_empty())?;
         let counts = PlaceCounts { arm: vec![0; vocab], open: vec![0; vocab] };
-        let mut reads = self.with_place_state(marks, stop, counts)?;
+        let mut reads = self.with_place_state(marks, stop, link, counts)?;
         let read = &mut reads.reads[1];
         let head_width = read.weight.dim(1)? / read.heads;
         let copy_heads = read.copy_heads();
@@ -2917,14 +2971,17 @@ impl HammingReads {
     }
 
     /// How many tokens the readout read's question table has, the place read's vocabulary; the
-    /// reads the place read cannot sit on are refused here.
-    fn place_vocab(&self) -> Result<usize> {
+    /// reads the place read cannot sit on are refused here. `linked`: the read keys before a link
+    /// token (claude-361), whose question is the carried one, so only the near key refuses the
+    /// carry.
+    fn place_vocab(&self, linked: bool) -> Result<usize> {
         if !self.has_ask() {
             return Err(invalid("the place read finds with the ask heads; turn them on with --hamming-ask 1"));
         }
-        if self.carry_rows() > 0 {
+        if self.carry_rows() > 0 && !linked {
             return Err(invalid(
-                "the place read and the question carry both change the readout read's question; one is on at a time",
+                "the place read with no link tokens and the question carry both change the readout read's question; \
+                 one is on at a time (a kit with link tokens takes the carry)",
             ));
         }
         let read = self
@@ -2944,9 +3001,10 @@ impl HammingReads {
     }
 
     /// The reads with the place read's host state attached as given, margins untouched.
-    fn with_place_state(mut self, marks: PlaceMarks, stop: &[u32], counts: PlaceCounts) -> Result<Self> {
-        let vocab = self.place_vocab()?;
-        self.reads[1].place = Some(PlaceRead::new(marks, stop_flags(stop, vocab)?, counts)?);
+    fn with_place_state(mut self, marks: PlaceMarks, stop: &[u32], link: &[u32], counts: PlaceCounts) -> Result<Self> {
+        let vocab = self.place_vocab(!link.is_empty())?;
+        let place = PlaceRead::new(marks, stop_flags(stop, vocab)?, link_flags(link, vocab)?, counts)?;
+        self.reads[1].place = Some(place);
         Ok(self)
     }
 
@@ -2958,7 +3016,7 @@ impl HammingReads {
         }
         let saved: PlaceSaved = serde_json::from_slice(&std::fs::read(&path)?)
             .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
-        self.with_place_state(saved.marks, &saved.stop, saved.counts)
+        self.with_place_state(saved.marks, &saved.stop, &saved.link, saved.counts)
     }
 
     /// The readout read's place read, when on.
@@ -2998,7 +3056,7 @@ impl HammingReads {
         let placed: Vec<bool> = starts.iter().map(Option::is_some).collect();
         let (query, key) = read.place_codes(ids, time, table)?;
         let rows = read.place_rows(place, &query, &key, ids, time)?;
-        let (pairs, votes) = place_learn(&rows, ids, time, &labels, &placed, &mut *place.counts()?);
+        let (pairs, votes) = place_learn(&rows, ids, time, &labels, &placed, &place.link, &mut *place.counts()?);
         if pairs.is_empty() {
             place.tallied(votes, None)?;
             return Ok(None);
@@ -6616,7 +6674,7 @@ mod place_tests {
 
     fn place() -> PlaceRead {
         let counts = PlaceCounts { arm: vec![0; VOCAB], open: vec![0; VOCAB] };
-        PlaceRead::new(marks(), stop_flags(&[DOT], VOCAB).expect("flags"), counts).expect("a place read")
+        PlaceRead::new(marks(), stop_flags(&[DOT], VOCAB).expect("flags"), vec![false; VOCAB], counts).expect("a place read")
     }
 
     /// One pass and its votes, with an exact margin: the rows' offers and the pull's pairs.
@@ -6630,13 +6688,13 @@ mod place_tests {
         let image = place.image().expect("an image");
         let rows = place_pass(&image, place_first(16), &[1 << 16], &TALK, TALK.len(), &q, &k);
         let counts = &mut place.counts().expect("counts");
-        let (pairs, votes) = place_learn(&rows, &TALK, TALK.len(), labels, &[placed], counts);
+        let (pairs, votes) = place_learn(&rows, &TALK, TALK.len(), labels, &[placed], &[], counts);
         place.tallied(votes, None).expect("a tally");
         (rows.into_iter().map(|r| r.offer).collect(), pairs)
     }
 
     fn kit() -> PlaceKit {
-        PlaceKit { tokens_sha256: String::new(), marks: marks(), stop: vec![DOT], places: vec![[17, 5, 18, 1]] }
+        PlaceKit { tokens_sha256: String::new(), marks: marks(), stop: vec![DOT], places: vec![[17, 5, 18, 1]], link: Vec::new() }
     }
 
     #[test]
@@ -6783,7 +6841,7 @@ mod place_tests {
         let labels = kit().labels(&[Some(100), Some(0)], time);
         assert_eq!(labels, PlaceLabels::from([(time + 16, PlaceLabel::At { place: 5, value_row: 17 })]));
         let counts = &mut place.counts().expect("counts");
-        let (pairs, votes) = place_learn(&rows, &ids, time, &labels, &[true, true], counts);
+        let (pairs, votes) = place_learn(&rows, &ids, time, &labels, &[true, true], &[], counts);
         // The pull's pairs are flat rows, and the one vote is the second window's right find.
         assert_eq!(pairs, vec![(33, 25), (34, 25)]);
         assert_eq!((votes, counts.arm[ASK as usize]), ([[1, 0], [0, 0]], 1));
@@ -6855,12 +6913,109 @@ mod place_tests {
         let saved = place.saved().expect("saved");
         let text = serde_json::to_vec(&saved).expect("json");
         let back: PlaceSaved = serde_json::from_slice(&text).expect("json");
-        let again = PlaceRead::new(back.marks, stop_flags(&back.stop, VOCAB).expect("flags"), back.counts).expect("a place read");
+        let again = PlaceRead::new(back.marks, stop_flags(&back.stop, VOCAB).expect("flags"), link_flags(&back.link, VOCAB).expect("flags"), back.counts).expect("a place read");
         assert_eq!(again.image().expect("an image"), image);
         // Counts for another vocabulary are refused.
         let short = PlaceCounts { arm: vec![0; 3], open: vec![0; VOCAB] };
-        assert!(PlaceRead::new(marks(), vec![false; VOCAB], short).is_err());
+        assert!(PlaceRead::new(marks(), vec![false; VOCAB], vec![false; VOCAB], short).is_err());
         assert!(stop_flags(&[VOCAB as u32], VOCAB).is_err());
+    }
+
+    /// claude-361: the near place read of [`place`], keyed before the link tokens `link`.
+    fn linked_place(link: &[u32]) -> PlaceRead {
+        let counts = PlaceCounts { arm: vec![0; VOCAB], open: vec![0; VOCAB] };
+        let stop = stop_flags(&[DOT], VOCAB).expect("flags");
+        PlaceRead::new(marks(), stop, link_flags(link, VOCAB).expect("flags"), counts).expect("a place read")
+    }
+
+    /// claude-361: a kit written before the link tokens loads with none, the near key; one with
+    /// link tokens loads back as it was; link tokens out of strictly ascending order are refused.
+    #[test]
+    fn a_kit_names_its_link_tokens_in_ascending_order_or_none() {
+        let mut old = serde_json::to_value(kit()).expect("json");
+        old.as_object_mut().expect("an object").remove("link");
+        let loaded: PlaceKit = serde_json::from_value(old).expect("a kit with no link tokens");
+        assert_eq!((loaded.link.is_empty(), loaded.check().is_ok()), (true, true));
+        let linked = PlaceKit { link: vec![NAME, IS], ..kit() };
+        let back: PlaceKit = serde_json::from_slice(&serde_json::to_vec(&linked).expect("json")).expect("json");
+        assert_eq!(back, linked);
+        assert!(linked.check().is_ok());
+        assert!(PlaceKit { link: vec![IS, NAME], ..kit() }.check().is_err(), "descending");
+        assert!(PlaceKit { link: vec![IS, IS], ..kit() }.check().is_err(), "repeated");
+    }
+
+    /// claude-361: with link tokens a place needs three tokens before it inside the window, so a
+    /// place at the window's third position is outside it; with none, it is labelled.
+    #[test]
+    fn a_linked_kit_labels_a_place_from_the_windows_fourth_position() {
+        let (near, linked) = (kit(), PlaceKit { link: vec![IS], ..kit() });
+        // The place, 5, is the window's third position for a window from 3, its fourth from 2.
+        let time = TALK.len();
+        assert_eq!(near.labels(&[Some(3)], time).get(&13), Some(&PlaceLabel::At { place: 2, value_row: 14 }));
+        assert_eq!(linked.labels(&[Some(3)], time).get(&13), Some(&PlaceLabel::Outside));
+        let at = PlaceLabel::At { place: 3, value_row: 15 };
+        assert_eq!(near.labels(&[Some(2)], time).get(&14), Some(&at));
+        assert_eq!(linked.labels(&[Some(2)], time).get(&14), Some(&at));
+    }
+
+    /// claude-361: under the before-link key a labelled question pulls at its last row alone,
+    /// and only when a link token stands before the place; with no link tokens the pairs are the
+    /// near key's, every question row from the window's second. The votes are the same.
+    #[test]
+    fn the_before_link_key_pulls_the_questions_last_row_after_a_link_token() {
+        let (q, k) = (codes(&TALK).0, codes(&TALK).1);
+        let image = place().image().expect("an image");
+        let rows = place_pass(&image, place_first(16), &[1 << 16], &TALK, TALK.len(), &q, &k);
+        assert_eq!(rows[16].asked.as_ref().map(|a| a.0.clone()), Some(13..15));
+        let labels = kit().labels(&[Some(0)], TALK.len());
+        let learn = |link: &[u32]| {
+            let flags = if link.is_empty() { Vec::new() } else { link_flags(link, VOCAB).expect("flags") };
+            let mut counts = PlaceCounts { arm: vec![0; VOCAB], open: vec![0; VOCAB] };
+            let (pairs, votes) = place_learn(&rows, &TALK, TALK.len(), &labels, &[true], &flags, &mut counts);
+            (pairs, votes, counts)
+        };
+        let (near, after_is, after_name) = (learn(&[]), learn(&[IS]), learn(&[NAME]));
+        assert_eq!(near.0, vec![(13, 5), (14, 5)]);
+        // "is", position 4, stands before the place: one pair, the question's last row.
+        assert_eq!(after_is.0, vec![(14, 5)]);
+        // No link token stands before the place: no pair.
+        assert_eq!(after_name.0, Vec::<(u32, u32)>::new());
+        for (_, votes, counts) in [&after_is, &after_name] {
+            assert_eq!((votes, &counts.arm, &counts.open), (&near.1, &near.2.arm, &near.2.open));
+        }
+    }
+
+    /// claude-361: the image carries the link bit on the link tokens alone and keys before them;
+    /// with none it keeps the near key. The saved form keeps the link tokens, and a read is
+    /// framed as a kit only with the same link tokens.
+    #[test]
+    fn the_image_carries_the_link_tokens_and_their_key() {
+        use uor_r4_integer::fbs_snapshot::PlaceKey;
+        let linked = linked_place(&[IS]);
+        let image = linked.image().expect("an image");
+        assert!((0..VOCAB as u32).all(|v| image.has(v, PLACE_LINK) == (v == IS)));
+        assert_eq!(image.key(), PlaceKey::BeforeLink);
+        assert_eq!(place().image().expect("an image").key(), PlaceKey::Near);
+        assert!((0..VOCAB as u32).all(|v| !place().image().expect("an image").has(v, PLACE_LINK)));
+        assert_eq!(linked.saved().expect("saved").link, vec![IS]);
+        assert!(linked.framed_as(&marks(), &[DOT], &[IS]) && !linked.framed_as(&marks(), &[DOT], &[]));
+        assert!(place().framed_as(&marks(), &[DOT], &[]) && !place().framed_as(&marks(), &[DOT], &[IS]));
+        assert!(link_flags(&[VOCAB as u32], VOCAB).is_err());
+        let short = PlaceCounts { arm: vec![0; VOCAB], open: vec![0; VOCAB] };
+        assert!(PlaceRead::new(marks(), vec![false; VOCAB], vec![false; 3], short).is_err());
+    }
+
+    /// claude-361: the place read with no link tokens refuses reads with the question carry;
+    /// with link tokens, whose key reads the carried question, it takes them.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_carry_is_refused_by_the_near_key_and_taken_by_the_before_link_key() {
+        let device = Device::new_cuda(0).unwrap();
+        let carried = HammingReads::new(4, 256, &device).unwrap().with_ask(VOCAB).unwrap().with_carry(4, VOCAB).unwrap();
+        let near = carried.clone().with_place(marks(), &[DOT], &[]);
+        assert!(near.as_ref().is_err_and(|e| e.to_string().contains("question carry")), "{:?}", near.err());
+        let linked = carried.with_place(marks(), &[DOT], &[IS]).unwrap();
+        assert_eq!(linked.place().map(|p| p.image().unwrap().key()), Some(uor_r4_integer::fbs_snapshot::PlaceKey::BeforeLink));
     }
 
     /// A table of `VOCAB` points whose codes are known: in each half of each 64-coordinate head,
@@ -6886,7 +7041,7 @@ mod place_tests {
             .unwrap()
             .with_ask(VOCAB)
             .unwrap()
-            .with_place(marks(), &[DOT])
+            .with_place(marks(), &[DOT], &[])
             .unwrap();
         let identity = Tensor::from_vec([1.0f32, 0.0, 0.0, 0.0].repeat(64), (64, 4), device).unwrap();
         for read in &reads.reads {

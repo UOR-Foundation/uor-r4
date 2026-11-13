@@ -95,7 +95,8 @@
 //! `--hamming-carry-question H` (needs `--hamming-ask 1`) adds, at the readout read's ask heads,
 //! the question points of the H rows before each row in its window, each scaled by a learned gain
 //! per token, starting at zero (`HammingReads::with_carry`, claude-335).
-//! `--hamming-place KIT` (needs `--hamming-ask 1`, refuses `--hamming-carry-question`) turns on
+//! `--hamming-place KIT` (needs `--hamming-ask 1`; refuses `--hamming-carry-question` unless KIT
+//! names link tokens, whose before-link key reads the carried question, claude-361) turns on
 //! the place read at the readout read (`HammingReads::with_place`, claude-351): a register a
 //! conversation, set by the ask heads' two-token find over the earlier user turns, and at an open
 //! reply row the token at the place as the copy mix's source. KIT is the file
