@@ -510,6 +510,7 @@ fn main() -> Result<()> {
         init_from: None,
         address_memory: None,
         address_band: None,
+        pair_rows: None,
     };
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {

@@ -310,6 +310,9 @@ pub struct LongConfig {
     /// The address memory's band `τ`; the arm's default when absent. Needs `address_memory`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub address_band: Option<f64>,
+    /// The pair rows' minimum turn count (`--pair-rows`), `None` when off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pair_rows: Option<u32>,
 }
 
 /// What TRAIN's scored targets are ([`LongConfig::train_targets`], claude-296).
@@ -709,6 +712,7 @@ impl Drop for ArmGuard {
         crate::flock_read_memory::set_memory_rows(None);
         crate::flock_read_memory::set_reply_rows(None);
         crate::e8_address::set_address_memory(None);
+        crate::pair_rows::set_pair_rows(None);
         set_trained_cut(None);
         crate::flock_read_hamming::set_row_cut(None);
     }
@@ -801,13 +805,39 @@ fn load_reads(directory: &Path, device: &Device) -> Result<()> {
     crate::e8_address::set_address_memory(crate::e8_address::AddressMemory::load(
         directory, device,
     )?);
+    let pair = crate::pair_rows::PairRows::load(directory, device)?;
+    if let Some(rows) = &pair {
+        let (nonzero, rms) = rows.census()?;
+        println!(
+            "[pair] loaded {} pairs; dictionary sha256 {}; rows nonzero {nonzero}, rms {rms:.6}",
+            rows.dict().len(),
+            sha256_bytes(&rows.dict().to_bytes())
+        );
+    }
+    crate::pair_rows::set_pair_rows(pair);
     Ok(())
+}
+
+/// The tokens of `\nUser:`, a user turn's marker; the same ids as `USER_MARKER` in
+/// `bin/train-question-reach.rs:26-28`.
+const PAIR_USER_MARKER: [u32; 3] = [55, 2728, 28];
+/// The tokens of `\nAssistant:`, a reply's header; the same ids as `ASSISTANT_HEADER` in
+/// `bin/train-question-reach.rs:26-28`.
+const PAIR_ASSISTANT_HEADER: [u32; 6] = [201, 35, 560, 652, 714, 28];
+
+/// The marks the pair rows find a turn and its reply by.
+pub(crate) fn pair_marks() -> crate::pair_rows::PairMarks {
+    crate::pair_rows::PairMarks {
+        user: PAIR_USER_MARKER.to_vec(),
+        assistant: PAIR_ASSISTANT_HEADER.to_vec(),
+    }
 }
 
 const INIT_RECORD_SCHEMA: &str = "uor-r4.train-in-space-init/1";
 const HAMMING_SIDECAR: &str = "hamming_read.safetensors";
-const UNSUPPORTED_INIT_SIDECARS: [&str; 7] = [
+const UNSUPPORTED_INIT_SIDECARS: [&str; 8] = [
     "address_memory.safetensors",
+    "pair_rows.safetensors",
     "flock_read.safetensors",
     "content_read.safetensors",
     "opening_read.safetensors",
@@ -901,6 +931,12 @@ fn validate_checkpoint_selection(config: &LongConfig) -> Result<()> {
     if config.address_memory.is_some() {
         return Err(invalid(
             "--init-from does not start an address memory; --address-memory trains from a fresh start",
+        ));
+    }
+    // claude-370: the pair rows likewise start at zero beside a fresh trunk.
+    if config.pair_rows.is_some() {
+        return Err(invalid(
+            "--init-from does not start the pair rows; --pair-rows trains from a fresh start",
         ));
     }
     if !checkpoint.is_dir() {
@@ -3406,6 +3442,9 @@ fn unserved_reads() -> Vec<&'static str> {
     }
     if crate::e8_address::address_memory().is_some() {
         set.push("the address memory");
+    }
+    if crate::pair_rows::pair_rows().is_some() {
+        set.push("the pair rows");
     }
     set
 }
@@ -13935,6 +13974,11 @@ pub fn run_recall(
             "the address memory trains with --out's long run, not under --recall",
         ));
     }
+    if config.pair_rows.is_some() {
+        return Err(invalid(
+            "the pair rows train with --out's long run, not under --recall",
+        ));
+    }
     if form.query && pairs_per_bucket != RECALL_QUERY_EPISODES {
         return Err(invalid(format!(
             "the two-class task holds {RECALL_QUERY_EPISODES} episodes a window, not {pairs_per_bucket}"
@@ -14868,6 +14912,15 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     if config.address_band.is_some() && config.address_memory.is_none() {
         return Err(invalid(
             "--address-band sets the address memory's band; turn the memory on with --address-memory",
+        ));
+    }
+    if config.pair_rows == Some(0) {
+        return Err(invalid("--pair-rows wants a minimum of 1 or more"));
+    }
+    // claude-370: the export has no section for the pair rows, so no artifact holds them.
+    if config.pair_rows.is_some() && config.train_as_served {
+        return Err(invalid(
+            "--train-as-served rounds what the export carries; the pair rows have no exported form",
         ));
     }
     // Training as served (claude-258) rounds what the export carries: the trunk, the Hamming
@@ -16894,6 +16947,7 @@ mod tests {
             init_from: None,
             address_memory: None,
             address_band: None,
+            pair_rows: None,
         }
     }
 
@@ -19599,6 +19653,40 @@ mod tests {
         assert!(refusal(usize::MAX, 72).contains("too large"));
         assert!(refusal(3, 13).contains("needs at least 14 steps"));
         assert!(refusal(3, 14).contains("needs a CUDA device"));
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn a_zero_pair_minimum_is_refused() {
+        let missing = std::env::temp_dir().join(format!("claude-370-zero-{}", std::process::id()));
+        let mut config = config(0, None);
+        config.pair_rows = Some(0);
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("--pair-rows wants a minimum of 1 or more")),
+            "{refused:?}"
+        );
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn pair_rows_refuse_training_as_served() {
+        let missing = std::env::temp_dir().join(format!("claude-370-served-{}", std::process::id()));
+        let mut config = config(0, None);
+        (config.pair_rows, config.train_as_served) = (Some(2), true);
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("the pair rows have no exported form")),
+            "{refused:?}"
+        );
         assert!(!missing.exists());
     }
 
