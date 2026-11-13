@@ -16,6 +16,7 @@ The order asked whether a conversation goes on answering when a reply that did n
 6. **Not covered:** `uor-chat`'s re-seed when the context overflows (it rebuilds the history from the last turns; a cut reply inside that window is fed again under drop and close), and a reply that ended wrong, which is still read back as if told (claude-368, item 6).
 7. **The builder stopped before the negative gates.** The top session wrote and ran them. Its script labelled every failing gate "COMPILE-ERROR" (it matched cargo's "error: test failed" line); the seven logs were read instead: each compiled and its pinned test failed. The script's pattern is corrected in the kit.
 8. **This branch starts at claude-367's head, not at `main`.** PR 3958 left the merge queue after 60 minutes without a runner (the organization's other repositories held the shared runners); it is queued again when the runners are free.
+9. **The fresh review found the rule untested on the path the laptop chat uses.** `StackChat` settles a reply that did not end in two places: the plain turn, and the turn served again (the place read spoken, the pair experts). Only the first had a test. Commit `e0c47e110f4104cd1c5e9d9ac923970dc3d042b6` adds `stack_chat_drops_a_cut_reply_on_the_serve_again_path`, which fails when the second call is set aside. The review also noted that under drop a caller whose history does not extend the chat's own leaves the chat's history empty; `Unended`'s comment now says so.
 
 ## What changed
 
@@ -25,7 +26,7 @@ The order asked whether a conversation goes on answering when a reply that did n
   - In both the session is reset so the next turn is fed from the history. A reply that ended is never touched. The reply returned is the same under all three.
 - `crates/uor-r4-integer/src/stack/mod.rs`: `Unended` is exported.
 - `crates/uor-r4-integer/src/bin/uor-chat.rs`: `--unended keep|drop|close` for text replies on `--stack` (the REPL, `--say`, `--script`); refused with `--prompt-ids`, `--serve` or without `--stack`. The transcript carries `"unended"` only when the flag is given, so a run without it is byte for byte as before.
-- `crates/uor-r4-integer/src/stack/tests.rs`: five tests; `uor-chat.rs`: one.
+- `crates/uor-r4-integer/src/stack/tests.rs`: six tests; `uor-chat.rs`: one.
 - This folder: [chat-long.json](chat-long.json) (the new conversation), [rules.tsv](rules.tsv) (one good-reply rule per turn of the four scripts), both committed before a reply of a new arm was read; [readings.tsv](readings.tsv); [long-replies.tsv](long-replies.tsv).
 
 ## Measurements
@@ -94,9 +95,10 @@ As served, the one turn wrong on all three models is turn 20: "9 is bigger." for
 
 ## Checks run at the head
 
-Run on the laptop at commit `ad2bb47d6ea6c274967a65c4b553e17153f607eb` (the code; the later commits add files of this folder only).
+Run on the laptop. The readings' code is commit `ad2bb47d6ea6c274967a65c4b553e17153f607eb`; commit `e0c47e110f4104cd1c5e9d9ac923970dc3d042b6` adds one test and two comment lines, and the other later commits add files of this folder only.
 
-- `cargo test --locked --offline -p uor-r4-integer --features serving-wasm --lib stack::`: 268 passed, 0 failed, 1 ignored.
+- `cargo test --locked --offline -p uor-r4-integer --features serving-wasm --lib stack::` at `e0c47e110f4104cd1c5e9d9ac923970dc3d042b6`: 269 passed, 0 failed, 1 ignored (268 at `ad2bb47d6ea6c274967a65c4b553e17153f607eb`).
+- An eighth negative gate, at `e0c47e110f4104cd1c5e9d9ac923970dc3d042b6`: with the settle call on the serve-again path set aside, the crate compiled and `stack_chat_drops_a_cut_reply_on_the_serve_again_path` failed; restored, the suite above passed.
 - `cargo test --locked --offline -p uor-r4-integer --features serving-wasm --bin uor-chat`: 13 passed, 0 failed.
 - `cargo build --release --locked --offline -p uor-r4-integer --features serving-wasm --bin uor-chat`: finished; that binary made every reading.
 - Seven negative gates, each a rule set aside and restored (`git diff --quiet HEAD -- crates` holds after): the removal of the turn under drop, the cut by two periods under close, the end mark under close, the rule that a reply that ended is left alone, the default, the session reset, and the refusal of a wrong flag value. Each compiled and its pinned test failed. The token-cap branch has a test and no negative gate.
