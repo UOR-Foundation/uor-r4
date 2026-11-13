@@ -7,7 +7,7 @@ The order asked whether a conversation goes on answering when a reply that did n
 ## What did not work, first
 
 1. **On the new conversation the gain is 7 turns of 51, under the order's lower line of 8.5.** Good turns after the first cut reply, experts off: keep 28, drop 35, close 35 ([readings.tsv](readings.tsv)). The order's "Adds" line was 45.
-   - **Why the gain is small there.** Under keep the new conversation gets going again by itself. Turn 19 ("Say exactly this: marlo venn tisk") ends on all three models, and four of the five turns after it are good under every arm. On p-s3 the reply cut at turn 4 is not copied at all: the turns after it are the same under keep, drop and close. So keep already has 28 of the 51.
+   - **Why the gain is small there.** Under keep the new conversation gets going again without the rule, though on p-s1 and p-s2 only at turn 19, after six cut turns in a row. Turn 19 ("Say exactly this: marlo venn tisk") ends on all three models, and four of the five turns after it are good under every arm. On p-s3 the reply cut at turn 4 is not copied at all: the turns after it are the same under keep, drop and close. So keep already has 28 of the 51.
    - What drop mends is the run of cut replies: on p-s1 turns 13 to 18 are six times "red is spelled r-e-e-e" under keep, and under drop turns 15, 16 and 17 are answered right; on p-s2 the same six turns give three good answers under drop.
 2. **Most turns still wrong under drop are replies that ended and are wrong.** With the experts off, on the three recorded scripts drop gives 53 good turns of 105 (keep 37) and on the new conversation 44 of 72 (keep 37). Of the 80 turns not good under drop, 13 did not end and 67 ended with a wrong answer ("The capital of France is the capital of France.", "It's green." for the day after Monday). A rule about cut replies does not reach those: they are what the model does not know without the experts.
 3. **Drop and close read the same.** Every total is equal (53 and 44 experts off, 307 experts on); the order's tie rule picks drop. The two arms differ on 4 turns of 177 (a reply cut under one arm is an ended wrong reply under the other) and none of them changes a count.
@@ -32,7 +32,7 @@ The order asked whether a conversation goes on answering when a reply that did n
 
 Three saved models (claude-358's p-s1, p-s2, p-s3, integer artifacts), served on the laptop. Modes: experts off; claude-367's setting held out; the same as served. A turn is good when its reply ended and meets its rule. No pod, no training.
 
-**The rules give the recorded counts.** On claude-368's nine recorded fact-script conversations the rules give its nine counts: off 1, 1, 7; held out 10, 8, 10; as served 12, 10, 12. The keep arm replays the 24 conversations claude-367 and claude-368 recorded with the same user turns, reply ids and stops: 0 differ.
+**The rules give the recorded counts.** On the nine conversations claude-368 recorded on its own script (`facts2` here) the rules give its nine counts: off 1, 1, 7; held out 10, 8, 10; as served 12, 10, 12. The keep arm replays the 24 conversations claude-367 and claude-368 recorded with the same user turns, reply ids and stops: 0 differ.
 
 **The pick.** Good turns on the three recorded scripts, experts off, three models: keep 37, drop 53, close 53 of 105. A tie: drop.
 
@@ -63,7 +63,7 @@ Three saved models (claude-358's p-s1, p-s2, p-s3, integer artifacts), served on
 
 **The new conversation, word for word** (p-s1, experts off, keep and drop; p-s2 as served). All 360 replies are in [long-replies.tsv](long-replies.tsv). A reply that did not end is marked ✂.
 
-| # | User | p-s1, off, keep | p-s1, off, drop | p-s2, as served |
+| # | User | p-s1, off, keep | p-s1, off, drop | p-s2, as served, keep |
 |---|---|---|---|---|
 | 1 | Hi there! | I'm good, thanks for asking. | I'm good, thanks for asking. | Hi there! What can I do for you? |
 | 2 | Keep these in mind: tolvek is 42, brimsa is corvane. | tolvek is 42. | tolvek is 42. | Noted. |
