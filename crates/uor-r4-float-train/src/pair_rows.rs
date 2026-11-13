@@ -1,0 +1,763 @@
+//! Pair rows (one-model-end-to-end, claude-370): a table of learned rows addressed by the exact
+//! pairs of tokens in a user's turn.
+//!
+//! Replies fail where they need two of the turn's tokens at once (claude-367). A pair of turn
+//! tokens names one row here, so a reply can read what the two of them mean together.
+//!
+//! 1. **Address.** Token `t` stands for the prime `primes[t]`, the first `vocab` primes in order
+//!    (`primes[0] = 2`). An unordered pair of different tokens `a`, `b` has the address
+//!    `primes[a] · primes[b]`: by unique factorisation no two pairs share one. The address is a
+//!    32-bit integer, so a vocabulary whose two largest primes multiply to 2³¹ or more is refused.
+//! 2. **Dictionary.** One pass over a token stream ([`PairDictionary::count`]) counts in how many
+//!    user turns each pair appears (once per turn however often it repeats). A pair seen in at
+//!    least `min` turns gets a row; rows are numbered by ascending address.
+//! 3. **Read.** A turn's bag is the sum of its pairs' rows. Every reply position of that turn adds
+//!    the bag to its state ([`PairRows::apply`]): the reply runs from the assistant header's last
+//!    token up to the next user marker or the window's end. The read is a gather and a
+//!    scatter-add; nothing multiplies a state by a table.
+//!
+//! The rows are active for the thread that sets them ([`set_pair_rows`]).
+use std::cell::RefCell;
+use std::collections::{BTreeSet, HashMap};
+use std::path::Path;
+use std::sync::Arc;
+
+use candle_core::{DType, Device, Tensor, Var};
+
+use crate::{invalid, Result};
+
+const FILE: &str = "pair_rows.safetensors";
+const DICT_FILE: &str = "pair_rows.dict";
+const MAGIC: &[u8; 8] = b"UORPAIR1";
+const LIMIT: u64 = 1 << 31;
+
+thread_local! {
+    static ACTIVE: RefCell<Option<PairRows>> = const { RefCell::new(None) };
+}
+
+/// Make `rows` the pair rows applied on this thread, or none.
+pub fn set_pair_rows(rows: Option<PairRows>) {
+    ACTIVE.with(|cell| *cell.borrow_mut() = rows);
+}
+
+/// The pair rows applied on this thread, if any are set. They share their variable with every
+/// other copy.
+pub fn pair_rows() -> Option<PairRows> {
+    ACTIVE.with(|cell| cell.borrow().clone())
+}
+
+/// The first `count` primes in order, with no check on their size.
+fn first_primes(count: usize) -> Vec<u32> {
+    let mut primes: Vec<u32> = Vec::with_capacity(count);
+    let mut candidate = 2u32;
+    while primes.len() < count {
+        let prime = primes
+            .iter()
+            .take_while(|&&p| u64::from(p) * u64::from(p) <= u64::from(candidate))
+            .all(|&p| candidate % p != 0);
+        if prime {
+            primes.push(candidate);
+        }
+        candidate += 1;
+    }
+    primes
+}
+
+/// The first `vocab` primes in order, one per token. Refuses fewer than two tokens and a
+/// vocabulary whose two largest primes multiply to 2³¹ or more.
+pub fn token_primes(vocab: usize) -> Result<Vec<u32>> {
+    if vocab < 2 {
+        return Err(invalid(format!(
+            "pair rows want a vocabulary of at least 2 tokens, not {vocab}"
+        )));
+    }
+    let primes = first_primes(vocab);
+    let top = u64::from(primes[vocab - 1]) * u64::from(primes[vocab - 2]);
+    if top >= LIMIT {
+        return Err(invalid(format!(
+            "pair rows hold a pair address in 31 bits; a vocabulary of {vocab} tokens has the \
+             address {top}"
+        )));
+    }
+    Ok(primes)
+}
+
+/// The token sequences that open a user turn and an assistant reply.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PairMarks {
+    /// The user marker: a turn's tokens start after its last token.
+    pub user: Vec<u32>,
+    /// The assistant header: a turn's tokens stop before its first token, and the reply starts
+    /// at its last token.
+    pub assistant: Vec<u32>,
+}
+
+impl PairMarks {
+    fn check(&self) -> Result<()> {
+        if self.user.is_empty() || self.assistant.is_empty() {
+            return Err(invalid(
+                "pair rows want a user marker and an assistant header of at least one token",
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// One user turn found in a token run, by position in that run.
+struct Turn {
+    /// The first position after the user marker.
+    start: usize,
+    /// The assistant header's first position: the turn's tokens are `start..header`.
+    header: usize,
+    /// The assistant header's last position: the first reply position.
+    reply: usize,
+}
+
+/// The user turns of `tokens` whose user marker and assistant header both lie inside it, and the
+/// start of every user marker. A second user marker before the header starts the turn again.
+fn scan(tokens: &[u32], marks: &PairMarks) -> (Vec<Turn>, Vec<usize>) {
+    let at = |i: usize, mark: &[u32]| tokens[i..].starts_with(mark);
+    let (mut turns, mut users) = (Vec::new(), Vec::new());
+    let mut open: Option<usize> = None;
+    let mut i = 0;
+    while i < tokens.len() {
+        if at(i, &marks.user) {
+            users.push(i);
+            i += marks.user.len();
+            open = Some(i);
+        } else if at(i, &marks.assistant) {
+            if let Some(start) = open.take() {
+                turns.push(Turn {
+                    start,
+                    header: i,
+                    reply: i + marks.assistant.len() - 1,
+                });
+            }
+            i += marks.assistant.len();
+        } else {
+            i += 1;
+        }
+    }
+    (turns, users)
+}
+
+/// The turn's different tokens, sorted.
+fn distinct(turn: &[u32]) -> Vec<u32> {
+    turn.iter()
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+/// The pairs that have rows, and the row each address names.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PairDictionary {
+    primes: Vec<u32>,
+    /// The kept addresses, ascending: row `r` is `addresses[r]`.
+    addresses: Vec<u32>,
+}
+
+impl PairDictionary {
+    /// Count the pairs of the user turns in `tokens` and keep those seen in at least `min` turns.
+    /// A pair counts once per turn. Refuses a turn token outside the vocabulary.
+    pub fn count(vocab: usize, tokens: &[u32], marks: &PairMarks, min: u32) -> Result<Self> {
+        marks.check()?;
+        let primes = token_primes(vocab)?;
+        let (turns, _) = scan(tokens, marks);
+        let mut seen: HashMap<u32, u32> = HashMap::new();
+        for turn in &turns {
+            let bag = distinct(&tokens[turn.start..turn.header]);
+            if let Some(&token) = bag.last().filter(|&&t| t as usize >= vocab) {
+                return Err(invalid(format!(
+                    "a turn token {token} lies outside the vocabulary of {vocab}"
+                )));
+            }
+            for (n, &a) in bag.iter().enumerate() {
+                for &b in &bag[n + 1..] {
+                    *seen
+                        .entry(primes[a as usize] * primes[b as usize])
+                        .or_default() += 1;
+                }
+            }
+        }
+        let mut addresses: Vec<u32> = seen
+            .into_iter()
+            .filter(|&(_, turns)| turns >= min)
+            .map(|(address, _)| address)
+            .collect();
+        addresses.sort_unstable();
+        Ok(Self { primes, addresses })
+    }
+
+    /// The vocabulary the addresses are drawn from.
+    pub fn vocab(&self) -> usize {
+        self.primes.len()
+    }
+
+    /// The number of rows.
+    pub fn len(&self) -> usize {
+        self.addresses.len()
+    }
+
+    /// Whether no pair has a row.
+    pub fn is_empty(&self) -> bool {
+        self.addresses.is_empty()
+    }
+
+    /// The address of the unordered pair `a`, `b`; none for equal tokens or a token outside the
+    /// vocabulary.
+    pub fn address(&self, a: u32, b: u32) -> Option<u32> {
+        if a == b {
+            return None;
+        }
+        let (pa, pb) = (self.primes.get(a as usize)?, self.primes.get(b as usize)?);
+        Some(pa * pb)
+    }
+
+    /// The row of the pair `a`, `b`, if it has one.
+    pub fn row(&self, a: u32, b: u32) -> Option<u32> {
+        let address = self.address(a, b)?;
+        self.addresses
+            .binary_search(&address)
+            .ok()
+            .map(|r| r as u32)
+    }
+
+    /// The rows of every pair of the turn's tokens that has one, sorted and unique.
+    pub fn turn_rows(&self, turn: &[u32]) -> Vec<u32> {
+        let bag = distinct(turn);
+        let mut rows = Vec::new();
+        for (n, &a) in bag.iter().enumerate() {
+            for &b in &bag[n + 1..] {
+                rows.extend(self.row(a, b));
+            }
+        }
+        rows.sort_unstable();
+        rows.dedup();
+        rows
+    }
+
+    /// The dictionary as bytes: the magic, the vocabulary, the row count and the addresses, each
+    /// a little-endian u32.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(16 + 4 * self.addresses.len());
+        bytes.extend_from_slice(MAGIC);
+        bytes.extend_from_slice(&(self.primes.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&(self.addresses.len() as u32).to_le_bytes());
+        for address in &self.addresses {
+            bytes.extend_from_slice(&address.to_le_bytes());
+        }
+        bytes
+    }
+
+    /// The dictionary [`Self::to_bytes`] wrote. Refuses another magic, a length that is not the
+    /// one the row count names, and addresses out of order.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let word = |n: usize| u32::from_le_bytes(bytes[n..n + 4].try_into().unwrap());
+        if bytes.len() < 16 || &bytes[..8] != MAGIC {
+            return Err(invalid("not a pair dictionary: no magic"));
+        }
+        let (vocab, count) = (word(8) as usize, word(12) as usize);
+        if bytes.len() != 16 + 4 * count {
+            return Err(invalid(format!(
+                "a pair dictionary of {count} rows wants {} bytes, not {}",
+                16 + 4 * count,
+                bytes.len()
+            )));
+        }
+        let addresses: Vec<u32> = (0..count).map(|r| word(16 + 4 * r)).collect();
+        if addresses.windows(2).any(|w| w[0] >= w[1]) {
+            return Err(invalid("a pair dictionary's addresses are not ascending"));
+        }
+        Ok(Self {
+            primes: token_primes(vocab)?,
+            addresses,
+        })
+    }
+}
+
+/// Which rows a batch of windows reads and where each turn's bag is added.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Plan {
+    /// Per position (`batch · time`, row-major): the turn whose bag it adds, or `turns` for none.
+    pub turn_of: Vec<u32>,
+    /// Per hit: the turn.
+    pub hit_turn: Vec<u32>,
+    /// Per hit: the dictionary row.
+    pub hit_row: Vec<u32>,
+    /// The number of turns with at least one hit. Only those get a turn index.
+    pub turns: usize,
+    /// Per window: the turn whose reply is still open at the window's last position, for a decode
+    /// step that continues it.
+    pub open: Vec<Option<u32>>,
+}
+
+/// The plan for `ids`, `batch` windows of `time` tokens, row-major. Nothing crosses a window: a
+/// turn counts only when its user marker and its assistant header both lie inside the window. A
+/// turn's reply positions run from the header's last token through the position before the next
+/// user marker, or the window's end. A turn none of whose pairs has a row adds nothing and gets no
+/// turn index.
+pub fn plan(
+    dict: &PairDictionary,
+    marks: &PairMarks,
+    ids: &[u32],
+    batch: usize,
+    time: usize,
+) -> Result<Plan> {
+    marks.check()?;
+    if ids.len() != batch * time {
+        return Err(invalid(format!(
+            "pair rows want {batch} windows of {time} tokens, not {} ids",
+            ids.len()
+        )));
+    }
+    let (mut spans, mut hit_turn, mut hit_row) = (Vec::new(), Vec::new(), Vec::new());
+    let mut open = vec![None; batch];
+    for (window, row) in ids.chunks(time.max(1)).take(batch).enumerate() {
+        let (turns, users) = scan(row, marks);
+        for turn in turns {
+            let rows = dict.turn_rows(&row[turn.start..turn.header]);
+            if rows.is_empty() {
+                continue;
+            }
+            let end = users
+                .iter()
+                .copied()
+                .find(|&u| u > turn.reply)
+                .unwrap_or(time);
+            let index = spans.len() as u32;
+            if end == time {
+                open[window] = Some(index);
+            }
+            hit_turn.extend(std::iter::repeat_n(index, rows.len()));
+            hit_row.extend(rows);
+            spans.push(window * time + turn.reply..window * time + end);
+        }
+    }
+    let turns = spans.len();
+    let mut turn_of = vec![turns as u32; batch * time];
+    for (index, span) in spans.into_iter().enumerate() {
+        turn_of[span].fill(index as u32);
+    }
+    Ok(Plan {
+        turn_of,
+        hit_turn,
+        hit_row,
+        turns,
+        open,
+    })
+}
+
+/// The plan's three index vectors as tensors on `device`: `hit_row`, `hit_turn`, `turn_of`. They
+/// are built from host vectors and carry no gradient history.
+fn indices(plan: &Plan, device: &Device) -> Result<[Tensor; 3]> {
+    let tensor = |v: &[u32]| Tensor::from_slice(v, v.len(), device).map(|t| t.detach());
+    Ok([
+        tensor(&plan.hit_row)?,
+        tensor(&plan.hit_turn)?,
+        tensor(&plan.turn_of)?,
+    ])
+}
+
+/// The learned rows, one per dictionary pair, `width` wide.
+#[derive(Clone, Debug)]
+pub struct PairRows {
+    dict: Arc<PairDictionary>,
+    marks: PairMarks,
+    rows: Var,
+}
+
+impl PairRows {
+    /// Rows for every pair of `dict`, `width` wide, all zero, so the model starts unchanged.
+    pub fn new(
+        dict: PairDictionary,
+        marks: PairMarks,
+        width: usize,
+        device: &Device,
+    ) -> Result<Self> {
+        marks.check()?;
+        if dict.is_empty() || width == 0 {
+            return Err(invalid(format!(
+                "pair rows want at least one pair and a width, not {} pairs of width {width}",
+                dict.len()
+            )));
+        }
+        let rows = Var::zeros((dict.len(), width), DType::F32, device)?;
+        Ok(Self {
+            dict: Arc::new(dict),
+            marks,
+            rows,
+        })
+    }
+
+    /// The dictionary the rows are numbered by.
+    pub fn dict(&self) -> &PairDictionary {
+        &self.dict
+    }
+
+    /// The marks that find a turn.
+    pub fn marks(&self) -> &PairMarks {
+        &self.marks
+    }
+
+    /// The trained variables: the rows.
+    pub fn variables(&self) -> Vec<Var> {
+        vec![self.rows.clone()]
+    }
+
+    /// `x` (`batch × time × width`) with each reply position's turn bag added. With no hit, `x`
+    /// itself.
+    pub fn apply(&self, x: &Tensor, ids: &[u32]) -> Result<Tensor> {
+        let (batch, time, width) = x.dims3()?;
+        let (count, rows_width) = self.rows.as_tensor().dims2()?;
+        if width != rows_width || count != self.dict.len() {
+            return Err(invalid(format!(
+                "pair rows of width {rows_width} meet a state of width {width}"
+            )));
+        }
+        let plan = plan(&self.dict, &self.marks, ids, batch, time)?;
+        if plan.hit_row.is_empty() {
+            return Ok(x.clone());
+        }
+        let [hit_row, hit_turn, turn_of] = indices(&plan, x.device())?;
+        let gathered = self.rows.as_tensor().index_select(&hit_row, 0)?;
+        let bags = Tensor::zeros((plan.turns + 1, width), DType::F32, x.device())?
+            .index_add(&hit_turn, &gathered, 0)?;
+        let per_position = bags
+            .index_select(&turn_of, 0)?
+            .reshape((batch, time, width))?
+            .to_dtype(x.dtype())?;
+        Ok(x.add(&per_position)?)
+    }
+
+    /// Write the rows (`pair_rows.safetensors`, with the marks) and the dictionary
+    /// (`pair_rows.dict`) into `directory`.
+    pub fn save(&self, directory: &Path) -> Result<()> {
+        let host = Device::Cpu;
+        let mut tensors: HashMap<String, Tensor> = HashMap::new();
+        tensors.insert("rows".to_owned(), self.rows.as_tensor().detach());
+        let marks = [
+            ("user", &self.marks.user),
+            ("assistant", &self.marks.assistant),
+        ];
+        for (name, mark) in marks {
+            tensors.insert(
+                name.to_owned(),
+                Tensor::from_slice(mark, mark.len(), &host)?,
+            );
+        }
+        candle_core::safetensors::save(&tensors, directory.join(FILE))?;
+        std::fs::write(directory.join(DICT_FILE), self.dict.to_bytes())?;
+        Ok(())
+    }
+
+    /// The rows saved in `directory`, or none when the checkpoint has no pair rows.
+    pub fn load(directory: &Path, device: &Device) -> Result<Option<Self>> {
+        let path = directory.join(FILE);
+        if !path.exists() {
+            return Ok(None);
+        }
+        let dict = PairDictionary::from_bytes(&std::fs::read(directory.join(DICT_FILE))?)?;
+        let tensors = candle_core::safetensors::load(&path, device)?;
+        let named = |name: &str| {
+            tensors
+                .get(name)
+                .ok_or_else(|| invalid(format!("{}: no tensor {name}", path.display())))
+        };
+        let marks = PairMarks {
+            user: named("user")?.to_vec1::<u32>()?,
+            assistant: named("assistant")?.to_vec1::<u32>()?,
+        };
+        marks.check()?;
+        let rows = named("rows")?;
+        let (count, _) = rows.dims2()?;
+        if count != dict.len() {
+            return Err(invalid(format!(
+                "{}: {count} rows for a dictionary of {} pairs",
+                path.display(),
+                dict.len()
+            )));
+        }
+        Ok(Some(Self {
+            dict: Arc::new(dict),
+            marks,
+            rows: Var::from_tensor(rows)?,
+        }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Plain tests cover the address, the dictionary and the plan on the host. The tensor read is
+    // tested on the GPU (`cuda`).
+
+    /// The GPU the tensor tests run on.
+    #[cfg(feature = "cuda")]
+    fn device() -> Device {
+        Device::new_cuda(0).unwrap()
+    }
+
+    const N: u32 = u32::MAX;
+
+    fn marks() -> PairMarks {
+        PairMarks {
+            user: vec![1, 4],
+            assistant: vec![2, 3],
+        }
+    }
+
+    /// Rows, by ascending address (primes 5→13, 6→17, 7→19, 8→23): (5,6)=0 at 221, (5,7)=1 at
+    /// 247, (6,7)=2 at 323, (7,8)=3 at 437.
+    fn dict() -> PairDictionary {
+        let stream = [1, 4, 5, 6, 2, 3, 1, 4, 7, 8, 2, 3, 1, 4, 5, 6, 7, 2, 3];
+        PairDictionary::count(20, &stream, &marks(), 1).unwrap()
+    }
+
+    /// `turn_of` with the plan's "none" written as `N`.
+    fn turn_of(plan: &Plan) -> Vec<u32> {
+        let none = plan.turns as u32;
+        plan.turn_of
+            .iter()
+            .map(|&t| if t == none { N } else { t })
+            .collect()
+    }
+
+    /// Window A: two turns. Turn 0 (5,6) replies at 6..=8, turn 1 (7,8) at 14..=15, still open.
+    const WINDOW_A: [u32; 16] = [9, 1, 4, 5, 6, 2, 3, 10, 11, 1, 4, 7, 8, 2, 3, 12];
+
+    #[test]
+    fn primes_are_the_first_in_order_and_a_wide_vocab_is_refused() {
+        assert_eq!(token_primes(6).unwrap(), vec![2, 3, 5, 7, 11, 13]);
+        assert!(token_primes(1).is_err());
+        let primes = first_primes(6_000);
+        let wide = (2..=6_000)
+            .find(|&v| u64::from(primes[v - 1]) * u64::from(primes[v - 2]) >= LIMIT)
+            .unwrap();
+        assert!(token_primes(wide - 1).is_ok());
+        assert!(token_primes(wide).is_err());
+    }
+
+    #[test]
+    fn the_address_is_unordered_and_none_for_equal_tokens() {
+        let dict = dict();
+        assert_eq!(dict.address(1, 3), Some(3 * 7));
+        assert_eq!(dict.address(3, 1), Some(3 * 7));
+        assert_eq!(dict.address(2, 2), None);
+        assert_eq!(dict.address(0, 20), None);
+        assert_eq!(dict.row(6, 5), Some(0));
+        assert_eq!(dict.row(8, 7), Some(3));
+        assert_eq!(dict.row(5, 8), None);
+        assert_eq!(dict.len(), 4);
+        assert_eq!(dict.turn_rows(&[7, 6, 5, 5]), vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn count_keeps_pairs_seen_in_min_turns_once_per_turn() {
+        // (5,6) appears four times in its first turn and once in a second; (5,7) in one turn;
+        // the replies' (8,9) is outside every turn.
+        let stream = [
+            1, 4, 5, 6, 5, 6, 2, 3, 8, 9, 1, 4, 5, 7, 2, 3, 8, 9, 1, 4, 6, 5, 2, 3,
+        ];
+        let at = |min| PairDictionary::count(20, &stream, &marks(), min).unwrap();
+        let one = at(1);
+        assert_eq!(one.len(), 2);
+        assert!(one.row(5, 6).is_some() && one.row(5, 7).is_some());
+        assert_eq!(one.row(8, 9), None);
+        let two = at(2);
+        assert_eq!(two.len(), 1);
+        assert_eq!(two.row(5, 6), Some(0));
+        assert!(at(3).is_empty(), "a pair counts once per turn");
+        assert!(PairDictionary::count(5, &stream, &marks(), 1).is_err());
+    }
+
+    #[test]
+    fn bytes_round_trip_and_a_truncated_file_is_refused() {
+        let dict = dict();
+        let bytes = dict.to_bytes();
+        assert_eq!(PairDictionary::from_bytes(&bytes).unwrap(), dict);
+        assert!(PairDictionary::from_bytes(&bytes[..bytes.len() - 1]).is_err());
+        assert!(PairDictionary::from_bytes(&bytes[..10]).is_err());
+        let mut other = bytes.clone();
+        other[0] ^= 1;
+        assert!(PairDictionary::from_bytes(&other).is_err());
+    }
+
+    #[test]
+    fn each_reply_takes_its_own_turn_and_nothing_else_does() {
+        let plan = plan(&dict(), &marks(), &WINDOW_A, 1, 16).unwrap();
+        assert_eq!(plan.turns, 2);
+        assert_eq!(
+            turn_of(&plan),
+            vec![N, N, N, N, N, N, 0, 0, 0, N, N, N, N, N, 1, 1]
+        );
+        assert_eq!(plan.hit_turn, vec![0, 1]);
+        assert_eq!(plan.hit_row, vec![0, 3]);
+        assert_eq!(plan.open, vec![Some(1)]);
+    }
+
+    #[test]
+    fn a_turn_cut_by_the_window_start_gets_none() {
+        let plan = plan(&dict(), &marks(), &[4, 5, 6, 2, 3, 10, 11, 12], 1, 8).unwrap();
+        assert_eq!(plan.turns, 0);
+        assert!(plan.hit_row.is_empty());
+        assert_eq!(turn_of(&plan), vec![N; 8]);
+        assert_eq!(plan.open, vec![None]);
+    }
+
+    #[test]
+    fn a_pair_outside_the_dictionary_gives_no_hit() {
+        let plan = plan(&dict(), &marks(), &[1, 4, 5, 8, 2, 3, 10], 1, 7).unwrap();
+        assert_eq!(plan.turns, 0);
+        assert!(plan.hit_row.is_empty() && plan.hit_turn.is_empty());
+        assert_eq!(turn_of(&plan), vec![N; 7]);
+        assert_eq!(plan.open, vec![None]);
+    }
+
+    #[test]
+    fn windows_of_a_batch_are_independent() {
+        // Window 0 ends inside a user turn; window 1 opens on a header. Neither pairs with the
+        // other. Window 1's own turn (7,8) replies at its last position.
+        let ids = [9, 9, 9, 9, 1, 4, 5, 6, 2, 3, 1, 4, 7, 8, 2, 3];
+        let plan = plan(&dict(), &marks(), &ids, 2, 8).unwrap();
+        let mut expect = vec![N; 16];
+        expect[15] = 0;
+        assert_eq!(turn_of(&plan), expect);
+        assert_eq!(
+            (plan.hit_turn.clone(), plan.hit_row.clone()),
+            (vec![0], vec![3])
+        );
+        assert_eq!(plan.open, vec![None, Some(0)]);
+        let alone = super::plan(&dict(), &marks(), &ids[8..], 1, 8).unwrap();
+        assert_eq!(alone.hit_row, plan.hit_row);
+        assert_eq!(turn_of(&alone), expect[8..].to_vec());
+    }
+
+    #[test]
+    fn open_is_none_once_a_new_user_marker_closes_the_reply() {
+        let ids = [1, 4, 5, 6, 2, 3, 10, 1, 4, 7];
+        let plan = plan(&dict(), &marks(), &ids, 1, 10).unwrap();
+        assert_eq!(turn_of(&plan), vec![N, N, N, N, N, 0, 0, N, N, N]);
+        assert_eq!(plan.open, vec![None]);
+        assert!(super::plan(&dict(), &marks(), &ids, 2, 10).is_err());
+    }
+
+    /// Two windows of 16: window A, and a window whose first turn (5,6,7) reads rows 0, 1, 2 at
+    /// 6..=8 and whose second turn (5,8) has no row.
+    #[cfg(feature = "cuda")]
+    fn batch_ids() -> Vec<u32> {
+        let mut ids = WINDOW_A.to_vec();
+        ids.extend([1, 4, 5, 6, 7, 2, 3, 10, 11, 1, 4, 5, 8, 2, 3, 12]);
+        ids
+    }
+
+    #[cfg(feature = "cuda")]
+    fn state(batch: usize, time: usize, width: usize) -> Vec<f32> {
+        (0..batch * time * width)
+            .map(|n| ((n * 37 % 101) as f32 - 50.0) / 7.0)
+            .collect()
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn rows_at_zero_leave_the_state_bit_for_bit() {
+        let device = device();
+        let pair = PairRows::new(dict(), marks(), 4, &device).unwrap();
+        let values = state(2, 16, 4);
+        let x = Tensor::from_vec(values.clone(), (2, 16, 4), &device).unwrap();
+        let y = pair.apply(&x, &batch_ids()).unwrap();
+        let y = y.flatten_all().unwrap().to_vec1::<f32>().unwrap();
+        assert!(y
+            .iter()
+            .zip(&values)
+            .all(|(a, b)| a.to_bits() == b.to_bits()));
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_read_is_the_sum_of_the_turn_rows_at_reply_positions() {
+        let device = device();
+        let width = 4;
+        let pair = PairRows::new(dict(), marks(), width, &device).unwrap();
+        let table: Vec<f32> = (0..4 * width)
+            .map(|n| ((n / width + 1) * 10 + n % width) as f32)
+            .collect();
+        let row = |r: usize| table[r * width..(r + 1) * width].to_vec();
+        pair.rows
+            .set(&Tensor::from_vec(table.clone(), (4, width), &device).unwrap())
+            .unwrap();
+        let values = state(2, 16, width);
+        let x = Tensor::from_vec(values.clone(), (2, 16, width), &device).unwrap();
+        let y = pair.apply(&x, &batch_ids()).unwrap();
+        let y = y.flatten_all().unwrap().to_vec1::<f32>().unwrap();
+        let mut bag = vec![vec![0.0f32; width]; 32];
+        for p in [6, 7, 8] {
+            bag[p] = row(0);
+        }
+        for p in [14, 15] {
+            bag[p] = row(3);
+        }
+        for p in [16 + 6, 16 + 7, 16 + 8] {
+            bag[p] = (0..width)
+                .map(|c| row(0)[c] + row(1)[c] + row(2)[c])
+                .collect();
+        }
+        for (p, add) in bag.iter().enumerate() {
+            for c in 0..width {
+                let expect = values[p * width + c] + add[c];
+                assert_eq!(y[p * width + c], expect, "position {p} coordinate {c}");
+            }
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn only_hit_rows_take_a_gradient() {
+        let device = device();
+        let pair = PairRows::new(dict(), marks(), 4, &device).unwrap();
+        let x = Tensor::from_vec(state(1, 16, 4), (1, 16, 4), &device).unwrap();
+        let loss = pair.apply(&x, &WINDOW_A).unwrap().sum_all().unwrap();
+        let grads = loss.backward().unwrap();
+        let grad = grads.get(pair.rows.as_tensor()).unwrap();
+        let grad = grad.to_vec2::<f32>().unwrap();
+        assert_eq!(grad[0], vec![3.0; 4], "row 0 is read at three positions");
+        assert_eq!(grad[1], vec![0.0; 4]);
+        assert_eq!(grad[2], vec![0.0; 4]);
+        assert_eq!(grad[3], vec![2.0; 4], "row 3 is read at two positions");
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_index_tensors_track_no_operation() {
+        let device = device();
+        let plan = plan(&dict(), &marks(), &batch_ids(), 2, 16).unwrap();
+        for index in indices(&plan, &device).unwrap() {
+            assert!(!index.track_op());
+            assert_eq!(index.dtype(), DType::U32);
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn save_and_load_round_trip() {
+        let device = device();
+        let directory =
+            std::env::temp_dir().join(format!("uor-r4-pair-rows-{}-{:x}", std::process::id(), 370));
+        std::fs::create_dir_all(&directory).unwrap();
+        assert!(PairRows::load(&directory, &device).unwrap().is_none());
+        let pair = PairRows::new(dict(), marks(), 4, &device).unwrap();
+        let table: Vec<f32> = (0..16).map(|n| n as f32 * 0.5 - 3.0).collect();
+        pair.rows
+            .set(&Tensor::from_vec(table.clone(), (4, 4), &device).unwrap())
+            .unwrap();
+        pair.save(&directory).unwrap();
+        let loaded = PairRows::load(&directory, &device).unwrap().unwrap();
+        assert_eq!(loaded.dict(), pair.dict());
+        assert_eq!(loaded.marks(), pair.marks());
+        let back = loaded.rows.as_tensor().flatten_all().unwrap();
+        assert_eq!(back.to_vec1::<f32>().unwrap(), table);
+        std::fs::remove_dir_all(&directory).unwrap();
+    }
+}
