@@ -2691,6 +2691,7 @@ fn place_pass(
     k: &[u64],
 ) -> Vec<PlaceRow> {
     let asks = margins.len();
+    let kind = image.key();
     let mut rows = Vec::with_capacity(ids.len());
     for (b, window) in ids.chunks(time).enumerate() {
         let base = b * time;
@@ -2698,7 +2699,7 @@ fn place_pass(
         for t in 0..window.len() {
             rows.push(state.advance(&window[..=t], image, |users| {
                 // The key code of the token at `p` is the one row `p + 1` holds.
-                place_find(image.key(), first, margins, users, t, |j| q[(base + t) * asks + j], |j, p| k[(base + p + 1) * asks + j], |p| image.has(window[p], PLACE_LINK))
+                place_find(kind, first, margins, users, t, |j| q[(base + t) * asks + j], |j, p| k[(base + p + 1) * asks + j], |p| image.has(window[p], PLACE_LINK))
             }));
         }
     }

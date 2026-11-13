@@ -11,7 +11,7 @@ use crate::fbs_snapshot::{CodeRole, ForcedCode, HammingTraceHead, HammingTraceRe
 
 use core::ops::Range;
 
-use crate::fbs_snapshot::{place_find, place_first, PlaceImage, PlaceState, PLACE_LINK};
+use crate::fbs_snapshot::{place_find, place_first, PlaceImage, PlaceKey, PlaceState, PLACE_LINK};
 use crate::place_asks::{AsksIndex, PlaceAsks};
 
 use super::format::{Container, StackHamming, HAMMING_WEIGHT_EXP};
@@ -1250,6 +1250,8 @@ pub(crate) struct ServedHamming {
 struct ServedPlace {
     heads: TypeHeads,
     image: PlaceImage,
+    /// The key the class table names ([`PlaceImage::key`]), read once when the artifact loads.
+    key: PlaceKey,
     /// The low half of a head's bits: the half its learned question fills. The other half is the
     /// token before, plainly.
     first: u64,
@@ -1270,7 +1272,7 @@ impl ServedPlace {
         if asks.len() != heads.margins.len() {
             return None;
         }
-        place_find(self.image.key(), self.first, &heads.margins, users, t, |j| asks[j], |j, p| heads.key(tokens[p], j), |p| self.image.has(tokens[p], PLACE_LINK))
+        place_find(self.key, self.first, &heads.margins, users, t, |j| asks[j], |j, p| heads.key(tokens[p], j), |p| self.image.has(tokens[p], PLACE_LINK))
     }
 }
 
@@ -1318,6 +1320,7 @@ impl ServedHamming {
                 let ask = read.ask.clone().ok_or(StackError::Shape("the place read needs the readout read's ask heads"))?;
                 place = Some(ServedPlace {
                     heads: TypeHeads::new(&image.record, read, table, vocab, width).with_ask(ask),
+                    key: tables.key(),
                     image: tables.clone(),
                     first: place_first(width / image.record.heads),
                     asks: None,
