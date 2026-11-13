@@ -66,7 +66,7 @@ use std::path::Path;
 use candle_core::{DType, Device, Tensor, Var};
 use uor_r4_integer::fbs_snapshot::{
     place_find, place_first, HammingTraceHead, HammingTraceRead, HammingTraceWindow, PlaceImage,
-    PlaceMarks, PlaceRow, PlaceState, PLACE_ARM, PLACE_OPEN, PLACE_STOP,
+    PlaceMarks, PlaceRow, PlaceState, PLACE_ARM, PLACE_LINK, PLACE_OPEN, PLACE_STOP,
 };
 
 use crate::geometric_stack::hamilton_gate;
@@ -2659,7 +2659,7 @@ fn place_pass(
         for t in 0..window.len() {
             rows.push(state.advance(&window[..=t], image, |users| {
                 // The key code of the token at `p` is the one row `p + 1` holds.
-                place_find(first, margins, users, t, |j| q[(base + t) * asks + j], |j, p| k[(base + p + 1) * asks + j])
+                place_find(image.key(), first, margins, users, t, |j| q[(base + t) * asks + j], |j, p| k[(base + p + 1) * asks + j], |p| image.has(window[p], PLACE_LINK))
             }));
         }
     }

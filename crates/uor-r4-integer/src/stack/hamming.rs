@@ -11,7 +11,7 @@ use crate::fbs_snapshot::{CodeRole, ForcedCode, HammingTraceHead, HammingTraceRe
 
 use core::ops::Range;
 
-use crate::fbs_snapshot::{place_find, place_first, PlaceImage, PlaceState};
+use crate::fbs_snapshot::{place_find, place_first, PlaceImage, PlaceState, PLACE_LINK};
 use crate::place_asks::{AsksIndex, PlaceAsks};
 
 use super::format::{Container, StackHamming, HAMMING_WEIGHT_EXP};
@@ -1260,8 +1260,9 @@ struct ServedPlace {
 
 impl ServedPlace {
     /// The place the question at the last row `t` of `tokens` finds among `users`, the contents
-    /// of the finished user turns: [`place_find`], the two-token question the float trainer
-    /// asks too, on this artifact's question and key codes.
+    /// of the finished user turns: [`place_find`], the question the float trainer asks too, on
+    /// this artifact's question and key codes and under the key its class table names
+    /// ([`PlaceImage::key`]).
     fn find(&self, table: &[i16], tokens: &[u32], users: &[Range<usize>]) -> Option<usize> {
         let t = tokens.len().checked_sub(1).filter(|&t| t >= 1)?;
         let heads = &self.heads;
@@ -1269,7 +1270,7 @@ impl ServedPlace {
         if asks.len() != heads.margins.len() {
             return None;
         }
-        place_find(self.first, &heads.margins, users, t, |j| asks[j], |j, p| heads.key(tokens[p], j))
+        place_find(self.image.key(), self.first, &heads.margins, users, t, |j| asks[j], |j, p| heads.key(tokens[p], j), |p| self.image.has(tokens[p], PLACE_LINK))
     }
 }
 

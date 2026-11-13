@@ -8666,7 +8666,7 @@ fn hamming_place_read_round_trips() {
     refused("one token", &|m| m.eos = m.bos);
     // The export's road: the image as the snapshot JSON carries it under its key gives the same
     // artifact, byte for byte; a field the exporter does not know, a class table at another
-    // length and a class bit outside the three are each refused.
+    // length and a class bit outside the four are each refused.
     let key = crate::fbs_snapshot::FBS_HAMMING_PLACE_KEY;
     let snapshot = serde_json::to_vec(&serde_json::json!({ key: place })).unwrap();
     let mut value: serde_json::Value = serde_json::from_slice(&snapshot).unwrap();
@@ -8678,8 +8678,39 @@ fn hamming_place_read_round_trips() {
     let short = super::PlaceImage { marks: place.marks.clone(), class: place.class[1..].to_vec() };
     assert!(super::add_hamming_place_uorlut01(&asked, &short).is_err(), "one class a token");
     let mut wide = place.clone();
-    wide.class[0] = 8;
-    assert!(super::add_hamming_place_uorlut01(&asked, &wide).is_err(), "a class is stop, arm and open");
+    wide.class[0] = 16;
+    assert!(super::add_hamming_place_uorlut01(&asked, &wide).is_err(), "a class is stop, arm, open and link");
+}
+
+/// claude-361: a class table with link bits names the before-link key, and a session finds by it.
+/// The user turn `20 PLACE_BEFORE PLACE_BEFORE 23 30 31 .` holds the near key's place at 4 (after
+/// `20 PLACE_BEFORE`) and, with 23 a link token, the before-link key's at 6 (after the link, with
+/// `PLACE_BEFORE PLACE_BEFORE` before it, which the question `PLACE_ASK`'s whole code names). The
+/// artifact without link bits holds 4, as claude-351's read does; the one with them holds 6.
+#[test]
+fn a_session_finds_by_the_before_link_key() {
+    let (asked, near, place) = place_trunk();
+    let mut class = place.class.clone();
+    class[23] = super::PLACE_LINK;
+    let image = super::PlaceImage::checked(place.marks.clone(), class, place.class.len()).expect("a link bit is a class bit");
+    let linked = super::add_hamming_place_uorlut01(&asked, &image).expect("the place read is added");
+    let loaded = super::read_hamming_uorlut01(&linked).expect("parse").expect("reads").place.expect("a place read");
+    assert_eq!((loaded.key(), place.key()), (super::PlaceKey::BeforeLink, super::PlaceKey::Near));
+    let talk = [
+        PLACE_BOS, PLACE_USER, 20, PLACE_BEFORE, PLACE_BEFORE, 23, 30, 31, PLACE_DOT, PLACE_EOS, PLACE_SEP, PLACE_MODEL, 40, PLACE_EOS, PLACE_SEP, PLACE_USER, 20, PLACE_ASK, PLACE_SEP, PLACE_MODEL, PLACE_OPENS,
+    ];
+    let run = |bytes: &[u8]| {
+        let model = IntegerStackModel::parse(bytes).expect("served");
+        let mut session = model.session();
+        let mut places = Vec::new();
+        for &token in &talk {
+            session.step_native(token).expect("step");
+            places.push(session.last_place());
+        }
+        places[19..].to_vec()
+    };
+    assert_eq!(run(&near), [(Some(4), None), (Some(4), Some(4))]);
+    assert_eq!(run(&linked), [(Some(6), None), (Some(6), Some(6))]);
 }
 
 /// claude-351: a session serves the place read. The register is armed at the reply's start by
@@ -8923,7 +8954,7 @@ fn the_place_read_offers_the_tokens_point_through_the_copy_mix() {
 fn a_place_pick_is_inside_its_margin_exactly_when_the_copy_weight_is_positive() {
     for margin in [0, 1, 65_535, 65_536, 65_537, 3 << 16, (9 << 16) + 77, i32::MAX] {
         for d in 0..=64u32 {
-            let inside = super::place_pick(&[0], &[margin], &[2..3], |_, _| if d == 64 { u64::MAX } else { (1u64 << d) - 1 }).is_some();
+            let inside = super::place_pick(&[0], &[margin], &[2..3], |_, _| if d == 64 { u64::MAX } else { (1u64 << d) - 1 }, |s| s >= 2).is_some();
             assert_eq!(inside, super::copy_weight_q31(margin, d) > 0, "margin {margin}, distance {d}");
         }
     }

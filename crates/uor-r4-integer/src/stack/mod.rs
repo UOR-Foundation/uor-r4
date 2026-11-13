@@ -114,7 +114,7 @@ pub use hamming::{
     CopyHeads, CopyRule, HammingImage, HammingReadImage, HammingStepHead, HammingStepRead, ServedCopyCodes,
     TypeHeads, COPY_MEAN_EXP,
 };
-pub use crate::fbs_snapshot::{place_find, place_first, place_pick, PlaceImage, PlaceMarks, PlaceRole, PlaceRow, PlaceState, PlaceTurns, PLACE_ARM, PLACE_OPEN, PLACE_STOP};
+pub use crate::fbs_snapshot::{place_find, place_first, place_pick, PlaceImage, PlaceKey, PlaceMarks, PlaceRole, PlaceRow, PlaceState, PlaceTurns, PLACE_ARM, PLACE_LINK, PLACE_OPEN, PLACE_STOP};
 pub use kernels::{stack_argmax, stack_memory_select, stack_snap_select, MAX_SELECT_SIDE};
 pub use memory::{read_memory_uorlut01, MemoryImage, MemoryTableImage};
 pub use point_key::{
