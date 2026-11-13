@@ -19,7 +19,7 @@ Every log named here is in the kit, `local/claude/claude-358/`, which is not com
 ## What did not work, first
 
 1. **The sheet's reading ran seven hours late, after later units had already used the models.** The pod went down at 03:11:48Z on 13 Nov and the instrument checks were read at 03:40Z. The session then went on to claude-359, claude-360 and claude-361, which read replies from the three retrained p artifacts as their baselines from about 06:00Z. This unit's own reading, the step that calls the row, ran at 10:11Z. The row came out Better, which is what licenses those artifacts as the line's models. Had it come out Level or Worse, three units' baselines would have rested on models the sheet did not license. The order the sheet asks for inside this unit (I-f and I-u before any reply) did hold.
-2. **The conversation is not better.** Seed 2's retrained model against stage 3's, nine turns, served on the laptop (`extras-try-1b/chat-table.txt`; stage 3's replies are identical to claude-356's record):
+2. **The conversation is not better.** Seed 2's retrained model against stage 3's, nine turns, served on the laptop (`extras-try-1b/chat-table.txt`; the stage 3 column is stage 3's model served with the same rule, and its reply ids are identical to claude-356's record, `extras-try-1b/compare-356.txt`):
 
    | Turn | User | Retrained | Stage 3 |
    |---|---|---|---|
@@ -34,7 +34,7 @@ Every log named here is in the kit, `local/claude/claude-358/`, which is not com
    | 9 | What is my name? | "You're welcome!" | "You're welcome!" |
 
    The retrained model loses turn 2, which stage 3 answered. Turn 5 is wrong on both. Turn 8 repeats turn 7's answer. Both run on after the copied string in turn 4. Neither says it was not told a name in turn 9.
-3. **The control gained too.** n-s2, which has no place read, went from 108 to 139 (D +31; 44 gained, 13 lost). So a gain of about that size comes with the rule alone, and this run does not show that the place read is what the rule helps. In the control the replies with no end token in 48 tokens rose from 102 to 131.
+3. **The control gained too.** n-s2, which has no place read, went from 108 to 139 (D +31; 44 gained, 13 lost). That is one control seed from a lower start, so it sizes nothing, but with it this run does not show that the place read is what the rule helps. In the control the replies with no end token in 48 tokens rose from 102 to 131.
 4. **Each retrained model also loses rows stage 3 had:** 51, 34 and 35 recall rows on the three seeds. Seed 2, word for word (`read-try-1/p-s2.*.own.jsonl`):
 
    | Row | Asked | Reference | Retrained | Stage 3 |
@@ -51,11 +51,11 @@ Every log named here is in the kit, `local/claude/claude-358/`, which is not com
    | 32 | "What's my code word?" | "It is hudganku." | "The code word is hudganku." | "The code word is hu." |
    | 45 | "...what sterbras was?" | "Sterbras is 7290." | "That's 7290." | "That's 729." |
 
-5. **The retrained models are worse than stage 3's when served with the old rule.** Under `--copy-rule latest-exact` they read 247, 254 and 257, below stage 3's 276, 296 and 265 under the new rule. The artifact carries its rule in the header and the reader serves it by default, so the product path is not affected, but a reader that overrides the rule loses 67 or 68 replies.
-6. **The repeat-a-string gain is one seed's.** Exact repeats of 104: seed 3 went from 1 to 36; seed 2 from 1 to 4; seed 1 from 3 to 6. Seed 3's O gain of +38 is this.
+5. **The retrained models are worse than stage 3's when served with the old rule.** Under `--copy-rule latest-exact` they read 247, 254 and 257, below stage 3's 276, 296 and 265 under the new rule. The artifact carries its rule in the header and the reader serves it by default, so the product path is not affected, but a reader that overrides the rule reads 66 to 68 fewer.
+6. **The repeat-a-string gain is one seed's.** Exact repeats of 104: seed 3 went from 1 to 36; seed 2 from 1 to 4; seed 1 from 3 to 6. That is +35 of seed 3's O gain of +38.
 7. **Seed 3's row check is the lowest:** I-f 0.9860 against the 0.98 floor (572 of 40,719 scored rows differ from the float rows); the others are 0.9908 to 0.9917.
-8. **The prediction missed low.** Written before the run: M between 0 and +30, Level the most likely row. M read +40.7. The size was guessed from the 26 to 33 replies the rule changed when only served; trained, it changed 503 to 544 of 979 replies per seed.
-9. **The extras script's conversation step failed** (`extras-try-1.log`): `extras-358.sh` calls the chat reader on an artifact without `--tokenizer`. The three conversations were rerun by hand with it into `extras-try-1b/`. The script in the kit is not repaired.
+8. **The prediction missed low.** Written before the run: M between 0 and +30, Level the most likely row. M read +40.7, and seed 3's D of +60 is outside the predicted range for a job (−10 to +40). The size was guessed from the 26 to 33 replies the rule changed when only served; trained, it changed 503 to 544 of 979 replies per seed.
+9. **The extras script's conversation step failed** (`extras-try-1.log`): `extras-358.sh` calls the chat reader on an artifact without `--tokenizer`. Its two "DIFFERENT reply ids" lines compare the failed step's empty output and mean nothing. The three conversations were rerun by hand with the flag into `extras-try-1b/`, and the comparison was rerun there. The script in the kit is not repaired.
 10. **Which of the flag's two training changes gives the gain is not shown.** The flag changes the copy read's choice and the leave rule together; no run separates them.
 
 ## What changed
@@ -89,7 +89,7 @@ Sum of D over the p jobs 122; **M = +40.7**. The sheet's bars: M at or above +29
 | Exact repeats of 104 | 1 → 4 | 3 → 6 | 1 → 36 | 5 → 7 |
 | Float pass, replies equal to the reference of 1,108 on the scoring panel | 187 | 187 | 224 | 157 |
 
-The float pass's count is a laptop count from each job's `samples-p-greedy-memory.json`, reply against reference up to the end mark. The claude-361 sheet cites 188 for p-s2; the one-row difference is not explained here.
+The float pass's count (`float-exact-358.txt`) is a laptop count from each job's `samples-p-greedy-memory.json`, reply against reference up to the end mark. The claude-361 sheet cites 188 for p-s2; the one-row difference is not explained here.
 
 **Speed** (`extras-try-1/toks-*.out`; `fbs-toks --read`, Apple M1, two rounds each). Tokens per second.
 
@@ -98,7 +98,7 @@ The float pass's count is a laptop count from each job's `samples-p-greedy-memor
 | p-s2 retrained | 1,567 / 1,636 | 1,564 / 1,622 | 4,309 / 4,499 | 1,225 / 1,292 |
 | stage 3's p-s2 with the rule's field | 1,587 / 1,624 | 1,577 / 1,641 | 4,365 / 4,469 | 1,242 / 1,286 |
 
-Serving speed is unchanged by the retrain.
+On this one pair of artifacts, two rounds, one laptop, serving speed is the same.
 
 ## Checks run at the head
 
@@ -125,6 +125,7 @@ None beyond the project loop.
 | Review | Of | Verdict | What was taken |
 |---|---|---|---|
 | Pre-run | `job-358.sh` against the sheet, before launch | PASS, three findings | all three, before the pod went up |
+| Report | the REPORT and the notebook row at `fbd3f70b3`, every figure against its log and the row against the sheet | APPROVE WITH CHANGES: three medium, four low; the row call sound | all seven: two unlogged figures now have kit logs (`extras-try-1b/compare-356.txt`, `float-exact-358.txt`), "67 or 68" corrected to 66 to 68, and four wordings narrowed. Not checked by the reviewer: the six word-for-word rows in item 4 |
 
 ## Still open
 
@@ -137,4 +138,4 @@ None beyond the project loop.
 
 ## Plain summary
 
-Training with the new copy rule made the model answer more single "what was X?" questions on the reading panel: about 41 more of 578 on average, on all three seeds, which clears the bar set before the run. A control model with no place read gained about as much, so the run does not show why it helps. In a nine-turn conversation the retrained model is not better: it loses one answer the old model gave and repeats an earlier answer to an unrelated question. The reading that calls the result ran seven hours after the pod finished, after later work had already started using the new models.
+Training with the new copy rule made the model's reply hold the told value on more single "what was X?" questions on the reading panel: about 41 more of 578 on average, on all three seeds, which clears the bar set before the run. A control model with no place read gained about as much, so the run does not show why it helps. In a nine-turn conversation the retrained model is not better: it loses one answer the old model gave and repeats an earlier answer to an unrelated question. The reading that calls the result ran seven hours after the pod finished, after later work had already started using the new models.
