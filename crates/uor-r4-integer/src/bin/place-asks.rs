@@ -8,6 +8,8 @@
 //!                   --held PANEL/tokens.u16 --held-kit panel-places.json [--held .. --held-kit ..] \
 //!                   [--slots 1,2,3|none] [--question-last N] [--open-reply-start 0|1]
 //! place-asks repeat --tokens TRAIN/tokens.u16 --kit train-places.json --asks asks.json --out with-pairs.json
+//! place-asks forms  --tokens TRAIN/tokens.u16 --kit train-places.json --asks asks.json \
+//!                   --rule tokens|frequent [--panel NAME=PANEL/tokens.u16,panel-places.json]...
 //! ```
 //!
 //! `repeat` (claude-364) counts the lead-in pairs on the tokens a written table was fitted on:
@@ -19,6 +21,12 @@
 //! in the fitted table, before the table is counted or written, and prints what the pair was: a
 //! reply then starts on the value its asks find. 0, the default, leaves the fit's table as it is.
 //! `census` reads a written table and takes only 0.
+//!
+//! `forms` (claude-365) counts a floor for each question form on `--tokens`, a written table's
+//! own split: under `tokens` a form is a question's distinct tokens, under `frequent` those of
+//! them that stand in at least 64 of the split's questions. It prints the count, then the census
+//! of that split (`fitted`) and of each panel twice: with the table as it is (`one:`) and with
+//! the form floors (`forms:`). Each panel is read with its own kit. It writes nothing.
 //!
 //! `ablate` (claude-360) fits under a cut, which keeps the named frame offsets (1 to 5 before a
 //! place, nearest first; 6 to 8 the turn's last tokens, the last first) and the last N tokens
@@ -37,7 +45,7 @@ use std::process::ExitCode;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use uor_r4_integer::fbs_snapshot::PlaceMarks;
-use uor_r4_integer::place_asks::{census, fit, fit_cut, fit_repeat, AsksIndex, Cut, PlaceAsks, ASKS_FRAME};
+use uor_r4_integer::place_asks::{census, fit, fit_cut, fit_forms, fit_repeat, AsksIndex, Cut, FormRule, PlaceAsks, ASKS_FRAME};
 
 const HEADER: usize = 64;
 
@@ -174,7 +182,7 @@ fn open_start(asks: &mut PlaceAsks, open: bool) -> Result<(), String> {
 }
 
 fn run(args: &[String]) -> Result<(), String> {
-    let mode = args.first().map(String::as_str).ok_or("usage: place-asks fit|census|ablate|repeat ...")?;
+    let mode = args.first().map(String::as_str).ok_or("usage: place-asks fit|census|ablate|repeat|forms ...")?;
     let open = open_reply_start(args)?;
     let (tokens, vocab, kit) = split(&flag(args, "--tokens")?, &flag(args, "--kit")?)?;
     match mode {
@@ -283,7 +291,45 @@ fn run(args: &[String]) -> Result<(), String> {
             file.write_all(text.as_bytes()).map_err(|e| format!("{}: {e}", out.display()))?;
             println!("asks-repeat wrote {} pairs={} triples={} fitted_on={}", out.display(), asks.repeat.len(), asks.repeat3.len(), asks.tokens_sha256);
         }
-        other => return Err(format!("unknown mode {other}: fit, census, ablate or repeat")),
+        "forms" => {
+            if open {
+                return Err("forms reads a written table: --open-reply-start 1 is for fit or ablate".to_owned());
+            }
+            let asks: PlaceAsks = read_json(&flag(args, "--asks")?)?;
+            if asks.marks != kit.marks || asks.vocab != vocab {
+                return Err("the asks were fitted with other marks or another vocabulary than this split's".to_owned());
+            }
+            let rule = match args.iter().position(|a| a == "--rule").and_then(|i| args.get(i + 1)).map(String::as_str) {
+                Some("tokens") => FormRule::Tokens,
+                Some("frequent") => FormRule::Frequent,
+                _ => return Err("--rule takes tokens or frequent".to_owned()),
+            };
+            // Each panel is read before any count, so a malformed one stops the run at once.
+            let mut panels = Vec::new();
+            for spec in args.windows(2).filter(|pair| pair[0] == "--panel").map(|pair| &pair[1]) {
+                let (name, paths) = spec.split_once('=').ok_or_else(|| format!("--panel {spec}: NAME=TOKENS,KIT"))?;
+                let (tokens_path, kit_path) = paths.split_once(',').ok_or_else(|| format!("--panel {spec}: NAME=TOKENS,KIT"))?;
+                let (panel_tokens, panel_vocab, panel_kit) = split(Path::new(tokens_path), Path::new(kit_path))?;
+                same_marks((&asks.marks, asks.vocab), (&panel_kit.marks, panel_vocab), Path::new(kit_path))?;
+                panels.push((name.to_owned(), panel_tokens, panel_kit));
+            }
+            let index = AsksIndex::new(&asks)?;
+            let (floors, lines) = fit_forms(&tokens, &kit.marks, &kit.places, &index, rule);
+            for line in &lines {
+                println!("{line}");
+            }
+            let with = index.clone().with_form_floors(floors);
+            let splits = std::iter::once(("fitted".to_owned(), &tokens, &kit)).chain(panels.iter().map(|(name, t, k)| (name.clone(), t, k)));
+            for (name, tokens, kit) in splits {
+                for (prefix, reader) in [("one", &index), ("forms", &with)] {
+                    let (counts, _) = census(tokens, &kit.marks, &kit.places, reader, &asks.forms, 0);
+                    for line in counts.lines(&format!("{prefix}:{name}")) {
+                        println!("{line}");
+                    }
+                }
+            }
+        }
+        other => return Err(format!("unknown mode {other}: fit, census, ablate, repeat or forms")),
     }
     Ok(())
 }
