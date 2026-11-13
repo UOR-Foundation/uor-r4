@@ -14,7 +14,7 @@ Served as integer artifacts on the laptop, do the models trained with the addres
 
 - **Recipe:** claude-358's p arm with `--address-memory ARM`, word for word as in [claude-346's sheet](one-model-end-to-end-address-memory-2026-11-13.md) (its Base artifact and Arms).
 - **Training pin:** `f941a33fd1a4eea751705d1cd6021af35452a4b7`, claude-346's pin, so the three new models are trained by the code that trained the three sealed ones.
-- **Snapshot pin:** `78705230ef176f325e890d901ce881893c1d6d9b`, this unit's branch with main merged in, pushed as the branch `claude/address-snapshot-pin`. The ORDER's Done-when 1 tests pass there on the laptop. Writing it here changes no question, arm, reading or bar.
+- **Snapshot pin:** `b036715ac6982df1b8479274703d2272e8fb6966`, this unit's branch with main merged in, pushed as the branch `claude/address-snapshot-pin`. The ORDER's Done-when 1 tests pass there on the laptop. Writing it here changes no question, arm, reading or bar. The pin moved once on 13 Nov, from `78705230ef176f325e890d901ce881893c1d6d9b`: the one commit between them takes the fresh code reads' findings (FIT, second read).
 - **Found on the laptop on 13 Nov, before any address artifact was read:** `b-s2`'s sealed snapshot exports to p-s2's artifact byte for byte (SHA-256 `f4667934627e99d709533f30505058fdf07912ddf3cfc9ade6ded5f415e8c680`). At seed 2 the two pins train the same model, so `b-s2` is p-s2 and its served replies are p-s2's.
 - **Sealed address models** (claude-346, float scoring pass, replies equal to the wanted reply of 1,108): `e8-s2` 218 (`run/e8-s2/try-3`), `e8-s3` 254 (`run/e8-s3/try-3`), `token-s2` 219 (`run/token-s2/try-4`), under `results/claude/one-model-end-to-end-address-memory-2026-11-13/`.
 - **Two pins, and the check between them.** The saved p models were trained at claude-358's pin `f694d162d9b04d1226fd17c0a81825f00e9da007`; every address model is trained at `f941a33f…`. claude-346 ran the saved recipe with no address table at `f941a33f…` and seed 2 (`b-s2`, sealed at `run/b-s2/try-4`): 188 exact of 1,108 in float, claude-358's figure for p-s2. That check is one seed and in float. So `b-s2` gets a snapshot with the address checkpoints and is served beside p-s2 as a same-pin reading, with no bar.
@@ -138,15 +138,17 @@ That is enough to choose which models the line builds on next, and not enough fo
 
 Three RTX 5090 pods, each refused above $1.60/h. A pod runs pre, about 57 minutes of training at the measured 0.21 s a step, and a scoring pass of up to 40 minutes: 1.7 to 2 hours. Then the snapshot job: two passes of one pod each, under an hour a pass (a build, the tests, then for each checkpoint a fetch of about 80 MB and a seal of about 70 MB), each pod refused above $1.60/h. $4 to $13 in all; claude-346 paid $2.97 and $3.29 for its two lanes. Three training pods at once are at most $4.80/h; with the first snapshot pass beside them, four pods at most $6.40/h, inside the caps of 4 pods and $8/h. The three lanes as launched cost $3.14/h together.
 
+A snapshot pod whose chain ends unsealed, or whose four checks fail, is held for the session and not taken down. Its watcher renews the lease for at most 2 hours (1 hour when the failure itself is sealed), then stops; the last 2-hour lease runs out and the reaper takes the pod. Left unanswered, a held pass therefore costs at most 4 more hours, $6.40 at the $1.60/h ceiling. Every input of a snapshot pass is a seal in the store, so a failed pass is rerun on a new pod and loses nothing.
+
 ## Compute and stop rule
 
-Vast through `scripts/pod/uor-pod`, sessions `claude-366-a`, `claude-366-b`, `claude-366-c` for the lanes and `claude-366-s` for the snapshot job. A snapshot pod's watcher gives its time notice at 90 minutes and its spend notice at $3. A stall, spend or time notice is never a stop: a healthy run is extended and the notice is recorded. A failed pre stops its pod's job. A failed scoring pass is said and does not fail its job. No run writes into an existing root (L-002).
+Vast through `scripts/pod/uor-pod`, sessions `claude-366-a`, `claude-366-b`, `claude-366-c` for the lanes and `claude-366-s` for the snapshot job. A snapshot pod's watcher gives its time notice at 90 minutes and its spend notice at $3. The snapshot launch checks that the watcher is alive (its screen, its opening line for this pod, no exit line) before anything ships; a pod with no watcher after 30 seconds is released and taken down. Two limits of the launch are known and watched by hand: the $1.60/h refusal comes only once the pod is up, because the price is known only then; and a launch that ends with a `Creating` line and no pod name (exit 5) can leave a pod up with no watcher, so the script prints `uor-pod status` and the session takes that pod down at once. A stall, spend or time notice is never a stop: a healthy run is extended and the notice is recorded. A failed pre stops its pod's job. A failed scoring pass is said and does not fail its job. No run writes into an existing root (L-002).
 
 ## FIT
 
 A fresh reviewer (claude, fresh context, 13 Nov 2026) read this sheet at `ed38134a6da31b243826f376d67c28087eeecdf0` beside the ORDER, the kit's job and chain scripts and CHARTER §3. It ran nothing. Verdict: **fit with changes.** It checked the arms against the kit and the bars against the ORDER line by line, and both match: the three lanes run `pre` then their one job, the job refuses any pin but `f941a33f…`, and the seeds, steps and address arms are the table's.
 
-**This FIT covers the three training lanes.** The snapshot job's pin and kit do not exist yet; they take their own fresh read before that pod goes up (Steps, 3).
+**This first FIT covers the three training lanes.** The snapshot job's pin and kit did not exist then; their own fresh read is the second FIT below.
 
 Its nine findings, all taken in this revision:
 
@@ -160,4 +162,15 @@ Its nine findings, all taken in this revision:
 8. *Low.* The counted table's floors were set while reading the saved models. Named in Risks.
 9. *Low.* 1.3 hours a pod was low. Cost now counts pre and the scoring pass; the kit's stale header is corrected.
 
-TEST FITNESS: FIT - research, #3407 (claude-366), a fresh non-author read at ed38134a of the three training lanes, every finding taken; the snapshot job takes its own read before its pod goes up
+**Second FIT: the snapshot job.** A second fresh reviewer (claude, fresh context, 13 Nov 2026) read this sheet at `631009f444e301e3b573d3670b67dcb77e439b80` beside the snapshot kit (`snapjob-366.sh`, `chainsnap-366.sh`, `sealsnap-366.sh`, `upsnap-366.sh`, `watch-snap-366.sh`, `gate-snap-366.sh`) at the pin `78705230…`. It ran nothing. Verdict: **fit with changes.** Its six findings, all taken:
+
+1. *Medium.* The launch did not check that the watcher was alive before it shipped the job. It now does (Compute and stop rule), and takes down a pod that has no watcher.
+2. *Medium.* `b-s2`'s comparison with its training job's snapshot was skipped in silence when the seal holds none. The job now writes "not compared" and the path it looked at.
+3. *Low.* A fetched seal's sum list was checked, but not that it lists the tar. The job now refuses a list that leaves the tar out.
+4. *Low.* The sheet did not say what a held pass can cost. Cost now says, and the snapshot pod's hold is 2 hours where a lane's is 6.
+5. *Low.* The price refusal comes only after the pod is up, and an exit-5 launch can leave a pod unwatched. Both are inherited from the lanes' launcher; Compute and stop rule now names them and that they are watched by hand.
+6. *Low.* A copy of the run's source pin was unchecked. A failure there is now a not-run record for that model.
+
+Three more fresh reads on 13 Nov covered the code at the pin `78705230…`: the integer rows module, the float side, and the reader, format and exporter. Each passed with low items and none found a wrong result. The commit that takes their findings is the one the pin moved by: a size worked out with checked steps, three more refusal tests, a test that the served step reads the rows in every layer (it fails when the read is cut to layer 0), the snapshot tool's refusal to write over a snapshot, and doc lines. That commit was not read again by a reviewer; the laptop's tests at the new pin and I-g on the pod check it, and the unit's exact-head review reads it before the merge.
+
+TEST FITNESS: FIT - research, #3407 (claude-366), a fresh non-author read at ed38134a of the three training lanes and a second fresh non-author read at 631009f4 of the snapshot job and its kit, every finding of both taken
