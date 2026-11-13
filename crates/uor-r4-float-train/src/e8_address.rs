@@ -295,7 +295,15 @@ impl AddressMemory {
             .map(|entry| ((entry % blocks) * cells) as f32)
             .collect();
         let offsets = Tensor::from_vec(offsets, entries, device)?;
-        let index = address.cell.add(&offsets)?.to_dtype(DType::U32)?;
+        // The index is cut from the graph. candle gives an op to anything computed from a tensor
+        // that has one, the gradient's own `index_add` included: an index that kept the decode's
+        // history gave the rows' gradient the whole forward pass to hold, and the optimizer's
+        // running means then held every step's forward pass for the rest of the run.
+        let index = address
+            .cell
+            .add(&offsets)?
+            .to_dtype(DType::U32)?
+            .detach();
         let read = table
             .index_select(&index, 0)?
             .reshape((positions, blocks, width))?;
@@ -319,7 +327,11 @@ impl AddressMemory {
                 .relu()?;
             // λ − λ̄ is exactly 0 forward, and its gradient is λ's.
             let live = credit.sub(&credit.detach())?;
-            let across = wall.across.add(&offsets)?.to_dtype(DType::U32)?;
+            let across = wall
+                .across
+                .add(&offsets)?
+                .to_dtype(DType::U32)?
+                .detach();
             let swing = table
                 .index_select(&across, 0)?
                 .reshape((positions, blocks, width))?
@@ -1325,6 +1337,31 @@ mod tests {
                 vec![1.0; BLOCK],
                 "band {band}"
             );
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_rows_gradient_carries_no_history_of_the_forward_pass() {
+        let device = device();
+        // The optimizer keeps running means of this gradient from step to step. A gradient with
+        // an op holds its whole forward pass alive in them, one more every step: on 13 Nov 2026
+        // that filled a 32 GB card within a few steps of the first training run.
+        for arm in [
+            AddressArm::E8,
+            AddressArm::Sign,
+            AddressArm::Token,
+            AddressArm::Collapse,
+        ] {
+            for band in [0.0, 0.5] {
+                let memory = AddressMemory::new(arm, 1, BLOCK, Some(band), 0, &device).unwrap();
+                let memory = memory.randomized(3).unwrap();
+                let state = near_a_wall(&device);
+                let out = memory.apply(0, state.as_tensor(), &[0]).unwrap();
+                let grads = out.sum_all().unwrap().backward().unwrap();
+                let rows = grads.get(memory.rows[0].as_tensor()).unwrap();
+                assert!(!rows.track_op(), "{arm:?}, band {band}");
+            }
         }
     }
 
