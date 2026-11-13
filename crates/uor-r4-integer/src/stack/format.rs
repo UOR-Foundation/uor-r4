@@ -259,8 +259,7 @@ pub struct StackHamming {
     /// The readout read's place read (claude-351): the ids that frame a conversation, by which
     /// the engine tells turns apart in the token stream. With it the readout read's ask heads
     /// find a place and do not read, and the read has a `hamming.d{depth}.place` section (i16,
-    /// `vocab`: bit 0 the stop, bit 1 the arm, bit 2 the open, bit 3 the link token of the
-    /// before-link key, claude-361). Left out without a place read, so
+    /// `vocab`: bit 0 the stop, bit 1 the arm, bit 2 the open). Left out without a place read, so
     /// such an artifact is byte for byte as before, and an engine without the field refuses one
     /// that sets it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2387,7 +2386,7 @@ pub fn add_hamming_ask_uorlut01(artifact: &[u8], asks: &[Option<super::AskImage>
 
 /// A Hamming stack whose readout read asks, with the place read added (claude-351): every section
 /// of `artifact` byte for byte, then `hamming.d{depth}.place` (i16, `vocab`: bit 0 the stop, bit 1
-/// the arm, bit 2 the open, bit 3 the link) on the readout read; the record's `place` carries the marks, and the
+/// the arm, bit 2 the open) on the readout read; the record's `place` carries the marks, and the
 /// schema is unchanged. The classes are integers already, so they are added to an exported stack,
 /// as the ask heads are. The result is read back before it is returned.
 pub fn add_hamming_place_uorlut01(artifact: &[u8], place: &super::PlaceImage) -> Result<Vec<u8>, StackError> {

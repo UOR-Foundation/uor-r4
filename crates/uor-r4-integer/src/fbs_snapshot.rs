@@ -2764,25 +2764,9 @@ pub const PLACE_STOP: i16 = 1;
 pub const PLACE_ARM: i16 = 2;
 /// A reply row with this vocabulary entry opens the read.
 pub const PLACE_OPEN: i16 = 4;
-/// The token stands before a told value in the training labels (claude-361): under the
-/// before-link key a place is a candidate only right after such a token.
-pub const PLACE_LINK: i16 = 8;
-
-/// Which tokens a place's key names, and how its question is put together.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PlaceKey {
-    /// claude-351 (today's): key at `s` = `x_{s-1}`'s key code in a head's first half, `x_{s-2}`'s
-    /// in the rest; question = the learned ask code of `x_t` in the first half, `x_{t-1}`'s key
-    /// code in the rest; candidates `s >= 2`.
-    Near,
-    /// claude-361: key at `s` = `x_{s-2}`'s key code in the first half, `x_{s-3}`'s in the rest;
-    /// question = the ask heads' whole code (all bits of `ask(j)`, which carries the question
-    /// carry when the read has one); candidates `s >= 3` whose token at `s-1` is a link token.
-    BeforeLink,
-}
 
 /// The place read's tables (claude-351): the marks that frame a conversation, and each vocabulary
-/// entry's class, [`PLACE_STOP`], [`PLACE_ARM`], [`PLACE_OPEN`] and [`PLACE_LINK`] or-ed.
+/// entry's class, [`PLACE_STOP`], [`PLACE_ARM`] and [`PLACE_OPEN`] or-ed.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlaceImage {
@@ -2792,14 +2776,14 @@ pub struct PlaceImage {
 
 impl PlaceImage {
     /// The tables over `vocab` entries, refusing marks [`PlaceMarks::check`] refuses, a class
-    /// table at another length, or a class bit outside the four.
+    /// table at another length, or a class bit outside the three.
     pub fn checked(marks: PlaceMarks, class: Vec<i16>, vocab: usize) -> Result<Self, String> {
         marks.check(vocab)?;
         if class.len() != vocab {
             return Err(format!("the place read's class table has {} entries for a vocabulary of {vocab}", class.len()));
         }
-        if class.iter().any(|&c| c & !(PLACE_STOP | PLACE_ARM | PLACE_OPEN | PLACE_LINK) != 0) {
-            return Err("the place read's class table has a bit outside stop, arm, open and link".to_owned());
+        if class.iter().any(|&c| c & !(PLACE_STOP | PLACE_ARM | PLACE_OPEN) != 0) {
+            return Err("the place read's class table has a bit outside stop, arm and open".to_owned());
         }
         Ok(Self { marks, class })
     }
@@ -2807,17 +2791,6 @@ impl PlaceImage {
     /// Whether `token`'s class has `bit`; a token outside the table has none.
     pub fn has(&self, token: u32, bit: i16) -> bool {
         self.class.get(token as usize).is_some_and(|&c| c & bit != 0)
-    }
-
-    /// The key the read was trained with (claude-361): [`PlaceKey::BeforeLink`] when any entry
-    /// has [`PLACE_LINK`], else [`PlaceKey::Near`], so an artifact with no link bit reads as
-    /// claude-351's.
-    pub fn key(&self) -> PlaceKey {
-        if self.class.iter().any(|&c| c & PLACE_LINK != 0) {
-            PlaceKey::BeforeLink
-        } else {
-            PlaceKey::Near
-        }
     }
 }
 
@@ -3082,43 +3055,26 @@ impl PlaceState {
     }
 }
 
-/// The question at row `t` and its find (claude-351, claude-361): what the integer session and
-/// the float trainer both call, so the question is put together in one place. `key(j, p)` is head
-/// `j`'s key code of the token at position `p`, and `first` the bits of a head's first half.
-/// - [`PlaceKey::Near`] (claude-351): head `j` asks with its learned question code for `x_t`
-///   (`ask(j)`) in the first half and with `x_{t−1}`'s key code in the rest; its key at `s` is
-///   `x_{s−1}`'s key code in the first half and `x_{s−2}`'s in the rest, for `s >= 2`. `link` is
-///   not called.
-/// - [`PlaceKey::BeforeLink`] (claude-361): head `j` asks with `ask(j)` whole; its key at `s` is
-///   `x_{s−2}`'s key code in the first half and `x_{s−3}`'s in the rest, and `s` is a candidate
-///   only from position 3 and when `link(s − 1)`, the token before it being a link token.
-///
-/// Row 0 finds nothing under either key. The rest is [`place_pick`]'s.
-#[allow(clippy::too_many_arguments)]
+/// The two-token question at row `t` and its find (claude-351): what the integer session and the
+/// float trainer both call, so the question is put together in one place. Head `j` asks with its
+/// learned question code for `x_t` (`ask(j)`) in the bits of `first`, a head's first half, and
+/// with `x_{t−1}`'s key code in the rest; its key at `s` is `x_{s−1}`'s key code in the first
+/// half and `x_{s−2}`'s in the rest. `key(j, p)` is head `j`'s key code of the token at position
+/// `p`. Row 0 has no token before it and finds nothing. The rest is [`place_pick`]'s.
 pub fn place_find(
-    kind: PlaceKey,
     first: u64,
     margins: &[i32],
     users: &[Range<usize>],
     t: usize,
     ask: impl Fn(usize) -> u64,
     key: impl Fn(usize, usize) -> u64,
-    link: impl Fn(usize) -> bool,
 ) -> Option<usize> {
     if t < 1 {
         return None;
     }
     let joined = |near: u64, far: u64| (near & first) | (far & !first);
-    match kind {
-        PlaceKey::Near => {
-            let queries: Vec<u64> = (0..margins.len()).map(|j| joined(ask(j), key(j, t - 1))).collect();
-            place_pick(&queries, margins, users, |j, s| joined(key(j, s - 1), key(j, s - 2)), |s| s >= 2)
-        }
-        PlaceKey::BeforeLink => {
-            let queries: Vec<u64> = (0..margins.len()).map(ask).collect();
-            place_pick(&queries, margins, users, |j, s| joined(key(j, s - 2), key(j, s - 3)), |s| s >= 3 && link(s - 1))
-        }
-    }
+    let queries: Vec<u64> = (0..margins.len()).map(|j| joined(ask(j), key(j, t - 1))).collect();
+    place_pick(&queries, margins, users, |j, s| joined(key(j, s - 1), key(j, s - 2)))
 }
 
 /// The bits of a head's first half, of a head of `head_width` coordinates (at most 64).
@@ -3129,20 +3085,13 @@ pub fn place_first(head_width: usize) -> u64 {
 /// One question row's find (claude-351): over the candidate positions, each head's nearest key,
 /// the later position on ties, kept when it is inside the head's margin; then the later of the
 /// heads' positions. `queries[j]` is head `j`'s question code, `key(j, s)` its key code at
-/// position `s`, and `margins[j]` its margin in bits at Q16. Only a candidate `admit` admits is
-/// weighed: one with the tokens before it that its key names, and under
-/// [`PlaceKey::BeforeLink`] a link token just before it ([`place_find`]).
-pub fn place_pick(
-    queries: &[u64],
-    margins: &[i32],
-    candidates: &[Range<usize>],
-    key: impl Fn(usize, usize) -> u64,
-    admit: impl Fn(usize) -> bool,
-) -> Option<usize> {
+/// position `s`, and `margins[j]` its margin in bits at Q16. A candidate before position 2 has no
+/// two tokens before it for its key and is passed over.
+pub fn place_pick(queries: &[u64], margins: &[i32], candidates: &[Range<usize>], key: impl Fn(usize, usize) -> u64) -> Option<usize> {
     let mut found: Option<usize> = None;
     for (j, &query) in queries.iter().enumerate() {
         let mut best: Option<(usize, u32)> = None;
-        for s in candidates.iter().cloned().flatten().filter(|&s| admit(s)) {
+        for s in candidates.iter().cloned().flatten().filter(|&s| s >= 2) {
             let d = (query ^ key(j, s)).count_ones();
             if best.is_none_or(|(_, least)| d <= least) {
                 best = Some((s, d));
@@ -3344,89 +3293,22 @@ mod place_tests {
     fn the_pick_is_the_nearest_key_the_later_on_ties_inside_the_margin() {
         let key = |_: usize, s: usize| [0b1111u64, 0b0001, 0b0011, 0b0001, 0b0111][s];
         let one = 1 << 16;
-        let near = |s: usize| s >= 2;
         // Distances from 0b0001 at positions 2 to 4: 1, 0, 2. The exact key wins.
-        assert_eq!(place_pick(&[0b0001], &[one], &[1..5], key, near), Some(3));
+        assert_eq!(place_pick(&[0b0001], &[one], &[1..5], key), Some(3));
         // Positions 1 and 3 are equally near 0b0001, and position 1 is passed over.
-        assert_eq!(place_pick(&[0b0001], &[one], &[0..2], key, near), None);
+        assert_eq!(place_pick(&[0b0001], &[one], &[0..2], key), None);
         // Among 2 and 4, position 2 is nearest 0b0011 (distance 0 against 1).
-        assert_eq!(place_pick(&[0b0011], &[2 * one], &[2..3, 4..5], key, near), Some(2));
+        assert_eq!(place_pick(&[0b0011], &[2 * one], &[2..3, 4..5], key), Some(2));
         // The nearest key to 0b0110 is one bit away, at position 4: a margin of one bit keeps
         // only a distance of 0, and a margin of two keeps it.
-        assert_eq!(place_pick(&[0b0110], &[one], &[1..5], key, near), None);
-        assert_eq!(place_pick(&[0b0110], &[2 * one], &[1..5], key, near), Some(4));
+        assert_eq!(place_pick(&[0b0110], &[one], &[1..5], key), None);
+        assert_eq!(place_pick(&[0b0110], &[2 * one], &[1..5], key), Some(4));
         // A tie goes to the later position: 0b0101 is one bit from the keys at 3 and 4.
-        assert_eq!(place_pick(&[0b0101], &[2 * one], &[3..5], key, near), Some(4));
+        assert_eq!(place_pick(&[0b0101], &[2 * one], &[3..5], key), Some(4));
         // Two heads: the later of their positions; a head outside its margin finds nothing.
-        assert_eq!(place_pick(&[0b0001, 0b0011], &[one, one], &[0..5], key, near), Some(3));
-        assert_eq!(place_pick(&[0b0011, 0b1111], &[one, one], &[0..5], key, near), Some(2));
-        assert_eq!(place_pick(&[0b0001], &[one], &[], key, near), None);
-    }
-
-    /// claude-361: the key codes of positions 0 to 7 for one head of 8 bits, whose first half is
-    /// the low nibble. Under the before-link key the place at 5 has key `0x34`: the low nibble of
-    /// position 3's code and the high nibble of position 2's.
-    const CODES: [u64; 8] = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
-
-    /// The find at row 7 among `users`, a margin that keeps only an exact key.
-    fn find(kind: PlaceKey, codes: &[u64; 8], users: &[Range<usize>], ask: u64, link: impl Fn(usize) -> bool) -> Option<usize> {
-        place_find(kind, place_first(8), &[1 << 16], users, 7, |_| ask, |_, p| codes[p], link)
-    }
-
-    #[test]
-    fn the_before_link_key_names_the_two_tokens_before_the_link() {
-        let every = |_: usize| true;
-        assert_eq!(find(PlaceKey::BeforeLink, &CODES, &[0..7], 0x34, every), Some(5));
-        let with = |p: usize, code: u64| {
-            let mut codes = CODES;
-            codes[p] = code;
-            find(PlaceKey::BeforeLink, &codes, &[0..7], 0x34, every)
-        };
-        // The code at `s − 2` fills the first half and the one at `s − 3` the rest.
-        assert_eq!(with(3, 0x4F), None);
-        assert_eq!(with(2, 0xF3), None);
-        // The link token's own code, at `s − 1`, and the one before the pair, at `s − 4`, are not
-        // read.
-        assert_eq!(with(4, 0x00), Some(5));
-        assert_eq!(with(1, 0x00), Some(5));
-    }
-
-    #[test]
-    fn the_before_link_key_admits_a_place_after_a_link_token_from_position_3() {
-        // The keys match at 5, and the token at 4 is not a link: nothing is found.
-        assert_eq!(find(PlaceKey::BeforeLink, &CODES, &[0..7], 0x34, |p| p != 4), None);
-        assert_eq!(find(PlaceKey::BeforeLink, &CODES, &[0..7], 0x34, |p| p == 4), Some(5));
-        // Position 3 is the first with three tokens before it; position 2 is passed over.
-        assert_eq!(find(PlaceKey::BeforeLink, &CODES, &[3..4], 0x12, |_| true), Some(3));
-        assert_eq!(find(PlaceKey::BeforeLink, &CODES, &[2..3], 0x12, |_| true), None);
-    }
-
-    #[test]
-    fn the_before_link_question_is_the_ask_code_whole() {
-        // The token before the question row, at 6, fills the near question's second half: with
-        // `0x3F` the near question is `0x34`, the near key at 4; with `0x77` it is `0x74`, no key.
-        let mut asked = CODES;
-        asked[6] = 0x3F;
-        let never = |_: usize| false;
-        assert_eq!(find(PlaceKey::Near, &CODES, &[0..7], 0x34, never), None);
-        assert_eq!(find(PlaceKey::Near, &asked, &[0..7], 0x34, never), Some(4));
-        // The before-link question does not read it.
-        let every = |_: usize| true;
-        assert_eq!(find(PlaceKey::BeforeLink, &CODES, &[0..7], 0x34, every), Some(5));
-        assert_eq!(find(PlaceKey::BeforeLink, &asked, &[0..7], 0x34, every), Some(5));
-    }
-
-    #[test]
-    fn a_link_bit_names_the_before_link_key() {
-        let near = image();
-        assert_eq!(near.key(), PlaceKey::Near);
-        let mut class = near.class.clone();
-        class[12] = PLACE_LINK;
-        let linked = PlaceImage::checked(near.marks.clone(), class.clone(), 20).expect("a link bit is a class bit");
-        assert_eq!(linked.key(), PlaceKey::BeforeLink);
-        assert!(linked.has(12, PLACE_LINK) && !linked.has(11, PLACE_LINK));
-        class[12] = 16;
-        assert!(PlaceImage::checked(near.marks, class, 20).is_err(), "a bit outside the four");
+        assert_eq!(place_pick(&[0b0001, 0b0011], &[one, one], &[0..5], key), Some(3));
+        assert_eq!(place_pick(&[0b0011, 0b1111], &[one, one], &[0..5], key), Some(2));
+        assert_eq!(place_pick(&[0b0001], &[one], &[], key), None);
     }
 }
 

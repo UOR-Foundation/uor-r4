@@ -1702,7 +1702,6 @@ pub fn place_kit(
         },
         stop,
         places,
-        link: Vec::new(),
     };
     kit.check().map_err(|e| e.to_string())?;
     // The marks a trainer's tables would refuse are refused here, before the kit is written.

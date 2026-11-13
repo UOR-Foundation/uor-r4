@@ -44,20 +44,11 @@ pub struct Cut {
     pub slots: u8,
     /// How many of a question's last tokens are read; 0 reads them all.
     pub question_last: usize,
-    /// How many frame tokens a question token keeps at each offset, the heaviest first, and none
-    /// whose weight is not above zero (claude-361); 0 keeps every fitted pair. It is the count
-    /// form of a trained question, which has one code a head for each of its tokens.
-    pub targets: usize,
-    /// Whether a frame token weighs anything when the question does not hold it. `false`
-    /// (claude-361) takes that weight off every frame token, held or not: what is left of a
-    /// `shared` row is what the token gains by being a token of the question, so no candidate
-    /// scores by its frame alone. A trained key has no such weight.
-    pub prior: bool,
 }
 
 impl Cut {
     /// Every offset and the whole question: no cut.
-    pub const ALL: Cut = Cut { slots: u8::MAX, question_last: 0, targets: 0, prior: true };
+    pub const ALL: Cut = Cut { slots: u8::MAX, question_last: 0 };
 
     /// The frame with each offset the cut drops filled as an offset with no token is, so it is
     /// the same at every candidate and tells none from another.
@@ -397,9 +388,7 @@ impl AsksIndex {
         for (j, &c) in f[..n].iter().enumerate() {
             let held = q.binary_search(&c).is_ok();
             let side = usize::from(!held);
-            let w = self.shared.get(&key2(j + 1, c)).copied().unwrap_or(self.unseen[j]);
-            // Without the prior a frame token keeps only what it gains by being held.
-            score = score.saturating_add(if self.cut.prior { w[side] } else { w[side].saturating_sub(w[1]) });
+            score = score.saturating_add(self.shared.get(&key2(j + 1, c)).map_or(self.unseen[j][side], |w| w[side]));
             for &qt in q {
                 if qt != c {
                     if let Some(&w) = self.pairs.get(&key3(qt, j + 1, c)) {
@@ -618,26 +607,6 @@ pub fn census(tokens: &[u32], marks: &PlaceMarks, places: &[[u32; 4]], index: &A
     (out, missed)
 }
 
-/// The pair rows `[question token, offset, frame token, weight]` a cut's `targets` keeps, sorted
-/// as a table holds them. With `targets` 0, every row. Otherwise, for each question token and
-/// offset, its `targets` heaviest frame tokens among those whose weight is above zero, the lower
-/// frame token first where two weigh the same.
-fn heaviest(mut rows: Vec<[i32; 4]>, targets: usize) -> Vec<[i32; 4]> {
-    if targets > 0 {
-        rows.retain(|row| row[3] > 0);
-        rows.sort_unstable_by(|a, b| (a[0], a[1]).cmp(&(b[0], b[1])).then(b[3].cmp(&a[3])).then(a[2].cmp(&b[2])));
-        let mut run = 0usize;
-        let mut last: Option<(i32, i32)> = None;
-        rows.retain(|row| {
-            run = if last == Some((row[0], row[1])) { run + 1 } else { 0 };
-            last = Some((row[0], row[1]));
-            run < targets
-        });
-    }
-    rows.sort_unstable();
-    rows
-}
-
 /// Fit the asks on a split by counting: `places` are its true places, `[reply start, place, ..]`
 /// in the split's positions. The second value is the fit's own account, line by line.
 pub fn fit(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4]], tokens_sha256: String) -> Result<(PlaceAsks, Vec<String>), String> {
@@ -799,7 +768,7 @@ pub fn fit_cut(tokens: &[u32], marks: &PlaceMarks, vocab: u32, places: &[[u32; 4
             pair_rows.push([(key >> 24) as i32, ((key >> 16) & 0xFF) as i32, (key & 0xFFFF) as i32, weight]);
         }
     }
-    let pair_rows = heaviest(pair_rows, cut.targets);
+    pair_rows.sort_unstable();
     let mut asking_rows: Vec<[i32; 2]> = asking
         .iter()
         .filter(|(_, n)| n[0].saturating_add(n[1]) >= ASKING_MIN)
@@ -999,7 +968,7 @@ mod tests {
         let (x, places) = corpus(240);
         let whole = fit(&x, &marks(), VOCAB, &places, "test".to_owned()).expect("the fit").0;
         // More last tokens than a question has is the whole question.
-        let cut = Cut { slots: u8::MAX, question_last: 64, targets: 0, prior: true };
+        let cut = Cut { slots: u8::MAX, question_last: 64 };
         let kept = fit_cut(&x, &marks(), VOCAB, &places, "test".to_owned(), cut).expect("the fit").0;
         assert_eq!(written(&kept), written(&whole));
     }
@@ -1013,11 +982,11 @@ mod tests {
         let past_two = |asks: &PlaceAsks| asks.shared.iter().filter(|row| holds(row[0], row[1])).count() + asks.pairs.iter().filter(|row| holds(row[1], row[2])).count();
         let whole = table(Cut::ALL);
         assert_ne!(past_two(&whole), 0);
-        assert_eq!(past_two(&table(Cut { slots: 0b11, question_last: 0, targets: 0, prior: true })), 0);
+        assert_eq!(past_two(&table(Cut { slots: 0b11, question_last: 0 })), 0);
         // The last token of a question is its key: the word before it is not read.
         let reads_what = |asks: &PlaceAsks| asks.pairs.iter().any(|row| row[0] == WHAT as i32) || asks.asking.iter().any(|row| row[0] == WHAT as i32);
         assert!(reads_what(&whole));
-        assert!(!reads_what(&table(Cut { slots: u8::MAX, question_last: 1, targets: 0, prior: true })));
+        assert!(!reads_what(&table(Cut { slots: u8::MAX, question_last: 1 })));
     }
 
     #[test]
@@ -1038,12 +1007,12 @@ mod tests {
         assert_eq!(whole.len(), 2, "one candidate in each statement");
         assert_ne!(whole[0], whole[1], "the key two tokens before a value tells the two apart");
         // The token before both values is the same one.
-        let cut = scores(Cut { slots: 0b1, question_last: 0, targets: 0, prior: true });
+        let cut = scores(Cut { slots: 0b1, question_last: 0 });
         assert_eq!(cut[0], cut[1]);
         let mut all = vec![WHAT, key];
         all.sort_unstable();
         assert_eq!(reader(Cut::ALL).asked(&x, &case.asked), all);
-        assert_eq!(reader(Cut { slots: u8::MAX, question_last: 1, targets: 0, prior: true }).asked(&x, &case.asked), vec![key]);
+        assert_eq!(reader(Cut { slots: u8::MAX, question_last: 1 }).asked(&x, &case.asked), vec![key]);
     }
 
     #[test]
@@ -1051,66 +1020,13 @@ mod tests {
         let (x, places) = corpus(240);
         let (held, held_places) = corpus_from(240, 60);
         let found = |slots: u8| {
-            let cut = Cut { slots, question_last: 0, targets: 0, prior: true };
+            let cut = Cut { slots, question_last: 0 };
             let (asks, _) = fit_cut(&x, &marks(), VOCAB, &places, "test".to_owned(), cut).expect("the fit");
             let index = AsksIndex::new(&asks).expect("the index").with_cut(cut);
             census(&held, &marks(), &held_places, &index, &asks.forms, 0).0.recall
         };
         assert_eq!(found(0b11), [30, 0, 0, 0]);
         assert!(found(0b1)[0] < 30, "{:?}", found(0b1));
-    }
-
-    #[test]
-    fn the_heaviest_rows_are_the_k_heaviest_frame_tokens_of_each_question_token_and_offset() {
-        // `[question token, offset, frame token, weight]`.
-        let rows = vec![[7, 2, 30, 40], [7, 2, 32, 90], [7, 2, 31, 90], [7, 2, 33, -200], [7, 3, 30, 5], [8, 2, 30, -5], [8, 2, 34, 0]];
-        let mut all = rows.clone();
-        all.sort_unstable();
-        assert_eq!(heaviest(rows.clone(), 0), all, "0 keeps every row, as a table holds them");
-        // The heaviest of each question token and offset; of two that weigh the same, the lower
-        // frame token; a weight that is not above zero is no target.
-        assert_eq!(heaviest(rows.clone(), 1), vec![[7, 2, 31, 90], [7, 3, 30, 5]]);
-        assert_eq!(heaviest(rows, 2), vec![[7, 2, 31, 90], [7, 2, 32, 90], [7, 3, 30, 5]]);
-    }
-
-    #[test]
-    fn a_cut_fit_keeps_no_more_targets_than_the_cut_names() {
-        let (x, places) = corpus(240);
-        let table = |targets: usize| fit_cut(&x, &marks(), VOCAB, &places, "test".to_owned(), Cut { targets, ..Cut::ALL }).expect("the fit").0;
-        // The most frame tokens any question token keeps at one offset.
-        let most = |asks: &PlaceAsks| {
-            let mut n: HashMap<(i32, i32), usize> = HashMap::new();
-            for row in &asks.pairs {
-                *n.entry((row[0], row[1])).or_default() += 1;
-            }
-            n.values().copied().max().unwrap_or(0)
-        };
-        assert!(most(&table(0)) > 1, "the corpus gives a question token more than one frame token at an offset");
-        assert_eq!(most(&table(1)), 1);
-        assert!(table(1).pairs.iter().all(|row| row[3] > 0));
-    }
-
-    #[test]
-    fn a_reader_without_the_prior_takes_off_what_each_frame_token_weighs_when_not_held() {
-        let (x, places) = corpus(240);
-        let (asks, _) = fit(&x, &marks(), VOCAB, &places, "test".to_owned()).expect("the fit");
-        let (case, _) = a_recall(&x, &places);
-        let reader = |prior: bool| AsksIndex::new(&asks).expect("the index").with_cut(Cut { prior, ..Cut::ALL });
-        let (with, without) = (reader(true), reader(false));
-        let q = with.asked(&x, &case.asked);
-        let (mut seen, mut moved) = (0, false);
-        for turn in &case.prior {
-            for s in turn.clone() {
-                let Some(whole) = with.score(&x, turn.start, turn.end, s, &q) else { continue };
-                // What the candidate's frame weighs with no token of the question in it.
-                let (f, n) = frame(&x, turn.start, turn.end, s, with.start);
-                let alone: i32 = f[..n].iter().enumerate().map(|(j, &c)| with.shared.get(&key2(j + 1, c)).map_or(with.unseen[j][1], |w| w[1])).sum();
-                assert_eq!(without.score(&x, turn.start, turn.end, s, &q), Some(whole - alone));
-                seen += 1;
-                moved |= alone != 0;
-            }
-        }
-        assert!(seen > 0 && moved, "a candidate whose frame weighs something by itself");
     }
 
     #[test]

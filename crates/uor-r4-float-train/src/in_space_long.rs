@@ -1219,14 +1219,14 @@ fn start_place(
         )));
     }
     let reads = match reads.place() {
-        Some(place) if place.framed_as(&kit.marks, &kit.stop, &kit.link) => reads,
+        Some(place) if place.framed_as(&kit.marks, &kit.stop) => reads,
         Some(_) => {
             return Err(invalid(format!(
-                "--init-from checkpoint's place read has other marks, stop tokens or link tokens than --hamming-place {}",
+                "--init-from checkpoint's place read has other marks or stop tokens than --hamming-place {}",
                 path.display()
             )))
         }
-        None => reads.with_place(kit.marks.clone(), &kit.stop, &kit.link)?,
+        None => reads.with_place(kit.marks.clone(), &kit.stop)?,
     };
     set_place_teach(Some((kit, config.hamming_place_pull)));
     Ok(reads)
@@ -3505,8 +3505,11 @@ fn check_pull_flags(config: &LongConfig) -> Result<()> {
     if config.hamming_place.is_some() && !config.hamming_ask {
         return Err(invalid("--hamming-place finds with the ask heads; turn them on with --hamming-ask 1"));
     }
-    // claude-361: `--hamming-place` with `--hamming-carry-question` is refused when the reads
-    // take the kit (`HammingReads::with_place`), and only for a kit with no link tokens.
+    if config.hamming_place.is_some() && config.hamming_carry_question > 0 {
+        return Err(invalid(
+            "--hamming-place and --hamming-carry-question both change the readout read's question; one is on at a time",
+        ));
+    }
     Ok(())
 }
 
