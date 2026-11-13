@@ -55,6 +55,14 @@
 //! gains `copy_rule` with the rule served and the artifact's own. Without the flag the artifact's
 //! own rule is served and the receipt is as before.
 //!
+//! `--place-asks FILE` (claude-359) serves the artifact's place read from a fitted asks table
+//! (`place-asks fit`) in place of its ask heads' finds: a place the asks find sets the register,
+//! and a fact they find was never told is answered with their stored reply. `--place-speak 0|1`
+//! (default 1) says whether an open row serves the token at its place outright. It needs an
+//! artifact with a place read, fitted marks and vocabulary equal to its own. The receipt gains
+//! `place_asks`: the file's SHA-256, `speak`, how many ids a row's place spoke, and how many
+//! replies started on the stored reply. Without the flag the receipt is as before.
+//!
 //! Every argument is a `--name value` pair; a name with no value is refused.
 //!
 //! It is an instrument: it trains nothing, changes no artifact and moves no bar.
@@ -64,7 +72,8 @@
 //!   --mark-reply 0|1 [--max-tokens 48] [--count-visits 0|1] [--time-steps 0|1] \
 //!   [--trace-control 0|1 --trace-out TRACE.jsonl] \
 //!   [--place-rows 0|1 [--places KIT.json [--kit-tokens TOKENS.u16]]] \
-//!   [--copy-rule mean|latest-exact|latest-nearest|longest-exact|longest-after-opening]
+//!   [--copy-rule mean|latest-exact|latest-nearest|longest-exact|longest-after-opening] \
+//!   [--place-asks ASKS.json [--place-speak 0|1]]
 //! ```
 //!
 //! `ROWS.json` is a JSON array of objects with a `prompt` array of token ids (a float score's
@@ -80,13 +89,14 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use uor_r4_integer::generation::short_cycle;
+use uor_r4_integer::place_asks::PlaceAsks;
 use uor_r4_integer::stack::{
     read_hamming_uorlut01, CopyRule, HammingStepRead, IntegerStackModel, IntegerStackSession,
 };
 
 const SCHEMA: &str = "uor-r4.raw-id-replies/1";
 const EOS: u32 = 1;
-const USAGE: &str = "usage: raw-id-replies --stack FILE --samples FILE --out FILE --mark-reply 0|1 [--max-tokens N] [--count-visits 0|1] [--time-steps 0|1] [--trace-control 0|1 --trace-out FILE] [--place-rows 0|1 [--places FILE [--kit-tokens FILE]]] [--copy-rule mean|latest-exact|latest-nearest|longest-exact|longest-after-opening]";
+const USAGE: &str = "usage: raw-id-replies --stack FILE --samples FILE --out FILE --mark-reply 0|1 [--max-tokens N] [--count-visits 0|1] [--time-steps 0|1] [--trace-control 0|1 --trace-out FILE] [--place-rows 0|1 [--places FILE [--kit-tokens FILE]]] [--copy-rule mean|latest-exact|latest-nearest|longest-exact|longest-after-opening] [--place-asks FILE [--place-speak 0|1]]";
 /// How many values the early-stopping scan reads between two looks at its bound.
 const BLOCK: usize = 16;
 
@@ -678,6 +688,26 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<Value> {
             return Err("--copy-rule needs an artifact with a Hamming read".to_owned());
         }
     }
+    // The asks (claude-359): a fitted table the place read is served from, set only here.
+    let place_speak = match flag(&args, "--place-speak").as_deref() {
+        None => None,
+        Some("0") => Some(false),
+        Some("1") => Some(true),
+        Some(other) => return Err(format!("--place-speak takes 0 or 1, not {other}")),
+    };
+    let place_asks = match (flag(&args, "--place-asks"), place_speak) {
+        (Some(path), speak) => {
+            let bytes = fs::read(&path).map_err(|e| format!("{path}: {e}"))?;
+            let asks: PlaceAsks = serde_json::from_slice(&bytes).map_err(|e| format!("{path}: {e}"))?;
+            let speak = speak.unwrap_or(true);
+            model.set_place_asks(&asks, speak).map_err(|e| format!("--place-asks: {e}"))?;
+            Some((sha256_hex(&bytes), speak))
+        }
+        (None, Some(_)) => return Err("--place-speak needs --place-asks".to_owned()),
+        (None, None) => None,
+    };
+    // Reply ids a row's place spoke, and replies that started the stored reply.
+    let (mut spoke_place, mut told_replies) = (0u64, 0u64);
     let has_turn_memory = model.session().has_turn_memory();
     if mark && !has_turn_memory {
         // A marked run on a model without a turn memory would be an unmarked run by another name.
@@ -772,6 +802,11 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<Value> {
             if place_rows {
                 registers.push(session.last_place());
             }
+            match session.last_spoken() {
+                Some((_, None)) => spoke_place += 1,
+                Some((_, Some(0))) => told_replies += 1,
+                _ => {}
+            }
             if let (Some(table), Some(query)) = (table, session.last_query_q12()) {
                 visits.count(table, query, session.last_native_token());
             }
@@ -829,6 +864,11 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<Value> {
             pick = served;
             if place_rows {
                 registers.push(session.last_place());
+            }
+            match session.last_spoken() {
+                Some((_, None)) => spoke_place += 1,
+                Some((_, Some(0))) => told_replies += 1,
+                _ => {}
             }
             if let (Some(table), Some(query)) = (table, session.last_query_q12()) {
                 visits.count(table, query, session.last_native_token());
@@ -895,6 +935,14 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<Value> {
         "stack_sha256": sha256_hex(&artifact),
         "samples_sha256": sha256_hex(&samples),
     });
+    if let Some((sha256, speak)) = &place_asks {
+        receipt["place_asks"] = json!({
+            "sha256": sha256,
+            "speak": speak,
+            "ids_spoken_from_a_place": spoke_place,
+            "replies_started_on_the_stored_reply": told_replies,
+        });
+    }
     if copy_rule.is_some() {
         // What the session serves after the switch, beside the artifact's own rule.
         receipt["copy_rule"] = json!({

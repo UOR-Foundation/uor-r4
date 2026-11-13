@@ -2930,6 +2930,12 @@ impl PlaceState {
         &self.turns
     }
 
+    /// When the row read last spoke a token of the stored reply: that token's index in it
+    /// (claude-359). `None` at a row that spoke a place's token or nothing.
+    pub fn told(&self) -> Option<usize> {
+        self.told
+    }
+
     /// Read the last token of `tokens` (`x_0..=x_t`), every earlier one read before it. `find` is
     /// asked at a row of a user turn's content, with the contents of the finished user turns: the
     /// place that row's question finds among them, if any.
