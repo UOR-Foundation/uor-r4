@@ -69,7 +69,7 @@ use std::process::ExitCode;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use uor_r4_integer::fbs_snapshot::PlaceMarks;
-use uor_r4_integer::pair_experts::{asked_turn, Check, Occurrence, PairExperts, Ratio, Setting, Verdict};
+use uor_r4_integer::pair_experts::{asked_turn, Check, Occurrence, PairExperts, Ratio, Setting, Verdict, Weigh};
 use uor_r4_integer::place_asks::{ask_cases, census, fit, fit_cut, fit_forms, fit_repeat, AsksIndex, Cut, FormRule, PlaceAsks, ASKS_FRAME};
 
 const HEADER: usize = 64;
@@ -737,7 +737,7 @@ fn run(args: &[String]) -> Result<(), String> {
             for &cap in &caps {
                 for &keep in &keeps {
                     for &floor in &floors {
-                        let setting = Setting { cap, keep, hold_out, floor };
+                        let setting = Setting { cap, keep, hold_out, floor, weigh: Weigh::Even, refuse_from: 0 };
                         let (tally, outcomes) = replay(&table, Some(&index), &kit.marks, &prompts, &rows, setting);
                         println!("{}", tally.line(setting));
                         if let Some((jsonl_path, tsv_path)) = &out {
@@ -888,7 +888,7 @@ mod tests {
         lines.iter().enumerate().map(|(n, line)| parse_row(line, n + 1).expect("row")).collect()
     }
 
-    const KEEP_HALF: Setting = Setting { cap: 100, keep: Ratio { num: 1, den: 2 }, hold_out: false, floor: 0 };
+    const KEEP_HALF: Setting = Setting { cap: 100, keep: Ratio { num: 1, den: 2 }, hold_out: false, floor: 0, weigh: Weigh::Even, refuse_from: 0 };
 
     #[test]
     fn the_replay_replaces_a_reply_the_turns_experts_do_not_hold_and_counts_it_newly_good() {

@@ -11,6 +11,9 @@
 //! is under a floor: then they do not know the turn, and the reply stands. With hold-out on, a turn's
 //! own counts are taken out first, so a turn is checked as if it had never been counted.
 //!
+//! A setting can also weigh each expert's shares by how sure it is, and let an expert that saw
+//! one reply nearly every time refuse the replies it never saw. By default it does neither.
+//!
 //! A table file carries the SHA-256 of its body, and every structural rule is checked again
 //! when a file is read.
 
@@ -60,6 +63,20 @@ pub struct ReplyScore {
     pub score: u64,
 }
 
+/// How one expert shares its vote among the replies it holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Weigh {
+    /// A reply gets its count over the expert's total: `(c << 20) / t`.
+    Even,
+    /// A reply's share is also weighed by how sure the expert is: `((c * m) << 20) / (t * t)`,
+    /// where `m` is the largest count the expert holds. An expert that saw one reply only still
+    /// gives it a whole vote; an expert split between replies gives each of them less.
+    Sure,
+}
+
+/// The share of its total an expert's largest count must reach for the expert to be sure.
+pub const SURE: Ratio = Ratio { num: 7, den: 8 };
+
 /// What the experts of one turn gave.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Votes {
@@ -67,18 +84,58 @@ pub struct Votes {
     pub experts: usize,
     /// Every reply with a positive score, by reply index.
     pub scores: Vec<ReplyScore>,
+    /// For each sure expert, the replies it holds a count for, by reply index. Empty when the
+    /// setting refuses nothing.
+    pub sure: Vec<Vec<u32>>,
 }
 
 impl Votes {
     /// The reply with the largest score; a tie goes to the smaller reply index.
     pub fn top(&self) -> Option<ReplyScore> {
+        self.top_of(|_| true)
+    }
+
+    /// The reply with the largest score among those `allowed` lets through; a tie goes to the
+    /// smaller reply index.
+    fn top_of(&self, allowed: impl Fn(u32) -> bool) -> Option<ReplyScore> {
         let mut best: Option<ReplyScore> = None;
-        for entry in &self.scores {
+        for entry in self.scores.iter().filter(|s| allowed(s.reply)) {
             if best.map_or(true, |b| entry.score > b.score) {
                 best = Some(*entry);
             }
         }
         best
+    }
+
+    /// The replies every sure expert holds, by reply index. Empty when no expert is sure or the
+    /// sure experts share no reply: then the refusal is void.
+    fn agreed(&self) -> Vec<u32> {
+        let Some((first, rest)) = self.sure.split_first() else {
+            return Vec::new();
+        };
+        first
+            .iter()
+            .copied()
+            .filter(|r| rest.iter().all(|list| list.binary_search(r).is_ok()))
+            .collect()
+    }
+
+    /// Whether the sure experts let a reply through: every sure expert holds it. When the
+    /// refusal is void every reply is let through.
+    pub fn allows(&self, reply: u32) -> bool {
+        let agreed = self.agreed();
+        agreed.is_empty() || agreed.binary_search(&reply).is_ok()
+    }
+
+    /// The top reply among those the sure experts let through. It is [`Self::top`] when the
+    /// refusal is void, and also when no reply they let through has a score.
+    pub fn top_allowed(&self) -> Option<ReplyScore> {
+        let agreed = self.agreed();
+        if agreed.is_empty() {
+            return self.top();
+        }
+        self.top_of(|r| agreed.binary_search(&r).is_ok())
+            .or_else(|| self.top())
     }
 
     /// The score of one reply; 0 when it has none.
@@ -117,6 +174,8 @@ pub enum Check {
         vote: u64,
         /// The top vote.
         top: u64,
+        /// The model's reply kept its share of the top vote, but a sure expert never saw it.
+        refused: bool,
     },
 }
 
@@ -341,8 +400,35 @@ impl PairExperts {
     /// out of every total and count first. A pair is an expert when what is left of its total
     /// is at least 1 and at most `cap`: the cap is read after the hold-out. A count is never
     /// read as more than what is left of its expert's total, so one expert gives any one reply
-    /// at most one whole vote whatever a file holds.
+    /// at most one whole vote whatever a file holds. Every expert shares its vote evenly and
+    /// none refuses a reply.
     pub fn votes(&self, turn: &[u32], hold_out: bool, cap: u32) -> Votes {
+        self.vote(turn, hold_out, cap, Weigh::Even, 0)
+    }
+
+    /// The experts' votes for a turn under a whole setting: [`Self::votes`], with each expert's
+    /// share weighed as the setting says, and the sure experts listed when the setting refuses.
+    pub fn votes_setting(&self, turn: &[u32], setting: Setting) -> Votes {
+        self.vote(
+            turn,
+            setting.hold_out,
+            setting.cap,
+            setting.weigh,
+            setting.refuse_from,
+        )
+    }
+
+    /// The one vote both [`Self::votes`] and [`Self::votes_setting`] read. An expert is sure when
+    /// `refuse_from` is above 0, what is left of its total is at least `refuse_from`, and its
+    /// largest left count is at least [`SURE`] of that total.
+    fn vote(
+        &self,
+        turn: &[u32],
+        hold_out: bool,
+        cap: u32,
+        weigh: Weigh,
+        refuse_from: u32,
+    ) -> Votes {
         let own: &[Count] = if hold_out {
             self.turns
                 .binary_search_by(|t| t.tokens.as_slice().cmp(turn))
@@ -353,6 +439,8 @@ impl PairExperts {
         let own_total: u64 = own.iter().map(|c| u64::from(c.count)).sum();
         let mut experts = 0;
         let mut scores: BTreeMap<u32, u64> = BTreeMap::new();
+        let mut sure: Vec<Vec<u32>> = Vec::new();
+        let mut left: Vec<(u32, u64)> = Vec::new();
         for address in pairs(&self.primes, turn) {
             let Ok(at) = self.experts.binary_search_by_key(&address, |e| e.address) else {
                 continue;
@@ -363,15 +451,33 @@ impl PairExperts {
                 continue;
             }
             experts += 1;
+            left.clear();
             for held in &expert.counts {
                 let mine = own
                     .binary_search_by_key(&held.reply, |c| c.reply)
                     .map_or(0, |i| own[i].count);
                 let c = u64::from(held.count.saturating_sub(mine)).min(t);
                 if c > 0 {
-                    let score = scores.entry(held.reply).or_insert(0);
-                    *score = score.saturating_add((c << VOTE_SHIFT) / t);
+                    left.push((held.reply, c));
                 }
+            }
+            let m = left.iter().map(|(_, c)| *c).max().unwrap_or(0);
+            for &(reply, c) in &left {
+                let share = match weigh {
+                    Weigh::Even => (c << VOTE_SHIFT) / t,
+                    Weigh::Sure => {
+                        (((u128::from(c) * u128::from(m)) << VOTE_SHIFT)
+                            / (u128::from(t) * u128::from(t))) as u64
+                    }
+                };
+                let score = scores.entry(reply).or_insert(0);
+                *score = score.saturating_add(share);
+            }
+            if refuse_from > 0
+                && t >= u64::from(refuse_from)
+                && m * u64::from(SURE.den) >= t * u64::from(SURE.num)
+            {
+                sure.push(left.iter().map(|(reply, _)| *reply).collect());
             }
         }
         Votes {
@@ -381,6 +487,7 @@ impl PairExperts {
                 .filter(|(_, score)| *score > 0)
                 .map(|(reply, score)| ReplyScore { reply, score })
                 .collect(),
+            sure,
         }
     }
 
@@ -395,26 +502,15 @@ impl PairExperts {
         cap: u32,
         keep: Ratio,
     ) -> Check {
-        let votes = self.votes(turn, hold_out, cap);
-        let Some(top) = votes.top() else {
-            return Check::NoExpert;
+        let setting = Setting {
+            cap,
+            keep,
+            hold_out,
+            floor: 0,
+            weigh: Weigh::Even,
+            refuse_from: 0,
         };
-        let vote = self.reply_index(reply).map_or(0, |r| votes.score(r));
-        if vote > 0
-            && u128::from(vote) * u128::from(keep.den)
-                >= u128::from(top.score) * u128::from(keep.num)
-        {
-            Check::Stands {
-                vote,
-                top: top.score,
-            }
-        } else {
-            Check::Replaced {
-                reply: top.reply,
-                vote,
-                top: top.score,
-            }
-        }
+        self.check_setting(turn, reply, setting)
     }
 
     /// The tokens of reply `index`.
@@ -757,6 +853,11 @@ pub struct Setting {
     /// The top vote the experts need before they answer in the model's place, in thousandths
     /// of one expert's whole vote. Under it they do not know the turn and the reply stands.
     pub floor: u32,
+    /// How each expert shares its vote among its replies.
+    pub weigh: Weigh,
+    /// An expert seen at least this many times, after the hold-out, whose largest count is at
+    /// least [`SURE`] of its total, refuses every reply it never saw. 0 refuses nothing.
+    pub refuse_from: u32,
 }
 
 /// What the experts decide about the reply to a prompt.
@@ -826,17 +927,41 @@ impl PairExperts {
         Verdict::Checked(self.check_setting(&prompt[asked], reply, setting))
     }
 
-    /// [`Self::check`] under a whole setting: a reply the check would replace stands instead
-    /// when the experts' top vote is under the setting's floor. One expert that saw only the top
-    /// reply gives it a whole vote, `1 << 20`; the floor counts in thousandths of that.
+    /// Checks the model's reply against the experts of the turn under a whole setting. The top
+    /// is the top reply the sure experts let through. The reply stands when the sure experts
+    /// let it through, its vote is positive and it is at least `keep` of the top vote. Otherwise
+    /// the top reply replaces it, unless the top vote is under the floor: then the reply stands
+    /// as unsure. One expert that saw only the top reply gives it a whole vote, `1 << 20`; the
+    /// floor counts in thousandths of that. A reply that kept its share but was refused is
+    /// marked so.
     pub fn check_setting(&self, turn: &[u32], reply: &[u32], setting: Setting) -> Check {
-        match self.check(turn, reply, setting.hold_out, setting.cap, setting.keep) {
-            Check::Replaced { vote, top, .. }
-                if u128::from(top) * 1000 < u128::from(setting.floor) << VOTE_SHIFT =>
-            {
-                Check::Unsure { vote, top }
+        let votes = self.votes_setting(turn, setting);
+        let Some(top) = votes.top_allowed() else {
+            return Check::NoExpert;
+        };
+        let index = self.reply_index(reply);
+        let vote = index.map_or(0, |r| votes.score(r));
+        let allowed = index.is_some_and(|r| votes.allows(r));
+        let kept = vote > 0
+            && u128::from(vote) * u128::from(setting.keep.den)
+                >= u128::from(top.score) * u128::from(setting.keep.num);
+        if kept && allowed {
+            Check::Stands {
+                vote,
+                top: top.score,
             }
-            other => other,
+        } else if u128::from(top.score) * 1000 < u128::from(setting.floor) << VOTE_SHIFT {
+            Check::Unsure {
+                vote,
+                top: top.score,
+            }
+        } else {
+            Check::Replaced {
+                reply: top.reply,
+                vote,
+                top: top.score,
+                refused: kept && !allowed,
+            }
         }
     }
 }
@@ -995,7 +1120,8 @@ mod tests {
             Check::Replaced {
                 reply: 0,
                 vote: 349_525,
-                top: 2_796_202
+                top: 2_796_202,
+                refused: false
             }
         );
         // A reply the table never saw has vote 0 and is replaced, even at a share of 0.
@@ -1005,7 +1131,8 @@ mod tests {
             Check::Replaced {
                 reply: 0,
                 vote: 0,
-                top: 2_796_202
+                top: 2_796_202,
+                refused: false
             }
         );
     }
@@ -1232,6 +1359,8 @@ mod tests {
             keep: Ratio { num: 1, den: 2 },
             hold_out: false,
             floor,
+            weigh: Weigh::Even,
+            refuse_from: 0,
         };
         // With no floor the setting's check is the check.
         assert_eq!(
@@ -1244,7 +1373,8 @@ mod tests {
             Check::Replaced {
                 reply: 0,
                 vote,
-                top
+                top,
+                refused: false
             }
         );
         assert_eq!(
@@ -1264,7 +1394,8 @@ mod tests {
             Check::Replaced {
                 reply: 0,
                 vote: 0,
-                top: whole
+                top: whole,
+                refused: false
             }
         );
         assert_eq!(
@@ -1274,6 +1405,264 @@ mod tests {
                 top: whole
             }
         );
+    }
+
+    /// Reply `[7]` is index 2 when a table holds it with `A` and `B`.
+    const C: &[u32] = &[7];
+
+    fn with(weigh: Weigh, refuse_from: u32) -> Setting {
+        Setting {
+            cap: 100,
+            keep: Ratio { num: 1, den: 2 },
+            hold_out: false,
+            floor: 0,
+            weigh,
+            refuse_from,
+        }
+    }
+
+    fn times<'a>(n: usize, turn: &'a [u32], reply: &'a [u32]) -> Vec<Occurrence<'a>> {
+        vec![occ(turn, reply); n]
+    }
+
+    /// Expert 6 = {0, 1} saw A 7 times and C once; expert 35 = {2, 3} saw B twice.
+    fn seven_of_eight() -> PairExperts {
+        let mut all = times(7, &[0, 1], A);
+        all.push(occ(&[0, 1], C));
+        all.extend(times(2, &[2, 3], B));
+        table(&all)
+    }
+
+    #[test]
+    fn a_weighed_vote_is_each_share_times_the_experts_largest_count_over_its_total() {
+        // Expert 6 = {0, 1}: total 4, A 3, B 1, so m = 3. Expert 35 = {2, 3}: total 2, A 2 only.
+        let mut all = times(3, &[0, 1], A);
+        all.push(occ(&[0, 1], B));
+        all.extend(times(2, &[2, 3], A));
+        let t = table(&all);
+        let turn = [0, 1, 2, 3];
+        let sure = t.votes_setting(&turn, with(Weigh::Sure, 0));
+        assert_eq!(sure.experts, 2);
+        // A: ((3 * 3) << 20) / 16 from expert 6, and a whole vote from the one-reply expert 35.
+        // B: ((1 * 3) << 20) / 16.
+        let a = ((3u64 * 3) << 20) / 16 + ((2u64 * 2) << 20) / 4;
+        let b = (3u64 << 20) / 16;
+        assert_eq!((a, b), (589_824 + 1_048_576, 196_608));
+        assert_eq!(sure.scores, scores(&[[0, a], [1, b]]));
+        // The even vote of the same turn is the count over the total.
+        let even = t.votes_setting(&turn, with(Weigh::Even, 0));
+        let a = (3u64 << 20) / 4 + (1 << 20);
+        assert_eq!(even.scores, scores(&[[0, a], [1, (1u64 << 20) / 4]]));
+        assert_eq!(even, t.votes(&turn, false, 100));
+    }
+
+    #[test]
+    fn a_sure_expert_refuses_a_reply_it_never_saw() {
+        // Expert 6 = {0, 1} saw A 8 times; expert 35 = {2, 3} saw B twice. On {0, 1, 2, 3} A and
+        // B tie at one whole vote, so B keeps its share and stands under the even rule.
+        let mut all = times(8, &[0, 1], A);
+        all.extend(times(2, &[2, 3], B));
+        let t = table(&all);
+        let turn = [0, 1, 2, 3];
+        let whole = 1u64 << 20;
+        assert_eq!(
+            t.check_setting(&turn, B, with(Weigh::Even, 0)),
+            Check::Stands {
+                vote: whole,
+                top: whole
+            }
+        );
+        // From 8 on, expert 6 is sure and never saw B: B is replaced by A, the top it allows.
+        let votes = t.votes_setting(&turn, with(Weigh::Even, 8));
+        assert_eq!(votes.sure, vec![vec![0]]);
+        assert!(votes.allows(0) && !votes.allows(1));
+        assert_eq!(
+            votes.top_allowed(),
+            Some(ReplyScore {
+                reply: 0,
+                score: whole
+            })
+        );
+        assert_eq!(
+            t.check_setting(&turn, B, with(Weigh::Even, 8)),
+            Check::Replaced {
+                reply: 0,
+                vote: whole,
+                top: whole,
+                refused: true
+            }
+        );
+        assert_eq!(
+            t.check_setting(&turn, A, with(Weigh::Even, 8)),
+            Check::Stands {
+                vote: whole,
+                top: whole
+            }
+        );
+        // An expert seen fewer times than `refuse_from` refuses nothing.
+        let under = t.votes_setting(&turn, with(Weigh::Even, 9));
+        assert!(under.sure.is_empty() && under.allows(1));
+        assert_eq!(
+            t.check_setting(&turn, B, with(Weigh::Even, 9)),
+            Check::Stands {
+                vote: whole,
+                top: whole
+            }
+        );
+    }
+
+    #[test]
+    fn an_expert_is_sure_at_seven_eighths_and_not_below() {
+        // Expert 6 saw A 7 of 8 times: 8 * 7 == 7 * 8, so it is sure, and it never saw B.
+        let t = seven_of_eight();
+        let turn = [0, 1, 2, 3];
+        let votes = t.votes_setting(&turn, with(Weigh::Even, 8));
+        assert_eq!(votes.sure, vec![vec![0, 2]]);
+        assert!(votes.allows(0) && votes.allows(2) && !votes.allows(1));
+        // The plain top is B, a whole vote; the top it allows is A, 7/8 of one.
+        let a = (7u64 << 20) / 8;
+        assert_eq!(
+            votes.top(),
+            Some(ReplyScore {
+                reply: 1,
+                score: 1 << 20
+            })
+        );
+        assert_eq!(votes.top_allowed(), Some(ReplyScore { reply: 0, score: a }));
+        assert_eq!(
+            t.check_setting(&turn, B, with(Weigh::Even, 8)),
+            Check::Replaced {
+                reply: 0,
+                vote: 1 << 20,
+                top: a,
+                refused: true
+            }
+        );
+        // A count of 6 of 8 is under 7/8: the expert refuses nothing and B, the top, stands.
+        // From 3 on, expert 35 (seen twice) is under `refuse_from` and refuses nothing either.
+        let mut all = times(6, &[0, 1], A);
+        all.extend(times(2, &[0, 1], C));
+        all.extend(times(2, &[2, 3], B));
+        let below = table(&all);
+        assert!(below
+            .votes_setting(&turn, with(Weigh::Even, 3))
+            .sure
+            .is_empty());
+        assert_eq!(
+            below.check_setting(&turn, B, with(Weigh::Even, 3)),
+            Check::Stands {
+                vote: 1 << 20,
+                top: 1 << 20
+            }
+        );
+    }
+
+    #[test]
+    fn the_refusal_is_void_when_the_sure_experts_share_no_reply() {
+        // Expert 6 saw only A and expert 35 saw only B, 8 times each: both are sure.
+        let mut all = times(8, &[0, 1], A);
+        all.extend(times(8, &[2, 3], B));
+        let t = table(&all);
+        let turn = [0, 1, 2, 3];
+        let votes = t.votes_setting(&turn, with(Weigh::Even, 8));
+        assert_eq!(votes.sure, vec![vec![0], vec![1]]);
+        assert!(votes.allows(0) && votes.allows(1));
+        assert_eq!(votes.top_allowed(), votes.top());
+        assert_eq!(
+            t.check_setting(&turn, B, with(Weigh::Even, 8)),
+            t.check_setting(&turn, B, with(Weigh::Even, 0))
+        );
+        assert!(matches!(
+            t.check_setting(&turn, B, with(Weigh::Even, 8)),
+            Check::Stands { .. }
+        ));
+    }
+
+    #[test]
+    fn the_floor_is_read_on_the_top_the_sure_experts_allow() {
+        // The plain top B is a whole vote (1000 thousandths); the allowed top A is 875.
+        let t = seven_of_eight();
+        let turn = [0, 1, 2, 3];
+        let a = (7u64 << 20) / 8;
+        assert_eq!(a * 1000 / (1 << 20), 875);
+        let at = |floor: u32| Setting {
+            floor,
+            ..with(Weigh::Even, 8)
+        };
+        assert_eq!(
+            t.check_setting(&turn, B, at(875)),
+            Check::Replaced {
+                reply: 0,
+                vote: 1 << 20,
+                top: a,
+                refused: true
+            }
+        );
+        // At 900 the plain top would answer, but the reply the experts would give does not.
+        assert_eq!(
+            t.check_setting(&turn, B, at(900)),
+            Check::Unsure {
+                vote: 1 << 20,
+                top: a
+            }
+        );
+    }
+
+    #[test]
+    fn the_even_setting_with_no_refusal_is_the_vote_and_the_verdicts_of_before() {
+        let t = table(&sample());
+        for turn in [
+            &[0u32, 1, 2][..],
+            &[0, 1],
+            &[1, 2, 3],
+            &[2, 3],
+            &[0, 2, 1],
+            &[4, 5],
+        ] {
+            for hold_out in [false, true] {
+                for cap in [1, 2, 3, 100] {
+                    let setting = Setting {
+                        cap,
+                        hold_out,
+                        ..with(Weigh::Even, 0)
+                    };
+                    let votes = t.votes_setting(turn, setting);
+                    assert_eq!(votes, t.votes(turn, hold_out, cap));
+                    assert!(votes.sure.is_empty());
+                    assert_eq!(votes.top_allowed(), votes.top());
+                }
+            }
+        }
+        // The verdicts the even check gave on the sample before the two rules.
+        let even = with(Weigh::Even, 0);
+        assert_eq!(
+            t.check_setting(&[0, 1, 2], A, even),
+            Check::Stands {
+                vote: 2_796_202,
+                top: 2_796_202
+            }
+        );
+        assert_eq!(
+            t.check_setting(&[0, 1, 2], B, even),
+            Check::Replaced {
+                reply: 0,
+                vote: 349_525,
+                top: 2_796_202,
+                refused: false
+            }
+        );
+        let held = Setting {
+            hold_out: true,
+            ..even
+        };
+        assert_eq!(
+            t.check_setting(&[0, 1, 2], B, held),
+            Check::Stands {
+                vote: 1 << 20,
+                top: 1 << 20
+            }
+        );
+        assert_eq!(t.check_setting(&[4, 5], B, even), Check::NoExpert);
     }
 
     const BOS: u32 = 100;
@@ -1326,6 +1715,8 @@ mod tests {
             keep: Ratio { num: 1, den: 2 },
             hold_out: false,
             floor: 0,
+            weigh: Weigh::Even,
+            refuse_from: 0,
         };
         // The earlier turn {0, 1} holds reply B; the asked turn {0, 1, 2} holds A three ways.
         let prompt = [

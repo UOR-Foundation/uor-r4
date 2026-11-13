@@ -19,7 +19,7 @@ use uor_r4_integer::generation::Stop;
 use uor_r4_integer::loopback::{serve_loopback, LoopbackConfig};
 use uor_r4_integer::model::{IntegerModel, IntegerSession, IntegerStep};
 use uor_r4_integer::openai::OpenAiServing;
-use uor_r4_integer::pair_experts::{Check, PairExperts, Ratio, Setting, Verdict};
+use uor_r4_integer::pair_experts::{Check, PairExperts, Ratio, Setting, Verdict, Weigh};
 use uor_r4_integer::sampling::SamplePolicy;
 use uor_r4_integer::stack::{
     is_dialogue_query, recall_from_dialogue, ContentReadout, CopyRule, IntegerStackModel,
@@ -1569,7 +1569,7 @@ mod tests {
             (Verdict::Checked(Check::NoExpert), "noexpert"),
             (Verdict::Checked(Check::Stands { vote: 9, top: 9 }), "stands"),
             (Verdict::Checked(Check::Unsure { vote: 1, top: 3 }), "unsure"),
-            (Verdict::Checked(Check::Replaced { reply: 2, vote: 0, top: 5 }), "replaced"),
+            (Verdict::Checked(Check::Replaced { reply: 2, vote: 0, top: 5, refused: false }), "replaced"),
             (Verdict::NoRoom, "noroom"),
         ];
         for (verdict, name) in names {
@@ -2384,6 +2384,8 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
                 keep,
                 hold_out: cli.pair_hold_out == Some(true),
                 floor,
+                weigh: Weigh::Even,
+                refuse_from: 0,
             };
             let sha256 = table.sha256();
             chat.set_pair_experts(Some((table, setting))).map_err(refused)?;
