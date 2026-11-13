@@ -4021,8 +4021,8 @@ mod decode_cache_tests {
         Ok(())
     }
 
-    /// claude-370: zero rows add nothing, so the forward is the one with no rows set, value for
-    /// value.
+    /// claude-370: zero rows add nothing, so the forward is the one with no rows set, bit for
+    /// bit: a `-0.0` turned `+0.0` counts as a change.
     #[cfg(feature = "cuda")]
     #[test]
     fn zero_pair_rows_leave_the_forward_bit_for_bit() -> Result<()> {
@@ -4030,10 +4030,9 @@ mod decode_cache_tests {
         let device = Device::new_cuda(0)?;
         let model = small_model(&device, 64)?;
         let ids = windows(&pair_rows_windows(), 16);
-        let values = |t: Tensor| t.flatten_all()?.to_vec1::<f32>();
-        let plain = values(model.hidden(&ids, 3, 16)?)?;
+        let plain = bits(&model.hidden(&ids, 3, 16)?)?;
         crate::pair_rows::set_pair_rows(Some(pair_rows_for(&model, true)?));
-        assert_eq!(values(model.hidden(&ids, 3, 16)?)?, plain);
+        assert_eq!(bits(&model.hidden(&ids, 3, 16)?)?, plain);
         Ok(())
     }
 
