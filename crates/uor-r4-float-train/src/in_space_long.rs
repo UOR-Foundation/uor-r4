@@ -19747,6 +19747,41 @@ mod tests {
     }
 
     #[test]
+    fn pair_rows_refuse_a_checkpoint_start() {
+        let missing = std::env::temp_dir().join(format!("claude-370-init-{}", std::process::id()));
+        let mut config = config(0, None);
+        (config.pair_rows, config.init_from) = (Some(2), Some(missing.join("checkpoint")));
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("--init-from does not start the pair rows")),
+            "{refused:?}"
+        );
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn pair_rows_refuse_the_recall_task() {
+        let missing = std::env::temp_dir().join(format!("claude-370-recall-{}", std::process::id()));
+        let mut config = config(0, None);
+        config.pair_rows = Some(2);
+        let form = RecallForm::default();
+        let refused = run_recall(&missing, &config, RECALL_QUERY_EPISODES, form, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("the pair rows train with --out's long run")),
+            "{refused:?}"
+        );
+        assert!(!missing.exists());
+    }
+
+    #[test]
     fn a_config_without_the_profile_writes_no_profile_key() {
         let mut config = config(0, None);
         let json = String::from_utf8(serde_json::to_vec_pretty(&config).unwrap()).unwrap();
