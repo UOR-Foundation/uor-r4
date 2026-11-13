@@ -124,6 +124,8 @@ impl StackStop {
 /// What the conversation keeps of a reply that did not end (claude-369): one stopped by the short
 /// cycle or by the token cap. `Keep` keeps it as served; `Drop` takes the user's turn and the
 /// reply out of the history; `Close` keeps the reply, one pass of a cycle, and the end mark.
+/// When the history a caller passes does not extend the chat's own, drop leaves the chat's
+/// history empty: that caller holds the conversation.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum Unended {
     #[default]

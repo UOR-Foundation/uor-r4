@@ -1811,6 +1811,27 @@ fn stack_chat_drops_a_cut_reply_and_its_turn() -> ChatTest {
 }
 
 #[test]
+fn stack_chat_drops_a_cut_reply_on_the_serve_again_path() -> ChatTest {
+    let (seed, prompt) = unended_turn(cut_by_cycle, 12)?;
+    let (model, json) = long_chat(seed)?;
+    let bos = prompt[0];
+    let mut keep = open_chat(&model, &json)?;
+    keep.seed(&[bos])?;
+    let kept = keep.reply_history(&prompt, 12)?;
+    let mut chat = open_chat(&model, &json)?;
+    chat.set_unended(super::Unended::Drop);
+    chat.set_serve_again(true);
+    chat.seed(&[bos])?;
+    let before = chat.tokens().to_vec();
+    let reply = chat.reply_history(&prompt, 12)?;
+    assert!(cut_by_cycle(reply.stop), "the reply still has its not-ended stop");
+    assert_eq!(reply.stop, kept.stop);
+    assert_eq!(chat.last_reply_unended(), Some(super::Unended::Drop));
+    assert_eq!(chat.tokens(), &before[..], "the turn and the reply both leave");
+    Ok(())
+}
+
+#[test]
 fn stack_chat_closes_a_cut_reply_with_one_pass_and_the_end_mark() -> ChatTest {
     let (seed, prompt) = unended_turn(cut_by_cycle, 12)?;
     let (model, json) = long_chat(seed)?;
