@@ -7,7 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: false
 depends_on: []
-scope: [AGENTS.md, CHARTER.md, PLAN.md, docs/harness/native-space.json, docs/loop/tasks/native-space-state-contract/**, docs/model/**, docs/mechanisms/**, docs/research/notebook/float-training.md, docs/roadmap/items/native-space-state-contract.md, crates/uor-r4-core/src/native_geometric/**, crates/uor-r4-integer/src/stack/**, crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-float-train/src/**, crates/uor-r4-harness/src/**, crates/uor-r4-harness/rules/**, crates/uor-r4-harness/tests/**]
+scope: [AGENTS.md, CHARTER.md, PLAN.md, docs/harness/native-space.json, docs/loop/tasks/native-space-state-contract/**, docs/model/**, docs/mechanisms/**, docs/research/notebook/float-training.md, docs/roadmap/items/native-space-state-contract.md, crates/uor-r4-core/src/native_geometric/**, crates/uor-r4-discrete/**, crates/uor-r4-integer/src/stack/**, crates/uor-r4-integer/src/fbs_snapshot.rs, crates/uor-r4-integer/src/discrete_d11.rs, crates/uor-r4-float-train/src/**, crates/uor-r4-harness/src/**, crates/uor-r4-harness/rules/**, crates/uor-r4-harness/tests/**]
 ---
 
 ## Why it matters
@@ -40,7 +40,7 @@ the CUDA training kernel and the integer serving kernel implement the same trans
    addresses and emitted token ids.
 4. The fixture fails when one backend changes an operator, a scale, a route or a carry field;
    the planted fault is recorded.
-5. The document names which current float/exporter paths are legacy or compatibility code and
+5. The document names which current float/exporter paths are legacy or diagnostic code and
    which files implement the new state.
 6. `cargo test`, Clippy on touched Rust crates, `uor-harness check`, and the item's focused
    replay checks pass.

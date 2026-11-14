@@ -181,7 +181,7 @@ pub fn native_space_contract(paths: &StatePaths) -> Vec<Finding> {
             rule_id: RULE,
             severity: "error",
             message: format!("{source}: {}", message.into()),
-            path: CONTRACT.into(),
+            path: source.into(),
             fix: fix.into(),
         });
     }
@@ -636,12 +636,15 @@ pub fn native_space_contract(paths: &StatePaths) -> Vec<Finding> {
     let item_path = format!("docs/roadmap/items/{roadmap_item}.md");
     match read(&paths.repo, &item_path) {
         Ok(item) => {
-            if frontmatter_value(&item, "status") != Some("ready") {
+            if !matches!(
+                frontmatter_value(&item, "status"),
+                Some("ready" | "in-progress" | "done")
+            ) {
                 push(
                     &mut out,
                     &item_path,
-                    "native-state item is not ready",
-                    "restore its ready status or replace the contract's roadmap_item",
+                    "native-state item is not ready, in progress or done",
+                    "restore an active lifecycle status or replace the contract's roadmap_item",
                 );
             }
             let lower = item.to_ascii_lowercase();
@@ -1274,10 +1277,25 @@ mod tests {
                 .iter()
                 .all(|finding| finding.rule_id == "harness.native_space_contract"));
             assert!(
-                f.iter().any(|finding| finding.message.contains(expected)),
-                "{path}: expected {expected:?}, got {f:?}"
+                f.iter()
+                    .any(|finding| { finding.path == *path && finding.message.contains(expected) }),
+                "{path}: expected {expected:?} on the failing source, got {f:?}"
             );
         }
+    }
+
+    #[test]
+    fn the_native_space_contract_accepts_a_completed_roadmap_item() {
+        let dir = native_space_fixture();
+        let path = dir
+            .path()
+            .join("docs/roadmap/items/native-space-state-contract.md");
+        let item = std::fs::read_to_string(&path)
+            .expect("read item")
+            .replace("status: ready", "status: done");
+        std::fs::write(&path, item).expect("complete item");
+        let f = native_space_contract(&paths_of(dir.path()));
+        assert!(f.is_empty(), "{f:?}");
     }
 
     #[test]

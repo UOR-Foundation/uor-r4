@@ -30,7 +30,7 @@ Training and serving are two phases of one state transition:
    reorder bytes. It may not quantize a different master model into the served model. A
    nonzero export gap cannot qualify the default path.
 
-Float may remain in separately scanned reference, analysis or compatibility code. It is not
+Float may remain in separately scanned reference or diagnostic code. It is not
 the default model, carry state, memory state or optimizer state, and it cannot be the source
 from which the served state is manufactured.
 

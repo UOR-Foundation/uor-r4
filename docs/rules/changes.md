@@ -47,7 +47,7 @@ Then:
    > discrete path stays active; its qualification uses exact arithmetic.
 
    D37, D73, the float trainer, exporter and all measured evidence remain. They become
-   historical/reference or compatibility work, not the default architecture.
+   historical/reference or diagnostic work, not the default architecture.
 5. **Control plane.** AGENTS.md, the project Codex skills and `uor-harness` now carry the same
    invariant. `harness.native_space_contract` fails when the owner decision, charter markers,
    milestone rule, plan section, skills or required native-parity contract disagree.

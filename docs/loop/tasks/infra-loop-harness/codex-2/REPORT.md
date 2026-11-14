@@ -23,6 +23,12 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 - Its fixture still represented the pre-repair contract, so the first rerun could not prove the
   new protocol-marker or model-status requirements. The fixture now declares the exact five model
   surfaces, their pending/historical status line and the canonical protocol pointer.
+- The first full-package rerun after the second review repair reported 663 passed, 20 failed and
+  1 ignored. The test temp directories were under `local/codex/tmp`, inside the shared checkout,
+  so the harness's R10 write guard correctly refused the synthetic ledger, receipt, ratchet and
+  multi-lab writes. This is an instrument-location failure, not a passing run or a product result.
+- The initial formatting check found one rustfmt layout mismatch in the strengthened path
+  assertion. The package was formatted; the rerun remains pending.
 
 ## What changed
 
@@ -43,6 +49,13 @@ charter block, a decision corrected only in its rationale, wrong skill name and 
 plan/roadmap markers, a contradictory AGENTS sentence, a reworded milestone rule, missing model
 markers and weakened canonical/parity/forbidden fields.
 
+The second review repair adds the required owner-approval section to the active `codex-2` ORDER,
+attributes each native-space finding to the source that actually failed instead of always naming
+the contract, accepts the ordinary `ready`/`in-progress`/`done` roadmap lifecycle, and adds a
+completed-item regression fixture. It also adds the existing `uor-r4-discrete` CUDA/CPU path and
+the integer `discrete_d11.rs` serving path to the native-state item's scope, and aligns the
+charter, skill and change-log float exception with D85's exact reference-or-diagnostic rule.
+
 Model documentation now distinguishes the D85 contract from the implementation that is still
 pending. `docs/harness/claims.json` is identified as generated claim state. The rule registry's
 stale 53/13 prose is corrected to 54/14.
@@ -55,8 +68,12 @@ contradiction fixtures. Size is reported, not capped (D48); no unrelated source 
 ## Measurements
 
 - Native-space focused tests: 5 passed.
+- Native-space focused tests after the second review repair: 6 passed.
 - Full harness package: 682 library tests passed, 1 ignored; the binary, every integration target
   and the doc test passed.
+- Full harness package after the second review repair: 663 passed, 20 failed, 1 ignored; the
+  failures are the shared-checkout R10 refusal caused by placing test temp directories under
+  `local/codex/tmp`. This run is NOT a pass and must be rerun with `TMPDIR` outside the checkout.
 - Native-space rule on the real repository: 1 selected, 0 failed.
 - Full harness inventory: 346 rules, 0 errors, 311 existing warnings, exit 0.
 - Harness tests: 682 library tests passed, 1 ignored; every integration and doc test passed.
@@ -74,6 +91,10 @@ Run at the final task head unless explicitly identified as an earlier superseded
 - `git diff --check` - passed.
 - `CARGO_TARGET_DIR=local/harness-target cargo test --locked -p uor-r4-harness` - all targets
   passed.
+- Second-repair focused run:
+  `CARGO_TARGET_DIR=local/harness-target cargo test --locked -p uor-r4-harness native_space_contract`
+  - 6 passed.
+- Second-repair full run with in-checkout `TMPDIR` - 663 passed, 20 failed, 1 ignored; not a pass.
 - `CARGO_TARGET_DIR=local/harness-target cargo clippy --locked -p uor-r4-harness --all-targets --
   -D warnings` - passed.
 - `CARGO_TARGET_DIR=local/harness-target cargo build --locked --release -p uor-r4-harness` -
@@ -102,6 +123,8 @@ Run at the final task head unless explicitly identified as an earlier superseded
 ## Still open
 
 - The new repair head needs its own fresh-context exact-head review.
+- The full package suite, Clippy, full harness check, report check and PR check still need a clean
+  rerun at the committed second-repair head, with `TMPDIR` outside the shared checkout.
 - The first native implementation remains `native-space-state-contract`; no model run is open.
 - Existing float/export measurements remain historical and do not qualify D85.
 - PR delivery, queue and post-merge verification remain after review.
