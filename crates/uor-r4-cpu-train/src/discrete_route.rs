@@ -4683,10 +4683,15 @@ mod tests {
             .map_err(|error| error.to_string())
     }
 
-    /// K5: the learned-state words a step changed, as (table name, word index).
+    /// K5: the learned-state and derived cell words a step changed, as (table name, index).
     fn touched_words(before: &[u8], after: &[u8]) -> Vec<(&'static str, usize)> {
         let mut touched = Vec::new();
-        for name in ["discrete.table", "discrete.routes", "discrete.gates"] {
+        for name in [
+            "discrete.table",
+            "discrete.cells",
+            "discrete.routes",
+            "discrete.gates",
+        ] {
             let (left, right) = (table_words(before, name), table_words(after, name));
             assert_eq!(left.len(), right.len(), "{name} changed length");
             for (index, (l, r)) in left.iter().zip(&right).enumerate() {
@@ -4704,6 +4709,26 @@ mod tests {
             .unwrap()
             .artifact_bytes()
             .unwrap()
+    }
+
+    /// The words a Table move on block 0 (token 0) may change: its 8 coordinates and
+    /// token 0's derived cell.
+    fn declared_block_zero() -> Vec<(&'static str, usize)> {
+        let mut declared: Vec<_> = (0..8).map(|word| ("discrete.table", word)).collect();
+        declared.push(("discrete.cells", 0));
+        declared
+    }
+
+    /// K4: the serving loader refused, not a per-row evaluation.
+    fn assert_loader_refuses(
+        reading: std::result::Result<CpuDiscretePanelExportReading, String>,
+        category: &str,
+    ) {
+        let error = reading.expect_err(category);
+        assert!(
+            error.contains("discrete serving artifact"),
+            "{category}: {error}"
+        );
     }
 
     fn table_move(epoch: u64) -> CpuDiscreteProposal {
@@ -4735,7 +4760,7 @@ mod tests {
             let stepped = applier.artifact_bytes().unwrap();
             let reading = contract_reading(&stepped, &stepped).unwrap();
             assert!(reading.is_exact(), "{reading:?}");
-            let declared: Vec<_> = (0..8).map(|word| ("discrete.table", word)).collect();
+            let declared = declared_block_zero();
             let touched = touched_words(&start, &stepped);
             assert!(
                 !touched.is_empty() && touched.iter().all(|word| declared.contains(word)),
@@ -4783,8 +4808,10 @@ mod tests {
         // read check. Pinned as measured.
         let trits = table_words(&flock, "discrete.gates");
         let mut gate_seen = Vec::new();
+        let mut gate_tried = 0u32;
         for (index, &trit) in trits.iter().enumerate() {
             for value in [-1i32, 0, 1].into_iter().filter(|&v| v as u32 != trit) {
+                gate_tried += 1;
                 let mut fault = flock.clone();
                 set_table_u32(&mut fault, "discrete.gates", index, value as u32);
                 let reading = contract_reading(&flock, &fault).unwrap();
@@ -4795,6 +4822,7 @@ mod tests {
                 }
             }
         }
+        assert_eq!(gate_tried, 8, "C-2 gate faults tried");
         assert_eq!(
             gate_seen,
             vec![(0, -1), (2, -1), (2, 1)],
@@ -4806,7 +4834,7 @@ mod tests {
         let mut fault = route.clone();
         let cell = table_words(&route, "discrete.cells")[0];
         set_table_u32(&mut fault, "discrete.cells", 0, cell ^ 1);
-        assert!(contract_reading(&route, &fault).is_err(), "C-3");
+        assert_loader_refuses(contract_reading(&route, &fault), "C-3");
 
         // C-4 memory read choice (the flock's kept list): no word on the serving side, so
         // it cannot be planted from outside. Pinned as a failing control in PARITY.md.
@@ -4818,7 +4846,7 @@ mod tests {
             .apply(CpuDiscreteProposalKind::Table, 1, table_move(0))
             .unwrap();
         let stepped = applier.artifact_bytes().unwrap();
-        let declared: Vec<_> = (0..8).map(|word| ("discrete.table", word)).collect();
+        let declared = declared_block_zero();
         let touched = touched_words(&route, &stepped);
         assert!(
             touched.iter().any(|word| !declared.contains(word)),
@@ -4844,13 +4872,26 @@ mod tests {
 
         // C-7 stop state: neither side has one. Pinned as a failing control in PARITY.md.
 
-        // C-8 serialized words: a gate trit the Route read never reads loads cleanly and
-        // passes every read check (K1-K3); only the load-save word check (K6) sees it.
+        // C-8 serialized words: a non-zero gate trit in a Route artifact. Serving loads it
+        // and reads every word exactly as the clean model (K1-K3 pass); the training side
+        // refuses to load it (K6's load fails). The two loaders disagree on what a valid
+        // artifact is: serving is the laxer one. Pinned as measured.
         let mut fault = route.clone();
         set_table_u32(&mut fault, "discrete.gates", 0, 1);
         let reading = contract_reading(&route, &fault).unwrap();
         assert!(reading.is_exact(), "C-8 reads {reading:?}");
-        assert_ne!(saved_after_load(&route), fault, "C-8 K6");
+        assert!(
+            IntegerDiscreteModel::from_bytes(&fault).is_ok(),
+            "C-8 serving loads"
+        );
+        let refusal = CpuDiscreteProposalApplier::from_bytes(&fault)
+            .err()
+            .expect("C-8 the training side refuses")
+            .to_string();
+        assert!(
+            refusal.contains("Route initialization requires zero gates"),
+            "C-8 {refusal}"
+        );
         // and a non-zero header pad byte is refused by the serving loader (K4).
         let mut fault = route.clone();
         let header_len = u64::from_le_bytes(route[8..16].try_into().unwrap()) as usize;
@@ -4860,7 +4901,7 @@ mod tests {
             "fixture header leaves no pad byte"
         );
         fault[16 + header_len] = 1;
-        assert!(contract_reading(&route, &fault).is_err(), "C-8 K4");
+        assert_loader_refuses(contract_reading(&route, &fault), "C-8 K4");
     }
 
     #[test]

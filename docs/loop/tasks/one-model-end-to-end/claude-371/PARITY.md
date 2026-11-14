@@ -18,9 +18,9 @@ The prompt set is all 39 prefixes of lengths 1 to 3 over the three tokens. The c
 | K1 carry | every i32 coordinate of the read vector (blocks × 8 per prefix; 624 words over 39 prefixes) | `export_parity` query-coordinate mismatches |
 | K2 memory address | the admitted cell list, in order | `export_parity` admitted-cell mismatches |
 | K3 emitted ids | the top-8 list and the top-1 token | `export_parity` top-8 and token mismatches |
-| K4 load | the serving loader accepts or refuses the bytes | `IntegerDiscreteModel::from_bytes` |
-| K5 touched words | the set of (table, index) words in `discrete.table`, `discrete.routes` and `discrete.gates` that a step changed, against the step's declared set | `touched_words` (new) |
-| K6 save | the bytes the CPU side writes after loading, compared with the bytes loaded | `saved_after_load` (new), via `CpuDiscreteProposalApplier::artifact_bytes` |
+| K4 load | the serving loader refuses the bytes (the error must come from the loader, not from a row) | `IntegerDiscreteModel::from_bytes`, `assert_loader_refuses` (new) |
+| K5 touched words | the set of (table, index) words in `discrete.table`, `discrete.cells`, `discrete.routes` and `discrete.gates` that a step changed, against the declared set (a Table move on block 0: table words 0–7 and cell 0) | `touched_words` (new) |
+| K6 save | the training side loads the bytes and saves them; the saved bytes must equal the bytes loaded | `saved_after_load` (new), via `CpuDiscreteProposalApplier::artifact_bytes` |
 
 ## One planted fault per category, and what caught it
 
@@ -34,13 +34,14 @@ Measured by `native_space_parity_contract_catches_one_planted_fault_per_category
 | C-4 memory read choices | the flock's kept list | — | **Not plantable.** CUDA writes it to `trace`; serving exposes only the read vector. **Failing control.** |
 | C-5 learned-state words touched | a step applied to table block 1 where block 0 was declared | K5 | caught. No read check is involved. |
 | C-6 emitted ids and stop | tokens 0 and 1 swapped, rows and cells together (it loads cleanly) | K3 | caught: top-8 and token mismatches. **Stop state: neither side has one. Failing control.** |
-| C-8 serialized words | a gate trit the Route read never reads (it loads cleanly) | K6 only | K1 to K3 pass; K6 sees the changed bytes. A non-zero header pad byte is caught by K4. |
+| C-8 serialized words | a non-zero gate trit in a Route artifact | the training side's load (K6) | **Serving loads it and reads every word exactly as the clean model; the training side refuses it** ("Route initialization requires zero gates", `discrete_route.rs:153`). The loaders disagree on what a valid artifact is, and serving is the laxer one. **Negative gate:** with the CPU refusal set aside, the test fails at C-8. A non-zero header pad byte is refused by K4. |
 
 The clean start passes K1 to K6 on both fixtures (`native_space_parity_contract_starts_identical_and_stays_identical_after_a_step`). So does one training step: a Table move on block 0 touches only table words 0 to 7, the epoch goes from 0 to 1, and load-then-save gives the same bytes.
 
 ## What the misses mean
 
 - **An output-word check cannot certify the route and gate state.** On this fixture, 144 of 252 route faults and 5 of 8 gate faults change no output word on any of the 39 prefixes. A larger panel would see more of them. But a fault that no prompt in the panel exercises is still a different model: it would answer some later prompt differently. The direct check is to compare the learned words themselves (K6 covers this when both sides write bytes), plus the route ports chosen at each stage, as K1b below.
+- **The serving loader accepts what training refuses** (C-8). An artifact only serving can load is a model no training run produced. The serving loader should refuse non-zero gates in Route mode, as the CPU loader does.
 - **The serving runtime has three internal choices it does not expose:** the route port chosen at each stage, the flock's kept list, and the stop state, which does not exist yet. Until it exposes them, the contract can catch a fault there only through the outputs.
 
 ## The CUDA leg (next unit, on `wick`)

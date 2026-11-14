@@ -21,18 +21,19 @@ No training run, no GPU, no capability or speed claim.
    - The flock's kept list: CUDA writes it to `trace`, serving does not expose it.
    - Stop state: it does not exist.
 4. **No CUDA leg.** No test runs the CUDA kernels against the CPU or against serving on the same bytes. The CPU tests copy CUDA's rules by hand (`apply_status_order_and_noop_match_cuda`, `discrete_route.rs:5886`). Serving's tests compare against hand-copied CUDA witnesses (`discrete_d11.rs:1920`).
-5. **Two edge rules differ between CUDA and serving.**
-   - `root_cost` subtracts in signed `int` on CUDA (silent wrap) and with `unsigned_abs` in Rust (a debug panic).
-   - `snap` starts its best root at ABSENT on CUDA and at 0 in Rust.
-   - Both are unreachable while coordinates stay in range, and no check pins the range.
-6. **Side finding, at base, not caused by this unit.** Two stack-path CPU-to-serving tests fail on `675f5eb43`: `fbs::tests::ask_heads_at_both_hooks_match_serving_without_carry` and `fbs::tests::readout_ask_carry_matches_serving_over_a_multi_row_window` (`fbs.rs:2295`, "row 2: complete query"). They fail with this unit's change set aside, so they are not this change. Filed as a note, not fixed here.
-7. **Sources the hand-off named are absent.** D85, a native-space skill, `native-space.json`, a native-space roadmap item and the Codex branch are not on `main`, GitHub or this laptop. The rule was taken from the hand-off text.
+5. **The serving loader accepts an artifact the training side refuses.** A Route artifact with a non-zero gate trit loads in serving and reads exactly like the clean model. The CPU training side refuses it ("Route initialization requires zero gates", `discrete_route.rs:153`). An artifact only serving can load is a model no training run produced.
+6. **Edge rules between CUDA and serving.**
+   - `root_cost` subtracts in signed `int` on CUDA (undefined on overflow; PTX wraps in practice) and with `unsigned_abs` in Rust (a debug panic). Unreachable while coordinates stay in range; no check pins the range.
+   - `snap` starts its best root at ABSENT on CUDA and at 0 in Rust; the outputs are identical for every input short of u32 overflow.
+   - The 19-table trunk artifact also serves `snap` at n = 4 and n = 1 (`discrete_d11.rs:615,658`), which have no CUDA training implementation.
+7. **Side finding, at base, not caused by this unit.** Two stack-path CPU-to-serving tests fail on `675f5eb43`: `fbs::tests::ask_heads_at_both_hooks_match_serving_without_carry` and `fbs::tests::readout_ask_carry_matches_serving_over_a_multi_row_window` (`fbs.rs:2295`, "row 2: complete query"). They fail with this unit's change set aside, so they are not this change. Filed as a note, not fixed here.
+8. **Sources the hand-off named are absent.** D85, a native-space skill, `native-space.json`, a native-space roadmap item and the Codex branch are not on `main`, GitHub or this laptop. The rule was taken from the hand-off text.
 
 ## What changed
 
 - `docs/loop/tasks/one-model-end-to-end/claude-371/INVENTORY.md`: the card. It has two path tables and the shared constants. Seven areas (token to vector; carry and transport; snapping and root selection; memory addresses and reads; writer and emission; serialization; update and optimizer state) each list domain, width, lifetime, CUDA, serving, CPU, WASM, evidence and gap, with file and line. Backend identities follow.
 - `docs/loop/tasks/one-model-end-to-end/claude-371/PARITY.md`: the start bytes, checks K1 to K6, the eight categories with their planted faults and results, and the CUDA leg's design for `wick`.
-- `crates/uor-r4-cpu-train/src/discrete_route.rs`, test module only (+233 lines): two tests and six helpers (`table_words`, `every_prefix_sample`, `contract_reading`, `touched_words`, `saved_after_load`, `table_move`). No non-test line changed.
+- `crates/uor-r4-cpu-train/src/discrete_route.rs`, test module only (+274 lines): two tests and eight helpers (`table_words`, `every_prefix_sample`, `contract_reading`, `touched_words`, `saved_after_load`, `declared_block_zero`, `assert_loader_refuses`, `table_move`). No non-test line changed.
 - `docs/research/notebook/cpu-training.md`: one row. This is the D84 CPU line, because this leg is CPU work.
 
 ## Measurements
@@ -40,7 +41,7 @@ No training run, no GPU, no capability or speed claim.
 | Check | Route fixture | Flock fixture |
 |---|---|---|
 | Clean start, K1 to K6 | exact (39 rows, 624 carry words) | exact |
-| After one Table step on block 0 | exact; touched = table words 0–7 only; epoch 0 → 1; load-then-save byte-identical | exact; same |
+| After one Table step on block 0 | exact; touched = table words 0–7 and cell 0 only; epoch 0 → 1; load-then-save byte-identical | exact; same |
 
 | Category | Planted fault | Caught by | Result |
 |---|---|---|---|
@@ -51,7 +52,7 @@ No training run, no GPU, no capability or speed claim.
 | C-5 touched words | step on block 1, block 0 declared | K5 | caught |
 | C-6 emitted ids | tokens 0 and 1 swapped with their cells | K3 | caught |
 | C-6 stop | — | — | not plantable |
-| C-8 serialized words | unread gate trit (Route) | K6 only | caught by K6; K1 to K3 pass |
+| C-8 serialized words | non-zero gate trit (Route) | training-side load (K6) | serving loads and reads it exactly; training refuses it |
 | C-8 serialized words | non-zero header pad byte | K4 loader | caught |
 
 ## Checks run at the head
@@ -60,9 +61,12 @@ No training run, no GPU, no capability or speed claim.
 |---|---|
 | `cargo test -p uor-r4-cpu-train --lib native_space_parity_contract` (laptop, debug) | 2 passed |
 | Negative gate: the serving loader's cell check (`discrete_d11.rs:1115`) set aside, the contract test run, then restored | failed at "C-3", as it should; restored and re-run green |
+| Negative gate: the CPU loader's zero-gate refusal (`discrete_route.rs:152`) set aside | failed at "C-8", as it should; restored and re-run green |
 | `cargo test -p uor-r4-cpu-train --lib` (full, 538 s) | 506 passed, 2 failed, 5 ignored. The two failures are the `fbs::tests` above; they also fail at base with this change set aside. |
 | `rustfmt --edition 2021 --check` on `discrete_route.rs` | clean; the formatter's only change was inside the new block |
 | `cargo clippy -p uor-r4-cpu-train --tests` | no finding in the new lines |
+| Fresh-context fact-check of INVENTORY, PARITY and REPORT against the source (delegate:reviewer) | REQUEST CHANGES, seven items; all seven applied (trunk snaps, snap start value, `packed_codebook_roots`, `s[13]` lines, `root_cost` overflow, choose ties, init block index) |
+| Fresh-context code review of the test module (delegate:reviewer) | APPROVE WITH LOW ITEMS. The medium item (the first C-8 check compared a load-then-save with itself) is fixed: C-8 is now the loader asymmetry above. Low items 2 to 4 fixed. Left open: K5's declared set is the test's own expectation, not a value read from the training step. |
 
 ## Skills used
 
