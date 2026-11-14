@@ -17,7 +17,8 @@
 //!      name.
 //!    - Flock: score `-mean |q - k|`; the choice keeps the `K` nearest ([`choose_nearest`]).
 //! 3. **Choice.** Hard and detached: the best score (Starling: only when it is above 0), the least
-//!    energy (prime route) or the `K` nearest (Flock), ties to the latest `s`.
+//!    energy (prime route) or the `K` nearest (Flock); Starling and prime route break ties to the
+//!    latest `s`, Flock (`choose_nearest`, an argmin) to the earliest.
 //! 4. **Payload.** The shared table's point for the token after the chosen `s`, `table[ids[s+1]]`,
 //!    a known input since `s + 1 <= t`, times the straight-through factor `1 - (d - d.detach())`.
 //! 5. **Add.** `x + weight * payload`; `weight` starts at 0, so at step 0 the read changes nothing.
@@ -117,12 +118,17 @@ thread_local! {
 }
 
 /// Run `f` with credit and counts collected: only forwards inside it record them, so an eval
-/// forward never keeps a credit graph alive. The previous setting is restored on return.
+/// forward never keeps a credit graph alive. The previous setting is restored on return, and on
+/// a panic inside `f` too.
 pub fn collecting<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
-    let before = COLLECT.with(|cell| cell.replace(true));
-    let out = f();
-    COLLECT.with(|cell| cell.set(before));
-    out
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            COLLECT.with(|cell| cell.set(self.0));
+        }
+    }
+    let _restore = Restore(COLLECT.with(|cell| cell.replace(true)));
+    f()
 }
 
 /// Make `read` the vector read the trunk applies on this thread, or none.
@@ -357,6 +363,19 @@ impl VectorRead {
         self.credit
     }
 
+    /// Tests: every weight coordinate set to `weight`, and the Starling offset to `offset`.
+    #[cfg(all(test, feature = "cuda"))]
+    pub(crate) fn set_for_test(&self, weight: f32, offset: Option<f32>) -> Result<()> {
+        let device = self.weight.device();
+        let width = self.weight.as_tensor().elem_count();
+        self.weight
+            .set(&Tensor::from_vec(vec![weight; width], width, device)?)?;
+        if let (Some(var), Some(value)) = (&self.offset, offset) {
+            var.set(&Tensor::new(&[value], device)?)?;
+        }
+        Ok(())
+    }
+
     /// The learned parameters: query and key rotations, weight, and the Starling offset.
     pub fn variables(&self) -> Vec<&Var> {
         let mut vars = vec![&self.query_rotation, &self.key_rotation, &self.weight];
@@ -424,8 +443,26 @@ impl VectorRead {
         let depth = first_u32("depth")? as usize;
         let weight = Var::from_tensor(&get("weight")?)?;
         Self::validate(kind, depth, weight.as_tensor().elem_count())?;
+        let lanes = weight.as_tensor().elem_count() / 4;
+        let rotation = |name: &str| -> Result<Var> {
+            let t = get(name)?;
+            if t.dims() != [lanes, 4] {
+                return Err(invalid(format!(
+                    "the saved vector read's {name} is {:?}, not [{lanes}, 4]",
+                    t.dims()
+                )));
+            }
+            Ok(Var::from_tensor(&t)?)
+        };
         let offset = if kind.is_starling() {
-            Some(Var::from_tensor(&get("offset")?)?)
+            let t = get("offset")?;
+            if t.dims() != [1] {
+                return Err(invalid(format!(
+                    "the saved vector read's offset is {:?}, not [1]",
+                    t.dims()
+                )));
+            }
+            Some(Var::from_tensor(&t)?)
         } else {
             None
         };
@@ -434,8 +471,8 @@ impl VectorRead {
             depth,
             margin: first_f32("margin")?,
             credit: first_f32("credit")?,
-            query_rotation: Var::from_tensor(&get("query_rotation")?)?,
-            key_rotation: Var::from_tensor(&get("key_rotation")?)?,
+            query_rotation: rotation("query_rotation")?,
+            key_rotation: rotation("key_rotation")?,
             weight,
             offset,
             cells: Self::cells(kind, device)?,
@@ -1342,6 +1379,46 @@ mod tests {
                     "{kind:?}"
                 );
                 assert_eq!(stats.rows.to_scalar::<f32>()?, (T - 1) as f32);
+            }
+            Ok(())
+        }
+
+        /// The Starling gate: at an offset no score clears, no row reads and the stream comes
+        /// back unchanged; between, some rows read and some do not, and the device agrees with
+        /// the reference on every offset of the sweep.
+        #[test]
+        fn the_starling_gate_reads_only_above_zero() -> Result<()> {
+            for kind in [VectorReadKind::StarlingLorentz, VectorReadKind::StarlingL2] {
+                let f = fixture(kind, DEFAULT_MARGIN, 385)?;
+                let mut counts = Vec::new();
+                for offset in [0.0f32, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5] {
+                    let o = f.read.offset.as_ref().expect("a Starling offset");
+                    o.set(&Tensor::new(&[offset], o.device())?)?;
+                    clear_credit();
+                    let _ = take_stats();
+                    let out = host(&collecting(|| f.read.apply(&f.x, &IDS, &f.table))?)?;
+                    let want = reference_of(&f)?;
+                    let reads = want.chosen.iter().filter(|c| !c.is_empty()).count();
+                    let stats = take_stats().expect("stats");
+                    assert_eq!(
+                        stats.read_rows.to_scalar::<f32>()?,
+                        reads as f32,
+                        "{kind:?} offset {offset}"
+                    );
+                    for (i, (a, b)) in out.iter().zip(&want.out).enumerate() {
+                        assert!((a - b).abs() < 1e-5, "{kind:?} offset {offset} [{i}]");
+                    }
+                    if reads == 0 {
+                        assert_eq!(out, host(&f.x)?, "{kind:?} offset {offset}");
+                    }
+                    counts.push(reads);
+                }
+                clear_credit();
+                assert_eq!(counts[0], 0, "{kind:?}: a zero offset read {counts:?}");
+                assert!(
+                    counts.iter().any(|&c| c > 0 && c < T - 1),
+                    "{kind:?}: no offset of the sweep read some rows and not others: {counts:?}"
+                );
             }
             Ok(())
         }

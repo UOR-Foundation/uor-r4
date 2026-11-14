@@ -3972,6 +3972,67 @@ mod decode_cache_tests {
         Ok(())
     }
 
+    /// claude-381: a vector read set on the thread is in the trunk's forward (a weight of 0
+    /// changes no value, a weight of 0.5 changes the points), and once cleared the trunk gives
+    /// the points it gave before the read was set, bit for bit, for every kind and at a middle
+    /// depth and the last.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn a_set_then_cleared_vector_read_leaves_the_trunk_bit_for_bit() -> Result<()> {
+        use crate::vector_reads::{set_vector_read, VectorRead, VectorReadKind, DEFAULT_MARGIN};
+        struct Clear;
+        impl Drop for Clear {
+            fn drop(&mut self) {
+                set_vector_read(None);
+            }
+        }
+        let _clear = Clear;
+        let device = Device::new_cuda(0)?;
+        let model = small_model(&device, 64)?;
+        let mut rng = Lcg(381);
+        let rows: Vec<Vec<u32>> = (0..2)
+            .map(|_| (0..20).map(|_| (rng.next() % 4096) as u32).collect())
+            .collect();
+        let ids = windows(&rows, 10);
+        let values = |t: &Tensor| -> Result<Vec<f32>> { Ok(t.flatten_all()?.to_vec1::<f32>()?) };
+        let plain_points = model.hidden(&ids, 2, 10)?;
+        let plain = bits(&plain_points)?;
+        let layers = model.config.layers();
+        for kind in [
+            VectorReadKind::StarlingLorentz,
+            VectorReadKind::StarlingL2,
+            VectorReadKind::PrimeRoute,
+            VectorReadKind::Flock { neighbours: 2 },
+        ] {
+            for depth in [layers / 2, layers] {
+                let read =
+                    VectorRead::new(kind, depth, model.config.width, DEFAULT_MARGIN, 1.0, &device)?;
+                // A large offset: every Starling row with an earlier position reads.
+                read.set_for_test(0.0, Some(1.0e6))?;
+                set_vector_read(Some(read.clone()));
+                assert_eq!(
+                    values(&model.hidden(&ids, 2, 10)?)?,
+                    values(&plain_points)?,
+                    "{kind:?} at {depth}: a zero weight changed a value"
+                );
+                read.set_for_test(0.5, Some(1.0e6))?;
+                set_vector_read(Some(read));
+                assert_ne!(
+                    bits(&model.hidden(&ids, 2, 10)?)?,
+                    plain,
+                    "{kind:?} at {depth}: the read is not in the forward"
+                );
+                set_vector_read(None);
+                assert_eq!(
+                    bits(&model.hidden(&ids, 2, 10)?)?,
+                    plain,
+                    "{kind:?} at {depth}: the cleared trunk differs"
+                );
+            }
+        }
+        Ok(())
+    }
+
     /// claude-370: the pair-rows tests' marks (user `[3]`, assistant `[4, 5]`) and three windows
     /// of 16: (a) a turn with pairs whose reply is open from position 5; (b) no turn at all; (c)
     /// a turn whose reply a user marker at 8 closes, then a second turn whose reply opens at 12.

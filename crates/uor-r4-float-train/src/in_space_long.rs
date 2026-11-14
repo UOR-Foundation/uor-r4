@@ -822,7 +822,7 @@ fn load_reads(directory: &Path, device: &Device) -> Result<()> {
         directory, device,
     )?);
     crate::vector_reads::set_vector_read(crate::vector_reads::VectorRead::load(directory, device)?);
-    let pair =crate::pair_rows::PairRows::load(directory, device)?;
+    let pair = crate::pair_rows::PairRows::load(directory, device)?;
     if let Some(rows) = &pair {
         let (nonzero, rms) = rows.census()?;
         println!(
@@ -2380,7 +2380,10 @@ fn step_gradient(
                 }
                 None => loss,
             };
-            // claude-381: a vector read's margin credit, at this forward's share of the windows.
+            // claude-381: a vector read's margin credit, at this forward's share of the windows
+            // (an average per window, where the cross-entropy's `share` is per scored row; a
+            // micro-batch skipped above for having no scored row adds no credit). With one
+            // forward a step, the weight is 1.
             let loss = match crate::vector_reads::take_credit() {
                 Some(credit) => {
                     let weight = (hi - lo) as f64 / windows.len() as f64;
