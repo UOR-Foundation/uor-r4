@@ -14,10 +14,11 @@ git -C local/worktrees/codex-native-space-cycle status --short --branch
 git -C local/worktrees/codex-cuda-native-train status --short --branch
 ```
 
-The previous repair head is `8674c7863`; this tracked note is committed after it. At the note's
-parent, `origin/main` is `f40f06abe82447b3174418ffcd2f7245125e5c8f`; PR #3967 is open and draft;
-the control-plane branch is `codex/native-space-cycle`; and `codex/cuda-native-train` is at
-`01521bbb629c5aae4a910350cf10960172d13c55`. Report any disagreement before acting.
+The previous control-plane head is `0a9737c6e`; this tracked note is updated after it. At the
+note's parent, `origin/main` is `f40f06abe82447b3174418ffcd2f7245125e5c8f`; PR #3967 is open and
+draft; the control-plane branch is `codex/native-space-cycle`; and
+`codex/cuda-native-train` is at `ebeca85cb6c126c559df91c14ca2d6ea04c20b6b`. Report any
+disagreement before acting.
 
 ## Off limits
 
@@ -39,19 +40,20 @@ attributed findings to the failing source, accepted the roadmap lifecycle, align
 exception with D85, and added `crates/uor-r4-discrete/**` plus
 `crates/uor-r4-integer/src/discrete_d11.rs` to the next item's scope.
 
-At the repair commit, focused native-space tests passed 7. The full harness package reported
-663 passed, 20 failed and 1 ignored because `TMPDIR` was inside the shared checkout; the R10
-guard correctly refused synthetic writes. The clean rerun with `TMPDIR` outside the checkout then
-passed 684 tests with 0 failures and 1 ignored. Formatting and `git diff --check` pass; Clippy,
-full harness check, report check, PR check and a fresh exact-head review remain.
+Focused native-space tests pass 7. The clean full harness package run with `TMPDIR` outside the
+checkout passed 684 tests with 0 failures and 1 ignored. Formatting and `git diff --check` pass;
+the full harness check, PR check and a fresh exact-head review remain.
 
 `codex/cuda-native-train` carries the actual Q31 vector operator in
 `crates/uor-r4-discrete/src/native_vector.{rs,cu}` and `native_vector_device.rs`, with
 `native_vector_qualify.rs` and `native_vector_cuda.rs`. Recorded RTX 4090 evidence: 4,096 Q31
 quaternion pairs / 16,384 raw `i64` words bit-identical to the Rust oracle on `compute_89`,
 CUDA 13.1; noncommutative Hamilton checks; no float/tensor/matrix/transcendental PTX; ptxas 40
-registers and 0 spills. The branch is stacked on the control plane, has no PR, and the kernel is
-not wired into training or serving.
+registers for forward and 44 for training, both with 0 spills. The Q31 training step matched 4,096
+records word-for-word. One shared serializable gate/epoch model now aggregates those CUDA records;
+64 accepted model steps lower aggregate L1 loss from `17,179,869,184` to `13,373,147,056`, with
+CPU/CUDA gate-and-epoch parity after every step. The branch is pushed and stacked on the control
+plane; it has no PR and serving does not consume the shared state yet.
 
 ## Next task
 
@@ -61,10 +63,10 @@ not wired into training or serving.
 3. Pass formatting, full tests, Clippy, focused/full harness checks, stack-contract and roadmap
    checks, report check, local PR check and a fresh exact-head review.
 4. Mark #3967 ready, queue, merge, and verify fresh `origin/main`.
-5. Merge `origin/main` into `codex/cuda-native-train`, rerun PTX audit and RTX 4090 parity with
-   `UOR_REQUIRE_CUDA=1`, and open its standalone PR.
-6. After that merge, wire this same Q31 Hamilton operator into the native trainer and integer
-   serving session. That is the immediate project implementation, not more harness bookkeeping.
+5. Merge `origin/main` into the already pushed `codex/cuda-native-train` and open its standalone
+   PR once #3967 lands.
+6. Make integer serving consume the shared serialized `Q31HamiltonModel` gate/epoch transition.
+   That is the immediate project implementation, not more harness bookkeeping.
 
 Cancel if the compiled CUDA source no longer matches the reviewed arithmetic, the 4090 does not
 reproduce the Rust words bit-for-bit, or serving needs a numerically different operator.
@@ -75,6 +77,7 @@ reproduce the Rust words bit-for-bit, or serving needs a numerically different o
 - Created and repaired PR #3967's exact native-space contract.
 - Built and locally qualified the integer Q31 Hamilton CUDA operator on the RTX 4090.
 - Made invalid `Q31VectorState` values unconstructible.
+- Added the bounded Q31 CUDA training step and one shared serializable Q31 gate/epoch model.
 - Preserved the ASTRA paths above.
 
 ## Standing rules
@@ -98,12 +101,11 @@ moving worktree before this tracked repair commit; it is not evidence for the ne
 MANIFEST
 - origin/main: f40f06abe82447b3174418ffcd2f7245125e5c8f  check: git rev-parse origin/main
 - PR 3967 remote head: e4ae7301b440ec628cca007d23dde41b04832f3b  check: gh pr view 3967 --json headRefOid
-- previous repair head: 8674c78631f469df5596d53e67838377b646a4f9  check: git -C local/worktrees/codex-native-space-cycle rev-parse HEAD~1
 - focused native-space tests: 7 passed  check: cd local/worktrees/codex-native-space-cycle && CARGO_TARGET_DIR=local/harness-target cargo test --locked -p uor-r4-harness native_space_contract
 - full harness package: 684 passed / 0 failed / 1 ignored  check: docs/loop/tasks/infra-loop-harness/codex-2/REPORT.md
-- CUDA branch head: 01521bbb629c5aae4a910350cf10960172d13c55  check: git -C local/worktrees/codex-cuda-native-train rev-parse HEAD
-- CUDA branch tree: da7b796c1acae62ccf3876e896c37a4d9dbda1cb  check: git -C local/worktrees/codex-cuda-native-train rev-parse HEAD^{tree}
+- CUDA branch head: ebeca85cb6c126c559df91c14ca2d6ea04c20b6b  check: git -C local/worktrees/codex-cuda-native-train rev-parse HEAD
+- CUDA branch tree: 1e4d901f5b0019e57ed3c59de1ef4daf35657670  check: git -C local/worktrees/codex-cuda-native-train rev-parse HEAD^{tree}
 - CUDA PR: none yet  check: gh pr list --state open --head codex/cuda-native-train
 - RTX 4090 Q31 parity: 16,384 raw i64 words bit-identical  check: UOR_REQUIRE_CUDA=1 cargo test -p uor-r4-discrete --features cuda --test native_vector_cuda
-- next action: finish and merge #3967, then open the Q31 CUDA PR  check: gh pr view 3967 --json state,headRefOid
+- next action: make integer serving consume the shared Q31 model state  check: sed -n '/## Next task/,/## Orders/p' docs/loop/tasks/infra-loop-harness/codex-2/PICKUP.md
 ```
