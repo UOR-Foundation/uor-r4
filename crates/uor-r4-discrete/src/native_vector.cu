@@ -8,7 +8,10 @@ __device__ __forceinline__ u64 product(s64 a, s64 b) {
 }
 
 __device__ __forceinline__ s64 q31_word(u64 word) {
-    return (s64)(word + (1ull << 30)) >> 31;
+    s64 shifted = (s64)(word + (1ull << 30)) >> 31;
+    if (shifted < -2147483648ll) return -2147483648ll;
+    if (shifted > 2147483648ll) return 2147483648ll;
+    return shifted;
 }
 
 extern "C" __global__ void native_q31_hamilton_rotate(
@@ -19,8 +22,9 @@ extern "C" __global__ void native_q31_hamilton_rotate(
 ) {
     unsigned item = blockIdx.x * blockDim.x + threadIdx.x;
     if (item >= count) return;
-    const s64* a = gates + item * 4;
-    const s64* b = values + item * 4;
+    u64 at = (u64)item * 4ull;
+    const s64* a = gates + at;
+    const s64* b = values + at;
     s64 p00 = a[0], p01 = a[0], p02 = a[0], p03 = a[0];
     s64 p10 = a[1], p11 = a[1], p12 = a[1], p13 = a[1];
     s64 p20 = a[2], p21 = a[2], p22 = a[2], p23 = a[2];
@@ -45,8 +49,8 @@ extern "C" __global__ void native_q31_hamilton_rotate(
         product(p12, b[2]) -
         product(p21, b[1]) +
         product(p30, b[0]);
-    output[item * 4] = q31_word(w);
-    output[item * 4 + 1] = q31_word(x);
-    output[item * 4 + 2] = q31_word(y);
-    output[item * 4 + 3] = q31_word(z);
+    output[at] = q31_word(w);
+    output[at + 1] = q31_word(x);
+    output[at + 2] = q31_word(y);
+    output[at + 3] = q31_word(z);
 }

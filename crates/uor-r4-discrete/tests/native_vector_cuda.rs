@@ -3,14 +3,14 @@
 use uor_r4_discrete::native_vector::q31_hamilton_rotate;
 use uor_r4_discrete::native_vector_device::NativeVectorEngine;
 
-fn values(count: usize) -> Vec<[i64; 4]> {
+fn values(seed: u64, count: usize) -> Vec<[i64; 4]> {
     let mut out = vec![
         [i64::from(i32::MIN); 4],
         [1 << 31, -(1 << 31), 1, -1],
         [1 << 30, 1 << 29, -(1 << 28), 7],
         [0, 1 << 31, 0, -(1 << 31)],
     ];
-    let mut seed = 0x6a09_e667_f3bc_c909_u64;
+    let mut seed = seed;
     out.extend((0..count.saturating_sub(out.len())).map(|_| {
         let mut next = || {
             seed ^= seed << 13;
@@ -38,18 +38,18 @@ fn cuda_and_rust_return_identical_q31_transport_words() -> uor_r4_discrete::Resu
         }
         Err(error) => return Err(error),
     };
-    let gates = values(4096);
-    let held = values(4096);
+    let gates = values(0x6a09_e667_f3bc_c909, 4096);
+    let held = values(0xbb67_ae85_84ca_a73b, 4096);
     let cuda = engine.hamilton_rotate(&gates, &held)?;
     for i in 0..gates.len() {
         assert_eq!(
             cuda[i],
-            q31_hamilton_rotate(gates[i], held[i]),
+            q31_hamilton_rotate(gates[i], held[i])?,
             "native Q31 Hamilton parity differs at item {i}"
         );
     }
     assert_eq!(
-        NativeVectorEngine::hamilton_rotate_reference(gates[0], held[0]),
+        NativeVectorEngine::hamilton_rotate_reference(gates[0], held[0])?,
         cuda[0]
     );
     let unit = [[1 << 31, 0, 0, 0]];
@@ -60,6 +60,12 @@ fn cuda_and_rust_return_identical_q31_transport_words() -> uor_r4_discrete::Resu
         unit_cuda[0][0], planted_shift,
         "a planted Q30/Q31 shift change was not detected"
     );
+    let one = 1 << 31;
+    let axes = engine.hamilton_rotate(
+        &[[0, one, 0, 0], [0, 0, one, 0]],
+        &[[0, 0, one, 0], [0, one, 0, 0]],
+    )?;
+    assert_eq!(axes, [[0, 0, 0, one], [0, 0, 0, -one]]);
     Ok(())
 }
 
@@ -67,7 +73,7 @@ fn cuda_and_rust_return_identical_q31_transport_words() -> uor_r4_discrete::Resu
 fn a_one_bit_scale_change_is_detected() {
     let gate = [1 << 31, 0, 0, 0];
     let value = [1 << 30, 0, 0, 0];
-    let expected = q31_hamilton_rotate(gate, value);
+    let expected = q31_hamilton_rotate(gate, value).unwrap();
     let wrong_shift = ((value[0].unsigned_abs() << 31) as i64) >> 30;
     assert_ne!(expected[0], wrong_shift);
 }

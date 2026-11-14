@@ -1,7 +1,10 @@
 //! AOT CUDA handle for the native Q31 Hamilton vector transport.
 //! The module contains one integer entry point and no PTX/JIT fallback.
 
-use crate::native_vector::{q31_hamilton_rotate, Q31Quaternion, Q31Transport};
+use crate::native_vector::{
+    q31_batch_len_admitted, q31_hamilton_rotate, q31_quaternion_admitted, Q31Quaternion,
+    Q31Transport,
+};
 use crate::{Error, Result};
 use cudarc::driver::{CudaContext, CudaFunction, CudaStream, LaunchConfig, Ptx, PushKernelArg};
 use sha2::{Digest, Sha256};
@@ -82,11 +85,15 @@ impl NativeVectorEngine {
                 "native-vector transport needs a nonempty equal-length batch",
             ));
         }
+        if !q31_batch_len_admitted(gates.len()) {
+            return Err(invalid(
+                "native-vector batch exceeds the admitted 2^30-item bound",
+            ));
+        }
         if gates
             .iter()
             .chain(values)
-            .flatten()
-            .any(|coordinate| coordinate.unsigned_abs() > 1 << 31)
+            .any(|quaternion| !q31_quaternion_admitted(*quaternion))
         {
             return Err(invalid(
                 "native-vector Q31 coordinates must be in -2^31..=2^31",
@@ -125,7 +132,10 @@ impl NativeVectorEngine {
     }
 
     /// Run the Rust oracle on one quaternion in the same batch representation.
-    pub fn hamilton_rotate_reference(gate: Q31Quaternion, value: Q31Quaternion) -> Q31Transport {
+    pub fn hamilton_rotate_reference(
+        gate: Q31Quaternion,
+        value: Q31Quaternion,
+    ) -> Result<Q31Transport> {
         q31_hamilton_rotate(gate, value)
     }
 }

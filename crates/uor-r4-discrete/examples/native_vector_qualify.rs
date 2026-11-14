@@ -11,14 +11,14 @@ use uor_r4_discrete::native_vector_device::{
 
 const ITEMS: usize = 4096;
 
-fn values() -> Vec<[i64; 4]> {
+fn values(seed: u64) -> Vec<[i64; 4]> {
     let mut out = vec![
         [i64::from(i32::MIN); 4],
         [1 << 31, -(1 << 31), 1, -1],
         [1 << 30, 1 << 29, -(1 << 28), 7],
         [0, 1 << 31, 0, -(1 << 31)],
     ];
-    let mut seed = 0x6a09_e667_f3bc_c909_u64;
+    let mut seed = seed;
     while out.len() < ITEMS {
         let mut next = || {
             seed ^= seed << 13;
@@ -38,13 +38,13 @@ fn values() -> Vec<[i64; 4]> {
 
 fn main() -> uor_r4_discrete::Result<()> {
     let engine = NativeVectorEngine::new(0)?;
-    let gates = values();
-    let held = values();
+    let gates = values(0x6a09_e667_f3bc_c909);
+    let held = values(0xbb67_ae85_84ca_a73b);
     let started = Instant::now();
     let cuda = engine.hamilton_rotate(&gates, &held)?;
     let elapsed_ns = started.elapsed().as_nanos();
     for (index, ((gate, value), observed)) in gates.iter().zip(&held).zip(&cuda).enumerate() {
-        let expected = q31_hamilton_rotate(*gate, *value);
+        let expected = q31_hamilton_rotate(*gate, *value)?;
         if *observed != expected {
             return Err(uor_r4_discrete::Error::Invalid(format!(
                 "Q31 parity differs at item {index}: CUDA {observed:?}, Rust {expected:?}"

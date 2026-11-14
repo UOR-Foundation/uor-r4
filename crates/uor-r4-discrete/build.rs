@@ -66,6 +66,9 @@ fn admit_ptx_inventory(ptx: &str, inventory: &[&str]) -> Result<(), String> {
                         | "mma"
                         | "wmma"
                         | "wgmma"
+                        | "ldmatrix"
+                        | "stmatrix"
+                        | "movmatrix"
                         | "tcgen05"
                         | "tensor"
                         | "tensormap"
@@ -118,6 +121,9 @@ fn ptx_admission_self_test() -> Result<(), String> {
         "add.f32 %a,%b,%c;",
         ".reg .bf16 %a;",
         "mma.sync.aligned.m16n8k8.row.col.s32.s8.s8.s32 %a,%b,%c,%d;",
+        "ldmatrix.sync.aligned.m8n8.x1.shared.b16 {%a}, [%b];",
+        "stmatrix.sync.aligned.m8n8.x1.shared.b16 [%a], {%b};",
+        "movmatrix.sync.aligned.m8n8.trans.b16 %a, %b;",
         "ex2.approx %a,%b;",
         ".visible .entry unexpected() { ret; }",
         ".visible .entry discrete_init() { ret; }",

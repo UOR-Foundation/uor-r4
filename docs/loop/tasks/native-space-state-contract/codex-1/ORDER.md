@@ -24,10 +24,10 @@ The first shared transition is the Q31 Hamilton rotation used for vector transpo
 `NativeVectorState -> q31_hamilton_rotate -> NativeVectorState`
 
 The state is four signed 64-bit storage words at Q31, with each admitted coordinate in
-the signed 32-bit range including `+2^31`. The product is formed with signed
-32x32-to-64-bit integer products, accumulated modulo `2^64`, rounded by
-`2^30`, and returned as four signed 64-bit words at Q31. Modulo, rounding and shift
-order are part of the operator definition.
+the signed 32-bit range including `+2^31`. The product is formed with sign-extended
+64-bit integer multiplies of those admitted coordinates, accumulated modulo `2^64`,
+rounded by `2^30`, shifted right by 31 and saturated to the same closed domain.
+Modulo, rounding, shift and saturation order are part of the operator definition.
 
 The CUDA implementation, Rust CPU oracle and focused test use those exact rules. This
 first unit does not claim that the existing integer serving session already routes
