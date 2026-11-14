@@ -1,0 +1,8 @@
+b-s2 p14 in_train 162 of 672; not_in_train 49 of 436
+b-s2 p23 in_train 164 of 665; not_in_train 56 of 445
+b-s3 p14 in_train 155 of 672; not_in_train 47 of 436
+b-s3 p23 in_train 158 of 665; not_in_train 53 of 445
+pair-s2 p14 in_train 169 of 672; not_in_train 94 of 436
+pair-s2 p23 in_train 173 of 665; not_in_train 91 of 445
+pair-s3 p14 in_train 171 of 672; not_in_train 93 of 436
+pair-s3 p23 in_train 164 of 665; not_in_train 93 of 445
