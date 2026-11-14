@@ -11,14 +11,15 @@ gh pr view 3968 --json state,isDraft,headRefOid,baseRefName,url
 ```
 
 Expected: a clean `codex/cuda-native-train` containing the Q31 model work, merge-forward head
-`d12c29a11`, and the `codex-6` metadata repair. PR #3968 is based directly on `main` after PR
-#3967 merged. The repository wins over this note.
+`76f9aa3e2`, and the `codex-6` metadata repair. PR #3968 is based directly on `main`. The
+repository wins over this note.
 
 ## Current state
 
-- Fresh `origin/main` is `e2175455e79d377f724658ed2486e7f22a389f48`, the squash merge of PR #3967.
-- The CUDA branch merged that control plane at `d12c29a11`; all conflicting duplicated control
-  records resolved to `main`, while every Q31 CUDA source and test remained intact.
+- Fresh `origin/main` is `6434f9ab3415ec99c02da2934643bf98ced56f3a`, including Claude PRs #3969
+  and #3970 after the #3967 control plane.
+- The CUDA branch merged the control plane at `d12c29a11` and the newer `main` at `76f9aa3e2`;
+  all Q31 CUDA source and tests remained intact.
 - The finalized ORDER parser required the roadmap item link on the same line; `codex-6` repairs
   that metadata across the existing chain.
 
@@ -60,8 +61,8 @@ words in serving and Rust oracle.
 
 ```text
 MANIFEST
-- origin/main: e2175455e79d377f724658ed2486e7f22a389f48  check: git rev-parse origin/main
-- CUDA merge-forward: d12c29a11  check: git merge-base --is-ancestor d12c29a11 HEAD
+- origin/main: 6434f9ab3415ec99c02da2934643bf98ced56f3a  check: git rev-parse origin/main
+- CUDA merge-forward: 76f9aa3e2  check: git merge-base --is-ancestor 76f9aa3e2 HEAD
 - PR 3968 head: current branch HEAD at push  check: test "$(git rev-parse HEAD)" = "$(gh pr view 3968 --json headRefOid -q .headRefOid)"
 - shared model evidence: codex-5/REPORT.md  check: sed -n '/## Measurements/,/## Checks/p' docs/loop/tasks/native-space-state-contract/codex-5/REPORT.md
 - CUDA integration tests: 4 passed  check: NVCC=/usr/local/cuda/bin/nvcc UOR_NVCC_ARCH=compute_89 UOR_REQUIRE_CUDA=1 cargo test -p uor-r4-discrete --features cuda --test native_vector_cuda

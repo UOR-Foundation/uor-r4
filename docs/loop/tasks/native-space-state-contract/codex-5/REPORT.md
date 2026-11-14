@@ -39,6 +39,8 @@ material. This is within the ORDER's 300-line code estimate but reports the exac
 After PR #3967 merged as `e2175455e`, the CUDA branch merged that squash forward at `d12c29a11`.
 The merge keeps the final native-space contract and harness checks from `main` and preserves the
 Q31 CUDA operator, shared-model transition and integration tests unchanged in capability.
+Claude PRs #3969 and #3970 later advanced `main` to `6434f9ab3`; the CUDA branch merged that
+baseline cleanly at `76f9aa3e2`.
 
 ## Measurements
 

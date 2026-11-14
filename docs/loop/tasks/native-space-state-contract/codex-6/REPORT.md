@@ -18,6 +18,8 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 PR #3968 is retargeted from the merged control-plane branch to `main`. The CUDA branch merged
 `e2175455e` forward at `d12c29a11`, preserving the Q31 CUDA operator and shared-model training
 path while replacing older duplicated control-plane files with their final `main` versions.
+Claude PRs #3969 and #3970 then advanced `main` to `6434f9ab3`; a second clean merge-forward at
+`76f9aa3e2` retained both changes.
 
 All existing ORDERs now put the roadmap item link on the `Item:` line. The tracked PICKUP names
 fresh `main`, the merge-forward head, PR #3968's direct `main` base and integer serving as the next
