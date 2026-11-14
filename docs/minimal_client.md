@@ -51,6 +51,8 @@ Active synthesis engine          : <engine>
 
 Commands & Shortcuts:
   • Type /help to view available slash commands (/status, /models, /engine, /corpus, /export, /reset, /clear, /quit)
+  • Type / for interactive slash command suggestions & autocomplete
+  • Type exit or press Ctrl-D to quit session
 ```
 
 ### Slash command completion

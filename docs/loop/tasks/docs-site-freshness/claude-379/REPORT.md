@@ -42,7 +42,24 @@ Lab: claude. Order: [ORDER.md](ORDER.md). PR #3976. References #3972. Base: `a70
   - `mdbook build` exited 0 with 0 `ERROR`. Its one warning is the known mermaid version warning (built against 0.5.0, called from 0.5.4).
   - `xtask book-check` reported 107 pages and 0 broken links.
 - `xtask roadmap check` reported 146 items OK, and `roadmap render --check` reported the roadmap README current, after the item edit.
-- `uor-harness loop report --check` passes.
+- `uor-harness loop report --check` and `loop pr-check --local` both pass. The pr-check `filemap` advisory names five missing rows, all outside this diff.
+- **Two fresh reviews.** Both reviewers were read-only and saw only the item, the ORDER and the diff. Each hit its context budget after part of the diff. Between them, and with my own checks of the groups neither reached, every changed claim was checked:
+  - **Review 1, at `86f30f3b5`: APPROVE WITH CHANGES, no blocker.** It confirmed that no forbidden path was touched, that the record lines are well formed, the catalog counts, book-fresh 0 stale and 70 unchecked, the 749 lines and the archived `cargo run --bin r4`.
+    - SHOULD: the `ldmatrix`/`stmatrix`/`movmatrix` audit tokens were unconfirmed. They are at `crates/uor-r4-discrete/build.rs:72-74`, with self-tests at lines 127-129.
+    - SHOULD: m5-energy's export claim was unverified. `m4-serving.md` states both exports (lines 4, 13 and 63).
+    - NIT: the slash-command count was unconfirmed. Reading `COMMAND_DEFS` in `chat.rs` showed 13 commands, including `/exit`, and completion filters on that table. The page now lists all 13.
+  - **Review 2, at `e9cee8ef1`: REQUEST CHANGES, on one point.**
+    - SHOULD: the banner block dropped the two shortcut lines `chat.rs:2471-2478` still prints. Both are back.
+    - It also confirmed the `native-vector` module, its two entries, the 10 modules and 44 entries, every line count in the other-CUDA table, and the `client` subcommand and banner lines.
+    - Its two NITs needed no change: the ASCII art is not reproduced, and the prose already says it is there; 9,762 counts the kernel files only, as the row says.
+  - **Checked by me, outside both reviews:**
+    - The seven new web-client exports are in `crates/uor-r4-integer/src/wasm_bindgen_exports.rs`.
+    - `bake-off/` holds the three rounds and `reply-control-v3.json`, and `rules/` holds the two hook scripts.
+    - `src-tauri` is in the root `exclude`, and `STATUS.md` says it is retired.
+    - `projects/` has 8 folders, and `uor-cuda-inverted-file` came in `5c0317f15` (#3476), with a `host-test` target.
+    - `projects/msa` holds `README.md` and `code/README.md`.
+    - `r4g1-graph.md` has "Decided on 19 October 2026".
+    - The tokenizer test is at `training.rs:242`, from `ce7782a74` (#2872).
 
 ## Skills used
 
