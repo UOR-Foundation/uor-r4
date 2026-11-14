@@ -2,7 +2,7 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407).
 Base: `origin/main` at `085ff55d92c31ded738913ae8907251e4dcd8a21`. Follows claude-374 (PR #3965) and the 14 Nov audit (`local/claude/one-vector-roadmap-2026-11-14.md`).
-Renumbered from claude-375 on 14 Nov, before any result was read: the docs session's PR #3969 had taken that number first. The kit folder is `local/claude/claude-376/`.
+Renumbered from claude-375 on 14 Nov, while the reads ran (seed 1's exact counts had been looked at; this unit has no bar, and nothing in it changed): the docs session's PR #3969 had taken that number first. The kit folder is `local/claude/claude-376/`.
 
 ## Goal
 
