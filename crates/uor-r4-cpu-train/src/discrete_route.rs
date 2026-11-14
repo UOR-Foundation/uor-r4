@@ -4630,6 +4630,280 @@ mod tests {
         assert_eq!(serving.shape().epoch, source_epoch + 1);
     }
 
+    // claude-371 native-space parity contract (docs/loop/tasks/one-model-end-to-end/
+    // claude-371/PARITY.md): the CPU training-mode simulation and the integer serving
+    // runtime start from byte-identical bytes; every check compares raw words; one fault
+    // per category is planted in the serving copy (or the training step) and the check
+    // that catches it is pinned. Categories with no word on one side are pinned as
+    // not caught, so the test fails the day either side exposes them unpinned.
+
+    fn table_words(artifact: &[u8], name: &str) -> Vec<u32> {
+        let parsed = header(artifact).unwrap();
+        let header_len = u64::from_le_bytes(artifact[8..16].try_into().unwrap()) as usize;
+        let data_start = (16 + header_len).div_ceil(64) * 64;
+        let table = parsed["tables"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|table| table["name"].as_str() == Some(name))
+            .unwrap();
+        let offset = table["span"]["offset"].as_u64().unwrap() as usize;
+        let bytes = table["span"]["bytes"].as_u64().unwrap() as usize;
+        artifact[data_start + offset..data_start + offset + bytes]
+            .chunks_exact(4)
+            .map(|word| u32::from_le_bytes(word.try_into().unwrap()))
+            .collect()
+    }
+
+    fn every_prefix_sample() -> Vec<CpuDiscreteProposalSample> {
+        let mut samples = Vec::new();
+        for length in 1..=3usize {
+            for code in 0..3u32.pow(length as u32) {
+                let mut prefix = Vec::with_capacity(length);
+                let mut rest = code;
+                for _ in 0..length {
+                    prefix.push(rest % 3);
+                    rest /= 3;
+                }
+                let target = prefix.iter().sum::<u32>() % 3;
+                samples.push(CpuDiscreteProposalSample { prefix, target });
+            }
+        }
+        samples
+    }
+
+    /// K1 carry, K2 memory address, K3 emitted ids; `Err` is K4, the serving loader.
+    fn contract_reading(
+        cpu: &[u8],
+        served: &[u8],
+    ) -> std::result::Result<CpuDiscretePanelExportReading, String> {
+        CpuDiscreteProposalScorer::from_bytes(cpu)
+            .unwrap()
+            .export_parity(served, &every_prefix_sample())
+            .map_err(|error| error.to_string())
+    }
+
+    /// K5: the learned-state and derived cell words a step changed, as (table name, index).
+    fn touched_words(before: &[u8], after: &[u8]) -> Vec<(&'static str, usize)> {
+        let mut touched = Vec::new();
+        for name in [
+            "discrete.table",
+            "discrete.cells",
+            "discrete.routes",
+            "discrete.gates",
+        ] {
+            let (left, right) = (table_words(before, name), table_words(after, name));
+            assert_eq!(left.len(), right.len(), "{name} changed length");
+            for (index, (l, r)) in left.iter().zip(&right).enumerate() {
+                if l != r {
+                    touched.push((name, index));
+                }
+            }
+        }
+        touched
+    }
+
+    /// K6: the bytes the CPU side saves after loading `artifact` with no move.
+    fn saved_after_load(artifact: &[u8]) -> Vec<u8> {
+        CpuDiscreteProposalApplier::from_bytes(artifact)
+            .unwrap()
+            .artifact_bytes()
+            .unwrap()
+    }
+
+    /// The words a Table move on block 0 (token 0) may change: its 8 coordinates and
+    /// token 0's derived cell.
+    fn declared_block_zero() -> Vec<(&'static str, usize)> {
+        let mut declared: Vec<_> = (0..8).map(|word| ("discrete.table", word)).collect();
+        declared.push(("discrete.cells", 0));
+        declared
+    }
+
+    /// K4: the serving loader refused, not a per-row evaluation.
+    fn assert_loader_refuses(
+        reading: std::result::Result<CpuDiscretePanelExportReading, String>,
+        category: &str,
+    ) {
+        let error = reading.expect_err(category);
+        assert!(
+            error.contains("discrete serving artifact"),
+            "{category}: {error}"
+        );
+    }
+
+    fn table_move(epoch: u64) -> CpuDiscreteProposal {
+        CpuDiscreteProposal {
+            lane: 1,
+            current_loss: 10,
+            selected_loss: 9,
+            epoch,
+            sensitive: true,
+        }
+    }
+
+    #[test]
+    fn native_space_parity_contract_starts_identical_and_stays_identical_after_a_step() {
+        for start in [
+            serialized_route(),
+            serialized_discrete(DiscreteFixture::flock()),
+        ] {
+            let reading = contract_reading(&start, &start).unwrap();
+            assert!(reading.is_exact(), "{reading:?}");
+            assert_eq!(reading.rows, 39);
+            assert_eq!(saved_after_load(&start), start, "K6 load-save identity");
+
+            let mut applier = CpuDiscreteProposalApplier::from_bytes(&start).unwrap();
+            let receipt = applier
+                .apply(CpuDiscreteProposalKind::Table, 0, table_move(0))
+                .unwrap();
+            assert!(receipt.applied);
+            let stepped = applier.artifact_bytes().unwrap();
+            let reading = contract_reading(&stepped, &stepped).unwrap();
+            assert!(reading.is_exact(), "{reading:?}");
+            let declared = declared_block_zero();
+            let touched = touched_words(&start, &stepped);
+            assert!(
+                !touched.is_empty() && touched.iter().all(|word| declared.contains(word)),
+                "{touched:?}"
+            );
+            assert_eq!(saved_after_load(&stepped), stepped, "K6 after a step");
+            assert_eq!(header(&stepped).unwrap()["shape"]["epoch"], json!(1));
+        }
+    }
+
+    #[test]
+    fn native_space_parity_contract_catches_one_planted_fault_per_category() {
+        let route = serialized_route();
+        let flock = serialized_discrete(DiscreteFixture::flock());
+
+        // C-1 route choice: no route-port word exists on the serving side. A changed
+        // port is caught only through the carry it produces (K1). Over every single-word
+        // route fault (4 words x 63 other ports) K1 sees 108 and misses 144 on this
+        // fixture's 39 prefixes: a failing control, pinned so a route-choice word that
+        // later closes it shows here.
+        let ports = table_words(&route, "discrete.routes");
+        let (mut seen, mut missed) = (0u32, 0u32);
+        for (index, &port) in ports.iter().enumerate() {
+            for value in (0..64u32).filter(|&value| value != port) {
+                let mut fault = route.clone();
+                set_table_u32(&mut fault, "discrete.routes", index, value);
+                let reading = contract_reading(&route, &fault).unwrap();
+                if reading.query_coordinate_mismatches > 0 {
+                    seen += 1;
+                } else {
+                    // K2 and K3 are functions of the carry: no carry change, no change.
+                    assert!(reading.is_exact(), "C-1 at {index}/{value} {reading:?}");
+                    missed += 1;
+                }
+            }
+        }
+        assert_eq!(
+            (seen, missed),
+            (108, 144),
+            "C-1 route faults seen / missed by K1"
+        );
+
+        // C-2 complete carry: every gate trit the flock read adds, changed to each other
+        // trit. K1 sees 3 of the 8 on this fixture's 39 prefixes; the other 5 pass every
+        // read check. Pinned as measured.
+        let trits = table_words(&flock, "discrete.gates");
+        let mut gate_seen = Vec::new();
+        let mut gate_tried = 0u32;
+        for (index, &trit) in trits.iter().enumerate() {
+            for value in [-1i32, 0, 1].into_iter().filter(|&v| v as u32 != trit) {
+                gate_tried += 1;
+                let mut fault = flock.clone();
+                set_table_u32(&mut fault, "discrete.gates", index, value as u32);
+                let reading = contract_reading(&flock, &fault).unwrap();
+                if reading.query_coordinate_mismatches > 0 {
+                    gate_seen.push((index, value));
+                } else {
+                    assert!(reading.is_exact(), "C-2 at {index}/{value} {reading:?}");
+                }
+            }
+        }
+        assert_eq!(gate_tried, 8, "C-2 gate faults tried");
+        assert_eq!(
+            gate_seen,
+            vec![(0, -1), (2, -1), (2, 1)],
+            "C-2 gate faults seen by K1"
+        );
+
+        // C-3 memory address: a stored cell that disagrees with the table is refused by
+        // the serving loader (K4) before any read.
+        let mut fault = route.clone();
+        let cell = table_words(&route, "discrete.cells")[0];
+        set_table_u32(&mut fault, "discrete.cells", 0, cell ^ 1);
+        assert_loader_refuses(contract_reading(&route, &fault), "C-3");
+
+        // C-4 memory read choice (the flock's kept list): no word on the serving side, so
+        // it cannot be planted from outside. Pinned as a failing control in PARITY.md.
+
+        // C-5 learned-state words touched: a step on a different block than declared
+        // is caught by the touched-word check (K5), not by any read.
+        let mut applier = CpuDiscreteProposalApplier::from_bytes(&route).unwrap();
+        applier
+            .apply(CpuDiscreteProposalKind::Table, 1, table_move(0))
+            .unwrap();
+        let stepped = applier.artifact_bytes().unwrap();
+        let declared = declared_block_zero();
+        let touched = touched_words(&route, &stepped);
+        assert!(
+            touched.iter().any(|word| !declared.contains(word)),
+            "C-5 {touched:?}"
+        );
+
+        // C-6 emitted ids: two tokens' rows swapped with their cells load cleanly and
+        // change what is emitted (K3).
+        let mut fault = route.clone();
+        let table = table_words(&route, "discrete.table");
+        let cells = table_words(&route, "discrete.cells");
+        for word in 0..16 {
+            set_table_u32(&mut fault, "discrete.table", word, table[(word + 16) % 32]);
+            set_table_u32(&mut fault, "discrete.table", word + 16, table[word]);
+        }
+        set_table_u32(&mut fault, "discrete.cells", 0, cells[1]);
+        set_table_u32(&mut fault, "discrete.cells", 1, cells[0]);
+        let reading = contract_reading(&route, &fault).unwrap();
+        assert!(
+            reading.top8_mismatches > 0 && reading.token_mismatches > 0,
+            "C-6 {reading:?}"
+        );
+
+        // C-7 stop state: neither side has one. Pinned as a failing control in PARITY.md.
+
+        // C-8 serialized words: a non-zero gate trit in a Route artifact. Serving loads it
+        // and reads every word exactly as the clean model (K1-K3 pass); the training side
+        // refuses to load it (K6's load fails). The two loaders disagree on what a valid
+        // artifact is: serving is the laxer one. Pinned as measured.
+        let mut fault = route.clone();
+        set_table_u32(&mut fault, "discrete.gates", 0, 1);
+        let reading = contract_reading(&route, &fault).unwrap();
+        assert!(reading.is_exact(), "C-8 reads {reading:?}");
+        assert!(
+            IntegerDiscreteModel::from_bytes(&fault).is_ok(),
+            "C-8 serving loads"
+        );
+        let refusal = CpuDiscreteProposalApplier::from_bytes(&fault)
+            .err()
+            .expect("C-8 the training side refuses")
+            .to_string();
+        assert!(
+            refusal.contains("Route initialization requires zero gates"),
+            "C-8 {refusal}"
+        );
+        // and a non-zero header pad byte is refused by the serving loader (K4).
+        let mut fault = route.clone();
+        let header_len = u64::from_le_bytes(route[8..16].try_into().unwrap()) as usize;
+        let data_start = (16 + header_len).div_ceil(64) * 64;
+        assert!(
+            data_start > 16 + header_len,
+            "fixture header leaves no pad byte"
+        );
+        fault[16 + header_len] = 1;
+        assert_loader_refuses(contract_reading(&route, &fault), "C-8 K4");
+    }
+
     #[test]
     fn cpu_discrete_checkpoint_preserves_nonzero_source_epoch() {
         let artifact = set_route_epoch(serialized_route(), 420);
