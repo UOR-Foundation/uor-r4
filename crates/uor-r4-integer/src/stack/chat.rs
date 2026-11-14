@@ -33,6 +33,9 @@ use uor_r4_tokenizer::dialogue::{DialogueProtocol, Message};
 use uor_r4_tokenizer::ByteBpeTokenizer;
 
 use super::{IntegerStackModel, IntegerStackSession, StackError};
+use crate::fbs_snapshot::PlaceMarks;
+use crate::pair_experts::{Check, PairExperts, Setting, Verdict};
+use crate::place_asks::AsksIndex;
 
 /// The context the chat profile declares: the sealed bundle contract's 256.
 /// An artifact may declare another context; [`StackChat`] serves the artifact's
@@ -118,6 +121,29 @@ impl StackStop {
     }
 }
 
+/// What the conversation keeps of a reply that did not end (claude-369): one stopped by the short
+/// cycle or by the token cap. `Keep` keeps it as served; `Drop` takes the user's turn and the
+/// reply out of the history; `Close` keeps the reply, one pass of a cycle, and the end mark.
+/// When the history a caller passes does not extend the chat's own, drop leaves the chat's
+/// history empty: that caller holds the conversation.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum Unended {
+    #[default]
+    Keep,
+    Drop,
+    Close,
+}
+
+impl Unended {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Keep => "keep",
+            Self::Drop => "drop",
+            Self::Close => "close",
+        }
+    }
+}
+
 /// One greedy reply. `ids` are the generated ids with the terminal token
 /// included, exactly as the float stack's reply record keeps them; `text` is
 /// the decoded reply without a terminal EOS.
@@ -152,6 +178,24 @@ pub struct StackChat<'m> {
     serve_again: bool,
     /// Whether the reply produced last was served again.
     served_again: bool,
+    /// The pair experts that check a served reply (claude-367, [`Self::set_pair_experts`]);
+    /// off by default.
+    pair_check: Option<PairCheck<'m>>,
+    /// The experts' verdict on the reply produced last; `None` with the check off.
+    pair_verdict: Option<Verdict>,
+    /// What the history keeps of a reply that did not end (claude-369, [`Self::set_unended`]).
+    unended: Unended,
+    /// What was done with the reply produced last; `None` when it ended or the rule is keep.
+    last_unended: Option<Unended>,
+}
+
+/// The pair experts' check of a served reply (claude-367): the table, how it is applied, and
+/// the model's own counted table and marks, which tell a turn the check leaves alone.
+struct PairCheck<'m> {
+    table: PairExperts,
+    setting: Setting,
+    asks: &'m AsksIndex,
+    marks: &'m PlaceMarks,
 }
 
 impl<'m> StackChat<'m> {
@@ -184,6 +228,10 @@ impl<'m> StackChat<'m> {
             reply_places: Vec::new(),
             serve_again: false,
             served_again: false,
+            pair_check: None,
+            pair_verdict: None,
+            unended: Unended::Keep,
+            last_unended: None,
         })
     }
 
@@ -267,6 +315,65 @@ impl<'m> StackChat<'m> {
     /// Whether the reply produced last was served again ([`Self::set_serve_again`]).
     pub fn last_reply_served_again(&self) -> bool {
         self.served_again
+    }
+
+    /// What the conversation keeps of a reply that did not end (claude-369): one stopped by the
+    /// short cycle or the token cap. Keep (the default) leaves it in the history as served; drop
+    /// takes the turn's prompt and the reply out; close keeps the prompt, the reply without the
+    /// cycle's last two passes, and the end mark. After drop or close the next turn steps the
+    /// conversation again from its start. The reply returned and emitted is the same under each.
+    pub fn set_unended(&mut self, rule: Unended) {
+        self.unended = rule;
+    }
+
+    /// What was done with the reply produced last ([`Self::set_unended`]): `None` when it ended
+    /// or the rule is keep.
+    pub fn last_reply_unended(&self) -> Option<Unended> {
+        self.last_unended
+    }
+
+    /// Check each served reply against pair experts (claude-367), or with `None` stop checking.
+    /// A reply is checked with [`PairExperts::check_prompt`] on the prompt passed in, with the
+    /// model's own counted table ([`IntegerStackModel::place_asks_index`]), so a turn that table
+    /// finds something for is left alone. When the experts replace the reply, the reply given is
+    /// the experts' top reply and the protocol's end id: the history holds it, the next turn
+    /// steps the conversation again from its start, and [`Self::last_reply_places`] is empty.
+    /// Any other verdict leaves the served reply as it is. Off by default.
+    ///
+    /// While it is on, [`Self::reply_history_with`] emits nothing until the reply given is known,
+    /// then emits its ids in order, as [`Self::set_serve_again`] does; with both on, serving
+    /// again decides first which reply is checked. Refused, changing nothing, when the model has
+    /// no counted table: the table carries the turn marks the check reads.
+    pub fn set_pair_experts(&mut self, experts: Option<(PairExperts, Setting)>) -> Result<(), String> {
+        let Some((table, setting)) = experts else {
+            self.pair_check = None;
+            self.pair_verdict = None;
+            return Ok(());
+        };
+        let (asks, marks) = self
+            .model
+            .place_asks_index()
+            .ok_or("the model has no counted table to read the turns the pair experts check")?;
+        let vocab = self.model.shape().vocab;
+        if table.vocab() as usize != vocab {
+            return Err(format!(
+                "the pair experts were counted on a vocabulary of {} tokens; the model's is {vocab}",
+                table.vocab()
+            ));
+        }
+        self.pair_check = Some(PairCheck {
+            table,
+            setting,
+            asks,
+            marks,
+        });
+        Ok(())
+    }
+
+    /// The pair experts' verdict on the reply produced last ([`Self::set_pair_experts`]); `None`
+    /// with the check off, or when the model's serve failed before the check.
+    pub fn pair_verdict(&self) -> Option<Verdict> {
+        self.pair_verdict
     }
 
     /// Whether the artifact's declared context is the chat profile's 256.
@@ -376,13 +483,20 @@ impl<'m> StackChat<'m> {
         F: FnMut(u32, &[u8]) -> Result<(), StackChatError>,
     {
         self.served_again = false;
-        if !self.serve_again {
-            return self.serve_reply(history, max_new_tokens, &mut emit);
+        self.pair_verdict = None;
+        self.last_unended = None;
+        // The conversation's length before this turn's prompt (claude-369).
+        let before = if history.starts_with(&self.history[..]) { self.history.len() } else { 0 };
+        if !self.serve_again && self.pair_check.is_none() {
+            let reply = self.serve_reply(history, max_new_tokens, &mut emit)?;
+            self.settle_unended(history, before, &reply);
+            return Ok(reply);
         }
-        // Serve again (claude-363): nothing is emitted until it is known which reply stands.
+        // Serve again (claude-363) and the pair experts (claude-367): nothing is emitted until it
+        // is known which reply is given.
         let mut quiet = |_: u32, _: &[u8]| -> Result<(), StackChatError> { Ok(()) };
         let mut reply = self.serve_reply(history, max_new_tokens, &mut quiet)?;
-        if serve_again_due(&self.reply_places) {
+        if self.serve_again && serve_again_due(&self.reply_places) {
             // The first reply is in the history, so this prompt no longer extends it: the feed
             // starts the session over, and the session's reset keeps the switch.
             self.session.set_open_reply_start(true);
@@ -391,10 +505,74 @@ impl<'m> StackChat<'m> {
             reply = again?;
             self.served_again = true;
         }
+        if let Some(check) = self.pair_check.as_ref() {
+            let eos = self.protocol.eos_id;
+            let words = match reply.ids.split_last() {
+                Some((&last, rest)) if last == eos => rest,
+                _ => &reply.ids[..],
+            };
+            let verdict = check.table.check_prompt(Some(check.asks), check.marks, history, words, check.setting);
+            let replaced = matches!(verdict, Verdict::Checked(Check::Replaced { .. }));
+            // The experts' reply is given only when it and the end mark fit in the tokens the
+            // caller asked for, which the context holds by the serve's own guard. Otherwise the
+            // model's reply stands and the verdict says there was no room.
+            let given = match verdict {
+                Verdict::Checked(Check::Replaced { reply: r, .. }) => check.table.reply(r),
+                _ => None,
+            }
+            .filter(|words| words.len() < max_new_tokens);
+            self.pair_verdict = Some(if replaced && given.is_none() { Verdict::NoRoom } else { verdict });
+            if let Some(words) = given {
+                // The reply given is the table's, not one the model served again.
+                self.served_again = false;
+                let mut ids = words.to_vec();
+                ids.push(eos);
+                let decoded = self.tokenizer.decode(words);
+                reply = StackReply {
+                    ids,
+                    text: self.protocol.reply_text(&decoded).to_owned(),
+                    stop: StackStop::Eos,
+                };
+                // The session stepped the model's own reply, not this one: the history holds the
+                // reply given, and the next feed steps it again from a fresh session.
+                self.history.truncate(history.len());
+                self.history.extend_from_slice(&reply.ids);
+                self.session.reset();
+                self.session.clear_reply_start();
+                self.fed = 0;
+                self.pick = None;
+                self.reply_places.clear();
+            }
+        }
+        self.settle_unended(history, before, &reply);
         for &id in &reply.ids {
             emit(id, &self.tokenizer.decode_bytes(&[id]))?;
         }
         Ok(reply)
+    }
+
+    /// Apply [`Self::set_unended`]'s rule to the reply given, once it is final. `before` is the
+    /// conversation's length before the turn's prompt `history`; the history then holds `history`
+    /// and the reply's ids.
+    fn settle_unended(&mut self, history: &[u32], before: usize, reply: &StackReply) {
+        let kept = match (self.unended, reply.stop) {
+            (Unended::Keep, _) | (_, StackStop::Eos) => return,
+            (_, StackStop::ShortCycle { period }) => reply.ids.len().saturating_sub(2 * period),
+            (_, StackStop::MaximumNewTokens) => reply.ids.len(),
+        };
+        if self.unended == Unended::Drop {
+            self.history.truncate(before);
+        } else {
+            self.history.truncate(history.len());
+            self.history.extend_from_slice(&reply.ids[..kept]);
+            self.history.push(self.protocol.eos_id);
+        }
+        // The session stepped tokens the history no longer holds: the next feed starts it over.
+        self.session.reset();
+        self.session.clear_reply_start();
+        self.fed = 0;
+        self.pick = None;
+        self.last_unended = Some(self.unended);
     }
 
     /// One serve of [`Self::reply_history_with`]: step the history and choose the reply's ids.
