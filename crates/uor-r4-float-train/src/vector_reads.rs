@@ -7,8 +7,10 @@
 //!    quaternion per 4-lane block ([`hamilton_gate`]), then folded to [`ADDRESS`] coordinates by a
 //!    fixed sum over the `width / 16` groups of 16.
 //! 2. **Score.** From elementwise differences only, never a coordinate-sum of products:
-//!    - Starling Lorentz: the hyperboloid distance between the lifts of `q` and `k`, written from
-//!      `|q - k|^2`, `|q|^2` and `|k|^2` alone; score `offset - d`.
+//!    - Starling Lorentz: the Minkowski chord between the lifts of `q` and `k` on the hyperboloid,
+//!      `sqrt(2 (cosh d - 1))`, written from `|q - k|^2`, `|q|^2` and `|k|^2` alone; it orders
+//!      candidates as the hyperbolic distance `d` does, without the logarithm D29 refuses on the
+//!      device; score `offset - chord`.
 //!    - Starling L2: `d = |q - k|`; score `offset - d`.
 //!    - Prime route: surrogate score `-sum |q - k|`; the choice is the least zeta-phase energy
 //!      between the icosian cells (and so the primes) the four address blocks of `q_t` and `k_s`
@@ -649,9 +651,11 @@ impl VectorRead {
     }
 }
 
-/// The hyperboloid distance between the lifts `(sqrt(1 + |v|^2), v)` of `q_t` and `k_s`, from the
-/// squared difference `n2` `(batch, time, time)` and the squared norms only:
-/// `e = lift_q lift_k - (|q|^2 + |k|^2 - n2) / 2 - 1`, `d = arcosh(1 + e) = ln(1 + e + sqrt(e (e + 2)))`.
+/// The Minkowski chord between the lifts `(sqrt(1 + |v|^2), v)` of `q_t` and `k_s` on the
+/// hyperboloid, from the squared difference `n2` `(batch, time, time)` and the squared norms only:
+/// `e = lift_q lift_k - (|q|^2 + |k|^2 - n2) / 2 - 1 = cosh d - 1`, chord `sqrt(2 e)`. The chord
+/// rises with the hyperbolic distance `d = arcosh(1 + e)`, so it orders candidates exactly as `d`
+/// does; `d` itself needs a logarithm, whose kernel D29 refuses on the device.
 fn lorentz_from_distances(q3: &Tensor, k3: &Tensor, n2: &Tensor) -> Result<Tensor> {
     let qn = q3.sqr()?.sum(2)?;
     let kn = k3.sqr()?.sum(2)?;
@@ -667,8 +671,7 @@ fn lorentz_from_distances(q3: &Tensor, k3: &Tensor, n2: &Tensor) -> Result<Tenso
         .sub(&half)?
         .affine(1.0, -1.0)?
         .maximum(FLOOR)?;
-    let root = e.mul(&e.affine(1.0, 2.0)?)?.sqrt()?;
-    Ok(e.affine(1.0, 1.0)?.add(&root)?.log()?)
+    Ok(e.affine(2.0, 0.0)?.sqrt()?)
 }
 
 /// Over `mask`ed `values` `(batch, time, time)` (detached), the largest (or least) per row, and the
@@ -865,6 +868,14 @@ pub mod reference {
         (1.0 + e + (e * (e + 2.0)).sqrt()).ln()
     }
 
+    /// The tensor code's score distance: the Minkowski chord `sqrt(2 e)` between the two lifts,
+    /// with its floor under the excess `e = cosh d - 1`.
+    pub fn lorentz_chord(q: &[f64], k: &[f64]) -> f64 {
+        let (qn, kn, n2) = (squared(q), squared(k), squared_gap(q, k));
+        let e = ((1.0 + qn).sqrt() * (1.0 + kn).sqrt() - (qn + kn - n2) / 2.0 - 1.0).max(FLOOR);
+        (2.0 * e).sqrt()
+    }
+
     /// One read in f64: its kind, credit margin, Starling offset, and parameters as flat slices.
     pub struct Reference<'a> {
         pub kind: VectorReadKind,
@@ -919,9 +930,7 @@ pub mod reference {
                 .collect();
             let score = |t: usize, s: usize| -> f64 {
                 match self.kind {
-                    VectorReadKind::StarlingLorentz => {
-                        self.offset - lorentz_distance_floored(&q[t], &k[s])
-                    }
+                    VectorReadKind::StarlingLorentz => self.offset - lorentz_chord(&q[t], &k[s]),
                     VectorReadKind::StarlingL2 => {
                         self.offset - squared_gap(&q[t], &k[s]).max(FLOOR).sqrt()
                     }
@@ -1089,7 +1098,22 @@ mod tests {
             assert!((d - lorentz_distance_floored(q, k)).abs() < 1e-9);
             // The excess cancels to rounding, so the distance is of order sqrt(epsilon).
             assert!(lorentz_distance(q, q) < 1e-7);
+            // The device's score distance is the chord between the lifts, sqrt(2 (cosh d - 1)).
+            let chord = (2.0 * (direct(q, k).cosh() - 1.0)).sqrt();
+            assert!((lorentz_chord(q, k) - chord).abs() < 1e-7, "{q:?} {k:?}");
         }
+        // The chord orders every pair exactly as the hyperbolic distance does.
+        let mut by_distance: Vec<usize> = (0..pairs.len()).collect();
+        let mut by_chord = by_distance.clone();
+        by_distance.sort_by(|&a, &b| {
+            lorentz_distance(&pairs[a].0, &pairs[a].1)
+                .total_cmp(&lorentz_distance(&pairs[b].0, &pairs[b].1))
+        });
+        by_chord.sort_by(|&a, &b| {
+            lorentz_chord(&pairs[a].0, &pairs[a].1)
+                .total_cmp(&lorentz_chord(&pairs[b].0, &pairs[b].1))
+        });
+        assert_eq!(by_distance, by_chord);
         let points = [
             [0.0, 0.0, 0.0, 0.0],
             [1.0, 2.0, 0.0, -1.0],
