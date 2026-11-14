@@ -18,6 +18,11 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   `cargo run --locked -p xtask -- ...`.
 - The full harness check still reports 311 existing warnings, including stale claims, presence
   and prep records. It has zero errors; those unrelated warnings are not hidden as passes.
+- The recovered final repair did not compile: a filtered iterator called `and_then` instead of
+  `filter_map`.
+- Its fixture still represented the pre-repair contract, so the first rerun could not prove the
+  new protocol-marker or model-status requirements. The fixture now declares the exact five model
+  surfaces, their pending/historical status line and the canonical protocol pointer.
 
 ## What changed
 
@@ -28,6 +33,11 @@ canonical assertion plus its fixed historical-boundary suffix. Matching text can
 rationale or rejected alternatives. The checker also proves every declared parity field and
 forbidden default-path phrase is part of the canonical assertion.
 
+The final repair stores the protocol marker and pending/historical model-status line in
+`native-space.json`, requires both values literally, checks all five model surfaces in fixed
+order, and requires the harness skill pointer to carry exactly one canonical protocol marker.
+The isolated fixtures now exercise the same complete shape as the live repository.
+
 The test suite now covers a complete fixture, every missing source, a malformed or contradictory
 charter block, a decision corrected only in its rationale, wrong skill name and pointer, missing
 plan/roadmap markers, a contradictory AGENTS sentence, a reworded milestone rule, missing model
@@ -37,14 +47,16 @@ Model documentation now distinguishes the D85 contract from the implementation t
 pending. `docs/harness/claims.json` is identified as generated claim state. The rule registry's
 stale 53/13 prose is corrected to 54/14.
 
-Size: about 730 added/deleted lines across 21 files, about 2.1 times the repair ORDER's 350-line
-upper estimate. The overrun is the cost of replacing ambiguous phrase checks with exact markers in
-every authoritative record and adding isolated contradiction tests. Size is reported, not capped
-(D48); no unrelated source was changed.
+Size: the original repair was about 730 added/deleted lines across 21 files. The recovered final
+marker/status repair adds about 383 changed lines across nine files. Both exceed their ORDER
+estimates because they replace presence checks with exact cross-record contracts and isolated
+contradiction fixtures. Size is reported, not capped (D48); no unrelated source was changed.
 
 ## Measurements
 
 - Native-space focused tests: 5 passed.
+- Full harness package: 682 library tests passed, 1 ignored; the binary, every integration target
+  and the doc test passed.
 - Native-space rule on the real repository: 1 selected, 0 failed.
 - Full harness inventory: 346 rules, 0 errors, 311 existing warnings, exit 0.
 - Harness tests: 682 library tests passed, 1 ignored; every integration and doc test passed.
