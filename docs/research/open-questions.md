@@ -10,7 +10,8 @@ on new phrasing, remember across sessions, and run as one product. That remains 
 flowchart TD
   A["M1: saved integer model<br/>beats count tables"] --> B{"Can it start the right reply<br/>on new phrasing?"}
   B -- "point key gives a partial gain" --> M["claude-220: float key; claude-222/224/228: integer instruments<br/>claude-231 nearest built; claude-232 parity MISS"]
-  M --> R["Complete correct replies<br/>and durable memory"]
+  M --> V["Since 10 Nov: recall in conversations<br/>V0: facts come from the exact turn memory<br/>D85: one native state; V1, V2 in progress"]
+  V --> R["Complete correct replies<br/>and durable memory"]
   R --> S["Full serving, cost,<br/>distribution and release"]
 ```
 
