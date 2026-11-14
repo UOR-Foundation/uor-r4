@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "owner_decision": "D85",
+  "charter_markers": {
+    "start": "<!-- native-space-cycle:start -->",
+    "end": "<!-- native-space-cycle:end -->"
+  },
+  "charter_phrases": [
+    "one persistent native geometric state",
+    "same typed operators",
+    "bit-identical",
+    "floating point",
+    "export gap"
+  ],
+  "skills": {
+    "protocol": ".agents/skills/native-space-cycle/SKILL.md",
+    "harness_pointer": "docs/harness/skills/native-space-cycle/SKILL.md"
+  },
+  "skill_phrases": [
+    "one persistent state",
+    "one operator definition",
+    "one transition",
+    "training updates that state",
+    "serialization is not translation"
+  ],
+  "plan_heading": "## Native-space cycle",
+  "roadmap_item": "native-space-state-contract",
+  "roadmap_phrases": [
+    "one persistent native geometric state",
+    "bit-identical"
+  ],
+  "agents_phrase": "one persistent native train/serve",
+  "milestone_rule": "D85",
+  "change_log_phrase": "one persistent native train/serve state (D85)",
+  "model_surfaces": [
+    "docs/model/STACK-CONTRACT.md",
+    "docs/model/architecture.md",
+    "docs/model/pipeline-map.md",
+    "docs/model/serving-and-export.md",
+    "docs/model/training.md"
+  ],
+  "parity_fields": [
+    "route choices",
+    "carry state",
+    "read choices",
+    "memory addresses",
+    "token ids"
+  ],
+  "forbidden_default_path": [
+    "F32 master model",
+    "export gap"
+  ],
+  "legacy_boundary": "Float code and historical export-gap evidence remain preserved as reference or compatibility work, but cannot qualify the default native-space path."
+}

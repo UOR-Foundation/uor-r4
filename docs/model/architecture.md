@@ -6,6 +6,12 @@ complete**: a saved discrete model passed all six bars on two seeds. No model ho
 conversation. Two model paths exist and have not joined: the discrete M1 path and the float-trained
 FBS trunk.
 
+**D85 correction:** these two paths record how the model arrived at M1. The default path from
+13 November 2026 is one persistent native integer/fixed-point geometric state trained and served
+through the same typed operators. The first implementation item is
+[`native-space-state-contract`](../roadmap/items/native-space-state-contract.md). The diagrams and
+measurements below remain historical evidence until a joined native-space model replaces them.
+
 ![Two separate pipelines: the completed discrete M1 lane uses PositionHolonomyV1, Flock plus an orbit-root causal pointer, discrete Hamilton mixing, OrbitRootSnapNormV1 and OuterL1V1 readout; the float-trained FBS lane separately uses SpiralCore position, FBS recurrence, Hamming copy heads, exact turn memory and whole-table nearest readout.](../figures/model/pipeline.svg)
 
 *The upper discrete M1 lane and lower FBS research lane are different models, not one joined pipeline; only the D11 integer serving boundary is shared.*

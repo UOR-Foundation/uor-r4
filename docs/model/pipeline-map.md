@@ -17,6 +17,13 @@ It answers the owner's direction of 27 October 2026 (recorded verbatim in the it
 - the saved discrete M1 close and claude-211's bar-f result, and claude-217's current new-phrasing opening failure;
 - a section on [the archived prime and angular router](#the-archived-prime-and-angular-router).
 
+**D85 correction (13 Nov, owner).** The default pipeline is one persistent native
+integer/fixed-point geometric state. Training and serving use the same typed operators and
+transition, and replay route, carry, read, memory-address and token decisions bit for bit. The
+float-trunk/export material on this page is retained as historical measurement and mechanism
+evidence; it is not the default architecture after D85. The first implementation item is
+[`native-space-state-contract`](../roadmap/items/native-space-state-contract.md).
+
 The page ends with:
 - the scale arithmetic for the goal;
 - the gaps, ranked;
@@ -57,9 +64,12 @@ The M1's other units are an 8-core GPU and a 16-core Neural Engine (external, Ap
 | [claude-185](../loop/tasks/fbs-serving-vector-kernel/claude-185/REPORT.md), [186](../loop/tasks/fbs-serving-vector-kernel/claude-186/REPORT.md) | Serving profile and an integer square root: `lut-stack/5` at 4,491 / 4,504 tok/s (+7.5%). | Stage 11 |
 | [claude-188](../loop/tasks/integer-hamming-read/claude-188/REPORT.md), [189](../loop/tasks/integer-hamming-read/claude-189/REPORT.md) | `lut-stack/6` carries the Hamming reads; the copy heads' integer kernel matches an f64 reference. Session hooks next. | Stage 5; R5 |
 
-## Two model paths
+## Historical two model paths
 
 The repository trains two different models, and they do not meet:
+
+This section records the architecture that D85 superseded. A new default-path training item
+must first complete `native-space-state-contract`.
 
 | | Float in-space trunk ("FBS trunk") | Discrete path |
 |---|---|---|

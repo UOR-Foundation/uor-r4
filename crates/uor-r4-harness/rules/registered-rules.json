@@ -39,6 +39,7 @@
     "harness.entry_point",
     "harness.milestones.present",
     "harness.mistakes.have_guards",
+    "harness.native_space_contract",
     "harness.skills.nonempty",
     "harness.state_formats",
     "mistakes.evidence_exists",
@@ -81,7 +82,7 @@
   ],
   "sources": {
     "checkrules.rules()": 40,
-    "module register_rules()": 13,
+    "module register_rules()": 14,
     "prlint.GATE_RULES": "the remainder"
   }
 }

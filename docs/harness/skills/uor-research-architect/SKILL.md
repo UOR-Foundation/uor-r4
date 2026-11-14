@@ -6,7 +6,7 @@ harness: 1
 kind: research
 applies-to: [.agents/skills/uor-research-architect/SKILL.md, AGENTS.md]
 when: [architect review, whole project, architectural invariants, delivery requirements, research architect]
-requires: [context-hydration]
+requires: [context-hydration, native-space-cycle]
 outputs: [an architectural judgement against the current source and live authorities, never a restatement of policy]
 forbidden: [treating this page as the protocol - it is a pointer, and the protocol at the source path is authoritative]
 milestones: [m1, m2, m3, m4]

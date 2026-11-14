@@ -11,7 +11,8 @@ The owner approved the architecture pivot and the control-plane update:
 
 Recorded at `2026-11-14T02:57:18Z`. This approves changes to `CHARTER.md`, `AGENTS.md`,
 `docs/rules/changes.md`, and `docs/integration/DECISIONS.md` for one native train/serve
-representation and matching harness controls.
+representation and matching harness controls. It also approves
+`docs/harness/native-space.json` and its registration in `docs/harness/owner-paths.json`.
 
 ## Goal
 
@@ -54,14 +55,19 @@ Cancel this control-plane unit if:
 - `docs/harness/skills/**`
 - `docs/harness/owner-paths.json`
 - `docs/integration/DECISIONS.md`
+- `docs/model/**`
 - `docs/roadmap/items/infra-loop-harness.md`
+- `docs/roadmap/items/native-space-state-contract.md`
+- `docs/roadmap/README.md`
 - `docs/rules/changes.md`
 - `crates/uor-r4-harness/rules/registered-rules.json`
 - `crates/uor-r4-harness/src/checkdispatch.rs`
 - `crates/uor-r4-harness/src/harnessrules.rs`
 - `crates/uor-r4-harness/src/ruleinventory.rs`
 - `crates/uor-r4-harness/src/mistakes.rs`
+- `crates/uor-r4-harness/src/prep.rs`
 - `crates/uor-r4-harness/tests/**`
+- `xtask/src/stack_contract.rs`
 - `docs/loop/tasks/infra-loop-harness/codex-1/**`
 
 If another file is needed, stop and report it before changing it.

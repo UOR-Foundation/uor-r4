@@ -68,6 +68,17 @@ uor-harness git push-check              the pre-push hook: pr-check --local for 
 uor-harness check [--staged]            every machine-checkable rule in one pass
 ```
 
+### Native-space contract
+
+D85 makes one persistent native geometric state the default model path. The machine-readable
+index is [`native-space.json`](native-space.json); the protocol is
+[`.agents/skills/native-space-cycle/SKILL.md`](../../.agents/skills/native-space-cycle/SKILL.md).
+
+`uor-harness check --only harness.native_space_contract` verifies that the owner decision,
+charter marker block, both project skills, milestone owner rule, PLAN path, first roadmap item,
+AGENTS instruction, change log and owner-path registration agree. Every disagreement is an
+error. A future model-training item must pass this check before touching a training path.
+
 ### `loop render` (loop PR 3)
 
 ```sh

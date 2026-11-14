@@ -5,13 +5,25 @@ floating-point and transcendental arithmetic and excludes dense matmul; D80 and 
 hardware integer multiply and divide. **The saved discrete M1 pair and a separate FBS trunk have
 now been exported and served.** That is not useful-chat qualification or an M4/M7 product release.
 
-![The separate FBS float-training path leading to a 4-bit integer UORLUT01 artifact, with the export gap measured before native or WebAssembly serving. The discrete M1 pair instead uses the table-native 19-table lut-discrete-trunk/1 schema.](../figures/model/integer-export.svg)
+![Historical float-training and export route. The D85 default instead carries one native geometric state through training and serving.](../figures/model/integer-export.svg)
 
-*Training may use float offline. The integer artifact and its measured export gap are the serving boundary.*
+*Historical figure. Under D85, the integer artifact is a lossless serialization of the state training updated.*
 
 Labels: **proof**, **measurement**, **hypothesis**. See [`docs/formal_vocabulary.md`](../formal_vocabulary.md) and the [glossary](../start/glossary.md).
 
-## Two halves with one hard border
+## D85: one state, one operator path
+
+The default model path now trains directly in the integer/fixed-point geometric representation
+it serves. Weights, activations, SpiralCore carry, routes, memory and optimizer updates remain in
+that representation. Training and serving call the same typed operators; same-prompt replay
+must match route choices, carry, read choices, memory addresses and token ids bit for bit. The
+artifact may pack or compress those words losslessly, but it may not quantize a different F32
+master into the served model.
+
+Float training and the FBS export remain preserved below as historical/reference evidence. Their
+measured export gaps show how the old boundary behaved; they do not qualify the D85 path.
+
+## Historical two halves with one hard border
 
 **Offline training** runs on GPUs. The discrete path is integer end to end. D37 permits float only
 in a separately scanned offline module, with no softmax/squashing or dense matmul and a mandatory

@@ -1,6 +1,6 @@
 //! The `harness` rules, as Rust (D30 check-port step 2 of 10).
 //!
-//! # The seven `harness` rules
+//! # The eight `harness` rules
 //!
 //! | rule | severity | what it catches |
 //! |---|---|---|
@@ -11,6 +11,7 @@
 //! | `harness.owner_rules_applied` | warn | an `all`-scoped owner rule is absent from `APPLICABLE_RULES` |
 //! | `harness.entry_point` | error | normative docs invoke the Python entry point |
 //! | `harness.documented_commands` | warn | a documented command does not exist in the parser |
+//! | `harness.native_space_contract` | error | the owner's native train/serve invariant disagrees across its required records |
 
 use crate::mistakes;
 use crate::registries::Registries;
@@ -107,6 +108,466 @@ pub fn all(paths: &StatePaths, regs: &Registries) -> Vec<Finding> {
     out.extend(owner_rules_applied(regs));
     out.extend(entry_point(paths));
     out.extend(documented_commands(paths));
+    out.extend(native_space_contract(paths));
+    out
+}
+
+/// `harness.native_space_contract` — D85 is one invariant across the owner record, project
+/// skills, milestones and plan.
+///
+/// The check reads `docs/harness/native-space.json` as the machine index. It then verifies the
+/// owner decision, charter marker block, both project skills, milestone owner rule, PLAN heading
+/// and roadmap item, AGENTS instruction, change-log entry, and owner-path registration. A missing
+/// or contradictory source is an `error`: this is the default model path, not a documentation
+/// preference.
+pub fn native_space_contract(paths: &StatePaths) -> Vec<Finding> {
+    const RULE: &str = "harness.native_space_contract";
+    const CONTRACT: &str = "docs/harness/native-space.json";
+
+    fn read(root: &std::path::Path, rel: &str) -> Result<String, String> {
+        std::fs::read_to_string(root.join(rel)).map_err(|e| format!("{rel}: {e}"))
+    }
+
+    fn push(out: &mut Vec<Finding>, source: &str, message: impl Into<String>, fix: &str) {
+        out.push(Finding {
+            rule_id: RULE,
+            severity: "error",
+            message: format!("{source}: {}", message.into()),
+            path: CONTRACT.into(),
+            fix: fix.into(),
+        });
+    }
+
+    let contract_text = match read(&paths.repo, CONTRACT) {
+        Ok(text) => text,
+        Err(e) => {
+            return vec![Finding {
+                rule_id: RULE,
+                severity: "error",
+                message: format!("the native-space contract cannot be read: {e}"),
+                path: CONTRACT.into(),
+                fix: "restore docs/harness/native-space.json from main".into(),
+            }]
+        }
+    };
+    let contract: serde_json::Value = match serde_json::from_str(&contract_text) {
+        Ok(value) => value,
+        Err(e) => {
+            return vec![Finding {
+                rule_id: RULE,
+                severity: "error",
+                message: format!("the native-space contract is not JSON: {e}"),
+                path: CONTRACT.into(),
+                fix: "repair docs/harness/native-space.json".into(),
+            }]
+        }
+    };
+    let string = |key: &str| {
+        contract
+            .get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string()
+    };
+    let strings = |key: &str| -> Vec<String> {
+        contract
+            .get(key)
+            .and_then(|v| v.as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|v| v.as_str())
+            .map(str::to_owned)
+            .collect()
+    };
+    let mut out = Vec::new();
+
+    let owner = string("owner_decision");
+    let protocol = contract
+        .pointer("/skills/protocol")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    let pointer = contract
+        .pointer("/skills/harness_pointer")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    let start = contract
+        .pointer("/charter_markers/start")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    let end = contract
+        .pointer("/charter_markers/end")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    let plan_heading = string("plan_heading");
+    let roadmap_item = string("roadmap_item");
+    let agents_phrase = string("agents_phrase");
+    let milestone_rule = string("milestone_rule");
+    let change_phrase = string("change_log_phrase");
+    let model_surfaces = strings("model_surfaces");
+    let parity_fields = strings("parity_fields");
+    let forbidden_default = strings("forbidden_default_path");
+    let roadmap_phrases = strings("roadmap_phrases");
+
+    if contract.get("schema").and_then(|v| v.as_u64()) != Some(1) {
+        push(&mut out, CONTRACT, "schema must be 1", "set schema to 1");
+    }
+    for (field, value) in [
+        ("owner_decision", owner.as_str()),
+        ("skills.protocol", protocol),
+        ("skills.harness_pointer", pointer),
+        ("charter_markers.start", start),
+        ("charter_markers.end", end),
+        ("plan_heading", plan_heading.as_str()),
+        ("roadmap_item", roadmap_item.as_str()),
+        ("agents_phrase", agents_phrase.as_str()),
+        ("milestone_rule", milestone_rule.as_str()),
+        ("change_log_phrase", change_phrase.as_str()),
+    ] {
+        if value.trim().is_empty() {
+            push(
+                &mut out,
+                CONTRACT,
+                format!("{field} is empty"),
+                "name every machine-checked source in the contract",
+            );
+        }
+    }
+    for (field, values) in [
+        ("charter_phrases", strings("charter_phrases")),
+        ("skill_phrases", strings("skill_phrases")),
+        ("model_surfaces", model_surfaces.clone()),
+        ("roadmap_phrases", roadmap_phrases.clone()),
+        ("parity_fields", parity_fields.clone()),
+        ("forbidden_default_path", forbidden_default.clone()),
+    ] {
+        if values.is_empty() || values.iter().any(|value| value.trim().is_empty()) {
+            push(
+                &mut out,
+                CONTRACT,
+                format!("{field} must be a non-empty list of non-empty strings"),
+                "restore the complete native-space contract",
+            );
+        }
+    }
+    if string("legacy_boundary").trim().is_empty() {
+        push(
+            &mut out,
+            CONTRACT,
+            "legacy_boundary is empty",
+            "state how historical float/export evidence remains valid",
+        );
+    }
+    if let Ok(decisions) = read(&paths.repo, "docs/integration/DECISIONS.md") {
+        let row = decisions
+            .lines()
+            .find(|line| line.starts_with(&format!("| {owner} |")));
+        match row {
+            None => push(
+                &mut out,
+                "docs/integration/DECISIONS.md",
+                format!("owner decision {owner} is missing"),
+                "add the owner's native-space decision row",
+            ),
+            Some(row) => {
+                let lower = row.to_ascii_lowercase();
+                for phrase in strings("charter_phrases") {
+                    if !lower.contains(&phrase.to_ascii_lowercase()) {
+                        push(
+                            &mut out,
+                            "docs/integration/DECISIONS.md",
+                            format!("{owner} lacks {phrase:?}"),
+                            "make the owner decision state the complete native-space invariant",
+                        );
+                    }
+                }
+            }
+        }
+    } else {
+        push(
+            &mut out,
+            "docs/integration/DECISIONS.md",
+            "decision index cannot be read",
+            "restore the decision index",
+        );
+    }
+
+    if let Ok(charter) = read(&paths.repo, "CHARTER.md") {
+        match (charter.find(start), charter.find(end)) {
+            (Some(a), Some(b)) if a < b => {
+                let block = charter[a + start.len()..b].to_ascii_lowercase();
+                for phrase in strings("charter_phrases") {
+                    if !block.contains(&phrase.to_ascii_lowercase()) {
+                        push(
+                            &mut out,
+                            "CHARTER.md",
+                            format!("native-space marker block lacks {phrase:?}"),
+                            "state the complete invariant inside the D85 marker block",
+                        );
+                    }
+                }
+            }
+            _ => push(
+                &mut out,
+                "CHARTER.md",
+                "native-space marker block is missing or malformed",
+                "add one ordered native-space-cycle start/end marker pair",
+            ),
+        }
+    } else {
+        push(
+            &mut out,
+            "CHARTER.md",
+            "charter cannot be read",
+            "restore CHARTER.md",
+        );
+    }
+
+    for (path, label) in [(protocol, "protocol"), (pointer, "harness pointer")] {
+        match read(&paths.repo, path) {
+            Ok(skill) => {
+                if !skill
+                    .lines()
+                    .any(|line| line.trim() == "name: native-space-cycle")
+                {
+                    push(
+                        &mut out,
+                        path,
+                        format!("{label} skill has the wrong name"),
+                        "name the skill native-space-cycle",
+                    );
+                }
+                if path == protocol {
+                    let lower = skill.to_ascii_lowercase();
+                    for (label, phrases) in [
+                        ("protocol", strings("skill_phrases")),
+                        ("parity field", parity_fields.clone()),
+                        ("forbidden default path", forbidden_default.clone()),
+                    ] {
+                        for phrase in phrases {
+                            if !lower.contains(&phrase.to_ascii_lowercase()) {
+                                push(
+                                    &mut out,
+                                    path,
+                                    format!("{label} lacks {phrase:?}"),
+                                    "state the complete native-space invariant in the protocol",
+                                );
+                            }
+                        }
+                    }
+                }
+                if path == pointer && !skill.contains(protocol) {
+                    push(
+                        &mut out,
+                        path,
+                        format!("harness pointer does not name {protocol:?}"),
+                        "point the harness skill at the authoritative protocol",
+                    );
+                }
+            }
+            Err(e) => push(
+                &mut out,
+                path,
+                format!("{label} skill cannot be read: {e}"),
+                "restore the native-space-cycle skill",
+            ),
+        }
+    }
+
+    if let Ok(plan) = read(&paths.repo, "PLAN.md") {
+        if !plan.contains(&plan_heading) {
+            push(
+                &mut out,
+                "PLAN.md",
+                format!("{plan_heading:?} is missing"),
+                "restore the native-space cycle section",
+            );
+        }
+        if !plan.contains(&roadmap_item) {
+            push(
+                &mut out,
+                "PLAN.md",
+                format!("roadmap item {roadmap_item} is not on the path"),
+                "name the first native-state item",
+            );
+        }
+    } else {
+        push(
+            &mut out,
+            "PLAN.md",
+            "plan cannot be read",
+            "restore PLAN.md",
+        );
+    }
+    let item_path = format!("docs/roadmap/items/{roadmap_item}.md");
+    match read(&paths.repo, &item_path) {
+        Ok(item) => {
+            if !item.contains("status: ready") {
+                push(
+                    &mut out,
+                    &item_path,
+                    "native-state item is not ready",
+                    "restore its ready status or replace the contract's roadmap_item",
+                );
+            }
+            let lower = item.to_ascii_lowercase();
+            for phrase in &roadmap_phrases {
+                if !lower.contains(&phrase.to_ascii_lowercase()) {
+                    push(
+                        &mut out,
+                        &item_path,
+                        format!("native-state item lacks {phrase:?}"),
+                        "state the owner's invariant and parity test in the item",
+                    );
+                }
+            }
+        }
+        Err(e) => push(
+            &mut out,
+            &item_path,
+            format!("native-state item cannot be read: {e}"),
+            "add the first native-state roadmap item",
+        ),
+    }
+
+    match read(&paths.repo, "AGENTS.md") {
+        Ok(agents)
+            if agents
+                .to_ascii_lowercase()
+                .contains(&agents_phrase.to_ascii_lowercase()) => {}
+        Ok(_) => push(
+            &mut out,
+            "AGENTS.md",
+            format!("{agents_phrase:?} is missing"),
+            "add the native train/serve rule to the mandatory list",
+        ),
+        Err(e) => push(&mut out, "AGENTS.md", e, "restore AGENTS.md"),
+    }
+
+    match read(&paths.repo, "docs/harness/milestones.json") {
+        Ok(text) => match serde_json::from_str::<serde_json::Value>(&text) {
+            Ok(v) => {
+                let found = v
+                    .get("owner_rules")
+                    .and_then(|v| v.as_array())
+                    .into_iter()
+                    .flatten()
+                    .find(|r| r.get("id").and_then(|v| v.as_str()) == Some(milestone_rule.as_str()))
+                    .and_then(|r| r.get("rule"))
+                    .and_then(|v| v.as_str());
+                match found {
+                    None => push(
+                        &mut out,
+                        "docs/harness/milestones.json",
+                        format!("owner rule {milestone_rule} is missing"),
+                        "add D85 to owner_rules with the one persistent native-state rule",
+                    ),
+                    Some(rule) => {
+                        let lower = rule.to_ascii_lowercase();
+                        if !lower.contains("one persistent native") {
+                            push(
+                                &mut out,
+                                "docs/harness/milestones.json",
+                                format!(
+                                    "owner rule {milestone_rule} lacks one persistent native state"
+                                ),
+                                "state the owner's native-space rule",
+                            );
+                        }
+                        for phrase in &parity_fields {
+                            if !lower.contains(&phrase.to_ascii_lowercase()) {
+                                push(
+                                    &mut out,
+                                    "docs/harness/milestones.json",
+                                    format!("owner rule {milestone_rule} lacks {phrase:?}"),
+                                    "state every bit-identical parity field in the owner rule",
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => push(
+                &mut out,
+                "docs/harness/milestones.json",
+                format!("milestone registry is not JSON: {e}"),
+                "repair the milestone registry",
+            ),
+        },
+        Err(e) => push(
+            &mut out,
+            "docs/harness/milestones.json",
+            e,
+            "restore the milestone registry",
+        ),
+    }
+
+    match read(&paths.repo, "docs/rules/changes.md") {
+        Ok(changes) if changes.contains(&change_phrase) => {}
+        Ok(_) => push(
+            &mut out,
+            "docs/rules/changes.md",
+            format!("{change_phrase:?} is missing"),
+            "record the owner's charter change",
+        ),
+        Err(e) => push(
+            &mut out,
+            "docs/rules/changes.md",
+            e,
+            "restore the change log",
+        ),
+    }
+
+    match read(&paths.repo, "docs/harness/owner-paths.json") {
+        Ok(text) => match serde_json::from_str::<serde_json::Value>(&text) {
+            Ok(v) => {
+                let owned = v
+                    .get("paths")
+                    .and_then(|v| v.as_array())
+                    .into_iter()
+                    .flatten()
+                    .any(|p| p.get("path").and_then(|v| v.as_str()) == Some(CONTRACT));
+                if !owned {
+                    push(
+                        &mut out,
+                        "docs/harness/owner-paths.json",
+                        format!("{CONTRACT} is not owner-only"),
+                        "register the native-space contract as an owner path",
+                    );
+                }
+            }
+            Err(e) => push(
+                &mut out,
+                "docs/harness/owner-paths.json",
+                format!("owner paths are not JSON: {e}"),
+                "repair the owner-path registry",
+            ),
+        },
+        Err(e) => push(
+            &mut out,
+            "docs/harness/owner-paths.json",
+            e,
+            "restore the owner-path registry",
+        ),
+    }
+
+    for surface in model_surfaces {
+        match read(&paths.repo, &surface) {
+            Ok(text) if text.contains("D85") => {}
+            Ok(_) => push(
+                &mut out,
+                &surface,
+                "model surface does not name D85",
+                "mark the historical/default-path boundary in this model page",
+            ),
+            Err(e) => push(
+                &mut out,
+                &surface,
+                format!("model surface cannot be read: {e}"),
+                "restore the D85 model surface or remove it from the contract",
+            ),
+        }
+    }
+
     out
 }
 
@@ -244,7 +705,7 @@ mod tests {
         Registries::load(p).expect("registry")
     }
 
-    /// All seven ported `harness.*` rules must pass on the real repository.
+    /// All eight ported `harness.*` rules must pass on the real repository.
     #[test]
     fn the_real_repo_passes_the_ported_rules() {
         let r = repo();
@@ -295,6 +756,176 @@ mod tests {
         assert_eq!(f.len(), 1);
         assert_eq!(f[0].severity, "error");
         assert!(f[0].message.contains("no skills"), "{}", f[0].message);
+    }
+
+    fn native_space_fixture() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        for rel in [
+            "docs/harness",
+            "docs/harness/skills/native-space-cycle",
+            "docs/integration",
+            "docs/model",
+            "docs/rules",
+            "docs/roadmap/items",
+            ".agents/skills/native-space-cycle",
+        ] {
+            std::fs::create_dir_all(root.join(rel)).expect("mkdir");
+        }
+        std::fs::write(
+            root.join("docs/harness/native-space.json"),
+            r####"{
+  "schema": 1,
+  "owner_decision": "D85",
+  "charter_markers": {
+    "start": "<!-- native-space-cycle:start -->",
+    "end": "<!-- native-space-cycle:end -->"
+  },
+  "charter_phrases": ["one persistent native geometric state", "same typed operators", "bit-identical", "floating point", "export gap"],
+  "skills": {
+    "protocol": ".agents/skills/native-space-cycle/SKILL.md",
+    "harness_pointer": "docs/harness/skills/native-space-cycle/SKILL.md"
+  },
+  "skill_phrases": ["one persistent state", "one operator definition", "one transition", "training updates that state", "serialization is not translation"],
+  "plan_heading": "## Native-space cycle",
+  "roadmap_item": "native-space-state-contract",
+  "roadmap_phrases": ["one persistent native geometric state", "bit-identical"],
+  "agents_phrase": "one persistent native train/serve",
+  "milestone_rule": "D85",
+  "change_log_phrase": "one persistent native train/serve state (D85)",
+  "model_surfaces": ["docs/model/architecture.md"],
+  "parity_fields": ["route choices", "carry state", "read choices", "memory addresses", "token ids"],
+  "forbidden_default_path": ["F32 master model", "export gap"],
+  "legacy_boundary": "Float remains historical evidence."
+}"####,
+        )
+        .expect("contract");
+        std::fs::write(
+            root.join("docs/integration/DECISIONS.md"),
+            "| D85 | one persistent native geometric state; same typed operators; bit-identical; floating point; export gap |\n",
+        )
+        .expect("decisions");
+        std::fs::write(
+            root.join("CHARTER.md"),
+            "<!-- native-space-cycle:start -->\none persistent native geometric state; same typed operators; bit-identical; floating point; export gap\n<!-- native-space-cycle:end -->\n",
+        )
+        .expect("charter");
+        std::fs::write(
+            root.join(".agents/skills/native-space-cycle/SKILL.md"),
+            "---\nname: native-space-cycle\n---\nOne persistent state. One operator definition. One transition. Training updates that state. Serialization is not translation. route choices; carry state; read choices; memory addresses; token ids; F32 master model; export gap.\n",
+        )
+        .expect("protocol");
+        std::fs::write(
+            root.join("docs/harness/skills/native-space-cycle/SKILL.md"),
+            "---\nname: native-space-cycle\n---\npointer to .agents/skills/native-space-cycle/SKILL.md\n",
+        )
+        .expect("pointer");
+        std::fs::write(
+            root.join("PLAN.md"),
+            "## Native-space cycle\nnative-space-state-contract\n",
+        )
+        .expect("plan");
+        std::fs::write(
+            root.join("docs/roadmap/items/native-space-state-contract.md"),
+            "---\nstatus: ready\n---\none persistent native geometric state; bit-identical\n",
+        )
+        .expect("item");
+        std::fs::write(
+            root.join("AGENTS.md"),
+            "one persistent native train/serve\n",
+        )
+        .expect("agents");
+        std::fs::write(
+            root.join("docs/harness/milestones.json"),
+            r#"{"owner_rules":[{"id":"D85","rule":"One persistent native state: route choices, carry state, read choices, memory addresses and token ids."}]}"#,
+        )
+        .expect("milestones");
+        std::fs::write(
+            root.join("docs/model/architecture.md"),
+            "D85 default model surface\n",
+        )
+        .expect("model surface");
+        std::fs::write(
+            root.join("docs/rules/changes.md"),
+            "one persistent native train/serve state (D85)\n",
+        )
+        .expect("changes");
+        std::fs::write(
+            root.join("docs/harness/owner-paths.json"),
+            r#"{"paths":[{"path":"docs/harness/native-space.json"}]}"#,
+        )
+        .expect("owners");
+        dir
+    }
+
+    #[test]
+    fn the_native_space_contract_passes_a_complete_fixture() {
+        let dir = native_space_fixture();
+        let f = native_space_contract(&paths_of(dir.path()));
+        assert!(f.is_empty(), "{f:?}");
+    }
+
+    #[test]
+    fn the_native_space_contract_names_each_missing_or_contradictory_source() {
+        let cases: &[(&str, &str, &str)] = &[
+            ("docs/integration/DECISIONS.md", "", "D85"),
+            (
+                "CHARTER.md",
+                "<!-- native-space-cycle:start -->\nbody\n",
+                "marker",
+            ),
+            (
+                "docs/integration/DECISIONS.md",
+                "| D85 | floating point master |\n",
+                "one persistent native geometric state",
+            ),
+            (
+                ".agents/skills/native-space-cycle/SKILL.md",
+                "---\nname: native-space-cycle\n---\nOne persistent state. One operator definition. One transition. Training updates that state. Serialization is not translation. carry state; read choices; memory addresses; token ids; F32 master model; export gap.\n",
+                "route choices",
+            ),
+            (
+                ".agents/skills/native-space-cycle/SKILL.md",
+                "---\nname: native-space-cycle\n---\nOne persistent state. One operator definition. One transition. Training updates that state. Serialization is not translation. route choices; carry state; read choices; memory addresses; F32 master model; export gap.\n",
+                "token ids",
+            ),
+            ("PLAN.md", "", "## Native-space cycle"),
+            ("AGENTS.md", "", "one persistent native train/serve"),
+            (
+                "docs/harness/milestones.json",
+                r#"{"owner_rules":[{"id":"D85","rule":"One persistent native state."}]}"#,
+                "route choices",
+            ),
+            ("docs/rules/changes.md", "", "change"),
+            (
+                "docs/harness/owner-paths.json",
+                r#"{"paths":[]}"#,
+                "owner-only",
+            ),
+            (
+                "docs/roadmap/items/native-space-state-contract.md",
+                "---\nstatus: planned\n---\n",
+                "not ready",
+            ),
+            (
+                "docs/model/architecture.md",
+                "float master remains the default\n",
+                "does not name D85",
+            ),
+        ];
+        for (path, body, expected) in cases {
+            let dir = native_space_fixture();
+            std::fs::write(dir.path().join(path), body).expect("mutate");
+            let f = native_space_contract(&paths_of(dir.path()));
+            assert!(!f.is_empty(), "{path} produced no finding");
+            assert!(f
+                .iter()
+                .all(|finding| finding.rule_id == "harness.native_space_contract"));
+            assert!(
+                f.iter().any(|finding| finding.message.contains(expected)),
+                "{path}: expected {expected:?}, got {f:?}"
+            );
+        }
     }
 
     #[test]
@@ -502,6 +1133,7 @@ mod tests {
             ("harness.owner_rules_applied", "D99"),
             ("harness.entry_point", "README.md:1"),
             ("harness.documented_commands", "--refreshh"),
+            ("harness.native_space_contract", "native-space.json"),
         ] {
             let hit = dispatched
                 .iter()

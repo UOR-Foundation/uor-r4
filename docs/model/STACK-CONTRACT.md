@@ -5,6 +5,8 @@
 
 A stack contract makes one model composition explicit across source, configuration, artifact sections, commands, readings and probes. It is not a capability claim.
 
+**D85:** existing contracts whose training row says float32 and whose serving row uses a separate integer artifact describe the historical/export route. The default path is one persistent native geometric state with the same typed training and serving operators; these records remain valid only at their measured historical scope.
+
 ## Evidence status
 
 | Contract | State | Schema | Mechanisms | Evidence | Probes |
