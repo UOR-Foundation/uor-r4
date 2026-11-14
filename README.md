@@ -117,7 +117,7 @@ tested forms failed or broke a rule while the mechanism stays open.
 | Transformer part | Geometric replacement in UOR-R4 | Status |
 |---|---|---|
 | Embedding table (a starting vector per token) | [Prime-zeta codebook](docs/mechanisms/prime-zeta-codebook.md) and [address cells](docs/mechanisms/address-cells.md): whole-number addresses from primes and zeta-zero phases | ACTIVE |
-| Attention (which earlier tokens matter) | [Route](docs/mechanisms/route-read.md), [Flock](docs/mechanisms/flock-read.md) and [Relation](docs/mechanisms/relation-read.md) reads: walk an address tree, rotate a few neighbours into one frame, follow copy links | ACTIVE on the discrete M1 path; independent effects remain unisolated. The current FBS models read with the Hamming read instead ([Ternary/XOR](docs/mechanisms/ternary-xor.md), READY) |
+| Attention (which earlier tokens matter) | [Route](docs/mechanisms/route-read.md), [Flock](docs/mechanisms/flock-read.md) and [Relation](docs/mechanisms/relation-read.md) reads: walk an address tree, rotate a few neighbours into one frame, follow copy links | ACTIVE; independent effects remain unisolated |
 | Feed-forward layers (most of the multiplying) | [Hamilton rotation gate](docs/mechanisms/hamilton-gate.md) and [SpiralCore/FBS routes](docs/mechanisms/spiralcore-fbs.md) | Hamilton gate is in M1 and FBS; FBS routes are trained and served on FBS only; dated float projection form READY |
 | Softmax output and cross-entropy loss | [Admission](docs/mechanisms/admission.md) (open a few address "drawers", called cells) and a [rank-margin hinge](docs/mechanisms/rank-margin.md) | ACTIVE |
 | Backpropagation optimizer | [Discrete learning](docs/mechanisms/discrete-learning.md): try each legal rotation of one entry, keep it only if the score strictly improves | ACTIVE |
@@ -126,7 +126,10 @@ tested forms failed or broke a rule while the mechanism stays open.
 Position and normalization have replacements on the FBS trunk: SpiralCore transport spin and RMS
 norm with an integer square root. M1 instead uses Flock `FrozenZeroV1`, `DiscreteHamiltonGateV1`,
 `DiscreteQuaternionRecurrenceV1`, `PositionHolonomyV1`, `OrbitRootSnapNormV1`, an orbit-root causal pointer and post-rotation `OuterL1V1`—not FBS
-projection or the FBS RMS normalization. M1 does not establish every replacement's
+projection or the FBS RMS normalization. The current FBS models (claude-358) read with the
+Hamming read, the XOR/popcount form of [Ternary/XOR](docs/mechanisms/ternary-xor.md), not the
+Route, Flock or Relation reads
+([board](docs/mechanisms/README.md#the-current-recipe-claude-358s-p-recipe)). M1 does not establish every replacement's
 independent effect. The board lists
 **28 mechanisms: 12 ACTIVE, 5 READY and 11 PARKED**. Part by part:
 [transformer vs geometry](docs/start/transformer-vs-geometry.md).

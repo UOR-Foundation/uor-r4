@@ -12,6 +12,7 @@ Every claim below is [claude]'s.
 - **The audit's first draft of the board said "Flock is in no current recipe".** That is true of the FBS recipe only: the saved discrete M1 model reads with `Flock` (`FrozenZeroV1`). The board says "no current FBS recipe".
 - **AGENTS.md is unchanged.** Its stale-fact check found none: "1 of 8 milestones … is complete" matches `docs/harness/milestones.json` (M1 complete; M2, M3 and M7 in progress; the rest not started). It is an owner path, so no edit was made for style.
 - **The V0–V5 roadmap of the audit is not written anywhere.** It is Casey's open decision.
+- **Three slips were fixed before the review was recorded.** The fresh-context reviewer found the first; [claude] found the other two while checking the figures it left unverified. The first draft edited the README attention row's status cell ("ACTIVE on the discrete M1 path ..."), a scope change by wording; the cell is restored and the fact moved to a sentence under the table. The board listed `geometric_stack_native.rs` under "connected to neither the trainer nor the integer server", but it is a trainer file with an inactive part; the heading and item now say so. The REPORT named "open issues #2030 to #2032" as milestone evidence; that clause was removed.
 
 ## What changed
 
@@ -20,14 +21,14 @@ Every claim below is [claude]'s.
   - new section "Since 31 Oct: what the current model trains and serves (14 Nov 2026)", with three parts:
     - claude-358's `p` recipe, flag for flag from the [pair-rows sheet](../../../../harness/prep/one-model-end-to-end-pair-rows-2026-11-13.md), mapped to board rows, and what is not in it (Flock in no FBS recipe; Route, Relation, prime-zeta, address cells and discrete learning on the discrete path; the address memory and pair rows as flags only; no state carried across training windows);
     - a table of the new forms with no board row: the E8 address memory (claude-346, claude-366), the pair experts (claude-367, claude-368) and the pair rows (claude-370 Adds; claude-373 and claude-374 Do not add), each with whether it is served;
-    - the modules built but connected to neither `uor-r4-float-train` nor `uor-r4-integer`: nine attention modules and two zeta modules in `uor-r4-core`, `helm_d_r4_attention.rs` named as a softmax oracle, and the inactive historical source of `geometric_stack_native.rs`, whose Lorentz Starling read the trainer refuses.
+    - code built but off the trained and served path: nine attention modules and two zeta modules in `uor-r4-core`, `helm_d_r4_attention.rs` named as a softmax oracle, named by neither `uor-r4-float-train` nor `uor-r4-integer`; and the inactive part of the trainer's own `geometric_stack_native.rs`, whose Lorentz Starling read the trainer refuses.
 - **`docs/model/pipeline-map.md`:** a dated update note under the introduction, and a section "Units since 31 Oct" with a stage-by-stage table of what changed (Hamming reads served; turn memory served; the opt-in pair-expert override in `uor-chat`; nearest served with near-tie differences; text served through `uor-chat`; no carry across training windows; `lut-stack/10` bound, `/11` research only; the export refuses pair rows; claude-358's speeds) and one row per unit from claude-345 to claude-374.
 - **`README.md`:**
   - the human-text question now records claude-301 (ahead of T2 at both seeds, 6 Nov) and claude-317 (width 256 over 128, 8 Nov). The old text said the model "does not yet beat the T2 baseline" and named the batch-64 run as next;
   - a second open question: whether the model answers in a conversation, with claude-358's recall counts and the pair-expert override named as a table, not the model;
   - "Where we're going" names that second question as the immediate work, in place of the human-text bar;
   - the product line names `lut-stack/10` beside the historical `/5`;
-  - the attention row says the current FBS models read with the Hamming read (Ternary/XOR, READY);
+  - one sentence under the parts table says the current FBS models read with the Hamming read (Ternary/XOR); the attention row's status cell is unchanged;
   - the acknowledgements say Codex rejoined the registry on 12 Nov (#3942).
 - **Redirect-stub targets.** The four stubs stay redirects. Their targets gain the content of the archived brief they lacked, each with a link to it:
   - `flock-read.md`: the rank-table form of `flock-rank-reads` (sink, window, top-K, rank weights, at most W+K+1 rows, its test caveats, failure condition and open questions). It already held the `starling-read` brief's fair-test list.
@@ -44,15 +45,15 @@ None. This is a documentation unit with no model run. Every number it writes is 
 - `PastWindowRule::Carry`, `crates/uor-r4-float-train/src/in_space_long.rs` (about line 7124);
 - the pair-row refusal: `a_checkpoint_with_pair_rows_is_refused`, `crates/uor-r4-float-train/src/fbs_export.rs`;
 - the trainer's refusal of a non-`Dot` read: `in_space_long.rs` (about line 1093);
-- the unused modules: no file under `crates/uor-r4-float-train` or `crates/uor-r4-integer` names any of the twelve;
+- the unused modules: no file under `crates/uor-r4-float-train` or `crates/uor-r4-integer` names any of the twelve `uor-r4-core` modules (grep by module name, all twelve 0);
 - `stack_whole_table_nearest` (`-L1` at Q12), `crates/uor-r4-integer/src/stack/session.rs` line 3968.
 
 ## Checks run at the head
 
-- `cargo run -q --locked -p xtask -- links`: 7,503 sources, 1,289 broken repo-wide, none in a file this unit changed (filtered from `links --json`).
+- `cargo run -q --locked -p xtask -- links`: 7,504 sources, 1,288 broken repo-wide, none with a source in a file this unit changed (filtered from `links --json` by source path).
 - `cargo run -q --locked -p uor-r4-claim-wording -- .`: passed.
 - `uor-harness check`: exit 0 (warnings only, all branch hygiene unrelated to this diff).
-- Fresh-context exact-head review: recorded on the PR.
+- Fresh-context review (a `delegate:reviewer` given only the task, the ORDER and the diff) at `fbb7b35a6`: REQUEST CHANGES, one medium and two low findings. The medium one is fixed; the two lows checked clean (the six remaining module names: 0 references each; #3407 is the one-model-end-to-end item the replies work belongs to). The review record at the final head is on the PR.
 
 ## Skills used
 

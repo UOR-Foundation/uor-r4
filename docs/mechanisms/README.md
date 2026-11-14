@@ -70,14 +70,14 @@ These are new forms. None has a status; giving one is a decision card.
 
 The copy-read and place-read units of the same weeks (claude-345 to claude-365) refine the Hamming read heads already in the recipe; they are listed in the [pipeline map](../model/pipeline-map.md#units-since-31-oct).
 
-### Built, but connected to neither the trainer nor the integer server
+### Built, but off the trained and served path
 
-Checked by name: no file in `crates/uor-r4-float-train` or `crates/uor-r4-integer` refers to these modules.
+Checked by name: no file in `crates/uor-r4-float-train` or `crates/uor-r4-integer` refers to the `uor-r4-core` modules in the first three items. The fourth item is inside the trainer crate, in code its own header marks inactive.
 
 - **Attention modules in `crates/uor-r4-core/src/`:** `bounded_global_exact_spin_attention.rs`, `construction_causal_return_attention.rs`, `conversation_entity_spin_path_attention.rs`, `direct_causal_geometric_attention.rs`, `higher_scope_geometric_attention.rs`, `paragraph_entity_spin_path_attention.rs`, `prime_route_attention.rs`, `prime_route_geometric_attention.rs` and `recursive_geometric_attention.rs`. Other crates refer to some of them (`uor-r4-model-source`, `uor-r4-wasm-router`, `uor-r4-graph-certify`, the archived float `uor-r4-training`).
 - **`crates/uor-r4-core/src/helm_d_r4_attention.rs` is a softmax oracle.** Its header calls it "the compiler-side softmax oracle for issue #973". It is not a candidate to port.
 - **Zeta modules:** `crates/uor-r4-core/src/zeta_zeros.rs` and `zeta_projection.rs`. `zeta_zeros` is also used by the discrete path (`uor-r4-discrete`).
-- **`crates/uor-r4-float-train/src/geometric_stack_native.rs`:** its header says "Historical source remains inactive; only CUDA FBS, geometric recurrence and shared writer execute." Its Starling read with a Lorentz score (`ReadScore::Lorentz`) and matched flat control is in that inactive part: the trainer refuses a checkpoint whose read is not `ReadScore::Dot` (`in_space_long.rs`).
+- **Inactive code inside the trainer, `crates/uor-r4-float-train/src/geometric_stack_native.rs`:** the file is compiled into the trainer and holds its live CUDA FBS stack, but its header says "Historical source remains inactive; only CUDA FBS, geometric recurrence and shared writer execute." Its Starling read with a Lorentz score (`ReadScore::Lorentz`) and matched flat control is in that inactive part: the trainer refuses a checkpoint whose read is not `ReadScore::Dot` (`in_space_long.rs`).
 
 A module from `uor-r4-core` is checked for banned operations (CHARTER §3) before any port.
 
