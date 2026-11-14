@@ -18,7 +18,8 @@
 //! environment. The report lists the stale, unchecked, unrecorded and broken
 //! pages. It is advisory (D76): it exits 0 whatever freshness it finds, and a
 //! page it cannot read or assess is listed as broken. Only a bad argument, an
-//! unreadable SUMMARY or a missing HEAD (no git history) exits 1.
+//! unreadable SUMMARY, a missing HEAD (no git history) or an
+//! unwritable `--json` file exits 1.
 //! `book-stage` uses the same assessment for the banner on each staged page.
 
 use std::collections::BTreeMap;
@@ -236,7 +237,7 @@ impl Git for GitCli {
 
     fn commit_date(&self, commit: &str) -> Result<String, String> {
         Ok(self
-            .ok(&["show", "-s", "--format=%cs", commit])?
+            .ok(&["show", "-s", "--no-show-signature", "--format=%cs", commit])?
             .trim()
             .to_string())
     }
@@ -365,7 +366,10 @@ pub fn assess_or_broken(page: &str, text: Result<String, String>, git: &dyn Git)
     };
     match text {
         Err(e) => failed(e),
-        Ok(t) => assess(page, &t, git).unwrap_or_else(failed),
+        Ok(t) => assess(page, &t, git).unwrap_or_else(|e| Assessment {
+            record: parse_record(&t).ok().flatten(),
+            ..failed(e)
+        }),
     }
 }
 
@@ -886,6 +890,7 @@ mod tests {
             &BrokenGit,
         );
         assert_eq!(a.status, Status::Broken);
+        assert_eq!(a.record.as_ref().map(|r| r.sources.len()), Some(1));
         assert!(a.problem.unwrap().contains("not a git repository"));
         // A page that needs no git call is still assessed normally.
         let a = assess_or_broken("docs/z.md", Ok(page("# Title")), &BrokenGit);

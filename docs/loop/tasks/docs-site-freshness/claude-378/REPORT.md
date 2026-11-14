@@ -24,7 +24,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). PR #3975. References #3972.
   - It reads the first-line record of every page in `docs/SUMMARY.md`: `<!-- freshness: sources=a,b checked=<40-hex> -->`, or `sources=none`.
   - It sorts each page into one of seven states: fresh, stale, unchecked, no-sources, unrecorded, broken or malformed. A source is a `:(glob)` pathspec, and the page's own file is excluded.
   - It runs `git` with every `GIT_*` variable removed.
-  - `--json` writes the schema `uor-r4.book-fresh/1`. It is advisory (D76): it exits 0 whatever freshness it finds and lists a page it cannot read or assess as `broken`; only a bad argument, an unreadable SUMMARY or no git history exits 1. `git log` runs with `--no-show-signature`.
+  - `--json` writes the schema `uor-r4.book-fresh/1`. It is advisory (D76): it exits 0 whatever freshness it finds and lists a page it cannot read or assess as `broken`; only a bad argument, an unreadable SUMMARY, no git history or an unwritable `--json` file exits 1. `git log` runs with `--no-show-signature`.
 - **`book-stage`** removes the record from the staged copy and puts a banner line first. The banner gives the checked commit with a link, its date and the count of later changes, or "Not yet checked …". Only the copy under `target/book-src` changes.
 - **Records on 97 pages.**
   - Left unrecorded: `CHARTER.md` and `docs/rules/changes.md` (owner paths), plus `docs/mechanisms/README.md`, `exact-memory.md`, `flock-read.md`, `route-read.md` and `docs/model/pipeline-map.md` (edited by #3969).
@@ -53,7 +53,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md). PR #3975. References #3972.
   - When the `env_remove` call is disabled, `git_command_removes_every_git_variable` fails.
   - Each test passes again once its code is restored.
 - **Two fresh reviews of the code at `51b69f051`** (read-only, spec and diff only), both APPROVE WITH CHANGES, no blocker. What each found, and what was done:
-  - SHOULD (both): the command could still exit 1, because a page it could not read or a failing git call passed its error up through `?`. Fixed: `assess_or_broken` lists such a page as `broken` with the reason. The docs now say what does exit 1: a bad argument, an unreadable SUMMARY, or no HEAD.
+  - SHOULD (both): the command could still exit 1, because a page it could not read or a failing git call passed its error up through `?`. Fixed: `assess_or_broken` lists such a page as `broken` with the reason. The docs now say what does exit 1: a bad argument, an unreadable SUMMARY, no HEAD, or an unwritable `--json` file. A third review of the fix commit (`8347cd6b7`) found `git show` also needed `--no-show-signature` (SHOULD, fixed) and that a broken page dropped its parsed record from the JSON (NIT, fixed).
   - SHOULD: the CLI layer and the `GIT_*` removal were not pinned. Fixed with two new tests. `json_has_schema_every_count_and_null_sources_when_unrecorded` checks the schema, the seven counts and `sources: null`. `git_command_removes_every_git_variable` passes a fixed environment to the new `GitCli::command`; its negative gate is listed above. A third test, `unreadable_pages_and_git_errors_are_broken`, pins the first fix.
   - NIT: a user's `log.showSignature` setting would add lines to the `%H` count. Fixed with `--no-show-signature`.
   - NIT: the README's banner list was missing four texts, and this REPORT said 95 pages had sources when 2 of them are `sources=none`. Both fixed.
