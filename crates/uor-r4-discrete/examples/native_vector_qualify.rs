@@ -4,9 +4,10 @@
 //! uor-r4-discrete --features cuda --example native_vector_qualify`
 
 use std::time::Instant;
-use uor_r4_discrete::native_vector::q31_hamilton_rotate;
+use uor_r4_discrete::native_vector::{q31_hamilton_rotate, q31_hamilton_train_step};
 use uor_r4_discrete::native_vector_device::{
-    compiled_native_vector_image, native_vector_entry, NativeVectorEngine,
+    compiled_native_vector_image, native_vector_entry, native_vector_training_entry,
+    NativeVectorEngine,
 };
 
 const ITEMS: usize = 4096;
@@ -51,16 +52,48 @@ fn main() -> uor_r4_discrete::Result<()> {
             )));
         }
     }
+    let targets = values(0x3c6e_f372_fe94_f82b);
+    let training_started = Instant::now();
+    let training_cuda = engine.hamilton_train_step(&gates, &held, &targets, 8)?;
+    for index in 0..ITEMS {
+        let expected = q31_hamilton_train_step(gates[index], held[index], targets[index], 8)?;
+        if training_cuda[index] != expected {
+            return Err(uor_r4_discrete::Error::Invalid(format!(
+                "Q31 training-step parity differs at item {index}"
+            )));
+        }
+    }
+    let training_wall_ns = training_started.elapsed().as_nanos();
+
+    let one = 1 << 31;
+    let target = [1_518_500_249, 1_518_500_249, 0, 0];
+    let mut gate = [one, 0, 0, 0];
+    let initial_loss = q31_hamilton_train_step(gate, [one, 0, 0, 0], target, 8)?.loss_before;
+    let mut accepted_steps = 0;
+    for _ in 0..64 {
+        let step = engine.hamilton_train_step(&[gate], &[[one, 0, 0, 0]], &[target], 8)?;
+        accepted_steps += u32::from(step[0].accepted);
+        gate = step[0].accepted_gate;
+    }
+    let final_loss = q31_hamilton_train_step(gate, [one, 0, 0, 0], target, 8)?.loss_before;
     println!(
         "{}",
         serde_json::json!({
-            "schema": "uor-r4.native-vector-qualification/1",
+            "schema": "uor-r4.native-vector-qualification/2",
             "operator": native_vector_entry(),
+            "training_operator": native_vector_training_entry(),
             "state": "q31:i64x4",
             "items": ITEMS,
             "raw_words_compared": ITEMS * 4,
             "bit_identical": true,
             "wall_ns_including_transfer": elapsed_ns,
+            "training_steps_compared": ITEMS,
+            "training_step_bit_identical": true,
+            "training_wall_ns_including_transfer": training_wall_ns,
+            "finite_training_initial_loss": initial_loss,
+            "finite_training_final_loss": final_loss,
+            "finite_training_steps": 64,
+            "finite_training_accepted_steps": accepted_steps,
             "image_source_ptx_cubin_report_sha256": compiled_native_vector_image(),
             "first": cuda.first(),
             "last": cuda.last(),

@@ -37,7 +37,10 @@ const ENTRIES: [&str; 13] = [
     "discrete_count_score",
     "discrete_carrier_select",
 ];
-const NATIVE_VECTOR_ENTRIES: [&str; 1] = ["native_q31_hamilton_rotate"];
+const NATIVE_VECTOR_ENTRIES: [&str; 2] = [
+    "native_q31_hamilton_rotate",
+    "native_q31_hamilton_train_step",
+];
 
 /// Inspect the emitted module, rather than treating CUDA source spelling as
 /// evidence of its instructions. Integer index products are not prohibited.

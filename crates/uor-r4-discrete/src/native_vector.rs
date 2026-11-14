@@ -16,10 +16,22 @@ pub type Q31Quaternion = [i64; 4];
 /// One Q31 quaternion after Hamilton transport.
 pub type Q31Transport = [i64; 4];
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Q31TrainingStep {
+    pub prediction: Q31Transport,
+    pub candidate_gate: Q31Quaternion,
+    pub accepted_gate: Q31Quaternion,
+    pub loss_before: u64,
+    pub loss_after: u64,
+    pub accepted: bool,
+}
+
 const Q31_MIN: i64 = -(1 << 31);
 const Q31_MAX: i64 = 1 << 31;
 /// Largest admitted batch: the last `item * 4` index remains in the lower 32 bits.
 pub const MAX_Q31_BATCH_ITEMS: usize = 1 << 30;
+/// Largest admitted per-word learning-rate shift; `0` applies the full credit.
+pub const MAX_Q31_STEP_SHIFT: u32 = 31;
 
 /// Whether one word is inside the closed native Q31 domain.
 pub fn q31_coordinate_admitted(word: i64) -> bool {
@@ -34,6 +46,11 @@ pub fn q31_quaternion_admitted(value: Q31Quaternion) -> bool {
 /// Whether one batch fits the native launch-index contract.
 pub fn q31_batch_len_admitted(items: usize) -> bool {
     items <= MAX_Q31_BATCH_ITEMS
+}
+
+/// Whether one word is in the closed Q31 domain after saturating an integer value.
+pub fn q31_saturate(word: i64) -> i64 {
+    word.clamp(Q31_MIN, Q31_MAX)
 }
 
 /// The serialized word layout of one native vector carry.
@@ -130,6 +147,66 @@ pub fn q31_hamilton_rotate(gate: Q31Quaternion, value: Q31Quaternion) -> Result<
     ])
 }
 
+/// L1 distance in raw Q31 words.
+pub fn q31_l1_loss(actual: Q31Transport, expected: Q31Transport) -> u64 {
+    actual
+        .into_iter()
+        .zip(expected)
+        .map(|(actual, expected)| actual.abs_diff(expected))
+        .sum()
+}
+
+/// One bounded geometric credit step against a target Q31 transport.
+///
+/// The forward is the same Hamilton operator the CUDA trainer uses. The
+/// residual `prediction - target` is passed through that operator with the
+/// conjugate value to obtain a quaternion-shaped credit. The candidate gate is
+/// the old gate minus `credit >> step_shift`, saturated to the closed Q31
+/// domain. A candidate is accepted only when its L1 loss is strictly smaller.
+pub fn q31_hamilton_train_step(
+    gate: Q31Quaternion,
+    value: Q31Quaternion,
+    target: Q31Quaternion,
+    step_shift: u32,
+) -> Result<Q31TrainingStep> {
+    if !q31_quaternion_admitted(gate)
+        || !q31_quaternion_admitted(value)
+        || !q31_quaternion_admitted(target)
+    {
+        return Err(Error::Invalid(
+            "native Q31 training words must be in -2^31..=2^31".into(),
+        ));
+    }
+    if step_shift > MAX_Q31_STEP_SHIFT {
+        return Err(Error::Invalid(
+            "native Q31 step_shift must be in 0..=31".into(),
+        ));
+    }
+
+    let prediction = q31_hamilton_rotate(gate, value)?;
+    let loss_before = q31_l1_loss(prediction, target);
+    let residual = [
+        q31_saturate(prediction[0] - target[0]),
+        q31_saturate(prediction[1] - target[1]),
+        q31_saturate(prediction[2] - target[2]),
+        q31_saturate(prediction[3] - target[3]),
+    ];
+    let credit = q31_hamilton_rotate(residual, [value[0], -value[1], -value[2], -value[3]])?;
+    let candidate_gate =
+        std::array::from_fn(|index| q31_saturate(gate[index] - (credit[index] >> step_shift)));
+    let candidate_prediction = q31_hamilton_rotate(candidate_gate, value)?;
+    let loss_after = q31_l1_loss(candidate_prediction, target);
+    let accepted = loss_after < loss_before;
+    Ok(Q31TrainingStep {
+        prediction,
+        candidate_gate,
+        accepted_gate: if accepted { candidate_gate } else { gate },
+        loss_before,
+        loss_after,
+        accepted,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,5 +270,43 @@ mod tests {
         let edge = [ONE, ONE, 0, 0];
         let output = q31_hamilton_rotate(edge, edge).unwrap();
         assert!(q31_quaternion_admitted(output));
+    }
+
+    #[test]
+    fn a_finite_credit_sequence_lowers_the_target_loss() {
+        let value = [ONE, 0, 0, 0];
+        let target = [1_518_500_249, 1_518_500_249, 0, 0];
+        let mut gate = [ONE, 0, 0, 0];
+        let initial_loss = q31_l1_loss(q31_hamilton_rotate(gate, value).unwrap(), target);
+        let mut loss = initial_loss;
+        for _ in 0..64 {
+            let step = q31_hamilton_train_step(gate, value, target, 8).unwrap();
+            assert_eq!(step.loss_before, loss);
+            gate = step.accepted_gate;
+            loss = q31_l1_loss(q31_hamilton_rotate(gate, value).unwrap(), target);
+        }
+        assert!(loss < initial_loss, "initial {initial_loss}, final {loss}");
+    }
+
+    #[test]
+    fn a_nonimproving_candidate_keeps_the_previous_gate() {
+        let gate = [ONE, 0, 0, 0];
+        let value = [ONE, 0, 0, 0];
+        let target = q31_hamilton_rotate(gate, value).unwrap();
+        let step = q31_hamilton_train_step(gate, value, target, 8).unwrap();
+        assert!(!step.accepted);
+        assert_eq!(step.accepted_gate, gate);
+        assert_eq!(step.loss_before, 0);
+        assert_eq!(step.loss_after, 0);
+    }
+
+    #[test]
+    fn training_refuses_out_of_domain_words_and_shifts() {
+        let valid = [ONE, 0, 0, 0];
+        let invalid = [Q31_MAX + 1, 0, 0, 0];
+        assert!(q31_hamilton_train_step(invalid, valid, valid, 8).is_err());
+        assert!(q31_hamilton_train_step(valid, invalid, valid, 8).is_err());
+        assert!(q31_hamilton_train_step(valid, valid, invalid, 8).is_err());
+        assert!(q31_hamilton_train_step(valid, valid, valid, 32).is_err());
     }
 }

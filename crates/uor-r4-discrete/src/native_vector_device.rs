@@ -1,9 +1,9 @@
-//! AOT CUDA handle for the native Q31 Hamilton vector transport.
-//! The module contains one integer entry point and no PTX/JIT fallback.
+//! AOT CUDA handle for native Q31 Hamilton vector transport and training steps.
+//! The module contains only admitted integer entry points and no PTX/JIT fallback.
 
 use crate::native_vector::{
-    q31_batch_len_admitted, q31_hamilton_rotate, q31_quaternion_admitted, Q31Quaternion,
-    Q31Transport,
+    q31_batch_len_admitted, q31_hamilton_rotate, q31_hamilton_train_step, q31_quaternion_admitted,
+    Q31Quaternion, Q31TrainingStep, Q31Transport, MAX_Q31_STEP_SHIFT,
 };
 use crate::{Error, Result};
 use cudarc::driver::{CudaContext, CudaFunction, CudaStream, LaunchConfig, Ptx, PushKernelArg};
@@ -15,7 +15,8 @@ const PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/native-vector.ptx"));
 const CUBIN: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/native-vector.cubin"));
 const RESOURCES: &str = include_str!(concat!(env!("OUT_DIR"), "/native-vector-resources.txt"));
 const TARGET: &str = include_str!(concat!(env!("OUT_DIR"), "/cuda-image-target.txt"));
-const ENTRY: &str = "native_q31_hamilton_rotate";
+const ENTRY_ROTATE: &str = "native_q31_hamilton_rotate";
+const ENTRY_TRAIN_STEP: &str = "native_q31_hamilton_train_step";
 
 fn invalid(message: impl Into<String>) -> Error {
     Error::Invalid(message.into())
@@ -49,6 +50,7 @@ pub struct NativeVectorEngine {
     _context: Arc<CudaContext>,
     stream: Arc<CudaStream>,
     rotate: CudaFunction,
+    train_step: CudaFunction,
 }
 
 impl NativeVectorEngine {
@@ -66,11 +68,13 @@ impl NativeVectorEngine {
         let module = context
             .load_module(Ptx::from_binary(CUBIN.to_vec()))
             .map_err(cuda)?;
-        let rotate = module.load_function(ENTRY).map_err(cuda)?;
+        let rotate = module.load_function(ENTRY_ROTATE).map_err(cuda)?;
+        let train_step = module.load_function(ENTRY_TRAIN_STEP).map_err(cuda)?;
         Ok(Self {
             _context: context,
             stream,
             rotate,
+            train_step,
         })
     }
 
@@ -138,11 +142,131 @@ impl NativeVectorEngine {
     ) -> Result<Q31Transport> {
         q31_hamilton_rotate(gate, value)
     }
+
+    /// Apply one bounded Q31 Hamilton training step per item on CUDA.
+    pub fn hamilton_train_step(
+        &self,
+        gates: &[Q31Quaternion],
+        values: &[Q31Quaternion],
+        targets: &[Q31Quaternion],
+        step_shift: u32,
+    ) -> Result<Vec<Q31TrainingStep>> {
+        if gates.is_empty() || gates.len() != values.len() || gates.len() != targets.len() {
+            return Err(invalid(
+                "native-vector training needs nonempty equal-length gate, value and target batches",
+            ));
+        }
+        if !q31_batch_len_admitted(gates.len()) {
+            return Err(invalid(
+                "native-vector training batch exceeds the admitted 2^30-item bound",
+            ));
+        }
+        if step_shift > MAX_Q31_STEP_SHIFT {
+            return Err(invalid("native-vector step_shift must be in 0..=31"));
+        }
+        if gates
+            .iter()
+            .chain(values)
+            .chain(targets)
+            .any(|quaternion| !q31_quaternion_admitted(*quaternion))
+        {
+            return Err(invalid(
+                "native-vector Q31 training words must be in -2^31..=2^31",
+            ));
+        }
+        let count = u32::try_from(gates.len())
+            .map_err(|_| invalid("native-vector training batch exceeds the CUDA index bound"))?;
+        let gate_words: Vec<i64> = gates.iter().flatten().copied().collect();
+        let value_words: Vec<i64> = values.iter().flatten().copied().collect();
+        let target_words: Vec<i64> = targets.iter().flatten().copied().collect();
+        let gate_device = self.stream.clone_htod(&gate_words).map_err(cuda)?;
+        let value_device = self.stream.clone_htod(&value_words).map_err(cuda)?;
+        let target_device = self.stream.clone_htod(&target_words).map_err(cuda)?;
+        let mut predictions = self
+            .stream
+            .alloc_zeros::<i64>(gates.len() * 4)
+            .map_err(cuda)?;
+        let mut candidates = self
+            .stream
+            .alloc_zeros::<i64>(gates.len() * 4)
+            .map_err(cuda)?;
+        let mut accepted = self
+            .stream
+            .alloc_zeros::<i64>(gates.len() * 4)
+            .map_err(cuda)?;
+        let mut loss_before = self.stream.alloc_zeros::<u64>(gates.len()).map_err(cuda)?;
+        let mut loss_after = self.stream.alloc_zeros::<u64>(gates.len()).map_err(cuda)?;
+        let mut launch = self.stream.launch_builder(&self.train_step);
+        launch
+            .arg(&gate_device)
+            .arg(&value_device)
+            .arg(&target_device)
+            .arg(&count)
+            .arg(&step_shift)
+            .arg(&mut predictions)
+            .arg(&mut candidates)
+            .arg(&mut accepted)
+            .arg(&mut loss_before)
+            .arg(&mut loss_after);
+        unsafe {
+            launch.launch(LaunchConfig {
+                grid_dim: (count.div_ceil(256), 1, 1),
+                block_dim: (256, 1, 1),
+                shared_mem_bytes: 0,
+            })
+        }
+        .map_err(cuda)?;
+        let predictions: Vec<i64> = self.stream.clone_dtoh(&predictions).map_err(cuda)?;
+        let candidates: Vec<i64> = self.stream.clone_dtoh(&candidates).map_err(cuda)?;
+        let accepted: Vec<i64> = self.stream.clone_dtoh(&accepted).map_err(cuda)?;
+        let loss_before: Vec<u64> = self.stream.clone_dtoh(&loss_before).map_err(cuda)?;
+        let loss_after: Vec<u64> = self.stream.clone_dtoh(&loss_after).map_err(cuda)?;
+        Ok((0..gates.len())
+            .map(|index| Q31TrainingStep {
+                prediction: [
+                    predictions[index * 4],
+                    predictions[index * 4 + 1],
+                    predictions[index * 4 + 2],
+                    predictions[index * 4 + 3],
+                ],
+                candidate_gate: [
+                    candidates[index * 4],
+                    candidates[index * 4 + 1],
+                    candidates[index * 4 + 2],
+                    candidates[index * 4 + 3],
+                ],
+                accepted_gate: [
+                    accepted[index * 4],
+                    accepted[index * 4 + 1],
+                    accepted[index * 4 + 2],
+                    accepted[index * 4 + 3],
+                ],
+                loss_before: loss_before[index],
+                loss_after: loss_after[index],
+                accepted: loss_after[index] < loss_before[index],
+            })
+            .collect())
+    }
+
+    /// Run the Rust training-step oracle for one item.
+    pub fn hamilton_train_step_reference(
+        gate: Q31Quaternion,
+        value: Q31Quaternion,
+        target: Q31Quaternion,
+        step_shift: u32,
+    ) -> Result<Q31TrainingStep> {
+        q31_hamilton_train_step(gate, value, target, step_shift)
+    }
 }
 
 /// Compile-time proof that the native device API remains integer-only.
 pub fn native_vector_entry() -> &'static str {
-    ENTRY
+    ENTRY_ROTATE
+}
+
+/// The second admitted entry: one bounded Q31 training step per batch item.
+pub fn native_vector_training_entry() -> &'static str {
+    ENTRY_TRAIN_STEP
 }
 
 #[cfg(test)]
