@@ -51,8 +51,8 @@ The saved models p-s1 to p-s3 ([claude-358](../loop/tasks/one-model-end-to-end/c
 | Whole-table nearest readout, trained by the cell objective | [admission](admission.md) (A) |
 
 **Not in the recipe:**
-- [Flock read](flock-read.md) is ACTIVE and in no current recipe. `train-in-space` has `--flock-read`; the p recipe does not pass it. The float form (cell D, claude-144) closed its configuration on 29 Oct, and the integer selector `crates/uor-r4-integer/src/stack/flock.rs` describes itself as "Standalone integer flock selector for sparse causal attention awaiting integration".
-- [Route](route-read.md), [Relation](relation-read.md), [prime-zeta-codebook](prime-zeta-codebook.md), [address-cells](address-cells.md) and [discrete-learning](discrete-learning.md) are on the discrete M1 path, not in the FBS trunk.
+- [Flock read](flock-read.md) is ACTIVE and in no current FBS recipe. It is on the discrete path: the saved M1 model reads with `Flock` (`FrozenZeroV1`, [M1 close](../labs/m1-close-saved-model/README.md)). `train-in-space` has `--flock-read`; the p recipe does not pass it. The float form (cell D, claude-144) closed its configuration on 29 Oct, and the integer selector `crates/uor-r4-integer/src/stack/flock.rs` describes itself as "Standalone integer flock selector for sparse causal attention awaiting integration".
+- [Route](route-read.md), [Relation](relation-read.md), [prime-zeta-codebook](prime-zeta-codebook.md), [address-cells](address-cells.md) and [discrete-learning](discrete-learning.md) are on the discrete path, not in the FBS trunk.
 - The E8 address memory (`--address-memory`) and the pair rows (`--pair-rows`) exist as trainer flags only (below).
 - Training cuts back-to-back windows and carries no state from one window to the next. `Carry` in `crates/uor-r4-float-train/src/in_space_long.rs` (`PastWindowRule`) is a scoring rule for what a scored target sees, not a training mode.
 
