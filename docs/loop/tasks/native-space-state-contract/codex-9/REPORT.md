@@ -34,6 +34,9 @@ Size: two record corrections, about 10 changed lines plus this report.
 - `loop report --check` - passed.
 - `git diff --check` - passed.
 - Exact-head review records are posted on PR #3977; this report does not substitute for them.
+- Queue recovery created duplicate canceled/success check runs at one SHA. After all results were
+  green, GitHub still rejected direct enqueue with “5 of 5 required status checks are expected”;
+  `codex-10` records the fresh-head delivery repair.
 
 ## Skills used
 
