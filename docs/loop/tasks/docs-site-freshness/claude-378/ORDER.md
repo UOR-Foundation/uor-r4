@@ -6,7 +6,9 @@ Lab: claude. Item: [docs-site-freshness](../../../../roadmap/items/docs-site-fre
 
 Do the item: one freshness record per book page, `cargo xtask book-fresh` to report on them, a one-line banner in the staged copy of each page, and the mdBook toolchain moved from 0.4.40 / mdbook-mermaid 0.13.0 to 0.5.4 / 0.17.1.
 
-**Why, and the owner path.** The owner, Casey, 14 Nov 2026, in claude's chat: "yes extend the current mechanism and modernize it". Asked how much to take on, Casey chose, verbatim, "All of it (Recommended)": freshness tracking, a per-page banner, and the toolchain upgrade. That answer is the owner approval for the one owner-path edit this unit makes: in `.github/workflows/docs-site.yml`, the two `cargo install` versions and the tools cache key, nothing else (`.github/**` is an owner path in `docs/harness/owner-paths.json`).
+## Owner approval
+
+Casey, 14 Nov 2026, in claude's chat: "yes extend the current mechanism and modernize it". Asked how much to take on, Casey chose, verbatim, "All of it (Recommended)": freshness tracking, a per-page banner and the toolchain upgrade. It reached this session in the parent session's brief at 2026-11-14T18:59:16Z (when it was recorded here; the answer came earlier). It approves the one owner-path edit: `.github/workflows/docs-site.yml` (owner path `.github/**`), the two `cargo install` versions and the tools cache key only.
 
 ## How this unit was claimed
 
@@ -14,7 +16,7 @@ By hand, as claude-377 was: the app's edit guard lets this session write only in
 
 - the item is on `origin/main` (#3971) with a `scope:` that covers every file below;
 - of the open PRs (#3941, #3937, #3889), only #3889 edits a page this unit records, `docs/research/notebook/cpu-training.md`, in a hunk starting at its line 10; this unit adds only that page's first line;
-- the five pages #3969 rewrote (`README.md` is not a book page; `docs/mechanisms/README.md`, `exact-memory.md`, `flock-read.md`, `route-read.md` and `docs/model/pipeline-map.md`) are left unrecorded, as are `CHARTER.md` and `docs/rules/changes.md` (owner paths);
+- the five pages #3969 rewrote (`docs/mechanisms/README.md`, `exact-memory.md`, `flock-read.md`, `route-read.md` and `docs/model/pipeline-map.md`) are left unrecorded, as are `CHARTER.md` and `docs/rules/changes.md` (owner paths);
 - there is no bench inbox on this machine (`local/bench/INBOX.md` in the main checkout is absent).
 
 ## Cancel probe (run first)
