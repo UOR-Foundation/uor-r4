@@ -52,6 +52,7 @@ No language, serving or throughput result is claimed.
   native_vector_cuda -- -D warnings` - passed.
 - Release `native_vector_qualify` example - passed with 16,384 forward words and 4,096 training
   records bit-identical.
+- `uor-harness loop pr-check --local` - PASS, with only the known D76 advisory warnings.
 - `git diff --check` - passed.
 
 ## Skills used
