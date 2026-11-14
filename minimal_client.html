@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-8fdcd0c4.js";
+            window.path_to_searchindex_js = "searchindex-368620ef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-78e3d836.js"></script>
@@ -179,7 +179,7 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+                        <p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="minimalist-r⁴-terminal-client--local-vendor-api"><a class="header" href="#minimalist-r⁴-terminal-client--local-vendor-api">Minimalist R⁴ Terminal Client &amp; Local Vendor API</a></h1>
 <blockquote>
@@ -191,17 +191,15 @@ prompt. There is no working source-free geometric chat path yet; #961 -&gt; #952
 before this interface can carry that claim. See the
 <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/geometric_intelligence_programme.md">current programme</a>.</p>
 </blockquote>
-<p>The interface exposes <code>r4 client</code> plus vendor-shaped endpoints such as
+<p>The interface exposes the <code>client</code> subcommand plus vendor-shaped endpoints such as
 <code>POST /v1/chat/completions</code>, <code>GET /v1/models</code>, and <code>GET /uor/v1/status</code>.
 Provider, engine, and multiplication-free claims apply only to the exact
 legacy execution tier and artifact selected for a request; the existence of
 the endpoint is not evidence about which mechanism produced its response.</p>
 <hr>
-<h2 id="1-single-command-launcher-r4-appsh"><a class="header" href="#1-single-command-launcher-r4-appsh">1. Single-Command Launcher (<code>./r4-app.sh</code>)</a></h2>
-<p>The simplest way to run R⁴ interactively is with the zero-dependency <code>./r4-app.sh</code> launcher:</p>
-<pre><code class="language-bash">./r4-app.sh
-</code></pre>
-<h3 id="what-r4-appsh-does-automatically"><a class="header" href="#what-r4-appsh-does-automatically">What <code>./r4-app.sh</code> does automatically:</a></h3>
+<h2 id="1-the-archived-launcher-archivelegacy-clir4-appsh"><a class="header" href="#1-the-archived-launcher-archivelegacy-clir4-appsh">1. The archived launcher (<code>archive/legacy-cli/r4-app.sh</code>)</a></h2>
+<p>The zero-dependency launcher <code>r4-app.sh</code> and the <code>uor-r4-cli</code> script it starts are kept in <code>archive/legacy-cli/</code>. They no longer run as they are: <code>uor-r4-cli</code> calls <code>cargo run --bin r4</code>, and no crate in the workspace builds a binary named <code>r4</code> any more. The list below records what the launcher did.</p>
+<h3 id="what-r4-appsh-did-automatically"><a class="header" href="#what-r4-appsh-did-automatically">What <code>r4-app.sh</code> did automatically:</a></h3>
 <ol>
 <li><strong>Model Selection Menu</strong>: Presents an interactive choice between <code>smollm2-135m-instruct</code>, <code>smollm2-360m-instruct</code>, and <code>smollm2-1-7b-instruct</code>.</li>
 <li><strong>4-Stage Pipeline Compilation &amp; Live Progress</strong>: Automatically runs any missing compilation stages (download, corpus compilation, R4G1 graph scoring) while displaying <code>claude-code</code>-styled live progress bars (<code>[█████████████░░░░░░░░] 65% (18s)</code>).</li>
@@ -210,39 +208,26 @@ the endpoint is not evidence about which mechanism produced its response.</p>
 <li><strong>Signal Cleanup</strong>: Traps <code>EXIT</code>, <code>INT</code> (<code>Ctrl-C</code>), <code>TERM</code>, <code>HUP</code> (window close), and <code>QUIT</code> (<code>Ctrl-\</code>) signals to cleanly terminate the background server process.</li>
 </ol>
 <hr>
-<h2 id="2-interactive-terminal-client-r4-client"><a class="header" href="#2-interactive-terminal-client-r4-client">2. Interactive Terminal Client (<code>r4 client</code>)</a></h2>
-<p>You can also run the client against an existing local server instance:</p>
-<pre><code class="language-bash">cargo run --release -- client --remote http://127.0.0.1:8000/v1
+<h2 id="2-interactive-terminal-client-client"><a class="header" href="#2-interactive-terminal-client-client">2. Interactive Terminal Client (<code>client</code>)</a></h2>
+<p>The client is the <code>client</code> subcommand of the <code>uor-r4-wasm-router</code> binary (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/crates/uor-r4-wasm-router/src/main.rs"><code>crates/uor-r4-wasm-router/src/main.rs</code></a>). Run it against an existing local server instance:</p>
+<pre><code class="language-bash">cargo run --release -p uor-r4-wasm-router -- client --remote http://127.0.0.1:8000/v1
 </code></pre>
-<h3 id="rich-intro-banner--slash-command-autocomplete"><a class="header" href="#rich-intro-banner--slash-command-autocomplete">Rich Intro Banner &amp; Slash Command Autocomplete</a></h3>
-<p>Upon launching, <code>r4 client</code> displays an ANSI R⁴ ASCII banner and shortcuts guide:</p>
-<pre><code class="language-text">  ██████╗ ██╗  ██╗     ██████╗██╗     ██╗
-  ██╔══██╗██║  ██║    ██╔════╝██║     ██║
-  ██████╔╝███████║    ██║     ██║     ██║
-  ██╔══██╗╚════██║    ██║     ██║     ██║
-  ██║  ██║     ██║    ╚██████╗███████╗██║
-  ╚═╝  ╚═╝     ╚═╝     ╚═════╝╚══════╝╚═╝
-
-R⁴ Holographic Graph &amp; Transformerless Engine v0.1.0
+<h3 id="intro-banner-and-slash-commands"><a class="header" href="#intro-banner-and-slash-commands">Intro banner and slash commands</a></h3>
+<p>Upon launching, the client prints an ANSI ASCII banner and then a shortcuts guide (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/crates/uor-r4-wasm-router/src/chat.rs"><code>chat.rs</code></a>):</p>
+<pre><code class="language-text">UOR-R4 Holographic Graph &amp; Transformerless Engine v0.1.0
 Zero-Multiply Local Intelligence Runtime • Pinned Multiplication-Free Execution
 
 Connected to local vendor endpoint: http://127.0.0.1:8000/v1/chat/completions
 Active teacher model             : smollm2-135m-instruct
+Active synthesis engine          : &lt;engine&gt;
 
 Commands &amp; Shortcuts:
-  • Type /help to view available slash commands (/status, /models, /clear, /quit)
+  • Type /help to view available slash commands (/status, /models, /engine, /corpus, /export, /reset, /clear, /quit)
   • Type / for interactive slash command suggestions &amp; autocomplete
   • Type exit or press Ctrl-D to quit session
 </code></pre>
-<h3 id="interactive-slash-command-completion"><a class="header" href="#interactive-slash-command-completion">Interactive Slash Command Completion</a></h3>
-<p>Typing <code>/</code> triggers interactive command suggestions:</p>
-<ul>
-<li>Typing <code>/</code> \(\rightarrow\) Displays available commands list.</li>
-<li>Typing <code>/m</code> or <code>/mo</code> \(\rightarrow\) Auto-completes and runs <code>/models</code>.</li>
-<li>Typing <code>/s</code> or <code>/st</code> \(\rightarrow\) Auto-completes and runs <code>/status</code>.</li>
-<li>Typing <code>/h</code> \(\rightarrow\) Auto-completes and runs <code>/help</code>.</li>
-<li>Typing <code>/q</code> \(\rightarrow\) Auto-completes and runs <code>/quit</code>.</li>
-</ul>
+<h3 id="slash-command-completion"><a class="header" href="#slash-command-completion">Slash command completion</a></h3>
+<p>Typing <code>/</code> lists the slash commands: <code>/help</code>, <code>/status</code>, <code>/models</code>, <code>/switch</code>, <code>/engine</code>, <code>/corpus</code>, <code>/compile</code>, <code>/audit</code>, <code>/clear</code>, <code>/reset</code>, <code>/export</code>, <code>/quit</code> and <code>/exit</code> (another name for <code>/quit</code>). Typing more of a command narrows the list to the commands that start with what has been typed, for example <code>/mo</code> to <code>/models</code> and <code>/st</code> to <code>/status</code>.</p>
 <hr>
 <h2 id="3-local-vendor-style-http-api-endpoints"><a class="header" href="#3-local-vendor-style-http-api-endpoints">3. Local Vendor-Style HTTP API Endpoints</a></h2>
 <p>The local R⁴ server implements OpenAI/vendor-compatible endpoints for local tools, IDE integrations, and custom frontends.</p>

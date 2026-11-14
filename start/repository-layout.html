@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8fdcd0c4.js";
+            window.path_to_searchindex_js = "../searchindex-368620ef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-78e3d836.js"></script>
@@ -179,10 +179,10 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+                        <p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="how-the-repository-is-laid-out"><a class="header" href="#how-the-repository-is-laid-out">How the repository is laid out</a></h1>
-<p>Every top-level folder has one job. This page lists them, says which ones are about to move, and explains three names that are easy to confuse. It describes the repository as of 20 October 2026; the owner approved a layout pass that day, and this page changes with each step of it.</p>
+<p>Every top-level folder has one job. This page lists them and the files at the top, and explains three names that are easy to confuse. The folders that the layout pass the owner approved on 20 October 2026 moved are named where they now live.</p>
 <h2 id="folders"><a class="header" href="#folders">Folders</a></h2>
 <div class="table-wrapper">
 <table>
@@ -191,13 +191,16 @@
 </thead>
 <tbody>
 <tr><td><code>archive/</code></td><td>Every dated record and retired file, byte for byte as it was. Nothing in it is edited. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/CATALOG.md"><code>archive/CATALOG.md</code></a> indexes it.</td></tr>
+<tr><td><code>bake-off/</code></td><td>Frozen bake-off records: for each contest, the socket (what a candidate takes and hands out), the control, and for the scored round the scoreboard and the pick. Today it holds the three reply-control rounds and <code>reply-control-v3.json</code>.</td></tr>
 <tr><td><code>crates/</code></td><td>The Rust code, one crate per folder: the model, the serving runtime, the harness and the tools around them. <code>crates/uor-r4-float-train/</code> is the offline float training crate of the float-trained FBS trunk (D37; never part of serving). <code>crates/uor-r4-wasm-router/</code> is the browser-facing library (with its tests and server profiles); until 20 October 2026 it was the root package in <code>src/</code>, <code>tests/</code> and <code>profiles/</code>.</td></tr>
 <tr><td><code>data/</code></td><td>The small evaluation panels (<code>data/panels/</code>) and four reference tokenizer descriptors that older tests compare against (<code>data/tokenizers/</code>, the old top-level <code>models/</code>). Large inputs (corpora, checkpoints) live in the private Hugging Face store instead.</td></tr>
 <tr><td><code>docs/</code></td><td>The documentation you are reading, the reference documents (indexed in <code>docs/reference/</code>), the live lab records under <code>docs/labs/</code> and the harness files under <code>docs/harness/</code>.</td></tr>
 <tr><td><code>projects/</code></td><td>Side projects related to UOR-R4 but not part of the model. See the <a href="../projects/index.html">projects page</a>.</td></tr>
+<tr><td><code>rules/</code></td><td>The two git hook scripts (<code>commit-msg-hook.sh</code>, <code>prepush-hook.sh</code>) that <code>uor-harness git install-hooks</code> installs.</td></tr>
 <tr><td><code>scripts/</code></td><td>Shell entry points: GPU pods (<code>scripts/pod/</code>), storage and hygiene (<code>scripts/storage/</code>), harness wrappers.</td></tr>
-<tr><td><code>third_party/</code></td><td>Copies of outside Rust crates the build patches in. Their contents are pinned by hash.</td></tr>
-<tr><td><code>tools/</code></td><td><code>lab-runner</code> (a workspace crate), notes for the <code>uor-knowledge</code> server, and one historical trainer (below).</td></tr>
+<tr><td><code>src-tauri/</code></td><td>The desktop client's native Rust backend (Tauri). It is a separate Cargo package, excluded from the root workspace so workspace builds need no GUI libraries.</td></tr>
+<tr><td><code>third_party/</code></td><td>Copies of outside code the build patches in: Rust crates such as candle and cudarc, and one reference implementation. Each records its upstream and file hashes.</td></tr>
+<tr><td><code>tools/</code></td><td><code>lab-runner</code> (a workspace crate), the small <code>uor-knowledge</code> server (a Python package and its notes), and one historical trainer (below).</td></tr>
 <tr><td><code>web/</code></td><td>The web client. <code>web/studio/</code> is the Studio page served at <code>/studio/</code> on the documentation site.</td></tr>
 <tr><td><code>xtask/</code></td><td>Repository tooling, run as <code>cargo xtask &lt;command&gt;</code>: link checks, the archive check, figures, the catalog and the site build.</td></tr>
 <tr><td><code>conformance/</code></td><td>The requirements ledger (<code>ledger.toml</code>, <code>ids.toml</code>, <code>authorities.toml</code>) and its behaviour specifications (<code>features/suites/*.feature</code>). The <code>repo-model</code> and <code>repo-conformance</code> crates read it to produce <code>CONFORMANCE.md</code>. Until 20 October 2026 these were the top-level <code>model/</code> and <code>features/</code> folders.</td></tr>
@@ -218,13 +221,13 @@
 <tr><td><code>.cargo/</code></td><td>Cargo build settings for the WebAssembly target.</td></tr>
 <tr><td><code>.devcontainer/</code></td><td>Editor container settings. Editors look for it at the top level.</td></tr>
 <tr><td><code>.agents/</code></td><td>Shared skills for coding agents, in the layout agent tools expect.</td></tr>
-<tr><td><code>.kimi-code/</code>, <code>.codex-lab/</code></td><td>Onboarding notes for the Kimi lab, and a folder kept from the former Codex lab (Codex left the registry).</td></tr>
+<tr><td><code>.kimi-code/</code>, <code>.codex-lab/</code></td><td>Onboarding notes for the Kimi lab, and the Codex lab's old onboarding page, superseded by <code>CHARTER.md</code> and kept for history.</td></tr>
 <tr><td><code>.uor-models/</code></td><td>The runtime's local model store. Only a manifest is tracked; the contents are gitignored. About ninety Rust source files read this path, so it stays.</td></tr>
 </tbody>
 </table>
 </div>
 <h2 id="files-at-the-top"><a class="header" href="#files-at-the-top">Files at the top</a></h2>
-<p><code>README.md</code>, <code>CHARTER.md</code> (the rules), <code>AGENTS.md</code> (onboarding for agents), <code>CONTRIBUTING.md</code>, <code>STATUS.md</code>, <code>ROADMAP.md</code>, <code>SECURITY.md</code>, <code>LICENSE</code>, <code>CITATION.cff</code> and the generated <code>CONFORMANCE.md</code>, plus build settings: <code>Cargo.toml</code>, <code>Cargo.lock</code>, <code>rust-toolchain.toml</code>, <code>deny.toml</code>, <code>Justfile</code> and <code>book.toml</code> (the documentation site).</p>
+<p><code>README.md</code>, <code>CHARTER.md</code> (the rules), <code>AGENTS.md</code> (onboarding for agents), <code>PLAN.md</code> (the current plan), <code>STATE.md</code> and <code>HANDOFF.md</code> (rendered by <code>uor-harness loop render</code>), <code>CONTRIBUTING.md</code>, <code>STATUS.md</code> (retired; it points to <code>STATE.md</code>), <code>ROADMAP.md</code>, <code>SECURITY.md</code>, <code>LICENSE</code>, <code>CITATION.cff</code> and the generated <code>CONFORMANCE.md</code>, plus build settings: <code>Cargo.toml</code>, <code>Cargo.lock</code>, <code>rust-toolchain.toml</code>, <code>deny.toml</code>, <code>Justfile</code> and <code>book.toml</code> (the documentation site).</p>
 <h2 id="names-that-are-easy-to-confuse"><a class="header" href="#names-that-are-easy-to-confuse">Names that are easy to confuse</a></h2>
 <ul>
 <li><code>conformance/</code> is a <strong>requirements ledger</strong>, not a language model. It was called <code>model/</code> until 20 October 2026 and was renamed to end that confusion.</li>

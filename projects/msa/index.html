@@ -37,7 +37,7 @@
             const path_to_root = "../../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../../searchindex-8fdcd0c4.js";
+            window.path_to_searchindex_js = "../../searchindex-368620ef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../../toc-78e3d836.js"></script>
@@ -179,10 +179,10 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+                        <p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="msa-modular-structural-arithmetic"><a class="header" href="#msa-modular-structural-arithmetic">MSA: Modular Structural Arithmetic</a></h1>
-<p>Modular Structural Arithmetic (MSA) is a small formal system for arithmetic with a few special numbers in it. It was written by Alex, a collaborator, and given to this project with his consent as source reading. The folder holds two short papers and nothing else: no code, no data, no experiments. It is a third-party idea that earlier route-attention and selector work in this repository pointed to. It is not part of the language model, and no result here measures anything about the model.</p>
+<p>Modular Structural Arithmetic (MSA) is a small formal system for arithmetic with a few special numbers in it. It was written by Alex, a collaborator, and given to this project with his consent as source reading. The project is two short papers and nothing else: no code, no data, no experiments. The papers stay in the private store (below); this folder holds this page and <code>code/README.md</code>, the original README. It is a third-party idea that earlier route-attention and selector work in this repository pointed to. It is not part of the language model, and no result here measures anything about the model.</p>
 <pre class="mermaid">flowchart LR
     G["gamma = 24, the generator"] -- "doubling" --&gt; M["mu = 48, the mediator"]
     M -- "doubling" --&gt; E["epsilon = 96, the manifestation"]
@@ -202,7 +202,7 @@
 <p>The paper then states special cases as axioms. For example, mod 11 the constants become 2, 4 and 8 (the "11-theorem"), and mod 7 they become 3, 6 and 5, which sum to a multiple of 7 (the "7-vanishing"). It also axiomatizes a "modular resonance" and a resonance period.</p>
 <p><strong>Checks anyone can do by hand (proof, by arithmetic).</strong> \(48^2=2304=24\times96\); \(24,48,96 \bmod 11 = 2,4,8\); \(24,48,96 \bmod 7 = 3,6,5\) and \(24+48+96=168=7\times24\). These confirm the numerical facts the axioms state. They do not show that the axiom system is consistent or that its larger claims, such as the characterization of doubling-preserving primes (axiom MSA9), hold; the papers present these as axioms, and this page has not checked that they follow from the others.</p>
 <h2 id="why-it-is-here"><a class="header" href="#why-it-is-here">Why it is here</a></h2>
-<p>The repository's earlier route-attention and selector work referenced MSA as part of a modular-structure research direction (<code>research/msa/README.md</code>). This page claims no tie to the model's geometry, and none has been tested. Any such link would be a hypothesis needing its own experiment.</p>
+<p>The repository's earlier route-attention and selector work referenced MSA as part of a modular-structure research direction (the original README, now <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/projects/msa/code/README.md"><code>code/README.md</code></a>). This page claims no tie to the model's geometry, and none has been tested. Any such link would be a hypothesis needing its own experiment.</p>
 <h2 id="where-it-stands"><a class="header" href="#where-it-stands">Where it stands</a></h2>
 <div class="table-wrapper">
 <table>
@@ -210,15 +210,15 @@
 <tr><th>Statement</th><th>Kind</th><th>Evidence</th></tr>
 </thead>
 <tbody>
-<tr><td>The folder contains two PDFs (6 and 10 pages) and a README, 3 files in all</td><td>measurement</td><td><code>files.sha256</code></td></tr>
+<tr><td>The original folder (<code>msa.tar</code>) holds two PDFs (6 and 10 pages) and a README, 3 files in all</td><td>measurement</td><td><code>files.sha256</code></td></tr>
 <tr><td>The constants and special-modulus facts above are true arithmetic</td><td>proof (direct calculation)</td><td>shown above</td></tr>
-<tr><td>MSA is a conservative extension of SA, and the rest of its axiom claims</td><td>not checked here; the README asserts the extension property</td><td><code>research/msa/README.md</code></td></tr>
+<tr><td>MSA is a conservative extension of SA, and the rest of its axiom claims</td><td>not checked here; the README asserts the extension property</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/projects/msa/code/README.md"><code>code/README.md</code></a></td></tr>
 <tr><td>MSA helps the model</td><td>hypothesis, untested</td><td>none</td></tr>
 </tbody>
 </table>
 </div>
 <h2 id="permission-and-attribution"><a class="header" href="#permission-and-attribution">Permission and attribution</a></h2>
-<p>Both papers are by Alex. The README states they are included "with the author's consent" and were contributed to the research archive by Casey Allard. The folder inventory flags that redistribution permission should be confirmed before the PDFs are committed to a public repository. Until the owner confirms it, the PDFs remain in the store and the folder holds the README and a hash-and-pointer file; once confirmed they can be committed with attribution (they total about 0.3 MB).</p>
+<p>Both papers are by Alex. The README states they are included "with the author's consent" and were contributed to the research archive by Casey Allard. The folder inventory flags that redistribution permission should be confirmed before the PDFs are committed to a public repository. Until the owner confirms it, the PDFs remain in the store and the folder holds this page and <code>code/README.md</code>; once confirmed they can be committed with attribution (they total about 0.3 MB).</p>
 <h2 id="where-the-originals-are"><a class="header" href="#where-the-originals-are">Where the originals are</a></h2>
 <p>The full project is preserved in the private Hugging Face dataset <code>caseyallard/uor-r4-store</code> under <code>research-archive/2026-10-19/tars/msa.tar</code> (338,432 bytes, 3 files, SHA-256 <code>73be0abc4ff823d00b35bab447e4f1928b45a478f9479dec84efa9504f1dd0b0</code>). Every file inside is listed in <code>files.sha256</code>, and the tar is listed in <code>tars.sha256</code>.</p>
 <h2 id="code"><a class="header" href="#code">Code</a></h2>

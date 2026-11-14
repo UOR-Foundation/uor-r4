@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-8fdcd0c4.js";
+            window.path_to_searchindex_js = "searchindex-368620ef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-78e3d836.js"></script>
@@ -962,10 +962,10 @@ whole-model score are still unproven; useful conversation has not been establish
 <li><a href="#formal-vocabulary-notation-and-claim-classes"><code>docs/formal_vocabulary.md</code></a>: the rules for proof, measurement and hypothesis.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="how-the-repository-is-laid-out"><a class="header" href="#how-the-repository-is-laid-out">How the repository is laid out</a></h1>
-<p>Every top-level folder has one job. This page lists them, says which ones are about to move, and explains three names that are easy to confuse. It describes the repository as of 20 October 2026; the owner approved a layout pass that day, and this page changes with each step of it.</p>
+<p>Every top-level folder has one job. This page lists them and the files at the top, and explains three names that are easy to confuse. The folders that the layout pass the owner approved on 20 October 2026 moved are named where they now live.</p>
 <h2 id="folders"><a class="header" href="#folders">Folders</a></h2>
 <div class="table-wrapper">
 <table>
@@ -974,13 +974,16 @@ whole-model score are still unproven; useful conversation has not been establish
 </thead>
 <tbody>
 <tr><td><code>archive/</code></td><td>Every dated record and retired file, byte for byte as it was. Nothing in it is edited. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/CATALOG.md"><code>archive/CATALOG.md</code></a> indexes it.</td></tr>
+<tr><td><code>bake-off/</code></td><td>Frozen bake-off records: for each contest, the socket (what a candidate takes and hands out), the control, and for the scored round the scoreboard and the pick. Today it holds the three reply-control rounds and <code>reply-control-v3.json</code>.</td></tr>
 <tr><td><code>crates/</code></td><td>The Rust code, one crate per folder: the model, the serving runtime, the harness and the tools around them. <code>crates/uor-r4-float-train/</code> is the offline float training crate of the float-trained FBS trunk (D37; never part of serving). <code>crates/uor-r4-wasm-router/</code> is the browser-facing library (with its tests and server profiles); until 20 October 2026 it was the root package in <code>src/</code>, <code>tests/</code> and <code>profiles/</code>.</td></tr>
 <tr><td><code>data/</code></td><td>The small evaluation panels (<code>data/panels/</code>) and four reference tokenizer descriptors that older tests compare against (<code>data/tokenizers/</code>, the old top-level <code>models/</code>). Large inputs (corpora, checkpoints) live in the private Hugging Face store instead.</td></tr>
 <tr><td><code>docs/</code></td><td>The documentation you are reading, the reference documents (indexed in <code>docs/reference/</code>), the live lab records under <code>docs/labs/</code> and the harness files under <code>docs/harness/</code>.</td></tr>
 <tr><td><code>projects/</code></td><td>Side projects related to UOR-R4 but not part of the model. See the <a href="#side-projects">projects page</a>.</td></tr>
+<tr><td><code>rules/</code></td><td>The two git hook scripts (<code>commit-msg-hook.sh</code>, <code>prepush-hook.sh</code>) that <code>uor-harness git install-hooks</code> installs.</td></tr>
 <tr><td><code>scripts/</code></td><td>Shell entry points: GPU pods (<code>scripts/pod/</code>), storage and hygiene (<code>scripts/storage/</code>), harness wrappers.</td></tr>
-<tr><td><code>third_party/</code></td><td>Copies of outside Rust crates the build patches in. Their contents are pinned by hash.</td></tr>
-<tr><td><code>tools/</code></td><td><code>lab-runner</code> (a workspace crate), notes for the <code>uor-knowledge</code> server, and one historical trainer (below).</td></tr>
+<tr><td><code>src-tauri/</code></td><td>The desktop client's native Rust backend (Tauri). It is a separate Cargo package, excluded from the root workspace so workspace builds need no GUI libraries.</td></tr>
+<tr><td><code>third_party/</code></td><td>Copies of outside code the build patches in: Rust crates such as candle and cudarc, and one reference implementation. Each records its upstream and file hashes.</td></tr>
+<tr><td><code>tools/</code></td><td><code>lab-runner</code> (a workspace crate), the small <code>uor-knowledge</code> server (a Python package and its notes), and one historical trainer (below).</td></tr>
 <tr><td><code>web/</code></td><td>The web client. <code>web/studio/</code> is the Studio page served at <code>/studio/</code> on the documentation site.</td></tr>
 <tr><td><code>xtask/</code></td><td>Repository tooling, run as <code>cargo xtask &lt;command&gt;</code>: link checks, the archive check, figures, the catalog and the site build.</td></tr>
 <tr><td><code>conformance/</code></td><td>The requirements ledger (<code>ledger.toml</code>, <code>ids.toml</code>, <code>authorities.toml</code>) and its behaviour specifications (<code>features/suites/*.feature</code>). The <code>repo-model</code> and <code>repo-conformance</code> crates read it to produce <code>CONFORMANCE.md</code>. Until 20 October 2026 these were the top-level <code>model/</code> and <code>features/</code> folders.</td></tr>
@@ -1001,13 +1004,13 @@ whole-model score are still unproven; useful conversation has not been establish
 <tr><td><code>.cargo/</code></td><td>Cargo build settings for the WebAssembly target.</td></tr>
 <tr><td><code>.devcontainer/</code></td><td>Editor container settings. Editors look for it at the top level.</td></tr>
 <tr><td><code>.agents/</code></td><td>Shared skills for coding agents, in the layout agent tools expect.</td></tr>
-<tr><td><code>.kimi-code/</code>, <code>.codex-lab/</code></td><td>Onboarding notes for the Kimi lab, and a folder kept from the former Codex lab (Codex left the registry).</td></tr>
+<tr><td><code>.kimi-code/</code>, <code>.codex-lab/</code></td><td>Onboarding notes for the Kimi lab, and the Codex lab's old onboarding page, superseded by <code>CHARTER.md</code> and kept for history.</td></tr>
 <tr><td><code>.uor-models/</code></td><td>The runtime's local model store. Only a manifest is tracked; the contents are gitignored. About ninety Rust source files read this path, so it stays.</td></tr>
 </tbody>
 </table>
 </div>
 <h2 id="files-at-the-top"><a class="header" href="#files-at-the-top">Files at the top</a></h2>
-<p><code>README.md</code>, <code>CHARTER.md</code> (the rules), <code>AGENTS.md</code> (onboarding for agents), <code>CONTRIBUTING.md</code>, <code>STATUS.md</code>, <code>ROADMAP.md</code>, <code>SECURITY.md</code>, <code>LICENSE</code>, <code>CITATION.cff</code> and the generated <code>CONFORMANCE.md</code>, plus build settings: <code>Cargo.toml</code>, <code>Cargo.lock</code>, <code>rust-toolchain.toml</code>, <code>deny.toml</code>, <code>Justfile</code> and <code>book.toml</code> (the documentation site).</p>
+<p><code>README.md</code>, <code>CHARTER.md</code> (the rules), <code>AGENTS.md</code> (onboarding for agents), <code>PLAN.md</code> (the current plan), <code>STATE.md</code> and <code>HANDOFF.md</code> (rendered by <code>uor-harness loop render</code>), <code>CONTRIBUTING.md</code>, <code>STATUS.md</code> (retired; it points to <code>STATE.md</code>), <code>ROADMAP.md</code>, <code>SECURITY.md</code>, <code>LICENSE</code>, <code>CITATION.cff</code> and the generated <code>CONFORMANCE.md</code>, plus build settings: <code>Cargo.toml</code>, <code>Cargo.lock</code>, <code>rust-toolchain.toml</code>, <code>deny.toml</code>, <code>Justfile</code> and <code>book.toml</code> (the documentation site).</p>
 <h2 id="names-that-are-easy-to-confuse"><a class="header" href="#names-that-are-easy-to-confuse">Names that are easy to confuse</a></h2>
 <ul>
 <li><code>conformance/</code> is a <strong>requirements ledger</strong>, not a language model. It was called <code>model/</code> until 20 October 2026 and was renamed to end that confusion.</li>
@@ -1217,7 +1220,7 @@ serving path?</li>
 <li>The one <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">PLAN</a> and the long-form <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/integration/project-track.md">project track</a>.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="the-web-client"><a class="header" href="#the-web-client">The web client</a></h1>
 <p><strong>9 November 2026 neutral Studio default published live.</strong> PR #3903 merged as <code>4160a5347717d7e6786848895b758bfc5dc663f7</code> after exact-head approval and required checks. Fresh-main typed verification passed <strong>455/455</strong> typed tests, <strong>47/47</strong> Playwright checks, <strong>15/15</strong> runtime contracts, <strong>11/11</strong> gates, both runtime routes/migration cases and direct <strong>7/7</strong> WASM checks. The typed publisher produced gh-pages <code>4a435ab8af9c1da6d49225c30f9dda0a4ad50b87</code>; Pages run <code>42714479496</code> succeeded. Previous typed-preview publish <code>6540e2717d3a606330dbd141e3642f3f13b87ecf</code> is the rollback head. Plain <code>/studio/</code> now renders the neutral UOR Harness workbench at desktop and mobile sizes; explicit <code>?legacy=1</code> and <code>?typed=0</code> retain the old interface, and Terminal explicitly reports <code>Interactive PTY is unavailable in this browser build.</code> The isolated public runtime reports <strong>14 requests with zero external/raw-TypeScript/runtime errors</strong>, one shell, <code>legacyMcp=0</code>, <code>typedMcp=1</code>, artifact readiness, exact <code>17 + 25 = 42</code>, and isolated/restored transcripts. Public index bytes match the staged file. Evidence is under <code>local/kimi/default-cutover/fresh-main/</code>. Static web still has no native terminal, background agent service or live R4 API contract; full Cowork parity is not claimed. See <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/studio-ide-harness/kimi-17/ORDER.md">kimi-17</a>; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/studio-ide-harness/kimi-14/ORDER.md">kimi-14</a> retains the earlier typed-preview publication.</p>
@@ -1269,7 +1272,10 @@ cross-browser parity is an M7 measurement, not an assumption.</li>
 <li><strong>Save and resume.</strong> <code>saveSession</code> emits a <code>UR4SESS1</code> snapshot and <code>restoreSession</code> loads it.</li>
 </ol>
 <p>The real exports are <code>init</code>, <code>tickClock</code>, <code>loadStack</code>, <code>step</code>, <code>saveSession</code>, <code>restoreSession</code>,
-<code>weightsPerToken</code>, <code>allocEvents</code> and <code>leakedModels</code>
+<code>memoryInfo</code>, <code>markReplyStart</code>, <code>clearReplyStart</code>, <code>weightsPerToken</code>, <code>allocEvents</code> and
+<code>leakedModels</code> for the stack engine; <code>loadDiscrete</code>, <code>predictDiscrete</code> and <code>discreteInfo</code> for
+discrete next-token prediction; and <code>exactArithmetic</code>, which answers a strict decimal expression
+without a model
 (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/crates/uor-r4-integer/src/wasm_bindgen_exports.rs"><code>wasm_bindgen_exports.rs</code></a>). Serving an
 exported D11 artifact on a client device is allowed; the GPU-first research-compute rule does not
 apply to product serving (<a href="#uor-r4-charter">charter</a>, section 3.6). D84's CPU training program is
@@ -2670,7 +2676,7 @@ only by manual dispatch. This documentation unit publishes neither.</p>
 <li>Next: <a href="#data-and-tokenizer">data and tokenizer</a>, <a href="#gpus-and-cuda">GPU and CUDA</a>, and <a href="#the-model-end-to-end">architecture</a>.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="gpus-and-cuda"><a class="header" href="#gpus-and-cuda">GPUs and CUDA</a></h1>
 <p>The project trains and tests its model on graphics cards (GPUs), not on the laptop's processor. The programs that run on a GPU are called kernels, and the project writes them in CUDA, NVIDIA's language for GPUs. Every kernel is compiled before it runs. For the active model, an audit reads the compiled result and refuses instructions the project has banned: decimal arithmetic, tensor-core matrix instructions and approximate exponentials. The cards are rented by the hour from a marketplace through one script, under hard limits on how many and how much. The rented GPUs are used for qualification runs and training doses. They produced the saved discrete M1 pair, which passed all six bars at two seeds; no model holds a useful conversation yet.</p>
@@ -2697,7 +2703,7 @@ only by manual dispatch. This documentation unit publishes neither.</p>
 
 <p><em>The kernel map. Source files compile to PTX before anything runs, and the audit sits between compiling and loading. There is no run-time compiler.</em></p>
 <h2 id="the-kernels-and-what-they-compute"><a class="header" href="#the-kernels-and-what-they-compute">The kernels and what they compute</a></h2>
-<p>The active model is <code>crates/uor-r4-discrete</code>, and its kernels are integer only. The header of <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/crates/uor-r4-discrete/src/discrete.cu"><code>discrete.cu</code></a> says model values use gather, sign, add and subtract, comparison and finite action-table look-ups, and that storage indexing uses integer products. It has 718 lines and 13 entry points:</p>
+<p>The active model is <code>crates/uor-r4-discrete</code>, and its kernels are integer only. The header of <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/crates/uor-r4-discrete/src/discrete.cu"><code>discrete.cu</code></a> says model values use gather, sign, add and subtract, comparison and finite action-table look-ups, and that storage indexing uses integer products. It has 749 lines and 13 entry points:</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -2714,7 +2720,7 @@ only by manual dispatch. This documentation unit publishes neither.</p>
 </tbody>
 </table>
 </div>
-<p>Eight more modules are built at build time, each with its own source, PTX, cubin and resource report, so the earlier images stay byte for byte unchanged: diagnostic decomposition (1 entry point), baseline reuse (1), row-parallel scoring (<code>rows</code>, 3), scoring several coordinates per launch (<code>rowsk</code>, 5), selecting and committing a set of moves (<code>bvgk</code>, 8), CSR-bucketed writing (<code>bucket</code>, 7), wider-carrier qualification (<code>wider-carrier</code>, 2), and within-cell writer/framing evaluation (<code>within-cell-writer</code>, 2). The eight specialized modules carry 29 entry points; all nine modules carry 42. The specialized modules are explicitly opt-in and do not replace the ordinary path. The build also writes exact geometry tables from the core crate: <code>AXES[512]</code>, <code>COMPOSE[4096]</code>, <code>INVERSE[64]</code>, 16 carrier roots, a breadth-first reachability map and 15 generators (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/crates/uor-r4-discrete/build.rs"><code>build.rs</code></a>).</p>
+<p>Eight more modules are built at build time, each with its own source, PTX, cubin and resource report, so the earlier images stay byte for byte unchanged: diagnostic decomposition (1 entry point), baseline reuse (1), row-parallel scoring (<code>rows</code>, 3), scoring several coordinates per launch (<code>rowsk</code>, 5), selecting and committing a set of moves (<code>bvgk</code>, 8), CSR-bucketed writing (<code>bucket</code>, 7), wider-carrier qualification (<code>wider-carrier</code>, 2), and within-cell writer/framing evaluation (<code>within-cell-writer</code>, 2). These eight are generated from <code>discrete.cu</code> and carry 29 entry points. A ninth, <code>native-vector</code>, has its own source, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/crates/uor-r4-discrete/src/native_vector.cu"><code>native_vector.cu</code></a>, and 2 entry points (<code>native_q31_hamilton_rotate</code> and <code>native_q31_hamilton_train_step</code>, the Q31 native vector state). All ten modules carry 44 entry points. The specialized modules are explicitly opt-in and do not replace the ordinary path. The build also writes exact geometry tables from the core crate: <code>AXES[512]</code>, <code>COMPOSE[4096]</code>, <code>INVERSE[64]</code>, 16 carrier roots, a breadth-first reachability map and 15 generators (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/crates/uor-r4-discrete/build.rs"><code>build.rs</code></a>).</p>
 <p>Other CUDA code in the repository is not on the active path:</p>
 <div class="table-wrapper">
 <table>
@@ -2722,17 +2728,17 @@ only by manual dispatch. This documentation unit publishes neither.</p>
 <tr><th>File</th><th style="text-align: right">Lines</th><th>Status</th></tr>
 </thead>
 <tbody>
-<tr><td><code>uor-r4-training/src/cuda_stack.cu</code> (22 kernels: Hamilton gate, rate select, normalisation, quaternion and recurrence scans, margin ranking, Adam update)</td><td style="text-align: right">859</td><td>Held. Float, for offline training under D37</td></tr>
-<tr><td><code>spiralcore_fbs.cu</code>, <code>starling_native.cu</code></td><td style="text-align: right">183, 134</td><td>Held. The SpiralCore/FBS float projection and the flock-style selector</td></tr>
+<tr><td><code>uor-r4-float-train/src/</code>: <code>cuda_stack.cu</code> (22 kernels: Hamilton gate, rate select, normalisation, quaternion and recurrence scans, margin ranking, Adam update), <code>spiralcore_fbs.cu</code>, <code>spiralcore_fbs_arms.cu</code> with its 9-line prelude, <code>fused_quantize.cu</code>, <code>top8_positions.cu</code></td><td style="text-align: right">859, 227, 150 + 9, 144, 159</td><td>Float, for offline training of the FBS trunk under D37; never serving</td></tr>
+<tr><td><code>uor-r4-training/src/</code>: <code>cuda_stack.cu</code> (an older copy, 22 kernels), <code>spiralcore_fbs.cu</code>, <code>starling_native.cu</code>, <code>lawful_pointer.cu</code>, <code>sieve_frame.cu</code></td><td style="text-align: right">859, 183, 134, 399, 288</td><td>Held. Float: the older training stack, the SpiralCore/FBS float projection, the flock-style selector and two pointer and sieve kernels</td></tr>
 <tr><td><code>third_party/candle-kernels-0.9.2</code> (nine tensor modules)</td><td style="text-align: right">1,778</td><td>Comparator. Patched to drop exp, log, sigmoid, tanh, erf, GELU, SiLU, softmax and RoPE</td></tr>
-<tr><td>Upstream and D29-excluded kernels under <code>historical/</code> and <code>docs/history/</code></td><td style="text-align: right">10,877</td><td>Never compiled. Kept as evidence</td></tr>
+<tr><td>Upstream kernels under <code>third_party/candle-kernels-0.9.2/historical/</code>, and the D29-excluded kernels now under <code>archive/history/d29-excluded-kernels-2026-10-13/</code></td><td style="text-align: right">9,762 + 2,681</td><td>Never compiled. Kept as evidence</td></tr>
 </tbody>
 </table>
 </div>
-<p>Line counts are raw counts of the files named.</p>
+<p>Line counts are raw counts of the files named. Two lab instruments under <code>docs/labs/</code> (<code>d11-exporter-float-trunk</code>, <code>m1-d11-artifact-scorer</code>) and the side project <code>projects/uor-cuda-inverted-file/</code> also hold CUDA sources, each with its own build.</p>
 <h2 id="how-a-kernel-is-admitted"><a class="header" href="#how-a-kernel-is-admitted">How a kernel is admitted</a></h2>
 <p><strong>Compile ahead of time (definition).</strong> The build script calls <code>nvcc -ptx -std=c++17 -arch=compute_NN</code>, where <code>NN</code> is the card's capability from the explicit <code>UOR_NVCC_ARCH</code> setting. NVIDIA's run-time compiler, NVRTC, is banned project-wide (D29, amended 13 October): what <code>nvcc</code> compiles at build time is exactly what the driver may load, and banned code present in a module counts even if never launched (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/integration/DECISIONS.md#d29--no-banned-mechanism-in-any-compiled-or-loaded-module-vendor-runtime-content-counts">D29</a>). Two older pages, the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/compute/cuda-training.md">CUDA training runbook</a> and the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/compute/pods-quickstart.md">pods quickstart</a>, still describe NVRTC. They were written before the ban.</p>
-<p><strong>The admission audit (proof by inspection of the code).</strong> The audit reads the emitted PTX text, not the CUDA source, so a banned instruction cannot hide behind spelling. It strips comments, splits each line into tokens, and rejects the build if any token has a component named <code>f16</code>, <code>f16x2</code>, <code>f32</code>, <code>f64</code>, <code>bf16</code>, <code>bf16x2</code>, <code>tf32</code>, <code>e4m3</code>, <code>e5m2</code>, <code>mma</code>, <code>wmma</code>, <code>wgmma</code>, <code>tcgen05</code>, <code>tensor</code> or <code>tensormap</code>, or starts with <code>ex2.approx</code>. It also requires the set of <code>.entry</code> points to equal the declared inventory exactly: a missing, extra or duplicate entry fails. A self-test runs on every build. It must accept a clean module (floats inside comments are fine) and must reject <code>add.f32</code>, a <code>.bf16</code> register, <code>mma.sync</code>, <code>ex2.approx</code>, an unexpected entry, a duplicate entry and missing entries. After admission, the same admitted PTX is assembled into a cubin for each of the nine modules, and the build fails if the cubin is empty or its resource report is missing.</p>
+<p><strong>The admission audit (proof by inspection of the code).</strong> The audit reads the emitted PTX text, not the CUDA source, so a banned instruction cannot hide behind spelling. It strips comments, splits each line into tokens, and rejects the build if any token has a component named <code>f16</code>, <code>f16x2</code>, <code>f32</code>, <code>f64</code>, <code>bf16</code>, <code>bf16x2</code>, <code>tf32</code>, <code>e4m3</code>, <code>e5m2</code>, <code>mma</code>, <code>wmma</code>, <code>wgmma</code>, <code>ldmatrix</code>, <code>stmatrix</code>, <code>movmatrix</code>, <code>tcgen05</code>, <code>tensor</code> or <code>tensormap</code>, or starts with <code>ex2.approx</code>. It also requires the set of <code>.entry</code> points to equal the declared inventory exactly: a missing, extra or duplicate entry fails. A self-test runs on every build. It must accept a clean module (floats inside comments are fine) and must reject <code>add.f32</code>, a <code>.bf16</code> register, <code>mma.sync</code>, <code>ldmatrix</code>, <code>stmatrix</code>, <code>movmatrix</code>, <code>ex2.approx</code>, an unexpected entry, a duplicate entry and missing entries. After admission, the same admitted PTX is assembled into a cubin for each of the ten modules, and the build fails if the cubin is empty or its resource report is missing.</p>
 <p><strong>What it does not say.</strong> Integer multiplies are allowed in these kernels, for example to compute indexes. The serving contract allowed no multiply instruction at all until D80 and D81 (28 Oct 2026). It now allows the scalar integer multiply and divide, and still bans float (<a href="#serving-and-export">serving and export</a>). The float training crate has no equivalent PTX audit, since float is legal there, and uses precision flags instead (<code>-ftz=false -prec-div=true -prec-sqrt=true</code>, and <code>--fmad=false</code> for the flock selector). Passing the audit shows which instructions are present. It does not show that a kernel computes the right thing. Correctness comes from separate controls on a pod.</p>
 <p><strong>Not in continuous integration.</strong> No GitHub workflow mentions <code>nvcc</code> or CUDA. The standing checks compile without the <code>cuda</code> feature, and qualification runs on rented pods. For exact-head compile checks there is a recipe, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/scripts/pod/uor-cuda-check-remote"><code>scripts/pod/uor-cuda-check-remote</code></a>. It rents one fresh RTX 5090 with CUDA 12.8 for 15 minutes (30 for the training crate), runs <code>cargo check</code> and then <code>clippy</code>, and tears the pod down (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/compute.md">compute guide</a>). It is compile and lint only, never a model run.</p>
 <h2 id="renting-the-cards"><a class="header" href="#renting-the-cards">Renting the cards</a></h2>
@@ -6503,10 +6509,10 @@ records before re-running any of them.</p>
 <li>The <a href="#the-mechanism-board">mechanism board</a>.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="the-research-lines"><a class="header" href="#the-research-lines">The research lines</a></h1>
-<p>A research line is one sustained question the project worked on, such as "how does the discrete model read earlier text". The 19 October audit sorted all 1,173 recorded pieces of work into 20 lines. This page lists them, shows when each ran, and says in a word where each stands. Seventeen lines have at least three records and get their own page. None has produced a model that holds a useful conversation: the project is pre-alpha and <strong>1 of its 8 milestones is complete (M1)</strong> (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">PLAN</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/STATE.md">STATE</a>).</p>
+<p>A research line is one sustained question the project worked on, such as "how does the discrete model read earlier text". The 19 October audit sorted the 1,173 recorded pieces of work it found into 20 lines; two status snapshots dated 22 October have since joined <code>harness-governance</code>, so the catalog now holds 1,175. This page lists them, shows when each ran, and says in a word where each stands. Seventeen lines have at least three records and get their own page. None has produced a model that holds a useful conversation: the project is pre-alpha and <strong>1 of its 8 milestones is complete (M1)</strong> (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">PLAN</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/STATE.md">STATE</a>).</p>
 <p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="figures/research-lines-timeline.svg" alt="A timeline from July to October 2026 of the 12 largest of the 20 research lines, with one dot per dated record; the 8 smaller lines are not shown"><span class="img-wrapper"><img src="figures/research-lines-timeline.svg" alt="A timeline from July to October 2026 of the 12 largest of the 20 research lines, with one dot per dated record; the 8 smaller lines are not shown"></span></label></p>
 <p><em>When each line ran. The September lines end as the October discrete line begins; the tooling and operations lines run alongside.</em></p>
 <h2 id="how-to-read-the-table"><a class="header" href="#how-to-read-the-table">How to read the table</a></h2>
@@ -6526,7 +6532,7 @@ records before re-running any of them.</p>
 <tbody>
 <tr><td><a href="#research-line-the-september-native-geometric-model"><code>native-geometric-sept</code></a>: the September native geometric model</td><td>31 Jul to 28 Sep</td><td style="text-align: right">294</td><td style="text-align: right">224</td><td>Closed; whole model parked</td></tr>
 <tr><td><a href="#research-line-discrete-attention-for-the-language-base-m1"><code>m1-discrete-attention</code></a>: discrete attention for the language base</td><td>7 Aug to 19 Oct</td><td style="text-align: right">199</td><td style="text-align: right">73</td><td>M1 complete, 30 Oct</td></tr>
-<tr><td><a href="#research-line-research-tooling-and-rules"><code>harness-governance</code></a>: research tooling and rules</td><td>24 Jul to 19 Oct</td><td style="text-align: right">185</td><td style="text-align: right">0</td><td>Active support, slimmer since 19 Oct</td></tr>
+<tr><td><a href="#research-line-research-tooling-and-rules"><code>harness-governance</code></a>: research tooling and rules</td><td>24 Jul to 22 Oct</td><td style="text-align: right">187</td><td style="text-align: right">0</td><td>Active support, slimmer since 19 Oct</td></tr>
 <tr><td><a href="#research-line-grounded-replies-from-exact-memory-m2"><code>m2-exact-memory</code></a>: grounded replies from exact memory</td><td>3 Sep to 12 Oct</td><td style="text-align: right">151</td><td style="text-align: right">93</td><td>In progress; the earlier fresh test failed (0 of 128), and D67 removed the blanket hold</td></tr>
 <tr><td><a href="#research-line-the-geometric-stack"><code>geometric-stack-pretraining</code></a>: the geometric stack</td><td>20 Sep to 11 Oct</td><td style="text-align: right">84</td><td style="text-align: right">50</td><td>Parked as a whole model</td></tr>
 <tr><td><a href="#research-line-compiling-a-teacher-into-tables-r4g1"><code>r4g1-transformerless</code></a>: compiling a teacher into tables</td><td>21 Jul to 27 Sep</td><td style="text-align: right">74</td><td style="text-align: right">40</td><td>Parked</td></tr>
@@ -6544,20 +6550,20 @@ records before re-running any of them.</p>
 <tr><td><code>vsa-native-prose</code></td><td>9 Oct</td><td style="text-align: right">2</td><td style="text-align: right">1</td><td>No page (fewer than three records)</td></tr>
 <tr><td><code>m6-reasoning-coding</code></td><td>22 Aug</td><td style="text-align: right">2</td><td style="text-align: right">1</td><td>No page (fewer than three records)</td></tr>
 <tr><td><code>e8-orbit-memory</code></td><td>11 Oct</td><td style="text-align: right">1</td><td style="text-align: right">1</td><td>No page (fewer than three records)</td></tr>
-<tr><td><strong>Total</strong></td><td>21 Jul to 19 Oct</td><td style="text-align: right"><strong>1,173</strong></td><td style="text-align: right"><strong>543</strong></td><td></td></tr>
+<tr><td><strong>Total</strong></td><td>21 Jul to 22 Oct</td><td style="text-align: right"><strong>1,175</strong></td><td style="text-align: right"><strong>543</strong></td><td></td></tr>
 </tbody>
 </table>
 </div>
 <p>The three short lines are listed in the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/CATALOG.md">generated archive catalog</a> with all their records. The <code>vsa-native-prose</code> records are in <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/labs/vsa-native-test-2026-10-09/README.md"><code>archive/labs/vsa-native-test-2026-10-09/README.md</code></a>, the E8 record is in <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/labs/e8-orbit-memory-2026-10-11/README.md"><code>archive/labs/e8-orbit-memory-2026-10-11/README.md</code></a>, and the <code>m6-reasoning-coding</code> record is <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/w33_geometry_qualification_845.md"><code>archive/w33_geometry_qualification_845.md</code></a>. The VSA and E8 orbit memory mechanisms have pages on <a href="#the-mechanism-board">the mechanism board</a>.</p>
 <h2 id="what-the-whole-table-shows"><a class="header" href="#what-the-whole-table-shows">What the whole table shows</a></h2>
 <ul>
-<li><strong>Two lines hold 42% of the records.</strong> <code>native-geometric-sept</code> (294) and <code>m1-discrete-attention</code> (199) together hold 493 of 1,173 (arithmetic from the table).</li>
+<li><strong>Two lines hold 42% of the records.</strong> <code>native-geometric-sept</code> (294) and <code>m1-discrete-attention</code> (199) together hold 493 of 1,175 (arithmetic from the table).</li>
 <li><strong>The "Results" column counts every recorded result, including ones scored on authored or exposed panels.</strong> Read it with <a href="#what-the-project-knows">what the project knows</a>: development is not fresh, and a pass on a built panel is not a language result.</li>
-<li><strong>Tooling and operations records are large.</strong> <code>harness-governance</code>, <code>compute-ops</code> and <code>spiralcore-wire</code> hold 207 records and no model result. Part of that came from owner decisions that forced a rebuild in October (<code>docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md</code>, section 3).</li>
+<li><strong>Tooling and operations records are large.</strong> <code>harness-governance</code>, <code>compute-ops</code> and <code>spiralcore-wire</code> hold 209 records and no model result. Part of that came from owner decisions that forced a rebuild in October (<code>docs/labs/repo-renormalization-2026-10-19/audit/synthesis.md</code>, section 3).</li>
 <li><strong><code>m1-discrete-attention</code> has now closed at M1 scope.</strong> The saved model scores 7,002 and 7,001 of 14,287 on DEV, above T2's 6,300 and unigram's 1,226. K16's older 65 and 463 are history, not the current best.</li>
 </ul>
-<h2 id="since-27-oct"><a class="header" href="#since-27-oct">Since 27 Oct</a></h2>
-<p><strong>M1 closed 30 Oct; current research through 31 Oct 2026.</strong> The table above stops at 19 Oct. The discrete path has since closed M1, while the float-trained FBS trunk carries current complete-reply research. See <a href="#the-pipeline-map">the pipeline map</a> for both paths and <a href="#research-line-discrete-attention-for-the-language-base-m1">the M1 research line</a> for the close. The project is pre-alpha: 1 of 8 milestones is complete. Claude-220 serves the point key inside one float model on fresh p-w, improving templates by +41/+40/+42 at three seeds with exact claude-219 parity; the gain recalls TRAIN replies, not new wording. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-222/REPORT.md">Claude-222</a> has built the integer point table, search and <code>/8</code> record, with 380 library tests and a full serving audit. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-224/REPORT.md">Claude-224</a> has built the panel decode and grade; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md">claude-227</a> passed retention GPU parity within the 3% bar; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-228/REPORT.md">claude-228</a> built the run's reference/read-back/BOS checks; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-229/REPORT.md">claude-229</a> found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so no bar result or throughput is reported. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-231/REPORT.md">Claude-231</a> built the nearest readout and export on native and browser paths; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md">claude-232</a> then missed greedy parity in every cell, so the mismatch must be localized before the p-x rerun.</p>
+<h2 id="27-to-31-october"><a class="header" href="#27-to-31-october">27 to 31 October</a></h2>
+<p><strong>M1 closed 30 Oct.</strong> This section records the work to 31 Oct 2026; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">PLAN</a> holds the current work. The table above stops at 22 Oct. The discrete path has since closed M1, while the float-trained FBS trunk carried the complete-reply research. See <a href="#the-pipeline-map">the pipeline map</a> for both paths and <a href="#research-line-discrete-attention-for-the-language-base-m1">the M1 research line</a> for the close. The project is pre-alpha: 1 of 8 milestones is complete. Claude-220 serves the point key inside one float model on fresh p-w, improving templates by +41/+40/+42 at three seeds with exact claude-219 parity; the gain recalls TRAIN replies, not new wording. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-222/REPORT.md">Claude-222</a> has built the integer point table, search and <code>/8</code> record, with 380 library tests and a full serving audit. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-224/REPORT.md">Claude-224</a> has built the panel decode and grade; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md">claude-227</a> passed retention GPU parity within the 3% bar; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-228/REPORT.md">claude-228</a> built the run's reference/read-back/BOS checks; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-229/REPORT.md">claude-229</a> found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so no bar result or throughput is reported. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-231/REPORT.md">Claude-231</a> built the nearest readout and export on native and browser paths; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md">claude-232</a> then missed greedy parity in every cell, so the mismatch had to be localized before the p-x rerun.</p>
 <h2 id="where-to-go-next"><a class="header" href="#where-to-go-next">Where to go next</a></h2>
 <ul>
 <li><a href="#how-research-is-done-now">How research is done now</a>, the rules for notebooks, sheets and releases.</li>
@@ -6566,7 +6572,7 @@ records before re-running any of them.</p>
 <li><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/CATALOG.md">Archive catalog</a>: every dated record, with one generated page per line under <code>archive/catalog/</code>.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-discrete-attention-for-the-language-base-m1"><a class="header" href="#research-line-discrete-attention-for-the-language-base-m1">Research line: discrete attention for the language base (M1)</a></h1>
 <p>This line asked whether a model using integers and small geometric moves could learn to read earlier
@@ -6660,7 +6666,7 @@ trunk remain separate.</p>
 <p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/m1-discrete-attention.md">generated catalog page</a> lists
 all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked above.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-the-prime-zeta-codebook-m1"><a class="header" href="#research-line-the-prime-zeta-codebook-m1">Research line: the prime-zeta codebook (M1)</a></h1>
 <p>Every word needs a starting address. The discrete model had been starting from a seeded table that left 4,096 words sharing only 16 distinct addresses. This line built a fixed, repeatable table instead: each word gets a prime number, and the prime is turned into a vector through the phases of the Riemann zeta zeros. All 4,096 words now get unique addresses. The line has three catalog records, plus a later zero-update comparison that found no advantage for PrimeZeta over simple injective controls.</p>
@@ -6719,7 +6725,7 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 <p>ACTIVE. The 25 October zero-update comparison was a configuration loss: P8 admitted 127/3,847 against 178–188 for the strongest nulls, lost to Q0, Q1, R0 and R1, tied Q2 and won only R2. The trained-in test against the two original nulls (a shifted-ordinate null and a permuted-prime null) is not yet run; it needs a fresh FIT and the lab's D67 pre-run review at matched budget with at least two seeds. Prime-zeta is a deterministic function of token id, so identical seeds give identical tables; seed variance needs another declared axis.</p>
 <p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/m1-prime-zeta.md">generated catalog page</a> lists the three records.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-the-float-route-to-rung-0-m1"><a class="header" href="#research-line-the-float-route-to-rung-0-m1">Research line: the float route to rung 0 (M1)</a></h1>
 <p>"Rung 0" is the first, smallest training test of a model that obeys every rule: no softmax, no matrix multiplication, geometric parts only. This line tried to reach it with floating-point training, then rebuilt each part until it was lawful. The central case was the "starling" read, which picks about seven neighbouring earlier tokens instead of using softmax. It could not learn from scratch. On 13 October the owner moved training to the integer path, and this line was preserved as inactive evidence.</p>
@@ -6780,7 +6786,7 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 <p>The float route is live again as the FBS trunk, trained in float on the GPU and exported to integers (owner direction, 28 Oct; D37 keeps float training offline-only). The trunk has about 63,744 trainable values, and the 4,096 by 256 word table holds about 94% of the model. On held-out text it gets about 60% next word, against 44% for word pairs and 49% for the counting model (claude-142). The Hamming read (claude-146) is the copy mechanism. The diagnosis (claude-155) is that the trunk routes but cannot store; exact memory is the storage. Training is deterministic since claude-179. See <a href="#the-pipeline-map">the pipeline map</a> and <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/route-plus-memory/claude-161/REPORT.md">claude-161</a>. The starling result above still stands as history. M1 is complete on the separate discrete model, not claimed for this FBS trunk or useful chat.</p>
 <p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/m1-float-rung0.md">generated catalog page</a> lists all 38 records.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-grounded-replies-from-exact-memory-m2"><a class="header" href="#research-line-grounded-replies-from-exact-memory-m2">Research line: grounded replies from exact memory (M2)</a></h1>
 <p>This line tried to make the model answer a question from a fact it was told earlier, and to say "I don't know" when it was never told. Facts sit in an exact store, so storing and fetching are not the hard part. The hard part is getting a trained model to read the right fact and write it out. One model reached 437 of 512 correct replies on the rows the team had been tuning on, then 0 of 128 on fresh rows.</p>
@@ -6841,7 +6847,7 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 <p>Related work on the FBS trunk line: exact turn memory keyed by the user's first 8 tokens names 598.7 and 598.3 of the DEV panel's 1,226 reply openings at two seeds (claude-161, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/route-plus-memory/claude-161/REPORT.md">report</a>), against 266.3 and 281.0 for an empty-table control. Claude-161's opening table moves only the first word of a reply; the completed reply table extends later rows, and <code>/7</code> serves both on synthetic fixtures with trained-artifact parity and memory-session restore still open. Claude-219's point-key opening improves free generation at three seeds on fresh p-v, but reaches only 12–18% of the forced-opening lift. Claude-220 then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-222/REPORT.md">Claude-222</a> has built the integer point table, search and <code>/8</code> record, with 380 library tests and a full serving audit. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-224/REPORT.md">Claude-224</a> has built the panel decode and grade; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md">claude-227</a> passed retention GPU parity within the 3% bar; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-228/REPORT.md">claude-228</a> built the run's reference/read-back/BOS checks; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-229/REPORT.md">claude-229</a> found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so no bar result or throughput is reported. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-231/REPORT.md">Claude-231</a> built the nearest readout and export on native and browser paths; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md">claude-232</a> then missed greedy parity in every cell, so the mismatch must be localized before the p-x rerun. This is not M2 acceptance or useful chat. See <a href="#the-pipeline-map">the pipeline map</a>.</p>
 <p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/m2-exact-memory.md">generated catalog page</a> lists all 151 records.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-durable-memory-and-the-object-store-m3"><a class="header" href="#research-line-durable-memory-and-the-object-store-m3">Research line: durable memory and the object store (M3)</a></h1>
 <p>Milestone M3 asks that a conversation's memory survive between sessions and that answers stay grounded in it. This line built the storage half: an exact object store that keeps bytes once in a hashed tree, can fetch any range with an integrity check, and can copy itself between machines. The store works and is well tested. The consumer is built, but the on-model M3 run awaits an M1-or-M2 model selection, so M3 has not been measured end to end.</p>
@@ -6898,7 +6904,7 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 <p>READY. The store and its consumer are built, but the on-model M3 run awaits an M1-or-M2 model selection and no M3 bar has been run (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/object-store-consumer-m3/README.md">consumer record</a>). The next step is to run M3 on the selected model, not to repeat storage-only work. Exact addressed memory as a read is still unbuilt (<a href="#exact-addressed-memory">exact memory</a>).</p>
 <p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/m3-durable-memory.md">generated catalog page</a> lists all 33 records.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-integer-serving-m4"><a class="header" href="#research-line-integer-serving-m4">Research line: integer serving (M4)</a></h1>
 <p>This line is about running a finished model on an ordinary laptop or in a browser using whole-number arithmetic and table lookups, with no floating point. The records below date from when multiplication was also banned (see 29 Oct 2026 at the end). In the records the engine reproduced its float models exactly on the old stack, and the multiply-free audits pass on the WASM serving symbols. The older models scored 1.20 to 1.24 bits per byte against a 0.90 target. Since then the discrete M1 pair and separate FBS <code>lut-stack/5</code> export have been served at their declared scopes; M4's accepted-model path remains open.</p>
@@ -6966,7 +6972,7 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 <p>Not yet on the accepted M4 path: text in and out (R7), and joined serving with proven readout parity. Claude-231 built the nearest readout on native and browser paths, but <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md">claude-232</a> missed greedy parity in every cell; the mismatch must be localized before p-x. The <code>/7</code> engine serves opening and later-reply memory tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open. M1 is complete; M4 is not complete, and its accepted-model path is not started. See <a href="#the-pipeline-map">the pipeline map</a>.</p>
 <p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/m4-serving.md">generated catalog page</a> lists all 42 records.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-laptop-energy-and-cost-m5"><a class="header" href="#research-line-laptop-energy-and-cost-m5">Research line: laptop energy and cost (M5)</a></h1>
 <p>The project's goal is fast local AI that costs little energy. Milestone M5 asks for the proof: measured joules per token, memory use and tokens per second on an M1 laptop. This line has only four records, and the milestone is not started. The most useful record is a warning: an operation count of "90% fewer multiplies" did not become faster generation. It was 1.65 times slower.</p>
@@ -6985,7 +6991,7 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 </tbody>
 </table>
 </div>
-<p>Counts: <code>archive/catalog.jsonl</code>. M5's bar: measured J/token, memory and tokens/s on the M1 with the selected parameter access (<code>ROADMAP.md</code>). Terms follow the <a href="#glossary">glossary</a>; ACTIVE, READY and PARKED are defined on the <a href="#the-mechanism-board">mechanism board</a>.</p>
+<p>Counts: <code>archive/catalog.jsonl</code>. M5's bar: measured J/token, memory and tokens/s on the M1 with the selected parameter access (<code>ROADMAP.md</code>, <code>STATE.md</code>). Terms follow the <a href="#glossary">glossary</a>; ACTIVE, READY and PARKED are defined on the <a href="#the-mechanism-board">mechanism board</a>.</p>
 <pre class="mermaid">flowchart LR
   A["25 Sep&lt;br/&gt;Low-energy plan&lt;br/&gt;(derived figures)"] --&gt; B["28 Sep&lt;br/&gt;Cost-profile lineage&lt;br/&gt;corrected"]
   B --&gt; C["11 Oct&lt;br/&gt;Tokens/s: lookup read&lt;br/&gt;1.65x slower"]
@@ -7019,10 +7025,10 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 <h2 id="what-it-taught-6"><a class="header" href="#what-it-taught-6">What it taught</a></h2>
 <p>Savings counted on paper are not tokens per second (lesson 13 in <a href="#what-the-project-knows">what the project knows</a>). Check where compute goes: the output readout took 99.97% of per-token compute in one model, and geometric operations were 0.05% of the stack's arithmetic (lesson 14). A table read is the intended primitive of the native integer path, but that path refuses product-key memory today, so the lookup's cost there is unmeasured (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/labs/native-address-port-2026-10-11/README.md">native address port</a>).</p>
 <h2 id="current-state-6"><a class="header" href="#current-state-6">Current state</a></h2>
-<p>Not started. M5 needs a lawful model to measure, and none has been exported (<a href="#research-line-integer-serving-m4">serving line</a>). Product serving and its tokens per second and energy on the client device are allowed measurements (charter, item 6).</p>
+<p>Not started. Exported models now exist: the discrete M1 pair and the FBS <code>lut-stack</code> exports serve at their declared scopes (<a href="#research-line-integer-serving-m4">serving line</a>). None has had its joules per token, memory or tokens per second measured on the M1 laptop, which is what M5 asks for. Product serving and its tokens per second and energy on the client device are allowed measurements (charter, item 6).</p>
 <p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/m5-energy.md">generated catalog page</a> lists all 4 records.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-api-browser-runtime-and-studio-m7"><a class="header" href="#research-line-api-browser-runtime-and-studio-m7">Research line: API, browser runtime and Studio (M7)</a></h1>
 <p>Milestone M7 asks that the finished model be reachable through a local API, a WebAssembly runtime and a web "Studio". This line holds the early design and review work for that surface and one cleanup of the Studio. The discrete M1 pair and separate FBS export exist, but there is no accepted conversational product bundle. Runtime and Studio checks pass on a synthetic stand-in, and the live Studio now serves the publicly released M1 trunk as top-8 next-token prediction—not chat. Accepted-model parity remains open.</p>
@@ -7078,7 +7084,7 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 <p>M7 is not met. The integer runtime, Studio worker and parity harness are verified on a synthetic stand-in. DeepSeek's #3445 also serves the publicly released M1 trunk in the live Studio as top-8 next-token prediction, with an explicit-click download and hash/tokenizer checks; greedy chat generation is refused because the language base repeats tokens. The accepted model bundle and its parity are still open. Pre-alpha: 1 of 8 milestones is complete (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/ROADMAP.md">ROADMAP</a>, <a href="#the-web-client">web client</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/m7-studio-live-model-sources/deepseek-3/REPORT.md">Studio model report</a>).</p>
 <p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/m7-distribution.md">generated catalog page</a> lists all 8 records.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-the-geometric-stack"><a class="header" href="#research-line-the-geometric-stack">Research line: the geometric stack</a></h1>
 <p>The "geometric stack" was a layered float model whose layers carried state with quaternion rotations. It was trained offline and then converted to 4-bit integers for serving. It matched an ordinary transformer on loss, served bit-exactly, and still wrote useless prose. It also used softmax, SiLU and matrix multiplication in training, so the owner's later bans made it a historical form. Some of its pieces now have trained descendants on the discrete M1 and FBS paths.</p>
@@ -7137,7 +7143,7 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 <p>PARKED as a whole model. Its lawful pieces are tracked separately: <a href="#hamilton-rotation-gate">Hamilton gate</a> is ACTIVE on both M1 and FBS; <a href="#spiralcore-transport-with-ternary-tree-binders-float-projection-form">SpiralCore/FBS routes</a> are ACTIVE on FBS only, while the dated float projection form stays READY. M1 uses Flock <code>FrozenZeroV1</code>, <code>DiscreteHamiltonGateV1</code>, <code>DiscreteQuaternionRecurrenceV1</code>, an orbit-root causal pointer and post-rotation <code>OuterL1V1</code>, not FBS projection. <a href="#geometric-recurrence-gates">Recurrence gates</a> is READY with its fit/export measured. The M1 table-native and FBS <code>lut-stack/5</code> exporters exist at their declared scopes. A rebuild remains a separate research question, not a missing exporter.</p>
 <p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/geometric-stack-pretraining.md">generated catalog page</a> lists all 84 records.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-the-september-native-geometric-model"><a class="header" href="#research-line-the-september-native-geometric-model">Research line: the September native geometric model</a></h1>
 <p>This line was the project's first attempt to build a language model from scratch in Rust out of geometric parts. It gave the model an exact memory of what was said and small learned "readers" that choose what to look at. It produced many narrow wins on hand-written test panels and no model that writes prose. The ideas that survived went into the discrete model that now carries the project.</p>
@@ -7204,7 +7210,7 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 <p>Closed. The whole-model form is PARKED. Its reads continue as the Route, Flock and Relation reads of the discrete model (<a href="#routed-read-address-routed-context-access">route</a>, <a href="#flock-read-starling--murmuration-neighbour-read">flock</a>, <a href="#relation-read-finite-relational-head">relation</a>), and its exact memory as <a href="#exact-addressed-memory">exact memory</a>. A negative closes a configuration, never a mechanism (D22). See <a href="#how-the-project-got-here">history</a> for how this fits the five phases.</p>
 <p><strong>Go deeper:</strong> every record of this line is listed in the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/native-geometric-sept.md">generated catalog page</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-the-august-geometric-intelligence-programme"><a class="header" href="#research-line-the-august-geometric-intelligence-programme">Research line: the August geometric intelligence programme</a></h1>
 <p>In August the project asked a basic question: can the geometry it likes, rotations in four dimensions (R4/Spin coordinates) and hyperbolic (Lorentz) space, carry the work of attention in a language model? The programme (issue #973) reproduced ordinary attention exactly inside these coordinates, which is a useful parity check, but never found a case where the geometry did better than a plain control. This line holds its nine records. Its questions moved into the September native model.</p>
@@ -7261,7 +7267,7 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 <p>Closed. The programme record survives as inactive evidence.</p>
 <p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/geometric-intelligence-aug.md">generated catalog page</a> lists all 9 records.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-compiling-a-teacher-into-tables-r4g1"><a class="header" href="#research-line-compiling-a-teacher-into-tables-r4g1">Research line: compiling a teacher into tables (R4G1)</a></h1>
 <p>This was the project's first idea. Watch an ordinary language model (the "teacher"), compile what it does into lookup tables and a graph, and run those on a laptop with no multiplications. It worked as a compiler: it copied the teacher's top choice about as often as the teacher's own tables did. It never wrote coherent text on its own, which is why the project moved on.</p>
@@ -7316,10 +7322,10 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 <h2 id="what-it-taught-11"><a class="header" href="#what-it-taught-11">What it taught</a></h2>
 <p>The teacher set the ceiling, not the store (lesson 5 in <a href="#what-the-project-knows">what the project knows</a>). A metric that read zero, or a cosine term that never fired, hid real results, so check the instrument first (lesson 1). Gains measured while the teacher's text was supplied never became coherent text the model wrote itself (lesson 3). Exact integer export and bit-exact serving work (lesson 17), and the project kept that contract. Dormant mechanisms were kept behind gates, never deleted (lesson 16).</p>
 <h2 id="current-state-11"><a class="header" href="#current-state-11">Current state</a></h2>
-<p>PARKED. The R4G1 graph never produced coherent free text and needs a transformer teacher, which the current rules ban. What happens to its crates is an open owner question (<code>docs/labs/repo-renormalization-2026-10-19/audit/mechanisms/board.md</code>, D36 item 3). The integer runtime contract remains the model for D11 serving (the integer-only serving decision) (<a href="#research-line-integer-serving-m4">M4 line</a>).</p>
+<p>PARKED. The R4G1 graph never produced coherent free text and needs a transformer teacher, which the current rules ban. The owner question the 19 Oct audit raised about its crates (<code>docs/labs/repo-renormalization-2026-10-19/audit/mechanisms/board.md</code>, D36 item 3) was decided on 19 Oct: repair, not archive. Repair restores the build only; the mechanism stays PARKED (<a href="#r4g1-compiled-lookup-graph-teacher-to-tables">R4G1 graph</a>). The integer runtime contract remains the model for D11 serving (the integer-only serving decision) (<a href="#research-line-integer-serving-m4">M4 line</a>).</p>
 <p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/r4g1-transformerless.md">generated catalog page</a> lists all 74 records.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-spiralcore-wire-transport-side-exploration"><a class="header" href="#research-line-spiralcore-wire-transport-side-exploration">Research line: SpiralCore wire transport (side exploration)</a></h1>
 <p>This line is a side road, not the model. SpiralCore is a set of exact geometric tools that the project also uses inside the model. Here, someone imported a separate use of it: compressing and routing network traffic between programs. All seven records are dated 18 October. They fix bugs, add tests and record loopback timings. None of them touches the language model, and none is a language result.</p>
@@ -7375,7 +7381,7 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 <p>A side exploration, kept for its tests. It uses no model, trains nothing and moves no milestone. The related exact-memory work that does matter to the model is the <a href="#research-line-durable-memory-and-the-object-store-m3">object store</a>, which has its own peer protocol.</p>
 <p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/spiralcore-wire.md">generated catalog page</a> lists all 7 records.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-data-and-tokenizer"><a class="header" href="#research-line-data-and-tokenizer">Research line: data and tokenizer</a></h1>
 <p>A language model never sees letters. It sees numbered pieces of text, and it learns from whatever text it is given. This line holds the small set of records about both choices: which tokenizer cuts the text, and where training text comes from. The project has used one 4,096-piece tokenizer for every current corpus, panel and model. A larger one is prepared as a tool but never trained. The newest records plan a one-time, owner-approved corpus written offline by a large open model.</p>
@@ -7426,12 +7432,12 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 </table>
 </div>
 <h2 id="what-it-taught-13"><a class="header" href="#what-it-taught-13">What it taught</a></h2>
-<p>A tokenizer is a hidden hypothesis. The missing multi-digit pieces look like an obvious cause of the numeric-memory failures, but an untrained probe found that the number codec already stores two-digit values in order, so the failure sits in the learned read and emit path (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/labs/numeric-addressability-probe-2026-10-09/README.md">probe</a>). A number-aware tokenizer was planned and never built or run (<code>docs/labs/repo-renormalization-2026-10-19/audit/mechanisms/tokenizer.json</code>, field <code>never_tested</code>). A data source that is borrowed, such as a teacher, sets the ceiling (lesson 5 in <a href="#what-the-project-knows">what the project knows</a>). Self-distilled numbers must stay apart from teacher-fidelity numbers.</p>
+<p>A tokenizer is a hidden hypothesis. The missing multi-digit pieces look like an obvious cause of the numeric-memory failures, but an untrained probe found that the number codec already stores two-digit values in order, so the failure sits in the learned read and emit path (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/labs/numeric-addressability-probe-2026-10-09/README.md">probe</a>). A number-aware tokenizer was planned and, by 19 October, never built or run (<code>docs/labs/repo-renormalization-2026-10-19/audit/mechanisms/tokenizer.json</code>, field <code>never_tested</code>). On 22 October a three-arm comparison built one and counted its pieces: with digits split off before byte-level BPE, all 100 two-digit pieces form (#2872, test <code>number_aware_three_arm_comparison_and_digit_piece_census</code> in <code>crates/uor-r4-tokenizer/tests/training.rs</code>). No model has been trained on it. A data source that is borrowed, such as a teacher, sets the ceiling (lesson 5 in <a href="#what-the-project-knows">what the project knows</a>). Self-distilled numbers must stay apart from teacher-fidelity numbers.</p>
 <h2 id="current-state-13"><a class="header" href="#current-state-13">Current state</a></h2>
-<p>Nothing has been trained on any tokenizer except <code>d36d3e87</code>. The never-run tests are 4,096 against 16,384 pieces, a number-aware tokenizer, and whether tokenizer choice interacts with the address placement of the discrete model. D41 releases no training hold: generating a corpus is not training the student (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/d41-scope-clarification-2026-10-19/README.md">scope note</a>).</p>
+<p>Nothing has been trained on any tokenizer except <code>d36d3e87</code>. The never-run tests are 4,096 against 16,384 pieces, training on the number-aware tokenizer, and whether tokenizer choice interacts with the address placement of the discrete model. D41 releases no training hold: generating a corpus is not training the student (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/d41-scope-clarification-2026-10-19/README.md">scope note</a>).</p>
 <p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/data-tokenizer.md">generated catalog page</a> lists all 8 records.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-evaluation-panels-and-graders"><a class="header" href="#research-line-evaluation-panels-and-graders">Research line: evaluation panels and graders</a></h1>
 <p>A model is only as well measured as its test. This line built and audited the project's test sets (panels) and the programs that mark them (graders). Its main finding is humbling: a single canned reply scored as well as the trained chat models on the abstention half of the test, so the early "reply" scores did not show what they seemed to show. The panels are now frozen and graded by deterministic code, not by a neural judge.</p>
@@ -7488,7 +7494,7 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 <p>The reply and memory panels and graders are frozen and unchanged. The M1 closing bar is now integer top-1 beating the unigram and successor tables, not chat replies (<a href="#uor-r4-charter">charter</a>, item 8). The reply headline stays suspended, and the charter brings bits per byte back as a bar only once a lawful likelihood exists.</p>
 <p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/eval-panels.md">generated catalog page</a> lists all 14 records.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-gpu-and-pod-operations"><a class="header" href="#research-line-gpu-and-pod-operations">Research line: GPU and pod operations</a></h1>
 <p>Training and scoring run on rented GPUs, and every rental has to be started, checked, paid for and shut down without losing results. This line is the plumbing: the pod tool, its tests, the switch to a cheaper provider, and the guards that stop a run on the wrong machine. It contains no model result. Its blocked records are the clearest example of a run that fails for operational reasons and says nothing about the model.</p>
@@ -7546,10 +7552,10 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 <p>Active, and a support line for every milestone. Pod admission also runs the banned-mechanism check (D29: compiled GPU modules may hold only allowed operations) in place of a CPU-reference test that no longer compiles (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/labs/pod-gate-d29-2026-10-13/README.md">pod gate</a>).</p>
 <p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/compute-ops.md">generated catalog page</a> lists all 15 records.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="research-line-research-tooling-and-rules"><a class="header" href="#research-line-research-tooling-and-rules">Research line: research tooling and rules</a></h1>
-<p>This line is not about the model. It records the rules, checkers and command-line tools the project built to keep its own research honest: who may run what, how claims are worded, and which banned operations must never creep back in. It holds 185 records and not one is a model result. Most of the effort came in two days in mid-October, when the whole tool was ported from Python to Rust.</p>
+<p>This line is not about the model. It records the rules, checkers and command-line tools the project built to keep its own research honest: who may run what, how claims are worded, and which banned operations must never creep back in. It holds 187 records and not one is a model result. Most of the effort came in two days in mid-October, when the whole tool was ported from Python to Rust.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -7557,10 +7563,10 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 </thead>
 <tbody>
 <tr><td><strong>Catalog id</strong></td><td><code>harness-governance</code></td></tr>
-<tr><td><strong>Time span</strong></td><td>24 Jul to 19 Oct 2026 (10 records undated). 105 of the 185 are dated 13 or 14 Oct</td></tr>
-<tr><td><strong>Milestone</strong></td><td>None (175 of 185); the tooling serves every milestone</td></tr>
-<tr><td><strong>Records</strong></td><td>185</td></tr>
-<tr><td><strong>Outcomes</strong></td><td>tooling 115 · process 55 · review 9 · ops 4 · plan 2. No positive or negative model results</td></tr>
+<tr><td><strong>Time span</strong></td><td>24 Jul to 22 Oct 2026 (10 records undated). 105 of the 187 are dated 13 or 14 Oct; the last two (22 Oct) are status snapshots</td></tr>
+<tr><td><strong>Milestone</strong></td><td>None (177 of 187); the tooling serves every milestone</td></tr>
+<tr><td><strong>Records</strong></td><td>187</td></tr>
+<tr><td><strong>Outcomes</strong></td><td>tooling 115 · process 55 · review 9 · ops 6 · plan 2. No positive or negative model results</td></tr>
 <tr><td><strong>State</strong></td><td>Active, but the 19 Oct charter cuts the bulk. The tool is a view over the real authorities, not a replacement for them</td></tr>
 </tbody>
 </table>
@@ -7603,7 +7609,7 @@ all 199 records in the 19 Oct audit; the M1 close and claude-217 are linked abov
 <p>Every checker needs a test that can fail (lesson 1 in <a href="#what-the-project-knows">what the project knows</a>). Several tools here reported success while checking nothing. A process that forbids running code produces nothing (lesson 21). Section 3 of the synthesis separates owner-mandated rebuilding from discretionary gating as causes of the drop in model results. Branches are temporary; <code>main</code> is the authority, and a merged claim must be released.</p>
 <h2 id="current-state-16"><a class="header" href="#current-state-16">Current state</a></h2>
 <p>Active but slimmer. The charter adopted on 19 October requires a written sheet only before GPU runs or milestone-claim runs, and keeps one notebook per line (<a href="#how-research-is-done-now">how research is done now</a>). No record in this line is a model result.</p>
-<p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/harness-governance.md">generated catalog page</a> lists all 185 records.</p>
+<p><strong>Go deeper:</strong> the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/catalog/harness-governance.md">generated catalog page</a> lists all 187 records.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <p class="page-freshness"><small>Not yet checked against its sources.</small></p>
 
@@ -9982,7 +9988,7 @@ Parallel execution may change compilation time, but must not change the canonica
 <li><strong>CPU Portability</strong>: Reproducibility is strictly CPU-native and GPU-free (zero CUDA, OpenCL, Metal, WebGPU, BLAS, or hardware vendor dependencies).</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="minimalist-r⁴-terminal-client--local-vendor-api"><a class="header" href="#minimalist-r⁴-terminal-client--local-vendor-api">Minimalist R⁴ Terminal Client &amp; Local Vendor API</a></h1>
 <blockquote>
@@ -9994,17 +10000,15 @@ prompt. There is no working source-free geometric chat path yet; #961 -&gt; #952
 before this interface can carry that claim. See the
 <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/geometric_intelligence_programme.md">current programme</a>.</p>
 </blockquote>
-<p>The interface exposes <code>r4 client</code> plus vendor-shaped endpoints such as
+<p>The interface exposes the <code>client</code> subcommand plus vendor-shaped endpoints such as
 <code>POST /v1/chat/completions</code>, <code>GET /v1/models</code>, and <code>GET /uor/v1/status</code>.
 Provider, engine, and multiplication-free claims apply only to the exact
 legacy execution tier and artifact selected for a request; the existence of
 the endpoint is not evidence about which mechanism produced its response.</p>
 <hr>
-<h2 id="1-single-command-launcher-r4-appsh"><a class="header" href="#1-single-command-launcher-r4-appsh">1. Single-Command Launcher (<code>./r4-app.sh</code>)</a></h2>
-<p>The simplest way to run R⁴ interactively is with the zero-dependency <code>./r4-app.sh</code> launcher:</p>
-<pre><code class="language-bash">./r4-app.sh
-</code></pre>
-<h3 id="what-r4-appsh-does-automatically"><a class="header" href="#what-r4-appsh-does-automatically">What <code>./r4-app.sh</code> does automatically:</a></h3>
+<h2 id="1-the-archived-launcher-archivelegacy-clir4-appsh"><a class="header" href="#1-the-archived-launcher-archivelegacy-clir4-appsh">1. The archived launcher (<code>archive/legacy-cli/r4-app.sh</code>)</a></h2>
+<p>The zero-dependency launcher <code>r4-app.sh</code> and the <code>uor-r4-cli</code> script it starts are kept in <code>archive/legacy-cli/</code>. They no longer run as they are: <code>uor-r4-cli</code> calls <code>cargo run --bin r4</code>, and no crate in the workspace builds a binary named <code>r4</code> any more. The list below records what the launcher did.</p>
+<h3 id="what-r4-appsh-did-automatically"><a class="header" href="#what-r4-appsh-did-automatically">What <code>r4-app.sh</code> did automatically:</a></h3>
 <ol>
 <li><strong>Model Selection Menu</strong>: Presents an interactive choice between <code>smollm2-135m-instruct</code>, <code>smollm2-360m-instruct</code>, and <code>smollm2-1-7b-instruct</code>.</li>
 <li><strong>4-Stage Pipeline Compilation &amp; Live Progress</strong>: Automatically runs any missing compilation stages (download, corpus compilation, R4G1 graph scoring) while displaying <code>claude-code</code>-styled live progress bars (<code>[█████████████░░░░░░░░] 65% (18s)</code>).</li>
@@ -10013,39 +10017,26 @@ the endpoint is not evidence about which mechanism produced its response.</p>
 <li><strong>Signal Cleanup</strong>: Traps <code>EXIT</code>, <code>INT</code> (<code>Ctrl-C</code>), <code>TERM</code>, <code>HUP</code> (window close), and <code>QUIT</code> (<code>Ctrl-\</code>) signals to cleanly terminate the background server process.</li>
 </ol>
 <hr>
-<h2 id="2-interactive-terminal-client-r4-client"><a class="header" href="#2-interactive-terminal-client-r4-client">2. Interactive Terminal Client (<code>r4 client</code>)</a></h2>
-<p>You can also run the client against an existing local server instance:</p>
-<pre><code class="language-bash">cargo run --release -- client --remote http://127.0.0.1:8000/v1
+<h2 id="2-interactive-terminal-client-client"><a class="header" href="#2-interactive-terminal-client-client">2. Interactive Terminal Client (<code>client</code>)</a></h2>
+<p>The client is the <code>client</code> subcommand of the <code>uor-r4-wasm-router</code> binary (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/crates/uor-r4-wasm-router/src/main.rs"><code>crates/uor-r4-wasm-router/src/main.rs</code></a>). Run it against an existing local server instance:</p>
+<pre><code class="language-bash">cargo run --release -p uor-r4-wasm-router -- client --remote http://127.0.0.1:8000/v1
 </code></pre>
-<h3 id="rich-intro-banner--slash-command-autocomplete"><a class="header" href="#rich-intro-banner--slash-command-autocomplete">Rich Intro Banner &amp; Slash Command Autocomplete</a></h3>
-<p>Upon launching, <code>r4 client</code> displays an ANSI R⁴ ASCII banner and shortcuts guide:</p>
-<pre><code class="language-text">  ██████╗ ██╗  ██╗     ██████╗██╗     ██╗
-  ██╔══██╗██║  ██║    ██╔════╝██║     ██║
-  ██████╔╝███████║    ██║     ██║     ██║
-  ██╔══██╗╚════██║    ██║     ██║     ██║
-  ██║  ██║     ██║    ╚██████╗███████╗██║
-  ╚═╝  ╚═╝     ╚═╝     ╚═════╝╚══════╝╚═╝
-
-R⁴ Holographic Graph &amp; Transformerless Engine v0.1.0
+<h3 id="intro-banner-and-slash-commands"><a class="header" href="#intro-banner-and-slash-commands">Intro banner and slash commands</a></h3>
+<p>Upon launching, the client prints an ANSI ASCII banner and then a shortcuts guide (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/crates/uor-r4-wasm-router/src/chat.rs"><code>chat.rs</code></a>):</p>
+<pre><code class="language-text">UOR-R4 Holographic Graph &amp; Transformerless Engine v0.1.0
 Zero-Multiply Local Intelligence Runtime • Pinned Multiplication-Free Execution
 
 Connected to local vendor endpoint: http://127.0.0.1:8000/v1/chat/completions
 Active teacher model             : smollm2-135m-instruct
+Active synthesis engine          : &lt;engine&gt;
 
 Commands &amp; Shortcuts:
-  • Type /help to view available slash commands (/status, /models, /clear, /quit)
+  • Type /help to view available slash commands (/status, /models, /engine, /corpus, /export, /reset, /clear, /quit)
   • Type / for interactive slash command suggestions &amp; autocomplete
   • Type exit or press Ctrl-D to quit session
 </code></pre>
-<h3 id="interactive-slash-command-completion"><a class="header" href="#interactive-slash-command-completion">Interactive Slash Command Completion</a></h3>
-<p>Typing <code>/</code> triggers interactive command suggestions:</p>
-<ul>
-<li>Typing <code>/</code> \(\rightarrow\) Displays available commands list.</li>
-<li>Typing <code>/m</code> or <code>/mo</code> \(\rightarrow\) Auto-completes and runs <code>/models</code>.</li>
-<li>Typing <code>/s</code> or <code>/st</code> \(\rightarrow\) Auto-completes and runs <code>/status</code>.</li>
-<li>Typing <code>/h</code> \(\rightarrow\) Auto-completes and runs <code>/help</code>.</li>
-<li>Typing <code>/q</code> \(\rightarrow\) Auto-completes and runs <code>/quit</code>.</li>
-</ul>
+<h3 id="slash-command-completion"><a class="header" href="#slash-command-completion">Slash command completion</a></h3>
+<p>Typing <code>/</code> lists the slash commands: <code>/help</code>, <code>/status</code>, <code>/models</code>, <code>/switch</code>, <code>/engine</code>, <code>/corpus</code>, <code>/compile</code>, <code>/audit</code>, <code>/clear</code>, <code>/reset</code>, <code>/export</code>, <code>/quit</code> and <code>/exit</code> (another name for <code>/quit</code>). Typing more of a command narrows the list to the commands that start with what has been typed, for example <code>/mo</code> to <code>/models</code> and <code>/st</code> to <code>/status</code>.</p>
 <hr>
 <h2 id="3-local-vendor-style-http-api-endpoints"><a class="header" href="#3-local-vendor-style-http-api-endpoints">3. Local Vendor-Style HTTP API Endpoints</a></h2>
 <p>The local R⁴ server implements OpenAI/vendor-compatible endpoints for local tools, IDE integrations, and custom frontends.</p>
@@ -10192,7 +10183,7 @@ maintainer sign-off.</li>
 <h1 id="side-projects"><a class="header" href="#side-projects">Side projects</a></h1>
 <p>This folder holds research projects that are related to UOR-R4 but are not part of the language model. Some feed ideas into the model (the model's prime and zeta-zero geometry draws on one of them). Others, like a network transport or a Lean proof of a matrix kernel, run alongside it. None of them is on the model's training or serving path, and none of them is evidence that the model works. The model itself is pre-alpha: <strong>M1 is complete, 1 of 8 milestones</strong>, and no model holds a useful conversation yet (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">PLAN</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/STATE.md">STATE</a>).</p>
 <p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="figures/projects/projects-map.svg" alt="Seven side projects shown as boxes around the central model. Four are marked as live source kept in git (spiralcore, riemann-lean, prime-analysis, wasm-gemm-gnaf), three as mostly archive (ai-research, research-archives, msa). Dashed arrows show where a project was consulted or drawn on by the model, and a dashed line to a private Hugging Face store shows where the bulky originals live."><span class="img-wrapper"><img src="figures/projects/projects-map.svg" alt="Seven side projects shown as boxes around the central model. Four are marked as live source kept in git (spiralcore, riemann-lean, prime-analysis, wasm-gemm-gnaf), three as mostly archive (ai-research, research-archives, msa). Dashed arrows show where a project was consulted or drawn on by the model, and a dashed line to a private Hugging Face store shows where the bulky originals live."></span></label></p>
-<p><em>The seven projects and where each connects to the model. Solid boxes keep their source in git. Dashed arrows into the model mean consulted or drawn on; the dashed arrow to the cylinder points to the large originals kept outside git.</em></p>
+<p><em>The seven projects of 19 October 2026 and where each connects to the model; the eighth, <code>uor-cuda-inverted-file</code>, was added on 1 November and is not drawn. Solid boxes keep their source in git. Dashed arrows into the model mean consulted or drawn on; the dashed arrow to the cylinder points to the large originals kept outside git.</em></p>
 <h2 id="why-these-projects-live-in-this-repository"><a class="header" href="#why-these-projects-live-in-this-repository">Why these projects live in this repository</a></h2>
 <p>The owner decided (19 October 2026) that side projects stay in this repository under <code>projects/</code>, with one README each, rather than moving to separate repositories. Two reasons follow from that decision. First, the history of the model cannot be read without them: the model's prime-routing and zeta-phase ideas draw on the Prime Analysis program, and the SpiralCore references were consulted when the SpiralCore/FBS mechanism was designed (the mechanism itself follows a separate v63 reference and a hosted v69 file; see <a href="#spiralcore-transport-with-ternary-tree-binders-float-projection-form">the mechanism page</a>). Second, most of this material existed only on one laptop, with no version control and no remote. Putting the source in git and the bulky files in a checksummed store fixes that.</p>
 <p>Three rules keep the side projects from being mistaken for model results:</p>
@@ -10216,11 +10207,12 @@ maintainer sign-off.</li>
 <tr><td><a href="#msa-modular-structural-arithmetic"><code>msa/</code></a></td><td>Two papers on Modular Structural Arithmetic by Alex</td><td>Papers only, third-party authorship</td><td>Cited in earlier route-attention work</td></tr>
 <tr><td><a href="#research-archives-the-gemini-era-sandbox"><code>research-archives/</code></a></td><td>The Gemini-era r3/r4 sandbox</td><td>Archive, not a live project</td><td>History only</td></tr>
 <tr><td><a href="#wasm-gemm-gnaf-a-lean-proof-project-about-a-matrix-multiply-kernel"><code>wasm-gemm-gnaf/</code></a></td><td>Lean 4 mechanization aimed at an optimality theorem for a WebAssembly matrix kernel</td><td>Theorem <strong>not</strong> established</td><td>None. Separate project</td></tr>
+<tr><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/projects/uor-cuda-inverted-file/README.md"><code>uor-cuda-inverted-file/</code></a></td><td>A standalone exact integer inverted-file index for codebook-quantized vectors: a CPU oracle, an optional CUDA Driver API path and a build-time PTX admission check</td><td>CPU tests run with <code>make host-test</code>; the CUDA path needs <code>nvcc</code> and a GPU</td><td>None on the model path. It needs no UOR-R4 code or model</td></tr>
 </tbody>
 </table>
 </div>
 <h2 id="where-the-originals-are"><a class="header" href="#where-the-originals-are">Where the originals are</a></h2>
-<p>Six of the seven projects came from the owner's untracked <code>research/</code> folder (the seventh, <code>wasm-gemm-gnaf</code>, is already tracked in git). On 19 October 2026 the whole folder was backed up to a private Hugging Face dataset before any file was moved.</p>
+<p>Six of the eight projects came from the owner's untracked <code>research/</code> folder. <code>wasm-gemm-gnaf</code> was already tracked in git, and <code>uor-cuda-inverted-file</code> was added in git on 1 November 2026 (#3476). On 19 October 2026 the whole folder was backed up to a private Hugging Face dataset before any file was moved.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -10229,13 +10221,13 @@ maintainer sign-off.</li>
 <tbody>
 <tr><td>Dataset</td><td><code>caseyallard/uor-r4-store</code> (private)</td><td><code>docs/labs/repo-renormalization-2026-10-19/backup/README.md</code></td></tr>
 <tr><td>Path</td><td><code>research-archive/2026-10-19/</code></td><td>same</td></tr>
-<tr><td>Layout</td><td>eight tars under <code>tars/</code>: one per project (seven pages here, with <code>archives.tar</code> holding research-archives and <code>spiralcore-v68.tar</code> holding spiralcore), plus <code>causal-continuation-2026-09-24.tar</code> (a September 2026 causal-continuation experiment folder: scripts, plans and freeze files) and <code>root-files.tar</code> (the old <code>research/</code> README and two value-faith panel JSON files), which have no project page; <code>tars.sha256</code> and <code>files.sha256</code> sit one level above <code>tars/</code></td><td>verified by listing the dataset on 19 October 2026</td></tr>
+<tr><td>Layout</td><td>eight tars under <code>tars/</code>: one per project from <code>research/</code> (six project pages here, with <code>archives.tar</code> holding research-archives and <code>spiralcore-v68.tar</code> holding spiralcore), plus <code>causal-continuation-2026-09-24.tar</code> (a September 2026 causal-continuation experiment folder: scripts, plans and freeze files) and <code>root-files.tar</code> (the old <code>research/</code> README and two value-faith panel JSON files), which have no project page; <code>tars.sha256</code> and <code>files.sha256</code> sit one level above <code>tars/</code></td><td>verified by listing the dataset on 19 October 2026</td></tr>
 <tr><td>Tar integrity</td><td>SHA-256 of each tar in <code>tars.sha256</code></td><td>same</td></tr>
 <tr><td>File integrity</td><td>SHA-256 of every file inside each tar in <code>files.sha256</code> (11,456 lines for all tars, including the loose files)</td><td><code>research-archive/2026-10-19/files.sha256</code> in the store</td></tr>
 </tbody>
 </table>
 </div>
-<p>To restore one project, fetch its tar, check it against <code>tars.sha256</code>, unpack it, and check individual files against <code>files.sha256</code>. Each project README lists its own tar, size and checksum (<code>wasm-gemm-gnaf</code> has none: it is already in git). The folder sizes quoted on the project pages come from the audit inventory <code>docs/labs/repo-renormalization-2026-10-19/audit/folders.json</code>, which is an audit working file; <code>files.sha256</code> holds hashes only.</p>
+<p>To restore one project, fetch its tar, check it against <code>tars.sha256</code>, unpack it, and check individual files against <code>files.sha256</code>. Each project README lists its own tar, size and checksum (<code>wasm-gemm-gnaf</code> and <code>uor-cuda-inverted-file</code> have none: they are in git). The folder sizes quoted on the project pages come from the audit inventory <code>docs/labs/repo-renormalization-2026-10-19/audit/folders.json</code>, which is an audit working file; <code>files.sha256</code> holds hashes only.</p>
 <h2 id="what-happens-to-the-code"><a class="header" href="#what-happens-to-the-code">What happens to the code</a></h2>
 <p>The plan for each project is the same: the source files named in that project's README are copied into its folder here, byte for byte, and the originals stay in the tar. Where the same file appears in two projects, one copy is kept and the other is recorded as a duplicate by hash (see <a href="#prime-analysis-the-prime-phase-and-chebyshev-psi-spectral-program"><code>prime-analysis/</code></a> and <a href="#ai-research-the-original-root-research-workspace"><code>ai-research/</code></a>). Third-party and personal documents are not committed until the owner has reviewed their licensing or privacy. The folder inventory behind this plan is <code>docs/labs/repo-renormalization-2026-10-19/audit/folders.json</code> (research_projects).</p>
 <h2 id="compliance-scope"><a class="header" href="#compliance-scope">Compliance scope</a></h2>
@@ -10320,10 +10312,10 @@ grep '  ./ai-research/' ../files.sha256 | shasum -a 256 -c --quiet -
 <li><a href="#primes-and-zeta-phases">Primes and zeta</a> and the <a href="#the-mechanism-board">mechanism index</a> for what carried into the current model.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="msa-modular-structural-arithmetic"><a class="header" href="#msa-modular-structural-arithmetic">MSA: Modular Structural Arithmetic</a></h1>
-<p>Modular Structural Arithmetic (MSA) is a small formal system for arithmetic with a few special numbers in it. It was written by Alex, a collaborator, and given to this project with his consent as source reading. The folder holds two short papers and nothing else: no code, no data, no experiments. It is a third-party idea that earlier route-attention and selector work in this repository pointed to. It is not part of the language model, and no result here measures anything about the model.</p>
+<p>Modular Structural Arithmetic (MSA) is a small formal system for arithmetic with a few special numbers in it. It was written by Alex, a collaborator, and given to this project with his consent as source reading. The project is two short papers and nothing else: no code, no data, no experiments. The papers stay in the private store (below); this folder holds this page and <code>code/README.md</code>, the original README. It is a third-party idea that earlier route-attention and selector work in this repository pointed to. It is not part of the language model, and no result here measures anything about the model.</p>
 <pre class="mermaid">flowchart LR
     G["gamma = 24, the generator"] -- "doubling" --&gt; M["mu = 48, the mediator"]
     M -- "doubling" --&gt; E["epsilon = 96, the manifestation"]
@@ -10343,7 +10335,7 @@ grep '  ./ai-research/' ../files.sha256 | shasum -a 256 -c --quiet -
 <p>The paper then states special cases as axioms. For example, mod 11 the constants become 2, 4 and 8 (the "11-theorem"), and mod 7 they become 3, 6 and 5, which sum to a multiple of 7 (the "7-vanishing"). It also axiomatizes a "modular resonance" and a resonance period.</p>
 <p><strong>Checks anyone can do by hand (proof, by arithmetic).</strong> \(48^2=2304=24\times96\); \(24,48,96 \bmod 11 = 2,4,8\); \(24,48,96 \bmod 7 = 3,6,5\) and \(24+48+96=168=7\times24\). These confirm the numerical facts the axioms state. They do not show that the axiom system is consistent or that its larger claims, such as the characterization of doubling-preserving primes (axiom MSA9), hold; the papers present these as axioms, and this page has not checked that they follow from the others.</p>
 <h2 id="why-it-is-here"><a class="header" href="#why-it-is-here">Why it is here</a></h2>
-<p>The repository's earlier route-attention and selector work referenced MSA as part of a modular-structure research direction (<code>research/msa/README.md</code>). This page claims no tie to the model's geometry, and none has been tested. Any such link would be a hypothesis needing its own experiment.</p>
+<p>The repository's earlier route-attention and selector work referenced MSA as part of a modular-structure research direction (the original README, now <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/projects/msa/code/README.md"><code>code/README.md</code></a>). This page claims no tie to the model's geometry, and none has been tested. Any such link would be a hypothesis needing its own experiment.</p>
 <h2 id="where-it-stands-18"><a class="header" href="#where-it-stands-18">Where it stands</a></h2>
 <div class="table-wrapper">
 <table>
@@ -10351,15 +10343,15 @@ grep '  ./ai-research/' ../files.sha256 | shasum -a 256 -c --quiet -
 <tr><th>Statement</th><th>Kind</th><th>Evidence</th></tr>
 </thead>
 <tbody>
-<tr><td>The folder contains two PDFs (6 and 10 pages) and a README, 3 files in all</td><td>measurement</td><td><code>files.sha256</code></td></tr>
+<tr><td>The original folder (<code>msa.tar</code>) holds two PDFs (6 and 10 pages) and a README, 3 files in all</td><td>measurement</td><td><code>files.sha256</code></td></tr>
 <tr><td>The constants and special-modulus facts above are true arithmetic</td><td>proof (direct calculation)</td><td>shown above</td></tr>
-<tr><td>MSA is a conservative extension of SA, and the rest of its axiom claims</td><td>not checked here; the README asserts the extension property</td><td><code>research/msa/README.md</code></td></tr>
+<tr><td>MSA is a conservative extension of SA, and the rest of its axiom claims</td><td>not checked here; the README asserts the extension property</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/projects/msa/code/README.md"><code>code/README.md</code></a></td></tr>
 <tr><td>MSA helps the model</td><td>hypothesis, untested</td><td>none</td></tr>
 </tbody>
 </table>
 </div>
 <h2 id="permission-and-attribution"><a class="header" href="#permission-and-attribution">Permission and attribution</a></h2>
-<p>Both papers are by Alex. The README states they are included "with the author's consent" and were contributed to the research archive by Casey Allard. The folder inventory flags that redistribution permission should be confirmed before the PDFs are committed to a public repository. Until the owner confirms it, the PDFs remain in the store and the folder holds the README and a hash-and-pointer file; once confirmed they can be committed with attribution (they total about 0.3 MB).</p>
+<p>Both papers are by Alex. The README states they are included "with the author's consent" and were contributed to the research archive by Casey Allard. The folder inventory flags that redistribution permission should be confirmed before the PDFs are committed to a public repository. Until the owner confirms it, the PDFs remain in the store and the folder holds this page and <code>code/README.md</code>; once confirmed they can be committed with attribution (they total about 0.3 MB).</p>
 <h2 id="where-the-originals-are-2"><a class="header" href="#where-the-originals-are-2">Where the originals are</a></h2>
 <p>The full project is preserved in the private Hugging Face dataset <code>caseyallard/uor-r4-store</code> under <code>research-archive/2026-10-19/tars/msa.tar</code> (338,432 bytes, 3 files, SHA-256 <code>73be0abc4ff823d00b35bab447e4f1928b45a478f9479dec84efa9504f1dd0b0</code>). Every file inside is listed in <code>files.sha256</code>, and the tar is listed in <code>tars.sha256</code>.</p>
 <h2 id="code-27"><a class="header" href="#code-27">Code</a></h2>
