@@ -22,15 +22,91 @@ pub const ENTRIES: [&str; 7] = [
 ];
 
 pub fn generate(source: &str) -> Result<String, String> {
-    let writer_end = source
+    let qualified = qualified_prefix(source)?;
+    let writer_end = qualified
         .find("// Statuses added")
         .ok_or("bucket source anchor changed: writer end missing")?;
     if source.matches(ORDINARY_WRITER).count() != 1 {
         return Err("bucket source anchor changed: ordinary writer body differs".into());
     }
-    let helpers_and_writer = &source[..writer_end];
+    let helpers_and_writer = &qualified[..writer_end];
     Ok(format!("{helpers_and_writer}\n{BUCKET}"))
 }
+
+const TRACE_ROUTE_START: &str = "// Route trace, flattened by row then block:";
+const TRACE_ROUTE_END: &str = "// ---- Flock & Relation read";
+const TRACE_ROUTE_DISPATCH: &str =
+    "    return route_vector(input,ids,routes,plan,g,s,row,kind,index,candidate,output,trace);";
+const ADMITTED_ROUTE_DISPATCH: &str =
+    "    return route_vector(input,ids,routes,plan,g,s,row,kind,index,candidate,output);";
+
+/// Reconstruct the exact helper/writer prefix that the committed RTX 5090
+/// bucket receipts qualified. The only removed behavior is the read-only trace
+/// sink; the untraced Route decision body and every writer helper must remain
+/// byte-identical or generation refuses.
+fn qualified_prefix(source: &str) -> Result<String, String> {
+    let route_start = source
+        .find(TRACE_ROUTE_START)
+        .ok_or("bucket source anchor changed: trace route start missing")?;
+    let route_offset = source[route_start..]
+        .find(TRACE_ROUTE_END)
+        .ok_or("bucket source anchor changed: trace route end missing")?;
+    let route_end = route_start + route_offset;
+    if source.matches(TRACE_ROUTE_START).count() != 1
+        || source.matches(TRACE_ROUTE_END).count() != 1
+        || source.matches(TRACE_ROUTE_DISPATCH).count() != 1
+    {
+        return Err("bucket source anchor changed: Route trace instrumentation differs".into());
+    }
+    let mut qualified = String::with_capacity(source.len());
+    qualified.push_str(&source[..route_start]);
+    qualified.push_str(ADMITTED_ROUTE_VECTOR);
+    qualified.push_str(&source[route_end..]);
+    Ok(qualified.replace(TRACE_ROUTE_DISPATCH, ADMITTED_ROUTE_DISPATCH))
+}
+
+/// The Route read qualified by the retained bucket-writer receipts. The trace
+/// body adds only an observation sink; this text preserves the admitted source
+/// bytes without maintaining a second compiled production implementation.
+const ADMITTED_ROUTE_VECTOR: &str = r#"__device__ bool route_vector(const int* input,const U* ids,const U* routes,const U* plan,const U* g,const U* s,U row,U kind,U index,U candidate,int* output) {
+    plan+=row*(3+s[6]*4+16);
+    U length=plan[0],nodes=plan[1],frontier=plan[2];plan+=3;
+    if(length==0 || length>s[2] || nodes>s[6] || frontier==0 || frontier>16 || s[13]>1u || (s[13]==1u && kind==0u))return false;
+    if(s[13]==1u){for(U block=0;block<s[1];++block)input_block(input,ids,g,row,length-1,block,s,kind,index,candidate,output+block*8);return true;}
+    for(U block=0;block<s[1];++block) {
+        int query[8];input_block(input,ids,g,row,length-1,block,s,kind,index,candidate,query);
+        U node=ABSENT,root=0,total=g[IDENTITY];
+        for(U stage=0;stage<s[5];++stage) {
+            U parameter=block*s[5]+stage;
+            U frame=routes[parameter];
+            if(frame>=64) return false;
+            if(kind==0 && index==parameter && candidate) frame=compose(g,move_action(g,candidate),frame);
+            int q[8];action(g,frame,query,q);
+            U count=stage==0?frontier:3;
+            U best=ABSENT,best_distance=ABSENT,best_hamming=ABSENT,goal=0;
+            for(U port=0;port<count;++port) {
+                U r=stage==0?port:g[BRANCH+root*3+port];
+                U distance,hamming;root_cost(q,g,r,&distance,&hamming);
+                if(distance<best_distance || (distance==best_distance && hamming<best_hamming)) {
+                    best=port;best_distance=distance;best_hamming=hamming;goal=r;
+                }
+            }
+            if(best==ABSENT) return false;
+            total=compose(g,g[BFS+root*16+goal],total);root=goal;
+            node=stage==0?plan[s[6]*4+best]:plan[node*4+best];
+            if(node>=nodes) return false;
+            U atom=plan[node*4+3];
+            if(atom!=ABSENT) {
+                if(atom>=length) return false;
+                int carrier[8];input_block(input,ids,g,row,atom,block,s,kind,index,candidate,carrier);
+                action(g,total,carrier,output+block*8);break;
+            }
+            if(stage+1==s[5]) return false;
+        }
+    }
+    return true;
+}
+"#;
 
 /// Exact text of `writer` in `src/discrete.cu`. If `discrete.cu` changes its writer
 /// implementation, `generate` refuses at build time rather than silently diverging.
@@ -569,8 +645,9 @@ mod tests {
     fn generated_bucket_module_keeps_helpers_and_adds_seven_entries() {
         let source = include_str!("discrete.cu");
         let generated = generate(source).expect("bucket source generated");
-        let prefix_end = source.find("// Statuses added").expect("writer end");
-        assert!(generated.starts_with(&source[..prefix_end]));
+        let qualified = qualified_prefix(source).expect("qualified prefix");
+        let prefix_end = qualified.find("// Statuses added").expect("writer end");
+        assert!(generated.starts_with(&qualified[..prefix_end]));
         assert_eq!(generated.matches("__global__").count(), ENTRIES.len());
         for entry in ENTRIES {
             assert_eq!(
@@ -582,6 +659,20 @@ mod tests {
         assert!(!generated.contains("void discrete_forward("));
         assert!(!generated.contains("void discrete_counterfactual("));
         assert!(!generated.contains("void discrete_evaluate("));
+    }
+
+    #[test]
+    fn trace_route_compatibility_anchor_matches_the_qualified_prefix() {
+        let source = include_str!("discrete.cu");
+        let qualified = qualified_prefix(source).expect("qualified prefix");
+        assert_eq!(
+            source.matches("__device__ bool route_vector(").count(),
+            1,
+            "production Route read must have one implementation"
+        );
+        assert_eq!(qualified.matches(ADMITTED_ROUTE_VECTOR).count(), 1);
+        assert!(!qualified.contains(TRACE_ROUTE_START));
+        assert!(!qualified.contains(TRACE_ROUTE_DISPATCH));
     }
 
     #[test]

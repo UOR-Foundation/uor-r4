@@ -8,7 +8,7 @@ Head: codex-6 implementation. Parent contract:
 - GPU: NVIDIA GeForce RTX 4090, compute capability 8.9, driver 595.99.02.
 - CUDA: 13.1, AOT target `compute_89`.
 - Host: `wick`.
-- Fixtures: Claude-371's Route and Flock `UORLUT01` bytes.
+- Fixtures: Route, Flock and Relation `UORLUT01` bytes.
 - Rows: all 39 prefixes of lengths 1 through 3 over three tokens.
 - Build: `NVCC=/usr/local/cuda/bin/nvcc UOR_NVCC_ARCH=compute_89 UOR_REQUIRE_CUDA=1`.
 
@@ -23,7 +23,8 @@ the qualification-only loaders recorded by codex-5; production loading remains s
 | Route stages | configured frame, parent root, selected port, goal root, composed action and next node |
 | Active-leaf header | query frame, output root, residual terms and query payload root |
 | Active-leaf levels | gate, eligible count, kept count, consensus root, kept nodes, transport actions and carried roots |
-| Trace parity | every word for all 39 rows, both fixtures, CUDA vs CPU vs serving |
+| Relation tail | per-node scores padded to the context's maximum binder-node count, CUDA vs CPU vs serving |
+| Trace parity | every base and Relation-tail word for all 39 rows and all three fixtures |
 | Untraced control | no allocation, with identical carry, predictions, losses, rivals and admitted cells |
 
 ## Fault controls
@@ -34,9 +35,12 @@ the qualification-only loaders recorded by codex-5; production loading remains s
 | Flock gate alternatives: 4 words x other two trits | **3 seen, 5 missed** | **8 / 8 seen** |
 | Active kept-node slots over the 39 prefixes | not exposed before this unit | **126 words** |
 | Active transport-action slots over the 39 prefixes | not exposed before this unit | **126 words** |
+| Active kept/action mutation controls | not exposed before this unit | **126 / 126 detected** |
+| Relation compact / padded score words | not exposed before this unit | **258 / 1,014 exact** |
 | One-word carry fault | caught | still caught |
 
 Result: the direct trace closes C-1 and C-4 and makes C-2's five output-only misses visible.
 The bucket writer's committed source hash remains unchanged because its generated source stops at
-the previously qualified helper/writer prefix.
+the previously qualified helper/writer prefix. The literal generation anchor restores that prefix
+from the one trace-capable production Route read; CUDA no longer compiles a second Route body.
 

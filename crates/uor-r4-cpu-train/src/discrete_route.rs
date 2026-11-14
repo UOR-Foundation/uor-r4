@@ -21,6 +21,7 @@ use uor_r4_integer::discrete_d11::{
 use crate::{CpuTrainError, VOCABULARY};
 
 type Result<T> = std::result::Result<T, CpuTrainError>;
+type CpuReadTraceParts = (Vec<i32>, Option<Vec<i32>>, Option<Vec<u32>>);
 
 fn invalid(message: impl Into<String>) -> CpuTrainError {
     CpuTrainError::Invalid(message.into())
@@ -228,7 +229,12 @@ impl CpuDiscreteRoute {
     pub fn read_traced(&self, prefix: &[u32]) -> Result<CpuDiscreteReadTrace> {
         let mut trace_words = Vec::new();
         let query = self.read_internal(prefix, Some(&mut trace_words))?;
-        Ok(CpuDiscreteReadTrace { query, trace_words })
+        Ok(CpuDiscreteReadTrace {
+            query,
+            trace_words,
+            relation_scores: None,
+            relation_trace_words: None,
+        })
     }
 
     fn read_internal(&self, prefix: &[u32], mut trace: Option<&mut Vec<u32>>) -> Result<Vec<i32>> {
@@ -613,10 +619,14 @@ impl ActiveLeafModel {
     }
 
     fn read(&self, prefix: &[u32]) -> Result<Vec<i32>> {
-        self.read_traced(prefix, None)
+        self.read_traced(prefix, None).map(|(query, _, _)| query)
     }
 
-    fn read_traced(&self, prefix: &[u32], mut trace: Option<&mut Vec<u32>>) -> Result<Vec<i32>> {
+    fn read_traced(
+        &self,
+        prefix: &[u32],
+        mut trace: Option<&mut Vec<u32>>,
+    ) -> Result<CpuReadTraceParts> {
         let label = match self.mode {
             ActiveLeafMode::Flock => "Flock",
             ActiveLeafMode::Relation { .. } => "Relation",
@@ -637,6 +647,12 @@ impl ActiveLeafModel {
         let mut all_relation_scores = (trace.is_some()
             && matches!(self.mode, ActiveLeafMode::Relation { .. }))
         .then(Vec::<i32>::new);
+        let max_nodes_count = (trace.is_some()
+            && matches!(self.mode, ActiveLeafMode::Relation { .. }))
+        .then(|| build_row_plan(self.context).map(|plan| plan.nodes.len()))
+        .transpose()?;
+        let mut all_relation_trace =
+            max_nodes_count.map(|nodes| Vec::with_capacity(self.blocks * nodes));
         for block in 0..self.blocks {
             let trace_start = trace.as_ref().map(|words| words.len());
             if let Some(words) = trace.as_deref_mut() {
@@ -806,6 +822,12 @@ impl ActiveLeafModel {
             if let Some(scores) = all_relation_scores.as_mut() {
                 scores.extend_from_slice(&relation_scores);
             }
+            if let (Some(scores), Some(max_nodes_count)) =
+                (&mut all_relation_trace, max_nodes_count)
+            {
+                scores.extend(relation_scores.iter().map(|&score| score as u32));
+                scores.resize((block + 1) * max_nodes_count, u32::MAX);
+            }
 
             for level in 0..self.stages {
                 let gate = self.level_gates[block][level];
@@ -921,10 +943,7 @@ impl ActiveLeafModel {
                     .map_err(|error| invalid(error.to_string()))?,
             );
         }
-        if let (Some(words), Some(scores)) = (trace, all_relation_scores.as_ref()) {
-            words.extend(scores.iter().map(|&score| score as u32));
-        }
-        Ok(out)
+        Ok((out, all_relation_scores, all_relation_trace))
     }
 
     fn act(&self, action: usize, input: &[i32; 8]) -> Result<[i32; 8]> {
@@ -967,8 +986,14 @@ impl CpuDiscreteFlock {
 
     pub fn read_traced(&self, prefix: &[u32]) -> Result<CpuDiscreteReadTrace> {
         let mut trace_words = Vec::new();
-        let query = self.0.read_traced(prefix, Some(&mut trace_words))?;
-        Ok(CpuDiscreteReadTrace { query, trace_words })
+        let (query, relation_scores, relation_trace_words) =
+            self.0.read_traced(prefix, Some(&mut trace_words))?;
+        Ok(CpuDiscreteReadTrace {
+            query,
+            trace_words,
+            relation_scores,
+            relation_trace_words,
+        })
     }
 }
 
@@ -1005,8 +1030,14 @@ impl CpuDiscreteRelation {
 
     pub fn read_traced(&self, prefix: &[u32]) -> Result<CpuDiscreteReadTrace> {
         let mut trace_words = Vec::new();
-        let query = self.0.read_traced(prefix, Some(&mut trace_words))?;
-        Ok(CpuDiscreteReadTrace { query, trace_words })
+        let (query, relation_scores, relation_trace_words) =
+            self.0.read_traced(prefix, Some(&mut trace_words))?;
+        Ok(CpuDiscreteReadTrace {
+            query,
+            trace_words,
+            relation_scores,
+            relation_trace_words,
+        })
     }
 }
 
@@ -1307,6 +1338,8 @@ pub struct CpuDiscretePanelReading {
 pub struct CpuDiscreteReadTrace {
     pub query: Vec<i32>,
     pub trace_words: Vec<u32>,
+    pub relation_scores: Option<Vec<i32>>,
+    pub relation_trace_words: Option<Vec<u32>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -1674,8 +1707,14 @@ impl CpuDiscreteProposalScorer {
 
     pub fn query_traced(&self, sample: &CpuDiscreteProposalSample) -> Result<CpuDiscreteReadTrace> {
         let mut trace_words = Vec::new();
-        let query = self.read_traced(&self.model, &sample.prefix, &mut trace_words)?;
-        Ok(CpuDiscreteReadTrace { query, trace_words })
+        let (query, relation_scores, relation_trace_words) =
+            self.read_traced(&self.model, &sample.prefix, &mut trace_words)?;
+        Ok(CpuDiscreteReadTrace {
+            query,
+            trace_words,
+            relation_scores,
+            relation_trace_words,
+        })
     }
 
     pub fn top8(&self, sample: &CpuDiscreteProposalSample) -> Result<[u32; 8]> {
@@ -1883,9 +1922,17 @@ impl CpuDiscreteProposalScorer {
         model: &CpuDiscreteProposalModel,
         prefix: &[u32],
         trace: &mut Vec<u32>,
-    ) -> Result<Vec<i32>> {
+    ) -> Result<CpuReadTraceParts> {
         match model {
-            CpuDiscreteProposalModel::Route(route) => route.read_internal(prefix, Some(trace)),
+            CpuDiscreteProposalModel::Route(route) => {
+                let traced = route.read_traced(prefix)?;
+                trace.extend_from_slice(&traced.trace_words);
+                Ok((
+                    traced.query,
+                    traced.relation_scores,
+                    traced.relation_trace_words,
+                ))
+            }
             CpuDiscreteProposalModel::Active(active) => active.read_traced(prefix, Some(trace)),
         }
     }
@@ -4821,6 +4868,26 @@ mod tests {
         samples
     }
 
+    fn trace_relation_fixture() -> Vec<u8> {
+        serialized_relation_fixture(
+            9,
+            &[
+                [0, 1],
+                [2, 3],
+                [4, 5],
+                [6, 7],
+                [8, 9],
+                [10, 11],
+                [12, 13],
+                [14, 15],
+            ],
+            &[1, 1, -1, 1, -1, 1],
+            &[[1, -1, 1, -1, 1], [-1, 1, -1, 1, -1], [1, 1, -1, -1, 1]],
+            2,
+            2,
+        )
+    }
+
     /// K1 carry, K2 memory address, K3 emitted ids; `Err` is K4, the serving loader.
     fn contract_reading(
         cpu: &[u8],
@@ -4855,6 +4922,14 @@ mod tests {
                 assert_eq!(
                     cpu.trace_words, serving.trace_words,
                     "CPU/serving trace row {row}"
+                );
+                assert_eq!(
+                    cpu.relation_scores, serving.evaluation.relation_scores,
+                    "CPU/serving relation scores row {row}"
+                );
+                assert_eq!(
+                    cpu.relation_trace_words, serving.relation_trace_words,
+                    "CPU/serving padded relation trace row {row}"
                 );
                 assert!(
                     cpu.trace_words.iter().any(|&word| word != u32::MAX),
@@ -4991,9 +5066,86 @@ mod tests {
             active_action_slots, 126,
             "transport-action trace slot count"
         );
+        let mut kept_mutations = 0usize;
+        let mut action_mutations = 0usize;
+        for (row, trace) in clean_flock.iter().enumerate() {
+            for (block_index, block) in trace
+                .chunks_exact(
+                    DISCRETE_ACTIVE_TRACE_HEADER_WORDS + 2 * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS,
+                )
+                .enumerate()
+            {
+                for (level_index, level) in block[DISCRETE_ACTIVE_TRACE_HEADER_WORDS..]
+                    .chunks_exact(DISCRETE_ACTIVE_TRACE_LEVEL_WORDS)
+                    .enumerate()
+                {
+                    let found = level[1] as usize;
+                    for (slot, word) in level[4..4 + found].iter().enumerate() {
+                        assert_ne!(*word, u32::MAX);
+                        let mut changed = clean_flock.clone();
+                        let base = block_index
+                            * (DISCRETE_ACTIVE_TRACE_HEADER_WORDS
+                                + 2 * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS)
+                            + DISCRETE_ACTIVE_TRACE_HEADER_WORDS
+                            + level_index * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS
+                            + 4
+                            + slot;
+                        changed[row][base] ^= 1;
+                        assert_eq!(changed_rows(&clean_flock, &changed), 1);
+                        kept_mutations += 1;
+                    }
+                    for (slot, word) in level[12..12 + found].iter().enumerate() {
+                        assert_ne!(*word, u32::MAX);
+                        let mut changed = clean_flock.clone();
+                        let base = block_index
+                            * (DISCRETE_ACTIVE_TRACE_HEADER_WORDS
+                                + 2 * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS)
+                            + DISCRETE_ACTIVE_TRACE_HEADER_WORDS
+                            + level_index * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS
+                            + 12
+                            + slot;
+                        changed[row][base] ^= 1;
+                        assert_eq!(changed_rows(&clean_flock, &changed), 1);
+                        action_mutations += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(kept_mutations, 126, "kept-node mutation controls");
+        assert_eq!(action_mutations, 126, "transport-action mutation controls");
         println!(
-            "native_trace rows={} kept_slots={active_kept_slots} action_slots={active_action_slots}",
+            "native_trace rows={} kept_slots={active_kept_slots} action_slots={active_action_slots} kept_mutations={kept_mutations} action_mutations={action_mutations}",
             clean_flock.len()
+        );
+    }
+
+    #[test]
+    fn native_space_relation_trace_keeps_its_scores_separate() {
+        let artifact = trace_relation_fixture();
+        let traces = clean_trace_words(&artifact);
+        let scorer = CpuDiscreteProposalScorer::from_bytes(&artifact).unwrap();
+        let mut score_words = 0usize;
+        let mut padded_score_words = 0usize;
+        for (row, sample) in every_prefix_sample().iter().enumerate() {
+            let traced = scorer.query_traced(sample).unwrap();
+            let scores = traced
+                .relation_scores
+                .as_ref()
+                .unwrap_or_else(|| panic!("relation scores absent at row {row}"));
+            assert!(!scores.is_empty(), "relation scores empty at row {row}");
+            score_words += scores.len();
+            padded_score_words += traced
+                .relation_trace_words
+                .as_ref()
+                .unwrap_or_else(|| panic!("padded relation trace absent at row {row}"))
+                .len();
+        }
+        assert_eq!(traces.len(), 39);
+        assert!(score_words > 0, "relation score trace is vacuous");
+        println!(
+            "native_relation_trace rows={} base_words={} score_words={score_words} padded_score_words={padded_score_words}",
+            traces.len(),
+            traces.iter().map(Vec::len).sum::<usize>()
         );
     }
 
@@ -5185,6 +5337,11 @@ mod tests {
                 CpuDiscreteProposalKind::Gate,
                 Parameter::Gate(0),
             ),
+            (
+                trace_relation_fixture(),
+                CpuDiscreteProposalKind::Gate,
+                Parameter::Gate(0),
+            ),
         ] {
             let snapshot = import_d11_for_qualification(&artifact).unwrap();
             let mut device = Device::from_snapshot_for_qualification(snapshot, 0).unwrap();
@@ -5214,6 +5371,9 @@ mod tests {
             let mut vector_at = 0usize;
             let mut cell_at = 0usize;
             let mut trace_at = 0usize;
+            let mut relation_at = 0usize;
+            let mut relation_present = false;
+            let mut expected_relation = Vec::new();
             for (row, sample) in samples.iter().enumerate() {
                 let cpu = scorer.query(sample).unwrap();
                 let cpu_traced = scorer.query_traced(sample).unwrap();
@@ -5227,6 +5387,10 @@ mod tests {
                 assert_eq!(
                     cpu_traced.trace_words, served_traced.trace_words,
                     "CPU/serving trace row {row}"
+                );
+                assert_eq!(
+                    cpu_traced.relation_scores, served_traced.evaluation.relation_scores,
+                    "CPU/serving relation scores row {row}"
                 );
                 assert_eq!(cpu, served.read_vector, "CPU/serving read row {row}");
                 assert_eq!(
@@ -5273,9 +5437,25 @@ mod tests {
                     "CUDA/CPU/serving trace row {row}"
                 );
                 trace_at = trace_end;
+                if let Some(scores) = cpu_traced.relation_trace_words.as_ref() {
+                    relation_present = true;
+                    expected_relation.extend_from_slice(scores);
+                    relation_at += scores.len();
+                }
             }
             assert_eq!(vector_at, cuda_vectors.len());
             assert_eq!(trace_at, cuda_trace.len());
+            let cuda_relation = forward.relation_trace_words().unwrap();
+            if relation_present {
+                assert_eq!(
+                    cuda_relation.as_deref(),
+                    Some(expected_relation.as_slice()),
+                    "CUDA/CPU/serving Relation tail"
+                );
+                assert_eq!(relation_at, expected_relation.len());
+            } else {
+                assert!(cuda_relation.is_none(), "unexpected Relation tail");
+            }
 
             let cuda_proposal = device.propose(&batch, &targets, parameter).unwrap();
             let cuda_losses = cuda_proposal.candidate_losses().unwrap();

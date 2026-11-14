@@ -27,8 +27,10 @@ prefixes. Every single route-frame or level-gate fault changes a compared trace 
 kept-node or transport-action mutation that occurs in a fixture changes a traced word, and the
 control pins the count. Succeeded: all 252 route faults and all 8 gate faults change the trace;
 the 144 route faults and five gate faults that escape output-only checks are directly visible.
-The active trace contains 126 kept-node and 126 transport-action slots. Untraced calls allocate no
-trace and return unchanged public values.
+The active trace contains 126 kept-node and 126 transport-action slots, each with a one-word
+mutation control. Relation's 258 compact and 1,014 padded score words match across backends. CUDA
+has one trace-capable Route body; the bucket generator preserves its qualified source prefix.
+Untraced calls allocate no trace and return unchanged public values.
 
 ## 2. Loader symmetry
 

@@ -448,7 +448,7 @@ impl Forward {
     /// Optional completed device per-node relation scores (`rows * blocks * nodes_count`)
     /// written by `discrete_forward` in `ReadSpec::Relation` mode. Storage readback only;
     /// no host recurrence or score computation.
-    pub fn relation_scores(&self) -> Result<Option<Vec<i32>>> {
+    pub fn relation_trace_words(&self) -> Result<Option<Vec<u32>>> {
         if !matches!(self.binding.read_spec, ReadSpec::Relation { .. }) {
             return Ok(None);
         }
@@ -459,7 +459,12 @@ impl Forward {
         let tail = words
             .get(offset..)
             .ok_or_else(|| invalid("relation trace buffer truncated"))?;
-        Ok(Some(tail.iter().map(|&w| w as i32).collect()))
+        Ok(Some(tail.to_vec()))
+    }
+    pub fn relation_scores(&self) -> Result<Option<Vec<i32>>> {
+        Ok(self
+            .relation_trace_words()?
+            .map(|words| words.into_iter().map(|word| word as i32).collect()))
     }
     /// Words per (row, block), including its header and all model levels.
     pub fn trace_stride(&self) -> Option<usize> {

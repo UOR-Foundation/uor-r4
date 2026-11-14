@@ -391,9 +391,12 @@ pub struct DiscretePrefixEvaluation {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DiscreteTracedPrefixEvaluation {
     pub evaluation: DiscretePrefixEvaluation,
-    /// Raw `u32` trace words in `(block, stage)` order, followed by Relation
-    /// scores when the read mode is Relation.
+    /// Raw base trace words in `(block, stage)` order. Relation scores remain
+    /// separate in [`Self::relation_trace_words`].
     pub trace_words: Vec<u32>,
+    /// Relation scores padded to the artifact context's maximum binder-node
+    /// count, exactly as CUDA stores its batch tail. `u32::MAX` marks padding.
+    pub relation_trace_words: Option<Vec<u32>>,
 }
 
 /// Target-supervised writer loss and rival counts for one prefix evaluation.
@@ -805,6 +808,7 @@ struct RowPlan {
     nodes: Vec<BinderNode>,
     frontier: Vec<usize>,
 }
+type FlockReadParts = (Vec<[i32; 8]>, Option<Vec<i32>>, Option<Vec<u32>>);
 
 fn build_row_plan(length: usize) -> Result<RowPlan> {
     if !(1..=MAX_CONTEXT).contains(&length) {
@@ -1454,7 +1458,8 @@ impl IntegerDiscreteModel {
         sweeps: u32,
         relation_active: bool,
         mut trace: Option<&mut Vec<u32>>,
-    ) -> Result<(Vec<[i32; 8]>, Option<Vec<i32>>)> {
+    ) -> Result<FlockReadParts> {
+        let context = self.shape.context as usize;
         let blocks = self.shape.blocks as usize;
         let stages = self.shape.stages as usize;
         let length = prefix.len();
@@ -1466,6 +1471,11 @@ impl IntegerDiscreteModel {
         } else {
             None
         };
+        let max_nodes_count = (relation_active && trace.is_some())
+            .then(|| build_row_plan(context).map(|plan| plan.nodes.len()))
+            .transpose()?;
+        let mut all_rel_trace =
+            max_nodes_count.map(|max_nodes_count| Vec::with_capacity(blocks * max_nodes_count));
 
         for b in 0..blocks {
             let trace_start = trace.as_ref().map(|words| words.len());
@@ -1612,6 +1622,11 @@ impl IntegerDiscreteModel {
                 if let Some(scores) = &mut all_rel_scores {
                     scores.extend_from_slice(&rel);
                 }
+                if let (Some(scores), Some(max_nodes_count)) = (&mut all_rel_trace, max_nodes_count)
+                {
+                    scores.extend(rel.iter().map(|&score| score as u32));
+                    scores.resize((b + 1) * max_nodes_count, u32::MAX);
+                }
             }
 
             let mut terms = 1usize;
@@ -1722,10 +1737,7 @@ impl IntegerDiscreteModel {
             }
             out.push(ROOTS[out_root].map(i32::from));
         }
-        if let (Some(words), Some(scores)) = (trace, all_rel_scores.as_ref()) {
-            words.extend(scores.iter().map(|&score| score as u32));
-        }
-        Ok((out, all_rel_scores))
+        Ok((out, all_rel_scores, all_rel_trace))
     }
 
     fn address_distance(&self, q: &[[i32; 8]], cell: u32) -> u32 {
@@ -1772,9 +1784,10 @@ impl IntegerDiscreteModel {
         }
         let plan = build_row_plan(prefix.len())?;
         let mut trace_words = Vec::new();
-        let (mut q_blocks, relation_scores) = match self.read_mode {
+        let (mut q_blocks, relation_scores, relation_trace_words) = match self.read_mode {
             DiscreteReadMode::Route => (
                 self.route_read(prefix, &plan, retain_trace.then_some(&mut trace_words))?,
+                None,
                 None,
             ),
             DiscreteReadMode::Flock { kept } => self.flock_or_relation_read(
@@ -1870,6 +1883,7 @@ impl IntegerDiscreteModel {
                 relation_scores,
             },
             trace_words,
+            relation_trace_words,
         })
     }
 

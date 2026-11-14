@@ -42,17 +42,18 @@ The clean start passes K1 to K6 on both fixtures (`native_space_parity_contract_
 
 - **An output-word check alone cannot certify the route and gate state.** On this fixture, 144 of 252 route faults and 5 of 8 gate faults change no output word on any of the 39 prefixes. The direct trace now sees all of them. K6 still compares the learned bytes when both sides write.
 - **The serving loader accepts what training refuses** (C-8). An artifact only serving can load is a model no training run produced. The serving loader should refuse non-zero gates in Route mode, as the CPU loader does.
-- **The serving runtime still has one internal choice it does not expose:** stop state, which does not exist yet. Route frames/ports and the active-leaf kept list now have read-only trace words.
+- **The serving runtime still has one internal choice it does not expose:** stop state, which does not exist yet. Route frames/ports, the active-leaf kept list and Relation scores now have separate read-only trace surfaces.
 
 ## The CUDA leg (completed by codex-5 and codex-6 on `wick`)
 
 - **Build:** `uor-r4-discrete --features cuda` with `UOR_NVCC_ARCH=compute_89` (RTX 4090), on `wick`, in the `uor-r4-claude` container. No rented GPU.
 - **Start:** the same two fixture artifacts, loaded into device buffers. `table`, `routes` and `gates` are copied word for word from the artifact sections; the spec words `s[]` come from the header; `s[11]`–`s[15]` are 0.
 - **Compare:**
-  - `discrete_forward` output words and the Route/active-leaf trace against the CPU and serving reads (K1 and C-4);
+  - `discrete_forward` output words, the Route/active-leaf trace and the padded Relation tail against the CPU and serving reads (K1 and C-4);
   - `predictions` against K3;
   - `discrete_counterfactual` loss words for every candidate against `CpuDiscreteProposalScorer::score` on the same rows;
   - the `discrete_choose` proposal words against `CpuDiscreteProposalChooser::choose`;
   - after `discrete_apply`, the device buffers copied back against the CPU applier's `artifact_bytes`, which covers K5 and K6.
 - **Plant:** the same C-1 to C-8 faults, plus one per kernel status (stale epoch 3, bad index 4, non-improvement 5, mode mismatch 9). Each must refuse with the same status as the CPU applier.
 - **K1b, delivered by codex-6:** a serving-side trace of the Route frame, parent root, selected port, goal root, composed action and next node at each stage. Active-leaf levels expose their gate, kept nodes, transport actions and carried roots.
+- **Relation layout:** compact scores remain on the evaluation; `relation_trace_words` carries the context-padded words in CUDA's batch-tail layout.
