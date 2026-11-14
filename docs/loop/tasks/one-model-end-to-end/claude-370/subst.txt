@@ -1,0 +1,72 @@
+b-s2 p14  fact and number rows 101: exact 18, ended with the answer word 40
+    C: capital	exact 1, answer word 6 of 20
+    C: colour	exact 4, answer word 6 of 9
+    C: day after	exact 1, answer word 5 of 15
+    C: legs	exact 1, answer word 9 of 15
+    C: opposite	exact 3, answer word 3 of 4
+    C: sound	exact 3, answer word 5 of 14
+    D: add	exact 0, answer word 0 of 13
+    D: bigger	exact 5, answer word 6 of 11
+b-s2 p23  fact and number rows 87: exact 18, ended with the answer word 31
+    C: capital	exact 0, answer word 0 of 14
+    C: colour	exact 3, answer word 5 of 10
+    C: day after	exact 3, answer word 5 of 13
+    C: legs	exact 3, answer word 7 of 14
+    C: opposite	exact 2, answer word 2 of 2
+    C: sound	exact 3, answer word 7 of 14
+    D: add	exact 0, answer word 0 of 8
+    D: bigger	exact 4, answer word 5 of 12
+b-s3 p14  fact and number rows 101: exact 15, ended with the answer word 29
+    C: capital	exact 0, answer word 2 of 20
+    C: colour	exact 3, answer word 5 of 9
+    C: day after	exact 0, answer word 1 of 15
+    C: legs	exact 4, answer word 10 of 15
+    C: opposite	exact 0, answer word 0 of 4
+    C: sound	exact 3, answer word 5 of 14
+    D: add	exact 0, answer word 0 of 13
+    D: bigger	exact 5, answer word 6 of 11
+b-s3 p23  fact and number rows 87: exact 12, ended with the answer word 25
+    C: capital	exact 0, answer word 0 of 14
+    C: colour	exact 2, answer word 4 of 10
+    C: day after	exact 0, answer word 1 of 13
+    C: legs	exact 3, answer word 8 of 14
+    C: opposite	exact 0, answer word 0 of 2
+    C: sound	exact 3, answer word 6 of 14
+    D: add	exact 0, answer word 1 of 8
+    D: bigger	exact 4, answer word 5 of 12
+pair-s2 p14  fact and number rows 101: exact 22, ended with the answer word 47
+    C: capital	exact 0, answer word 4 of 20
+    C: colour	exact 5, answer word 8 of 9
+    C: day after	exact 1, answer word 5 of 15
+    C: legs	exact 5, answer word 15 of 15
+    C: opposite	exact 3, answer word 3 of 4
+    C: sound	exact 3, answer word 5 of 14
+    D: add	exact 0, answer word 0 of 13
+    D: bigger	exact 5, answer word 7 of 11
+pair-s2 p23  fact and number rows 87: exact 22, ended with the answer word 39
+    C: capital	exact 0, answer word 0 of 14
+    C: colour	exact 3, answer word 5 of 10
+    C: day after	exact 3, answer word 5 of 13
+    C: legs	exact 6, answer word 12 of 14
+    C: opposite	exact 2, answer word 2 of 2
+    C: sound	exact 3, answer word 7 of 14
+    D: add	exact 0, answer word 1 of 8
+    D: bigger	exact 5, answer word 7 of 12
+pair-s3 p14  fact and number rows 101: exact 23, ended with the answer word 49
+    C: capital	exact 1, answer word 5 of 20
+    C: colour	exact 5, answer word 8 of 9
+    C: day after	exact 1, answer word 6 of 15
+    C: legs	exact 5, answer word 15 of 15
+    C: opposite	exact 3, answer word 3 of 4
+    C: sound	exact 3, answer word 5 of 14
+    D: add	exact 0, answer word 0 of 13
+    D: bigger	exact 5, answer word 7 of 11
+pair-s3 p23  fact and number rows 87: exact 24, ended with the answer word 40
+    C: capital	exact 1, answer word 1 of 14
+    C: colour	exact 3, answer word 5 of 10
+    C: day after	exact 4, answer word 6 of 13
+    C: legs	exact 6, answer word 12 of 14
+    C: opposite	exact 2, answer word 2 of 2
+    C: sound	exact 3, answer word 7 of 14
+    D: add	exact 0, answer word 1 of 8
+    D: bigger	exact 5, answer word 6 of 12

@@ -1,0 +1,84 @@
+row 46
+  turn: Guess what, I bought a jacket today.
+  panel: Oh, a jacket! How exciting.
+  b-s2: A new camera! That sounds wonderful.
+  b-s3: A new guitar! That sounds wonderful.
+  pair-s2: A new jacket! That sounds wonderful.
+  pair-s3: A new jacket! That sounds wonderful.
+row 138
+  turn: What is hermerk?
+  panel: That's 70.
+  b-s2: That's Wednesday.
+  b-s3: I'm sorry you feel sleepy.
+  pair-s2: It's Wednesday.
+  pair-s3: It's Wednesday.
+row 230
+  turn: What is jespaist?
+  panel: Jespaist is stavak.
+  b-s2: Jespaist is jespaist is jespaist is jespaist is jespaist is jespaist is jespaist is jespaist is jespaist is jespa  [did not end]
+  b-s3: Jespaist I hope it gets better soon.
+  pair-s2: Jespaist.
+  pair-s3: Jespaist is jespaist is jespaist is jespaist is jespaist is jespaist is jespaist is jespaist is jespaist is jespa  [did not end]
+row 322
+  turn: What's my code word?
+  panel: The code word is samsitgist.
+  b-s2: The code word is samsit.
+  b-s3: The code word is samsit.
+  pair-s2: The code word is samsit.
+  pair-s3: The code word is samsit.
+row 414
+  turn: What is jindrendklut?
+  panel: Jindrendklut is 2567.
+  b-s2: It's f meet about the bike!
+  b-s3: It's f s s s s s s s s s s s s s s s s s s s s s s s s s s s s s s s s s s s s s s s s s s s s s  [did not end]
+  pair-s2: It's fklut is 2567.
+  pair-s3: It's fid.
+row 506
+  turn: What's the capital city of Russia?
+  panel: The capital of Russia is Moscow.
+  b-s2: The capital of Russia is't't't't't't't't't't't't't't't't't't't't't't't't't't't't't't't't't't't't't't't  [did not end]
+  b-s3: The capital of Russia is S city of Russia is S city of Russia is S city of I do about all tell tell tell tell tell tell tell tell tell tell tell tell tell tell tell tell  [did not end]
+  pair-s2: The capital of Russia isc.
+  pair-s3: The capital of Russia isososcow.
+row 598
+  turn: Please repeat: klogrot saszor vairmokleel heestsest gronbrembrirk plendmetbed
+  panel: klogrot saszor vairmokleel heestsest gronbrembrirk plendmetbed
+  b-s2: klogrot saszor vairmokleel heestsest gronbrembrirk plendmetbed
+  b-s3: klogrot saszor vairmokleel heestsest gronbrembrirk plendmetbed Assistant: klogrot saszor vair  [did not end]
+  pair-s2: klogrot saszor vairmokleel heestsest gronbrembrirk plendmetbed
+  pair-s3: klogrot saszor vairmokleel heestsest gronbrembrirk plendmetbed
+row 690
+  turn: What was vaildarkbrol again?
+  panel: That's chotcha.
+  b-s2: That's chotcha.
+  b-s3: That's chotcha.
+  pair-s2: That's chotcha.
+  pair-s3: That's chotcha.
+row 782
+  turn: Are you a person?
+  panel: I'm a helpful assistant that runs on your computer.
+  b-s2: I am a small assistant. I can chat, remember what you tell me, and follow simple instructions.
+  b-s3: I am a small assistant. I can chat, remember what you tell me, and follow simple instructions.
+  pair-s2: I am a small assistant. I can chat, remember what you tell me, and follow simple instructions.
+  pair-s3: I am a small assistant. I can chat, remember what you tell me, and follow simple instructions.
+row 874
+  turn: Tell me what totrutjeed was.
+  panel: That's 52.
+  b-s2: It's 52.
+  b-s3: It's 52.
+  pair-s2: It's 52.
+  pair-s3: It's 52.
+row 966
+  turn: Please count from 3 to 8.
+  panel: 3, 4, 5, 6, 7, 8.
+  b-s2: 3, 4, 5, 6, 7, 8, 9.
+  b-s3: 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,   [did not end]
+  pair-s2: 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,   [did not end]
+  pair-s3: 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,   [did not end]
+row 1058
+  turn: Which city is the capital of Russia?
+  panel: It's Moscow.
+  b-s2: The capital of Russia is Moscow.
+  b-s3: The capital of Russia is the capital of Russia is the capital of Russia is the capital of Russia is the capital of Russia is the capital  [did not end]
+  pair-s2: The capital of Russia is Moscow.
+  pair-s3: The capital of Russia is Moscow.

@@ -1,0 +1,6 @@
+N 2218 (P14 1108, P23 1110)
+seed 2: b 431 exact, pair 527, gain 96; seed 3: b 413 exact, pair 521, gain 108
+gain(2) + gain(3) = 204; the lines in whole replies: Adds at 155.26 or more, Does not add under 66.54
+G = 4.60 points
+replies that did not end: seed 2 215 to 188, seed 3 160 to 188; rise 0.02 points (the line is 1)
+by the sheet: Adds
