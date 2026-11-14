@@ -57,15 +57,6 @@ Fault visibility:
 
 No training run, capability, language result, throughput or performance claim is made.
 
-## Skills used
-
-- `uor-research-architect`: kept the unit finite, artifact-bound and separate from language
-  qualification.
-- `working-discipline`: read the existing state first, compared the shipped paths, retained row
-  words and reported the parent-base failures separately.
-- `compaction`: recovered the interrupted CUDA-parity state without reconstructing measurements
-  from memory.
-
 ## Checks run at the head
 
 - `cargo test --locked -p uor-r4-cpu-train
@@ -90,6 +81,15 @@ No training run, capability, language result, throughput or performance claim is
 - Fresh-context exact-head review: the first pass returned CHANGES with the two P2 findings above;
   the repaired head is submitted for delta re-review. External PR publication requires owner
   approval under the repository AGENTS instruction.
+
+## Skills used
+
+- `uor-research-architect`: kept the unit finite, artifact-bound and separate from language
+  qualification.
+- `working-discipline`: read the existing state first, compared the shipped paths, retained row
+  words and reported the parent-base failures separately.
+- `compaction`: recovered the interrupted CUDA-parity state without reconstructing measurements
+  from memory.
 
 ## Still open
 
