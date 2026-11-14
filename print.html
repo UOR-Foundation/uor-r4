@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-368620ef.js";
+            window.path_to_searchindex_js = "searchindex-5ea30655.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-78e3d836.js"></script>
@@ -1220,7 +1220,7 @@ serving path?</li>
 <li>The one <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">PLAN</a> and the long-form <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/integration/project-track.md">project track</a>.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); 1 later commit changes its sources.</small></p>
 
 <h1 id="the-web-client"><a class="header" href="#the-web-client">The web client</a></h1>
 <p><strong>9 November 2026 neutral Studio default published live.</strong> PR #3903 merged as <code>4160a5347717d7e6786848895b758bfc5dc663f7</code> after exact-head approval and required checks. Fresh-main typed verification passed <strong>455/455</strong> typed tests, <strong>47/47</strong> Playwright checks, <strong>15/15</strong> runtime contracts, <strong>11/11</strong> gates, both runtime routes/migration cases and direct <strong>7/7</strong> WASM checks. The typed publisher produced gh-pages <code>4a435ab8af9c1da6d49225c30f9dda0a4ad50b87</code>; Pages run <code>42714479496</code> succeeded. Previous typed-preview publish <code>6540e2717d3a606330dbd141e3642f3f13b87ecf</code> is the rollback head. Plain <code>/studio/</code> now renders the neutral UOR Harness workbench at desktop and mobile sizes; explicit <code>?legacy=1</code> and <code>?typed=0</code> retain the old interface, and Terminal explicitly reports <code>Interactive PTY is unavailable in this browser build.</code> The isolated public runtime reports <strong>14 requests with zero external/raw-TypeScript/runtime errors</strong>, one shell, <code>legacyMcp=0</code>, <code>typedMcp=1</code>, artifact readiness, exact <code>17 + 25 = 42</code>, and isolated/restored transcripts. Public index bytes match the staged file. Evidence is under <code>local/kimi/default-cutover/fresh-main/</code>. Static web still has no native terminal, background agent service or live R4 API contract; full Cowork parity is not claimed. See <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/studio-ide-harness/kimi-17/ORDER.md">kimi-17</a>; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/studio-ide-harness/kimi-14/ORDER.md">kimi-14</a> retains the earlier typed-preview publication.</p>
@@ -2676,7 +2676,7 @@ only by manual dispatch. This documentation unit publishes neither.</p>
 <li>Next: <a href="#data-and-tokenizer">data and tokenizer</a>, <a href="#gpus-and-cuda">GPU and CUDA</a>, and <a href="#the-model-end-to-end">architecture</a>.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); no later commit changes them.</small></p>
+<p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/a70d6189df3368575e745d351ed692cb000e9388"><code>a70d6189d</code></a> (2026-11-14); 1 later commit changes its sources.</small></p>
 
 <h1 id="gpus-and-cuda"><a class="header" href="#gpus-and-cuda">GPUs and CUDA</a></h1>
 <p>The project trains and tests its model on graphics cards (GPUs), not on the laptop's processor. The programs that run on a GPU are called kernels, and the project writes them in CUDA, NVIDIA's language for GPUs. Every kernel is compiled before it runs. For the active model, an audit reads the compiled result and refuses instructions the project has banned: decimal arithmetic, tensor-core matrix instructions and approximate exponentials. The cards are rented by the hour from a marketplace through one script, under hard limits on how many and how much. The rented GPUs are used for qualification runs and training doses. They produced the saved discrete M1 pair, which passed all six bars at two seeds; no model holds a useful conversation yet.</p>
