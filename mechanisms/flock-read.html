@@ -236,6 +236,14 @@
 <li>Recall measured by distance bucket (so eviction is distinguishable).</li>
 <li>More than one read layer before any multi-hop claim.</li>
 </ul>
+<p><em>From the earlier rank-table brief, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/mechanisms/flock-rank-reads-2026-10-20.md">archive/mechanisms/flock-rank-reads-2026-10-20.md</a></em> (the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/mechanisms/flock-rank-reads.md">flock-rank-reads</a> stub points here):</p>
+<ul>
+<li><strong>The rank-table form.</strong> For each query row it kept a sink (position 0), a local window of the last W positions and the exact top-K of the rest by a monotone rank score. It weighted the kept sources by rank (<code>w_r ∝ 1/(r+1)</code>) or by a learned per-head table, so a read touches at most W+K+1 value rows. Only order matters, so the score can be an integer or a Hamming distance on sign bits.</li>
+<li><strong>Why the 10 Oct tests could judge it only in part.</strong> There was one W/K setting. Training used a straight-through gradient equal to the flock-softmax gradient, so the forward pass trained was not the one run. Learning rates were tuned for softmax. The flock ran on the host, which kept the runs small and the context short.</li>
+<li><strong>What still applies from its fair test:</strong> a gradient derived from the rank forward, a GPU flock kernel, K ∈ {8, 32} at contexts 384 and at least 1,536, and three seeds. The brief framed its bar against a softmax read; the owner has since withdrawn softmax and transformer comparators (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/harness/mistakes/L-006.md">L-006</a>), so that bar is history.</li>
+<li><strong>Its failure condition (hypothesis):</strong> if rank still trails at long context and raising K toward the whole window does not close the gap, the information lives in score magnitudes, which a rank discards by design.</li>
+<li><strong>Its open design questions:</strong> score-bucketed tables (rank × quantized margin), learned W and K per head, a sink at a geometric address instead of position 0, and Hamming over richer codes (multi-bit or H4/icosian).</li>
+</ul>
 <h2 id="what-comes-next"><a class="header" href="#what-comes-next">What comes next</a></h2>
 <p>The mechanism is ACTIVE, so this is a plan, not a reopening.</p>
 <ol>
