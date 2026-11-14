@@ -70,6 +70,11 @@ fn render_markdown(root: &Path, files: &[StackContractFile]) -> Result<String, F
     writeln!(w)?;
     writeln!(
         w,
+        "**D85 status:** the persistent native state/operator implementation is pending; all float-to-integer measurements on this page are historical/export evidence."
+    )?;
+    writeln!(w)?;
+    writeln!(
+        w,
         "**D85:** existing contracts whose training row says float32 and whose serving row uses a separate integer artifact describe the historical/export route. The default path is one persistent native geometric state with the same typed training and serving operators; these records remain valid only at their measured historical scope."
     )?;
     writeln!(w)?;

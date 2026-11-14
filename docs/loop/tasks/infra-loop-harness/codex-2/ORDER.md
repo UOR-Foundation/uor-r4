@@ -1,7 +1,17 @@
 # ORDER: infra-loop-harness, codex-2
 
-Lab: codex. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md).
+Lab: codex. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Setup row: 2.
 Parent: [codex-1](../codex-1/ORDER.md). Reviewed head: `076ede2c1`.
+
+## Owner approval
+
+The owner approved the native train/serve pivot and the control-plane update:
+
+> "yes please update your corvuswing loopkit and harness too so that you can continue down the correct path"
+
+Recorded at `2026-11-14T02:57:18Z`. This repair records the same approval for changes to
+`CHARTER.md`, `AGENTS.md`, `docs/rules/changes.md`, `docs/integration/DECISIONS.md`,
+`docs/harness/native-space.json` and its registration in `docs/harness/owner-paths.json`.
 
 ## Why this repair exists
 
