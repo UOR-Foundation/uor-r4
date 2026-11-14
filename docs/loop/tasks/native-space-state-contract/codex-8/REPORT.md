@@ -14,6 +14,9 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   `From<uor_r4_native_vector::Error>` conversion.
 - The installed `uor-harness` was stale and returned `0 rules` for the named native-space check.
   That was not accepted as a pass; the current harness binary was rebuilt and returned one rule.
+- The first exact-head review found that this REPORT overstated two serving test functions as six
+  tests and left the Clippy acceptance ambiguous. `codex-9` corrects the count and records a
+  package-scoped Clippy run that includes the new file.
 - Package-wide integer formatting and `-D warnings` Clippy already fail on extensive unrelated
   baseline drift. Only touched files are formatting-checked. Package-scoped integer Clippy remains
   red on existing code and is not reported as green.
@@ -32,9 +35,9 @@ model without numerical conversion, saves it losslessly and executes `q31_hamilt
 the same shared definition used by training. Wrong width, unknown version, nonzero trailing
 bytes, out-of-domain gate words and step shifts above 31 are refused.
 
-The six new serving tests are part of the integer test binary: two focused test functions cover a
-64-step trained state plus every serialization refusal. The shared crate's 14 tests and four
-CUDA integration tests continue to compare raw Q31 words.
+Two new serving test functions are part of the integer test binary: one covers a 64-step trained
+state and its raw transition words, and one covers every serialization refusal. The shared crate's
+14 tests and four CUDA integration tests continue to compare raw Q31 words.
 
 Size: 589 lines moved from discrete into the shared crate, 607 lines in that new crate including
 its tests, about 120 new lines in the serving adapter, and small dependency/re-export edits. The
@@ -70,6 +73,8 @@ not new behavior.
 - Harness package with `TMPDIR=/var/tmp/uor-harness.KQCj53` - 685 library tests passed with 1
   network-only test ignored, then every integration and doc test passed.
 - Touched-file `rustfmt --check` and `git diff --check` - passed after the CUDA wrapper repair.
+- `cargo clippy --locked --no-deps -p uor-r4-integer --features serving-wasm --lib` - exited 0
+  with existing warnings outside this unit; filtered `q31_serving.rs` diagnostics: 0.
 - Package-wide `uor-r4-integer` Clippy `-D warnings` - failed on existing warnings outside this
   change; no green result is claimed.
 
