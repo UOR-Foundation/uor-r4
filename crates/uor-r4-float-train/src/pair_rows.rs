@@ -16,9 +16,16 @@
 //!    token up to the next user marker or the window's end. The read is a gather and a
 //!    scatter-add; nothing multiplies a state by a table.
 //!
+//! 4. **Rarity weight** (claude-373, `--pair-weight replies`). Optionally each row is weighed by
+//!    the fixed `1 / R`, where `R` counts the different replies ([`reply_counts`]) that follow the
+//!    TRAIN turns holding its pair: a pair that names one reply adds its row whole, a pair seen
+//!    before many replies adds little. The bag is then the weighted sum of the turn's rows.
+//!
 //! The rows are active for the thread that sets them ([`set_pair_rows`]).
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::hash_map::DefaultHasher;
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -32,6 +39,9 @@ const FILE: &str = "pair_rows.safetensors";
 const DICT_FILE: &str = "pair_rows.dict";
 const MAGIC: &[u8; 8] = b"UORPAIR1";
 const LIMIT: u64 = 1 << 31;
+/// The most different replies counted for one pair (claude-373): a pair seen before more keeps
+/// this count, so its weight is `1 / REPLY_CAP`.
+pub const REPLY_CAP: usize = 4096;
 
 thread_local! {
     static ACTIVE: RefCell<Option<PairRows>> = const { RefCell::new(None) };
@@ -396,12 +406,44 @@ pub fn bag_readers(dict: &PairDictionary, marks: &PairMarks, prompts: &[&[u32]])
     Ok(readers)
 }
 
-/// The learned rows, one per dictionary pair, `width` wide.
+/// Per dictionary row: how many different replies follow the user turns of `tokens` that hold
+/// the row's pair, at most [`REPLY_CAP`]. A reply is told apart by its exact token run, hashed;
+/// it runs from the assistant header's last position up to the next user marker or the end of
+/// `tokens`, as in [`plan`]. Each different reply counts once however many turns it follows.
+pub fn reply_counts(dict: &PairDictionary, tokens: &[u32], marks: &PairMarks) -> Result<Vec<u32>> {
+    marks.check()?;
+    let (turns, users) = scan(tokens, marks);
+    let mut replies: Vec<HashSet<u64>> = vec![HashSet::new(); dict.len()];
+    for turn in &turns {
+        let rows = dict.turn_rows(&tokens[turn.start..turn.header]);
+        if rows.is_empty() {
+            continue;
+        }
+        let end = users
+            .get(users.partition_point(|&u| u <= turn.reply))
+            .copied()
+            .unwrap_or(tokens.len());
+        let mut hasher = DefaultHasher::new();
+        tokens[turn.reply..end].hash(&mut hasher);
+        let reply = hasher.finish();
+        for row in rows {
+            let seen = &mut replies[row as usize];
+            if seen.len() < REPLY_CAP {
+                seen.insert(reply);
+            }
+        }
+    }
+    Ok(replies.iter().map(|seen| seen.len() as u32).collect())
+}
+
+/// The learned rows, one per dictionary pair, `width` wide, and when weighed (claude-373) a fixed
+/// weight per row that takes no gradient.
 #[derive(Clone, Debug)]
 pub struct PairRows {
     dict: Arc<PairDictionary>,
     marks: PairMarks,
     rows: Var,
+    weights: Option<Tensor>,
 }
 
 impl PairRows {
@@ -424,7 +466,44 @@ impl PairRows {
             dict: Arc::new(dict),
             marks,
             rows,
+            weights: None,
         })
+    }
+
+    /// The rows weighed by rarity (claude-373): row `r` adds `1 / counts[r]` times itself, a
+    /// constant that takes no gradient. Refuses counts of another length or a zero count.
+    pub fn with_reply_weights(self, counts: &[u32]) -> Result<Self> {
+        if counts.contains(&0) {
+            return Err(invalid("a pair-rows reply count of zero has no weight"));
+        }
+        let weights = counts.iter().map(|&r| 1.0 / r as f32).collect();
+        self.with_weights(weights)
+    }
+
+    /// The rows with `weights`, one per row. Refuses another length or a weight that is not
+    /// finite and positive.
+    fn with_weights(mut self, weights: Vec<f32>) -> Result<Self> {
+        if weights.len() != self.dict.len() {
+            return Err(invalid(format!(
+                "{} pair-rows weights for a dictionary of {} pairs",
+                weights.len(),
+                self.dict.len()
+            )));
+        }
+        if let Some(w) = weights.iter().find(|w| !(w.is_finite() && **w > 0.0)) {
+            return Err(invalid(format!(
+                "a pair-rows weight must be finite and positive, not {w}"
+            )));
+        }
+        let device = self.rows.as_tensor().device().clone();
+        let length = weights.len();
+        self.weights = Some(Tensor::from_vec(weights, length, &device)?.detach());
+        Ok(self)
+    }
+
+    /// The fixed row weights, when the rows are weighed.
+    pub fn weights(&self) -> Option<&Tensor> {
+        self.weights.as_ref()
     }
 
     /// The dictionary the rows are numbered by.
@@ -527,6 +606,12 @@ impl PairRows {
         let width = x.dim(2)?;
         let [hit_row, hit_turn, turn_of] = indices(plan, turn_of, x.device())?;
         let gathered = self.rows.as_tensor().index_select(&hit_row, 0)?;
+        let gathered = match &self.weights {
+            Some(weights) => {
+                gathered.broadcast_mul(&weights.index_select(&hit_row, 0)?.unsqueeze(1)?)?
+            }
+            None => gathered,
+        };
         let bags = Tensor::zeros((plan.turns + 1, width), DType::F32, x.device())?
             .index_add(&hit_turn, &gathered, 0)?;
         let per_position = bags
@@ -536,12 +621,15 @@ impl PairRows {
         Ok(x.add(&per_position)?)
     }
 
-    /// Write the rows (`pair_rows.safetensors`, with the marks) and the dictionary
+    /// Write the rows (`pair_rows.safetensors`, with the marks and, when weighed, the weights) and the dictionary
     /// (`pair_rows.dict`) into `directory`.
     pub fn save(&self, directory: &Path) -> Result<()> {
         let host = Device::Cpu;
         let mut tensors: HashMap<String, Tensor> = HashMap::new();
         tensors.insert("rows".to_owned(), self.rows.as_tensor().detach());
+        if let Some(weights) = &self.weights {
+            tensors.insert("weights".to_owned(), weights.clone());
+        }
         let marks = [
             ("user", &self.marks.user),
             ("assistant", &self.marks.assistant),
@@ -558,7 +646,8 @@ impl PairRows {
     }
 
     /// The rows saved in `directory`, or none when the checkpoint has neither pair-rows file.
-    /// Refuses a checkpoint that holds only one of the two.
+    /// Refuses a checkpoint that holds only one of the two. Weights present load weighed rows;
+    /// a weights tensor of another length, or a weight not finite and positive, is refused.
     pub fn load(directory: &Path, device: &Device) -> Result<Option<Self>> {
         let (path, dict_path) = (directory.join(FILE), directory.join(DICT_FILE));
         if !path.exists() && !dict_path.exists() {
@@ -593,11 +682,16 @@ impl PairRows {
                 dict.len()
             )));
         }
-        Ok(Some(Self {
+        let pair = Self {
             dict: Arc::new(dict),
             marks,
             rows: Var::from_tensor(rows)?,
-        }))
+            weights: None,
+        };
+        match tensors.get("weights") {
+            None => Ok(Some(pair)),
+            Some(weights) => Ok(Some(pair.with_weights(weights.to_vec1::<f32>()?)?)),
+        }
     }
 }
 
@@ -995,5 +1089,143 @@ mod tests {
         std::fs::remove_file(directory.join(FILE)).unwrap();
         assert!(PairRows::load(&directory, &device).unwrap().is_none());
         std::fs::remove_dir_all(&directory).unwrap();
+    }
+
+    /// claude-373: pair (5,6) is in three turns with replies `3 10`, `3 10`, `3 11`; pair (7,8) in
+    /// two turns, both with reply `3 12`, the last of which runs to the stream's end.
+    #[test]
+    fn a_reply_count_counts_each_different_reply_once() {
+        let stream = [
+            1, 4, 5, 6, 2, 3, 10, 1, 4, 5, 6, 2, 3, 10, 1, 4, 5, 6, 2, 3, 11, 1, 4, 7, 8, 2, 3, 12,
+            1, 4, 7, 8, 2, 3, 12,
+        ];
+        let dict = PairDictionary::count(20, &stream, &marks(), 2).unwrap();
+        assert_eq!(dict.len(), 2);
+        assert_eq!(reply_counts(&dict, &stream, &marks()).unwrap(), vec![2, 1]);
+    }
+
+    /// claude-373: the reply counts the rows of [`dict`] are weighed by.
+    #[cfg(feature = "cuda")]
+    const COUNTS: [u32; 4] = [1, 2, 4, 8];
+
+    /// Rows of [`dict`], width 4, set to known values and weighed by [`COUNTS`].
+    #[cfg(feature = "cuda")]
+    fn weighed(device: &Device) -> (PairRows, Vec<f32>) {
+        let pair = PairRows::new(dict(), marks(), 4, device).unwrap();
+        let table: Vec<f32> = (0..16).map(|n| ((n / 4 + 1) * 10 + n % 4) as f32).collect();
+        pair.rows
+            .set(&Tensor::from_vec(table.clone(), (4, 4), device).unwrap())
+            .unwrap();
+        (pair.with_reply_weights(&COUNTS).unwrap(), table)
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn a_weighed_bag_is_the_weighted_sum_of_the_turn_rows() {
+        let device = device();
+        let (pair, table) = weighed(&device);
+        let weights = pair.weights().unwrap().to_vec1::<f32>().unwrap();
+        assert_eq!(weights, vec![1.0, 0.5, 0.25, 0.125]);
+        let part = |r: usize, c: usize| table[r * 4 + c] / COUNTS[r] as f32;
+        let values = state(2, 16, 4);
+        let x = Tensor::from_vec(values.clone(), (2, 16, 4), &device).unwrap();
+        let y = pair.apply(&x, &batch_ids()).unwrap();
+        let y = y.flatten_all().unwrap().to_vec1::<f32>().unwrap();
+        let mut bag = vec![vec![0.0f32; 4]; 32];
+        for p in [6, 7, 8] {
+            bag[p] = (0..4).map(|c| part(0, c)).collect();
+        }
+        for p in [14, 15] {
+            bag[p] = (0..4).map(|c| part(3, c)).collect();
+        }
+        for p in [16 + 6, 16 + 7, 16 + 8] {
+            bag[p] = (0..4)
+                .map(|c| part(0, c) + part(1, c) + part(2, c))
+                .collect();
+        }
+        for (p, add) in bag.iter().enumerate() {
+            for c in 0..4 {
+                let expect = values[p * 4 + c] + add[c];
+                assert_eq!(y[p * 4 + c], expect, "position {p} coordinate {c}");
+            }
+        }
+    }
+
+    /// A scratch folder for one test, removed by the caller.
+    #[cfg(feature = "cuda")]
+    fn scratch(tag: u32) -> std::path::PathBuf {
+        let directory =
+            std::env::temp_dir().join(format!("uor-r4-pair-rows-{}-{tag:x}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        directory
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn unweighed_rows_save_no_weights_and_load_unweighed() {
+        let device = device();
+        let directory = scratch(0x3730);
+        let pair = PairRows::new(dict(), marks(), 4, &device).unwrap();
+        assert!(pair.weights().is_none());
+        pair.save(&directory).unwrap();
+        let tensors = candle_core::safetensors::load(directory.join(FILE), &device).unwrap();
+        let mut names: Vec<&String> = tensors.keys().collect();
+        names.sort();
+        assert_eq!(names, ["assistant", "rows", "user"]);
+        let loaded = PairRows::load(&directory, &device).unwrap().unwrap();
+        assert!(loaded.weights().is_none());
+        std::fs::remove_dir_all(&directory).unwrap();
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn weights_round_trip_and_bad_weights_are_refused() {
+        let device = device();
+        let directory = scratch(0x3731);
+        let (pair, _) = weighed(&device);
+        pair.save(&directory).unwrap();
+        let loaded = PairRows::load(&directory, &device).unwrap().unwrap();
+        let back = loaded.weights().unwrap().to_vec1::<f32>().unwrap();
+        assert_eq!(back, vec![1.0, 0.5, 0.25, 0.125]);
+        let path = directory.join(FILE);
+        let bad: [Vec<f32>; 4] = [
+            vec![1.0, 0.5, 0.25],
+            vec![1.0, 0.0, 0.25, 0.125],
+            vec![1.0, -0.5, 0.25, 0.125],
+            vec![1.0, f32::NAN, 0.25, 0.125],
+        ];
+        for weights in bad {
+            let mut tensors = candle_core::safetensors::load(&path, &device).unwrap();
+            let length = weights.len();
+            let tensor = Tensor::from_vec(weights.clone(), length, &device).unwrap();
+            tensors.insert("weights".to_owned(), tensor);
+            candle_core::safetensors::save(&tensors, &path).unwrap();
+            let error = PairRows::load(&directory, &device).unwrap_err().to_string();
+            assert!(error.contains("pair-rows weight"), "{weights:?}: {error}");
+        }
+        std::fs::remove_dir_all(&directory).unwrap();
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn a_weighed_cached_step_equals_the_whole_window() {
+        let device = device();
+        let (pair, _) = weighed(&device);
+        let ids = batch_ids();
+        let values = state(2, 16, 4);
+        let x = Tensor::from_vec(values.clone(), (2, 16, 4), &device).unwrap();
+        let whole = pair.apply(&x, &ids).unwrap().narrow(1, 15, 1).unwrap();
+        let step = pair.apply_last(&x.narrow(1, 15, 1).unwrap(), &ids).unwrap();
+        let whole = whole.flatten_all().unwrap().to_vec1::<f32>().unwrap();
+        let step = step.flatten_all().unwrap().to_vec1::<f32>().unwrap();
+        assert!(whole
+            .iter()
+            .zip(&step)
+            .all(|(a, b)| a.to_bits() == b.to_bits()));
+        assert_ne!(
+            whole[..4],
+            values[15 * 4..16 * 4],
+            "window A's last position adds row 3"
+        );
     }
 }
