@@ -418,6 +418,63 @@ __device__ W writer(const int* q,const int* table,const U* g,const U* s,U target
 // Statuses added with the flock/relation read: 9 = read-mode/proposal-kind mismatch
 // (Gate in Route mode, Route in Flock/Relation mode); 10 = gate trit outside {-1,0,1}
 // or read mode/K/sweeps out of range. 13 = writer address metric word s[15] > 2.
+#define ROUTE_TRACE_ROW 4u
+#define ROUTE_TRACE_STAGE 6u
+// Qualification-only Route trace over the ordinary production forward. Header:
+// [frontier count, output root, completed stages, terminal atom]. Stage:
+// [frame, parent root, selected port, goal root, composed action, next node].
+__device__ bool route_vector_traced(const int* input,const U* ids,const U* routes,const U* plan,const U* g,const U* s,U row,U kind,U index,U candidate,int* output,U* trace) {
+    plan+=row*(3+s[6]*4+16);
+    U length=plan[0],nodes=plan[1],frontier=plan[2];plan+=3;
+    if(length==0 || length>s[2] || nodes>s[6] || frontier==0 || frontier>16 || s[13]>1u || (s[13]==1u && kind==0u))return false;
+    if(s[13]==1u){
+        for(U block=0;block<s[1];++block){
+            input_block(input,ids,g,row,length-1,block,s,kind,index,candidate,output+block*8);
+            if(trace){U* rec=trace+(row*s[1]+block)*(ROUTE_TRACE_ROW+s[5]*ROUTE_TRACE_STAGE);for(U i=0;i<ROUTE_TRACE_ROW+s[5]*ROUTE_TRACE_STAGE;++i)rec[i]=ABSENT;rec[0]=frontier;rec[1]=root_id(output+block*8,g);rec[2]=0;}
+        }
+        return true;
+    }
+    for(U block=0;block<s[1];++block) {
+        int query[8];input_block(input,ids,g,row,length-1,block,s,kind,index,candidate,query);
+        U node=ABSENT,root=0,total=g[IDENTITY];
+        U* rec=trace?trace+(row*s[1]+block)*(ROUTE_TRACE_ROW+s[5]*ROUTE_TRACE_STAGE):0;
+        if(rec){for(U i=0;i<ROUTE_TRACE_ROW+s[5]*ROUTE_TRACE_STAGE;++i)rec[i]=ABSENT;rec[0]=frontier;}
+        for(U stage=0;stage<s[5];++stage) {
+            U parameter=block*s[5]+stage;
+            U frame=routes[parameter];
+            if(frame>=64) return false;
+            if(kind==0 && index==parameter && candidate) frame=compose(g,move_action(g,candidate),frame);
+            U* sr=rec?rec+ROUTE_TRACE_ROW+stage*ROUTE_TRACE_STAGE:0;
+            if(sr){sr[0]=frame;sr[1]=root;}
+            int q[8];action(g,frame,query,q);
+            U count=stage==0?frontier:3;
+            U best=ABSENT,best_distance=ABSENT,best_hamming=ABSENT,goal=0;
+            for(U port=0;port<count;++port) {
+                U r=stage==0?port:g[BRANCH+root*3+port];
+                U distance,hamming;root_cost(q,g,r,&distance,&hamming);
+                if(distance<best_distance || (distance==best_distance && hamming<best_hamming)) {
+                    best=port;best_distance=distance;best_hamming=hamming;goal=r;
+                }
+            }
+            if(best==ABSENT) return false;
+            total=compose(g,g[BFS+root*16+goal],total);root=goal;
+            node=stage==0?plan[s[6]*4+best]:plan[node*4+best];
+            if(node>=nodes) return false;
+            if(sr){sr[2]=best;sr[3]=goal;sr[4]=total;sr[5]=node;}
+            U atom=plan[node*4+3];
+            if(atom!=ABSENT) {
+                if(atom>=length) return false;
+                int carrier[8];input_block(input,ids,g,row,atom,block,s,kind,index,candidate,carrier);
+                action(g,total,carrier,output+block*8);
+                if(rec){rec[2]=stage+1;rec[3]=atom;}
+                break;
+            }
+            if(stage+1==s[5]) return false;
+        }
+        if(rec)rec[1]=root_id(output+block*8,g);
+    }
+    return true;
+}
 extern "C" __global__ void discrete_init(int* table,U* routes,int* gates,const U* g,const U* s,U seed,U* status) {
     U i=blockIdx.x*blockDim.x+threadIdx.x;
     U elements=s[0]*s[1]*8;
@@ -446,7 +503,11 @@ extern "C" __global__ void discrete_export_token_cells(const int* table,const U*
 // (+ rows*blocks*nodes_count relation score words in Relation mode); ignored in Route mode.
 extern "C" __global__ void discrete_forward(const int* table,const U* routes,const int* gates,const U* ids,const int* input,const U* targets,const U* plan,const U* g,const U* s,const U* position_steps,int* out,U* predictions,W* losses,U* token_rivals,U* address_rivals,U* admitted,U* trace,U* status) {
     U row=blockIdx.x*blockDim.x+threadIdx.x;if(row>=s[4])return;
-    int q[MAX_WIDTH];if(!read_vector(input,ids,routes,gates,plan,g,s,position_steps,row,2,0,0,q,(s[8]==MODE_FLOCK || s[8]==MODE_RELATION)?trace:0)){atomicExch(status,2u);return;}
+    int q[MAX_WIDTH];
+    bool read_ok=s[8]==0u
+        ?route_vector_traced(input,ids,routes,plan,g,s,row,2,0,0,q,trace)
+        :read_vector(input,ids,routes,gates,plan,g,s,position_steps,row,2,0,0,q,trace);
+    if(!read_ok){atomicExch(status,2u);return;}
     for(U d=0;d<s[1]*8;++d)out[row*s[1]*8+d]=q[d];
     U arithmetic_status=0;
     losses[row]=writer(q,table,g,s,targets[row],2,0,0,predictions+row,token_rivals+row,address_rivals+row,admitted+row*16,0,0,0,&arithmetic_status);

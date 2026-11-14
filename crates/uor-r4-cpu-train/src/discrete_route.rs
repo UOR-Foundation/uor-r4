@@ -13,6 +13,10 @@ use uor_r4_discrete::trunk::{
     TrunkTables, TrunkTrainRow, BLOCK_WIDTH, CELL_COUNT, READ_WIDTH, TRUNK_BLOCKS,
 };
 use uor_r4_discrete::w2_capacity::decode_read_vector;
+use uor_r4_integer::discrete_d11::{
+    DISCRETE_ACTIVE_TRACE_HEADER_WORDS, DISCRETE_ACTIVE_TRACE_LEVEL_WORDS,
+    DISCRETE_ROUTE_TRACE_HEADER_WORDS, DISCRETE_ROUTE_TRACE_STAGE_WORDS,
+};
 
 use crate::{CpuTrainError, VOCABULARY};
 
@@ -218,6 +222,16 @@ impl CpuDiscreteRoute {
     }
 
     pub fn read(&self, prefix: &[u32]) -> Result<Vec<i32>> {
+        self.read_internal(prefix, None)
+    }
+
+    pub fn read_traced(&self, prefix: &[u32]) -> Result<CpuDiscreteReadTrace> {
+        let mut trace_words = Vec::new();
+        let query = self.read_internal(prefix, Some(&mut trace_words))?;
+        Ok(CpuDiscreteReadTrace { query, trace_words })
+    }
+
+    fn read_internal(&self, prefix: &[u32], mut trace: Option<&mut Vec<u32>>) -> Result<Vec<i32>> {
         if prefix.is_empty() || prefix.len() > self.context {
             return Err(invalid("Route prefix outside context"));
         }
@@ -236,8 +250,25 @@ impl CpuDiscreteRoute {
             let mut root = 0usize;
             let mut total = 0usize;
             let mut resolved = None;
+            let trace_start = trace.as_ref().map(|words| words.len());
+            if let Some(words) = trace.as_deref_mut() {
+                words.resize(
+                    words.len()
+                        + DISCRETE_ROUTE_TRACE_HEADER_WORDS
+                        + self.stages * DISCRETE_ROUTE_TRACE_STAGE_WORDS,
+                    u32::MAX,
+                );
+            }
             for stage in 0..self.stages {
-                let q = self.act(self.routes[block][stage] as usize, query)?;
+                let frame = self.routes[block][stage] as usize;
+                if let (Some(words), Some(start)) = (trace.as_deref_mut(), trace_start) {
+                    let at = start
+                        + DISCRETE_ROUTE_TRACE_HEADER_WORDS
+                        + stage * DISCRETE_ROUTE_TRACE_STAGE_WORDS;
+                    words[at] = frame as u32;
+                    words[at + 1] = root as u32;
+                }
+                let q = self.act(frame, query)?;
                 let count = if stage == 0 { plan.frontier.len() } else { 3 };
                 let mut best = 0usize;
                 let mut best_distance = u32::MAX;
@@ -273,16 +304,33 @@ impl CpuDiscreteRoute {
                         .children
                         .ok_or_else(|| invalid("Route stepped past atom"))?[best]
                 };
+                if let (Some(words), Some(start)) = (trace.as_deref_mut(), trace_start) {
+                    let at = start
+                        + DISCRETE_ROUTE_TRACE_HEADER_WORDS
+                        + stage * DISCRETE_ROUTE_TRACE_STAGE_WORDS;
+                    words[at + 2] = best as u32;
+                    words[at + 3] = goal as u32;
+                    words[at + 4] = total as u32;
+                    words[at + 5] = next as u32;
+                }
                 if let Some(atom) = plan.nodes[next].atom {
                     let carrier = &self.token_blocks[prefix[atom] as usize][block];
                     resolved = Some(self.act(total, carrier)?);
+                    if let (Some(words), Some(start)) = (trace.as_deref_mut(), trace_start) {
+                        words[start] = plan.frontier.len() as u32;
+                        words[start + 2] = (stage + 1) as u32;
+                        words[start + 3] = atom as u32;
+                    }
                     break;
                 }
                 node = next;
             }
-            out.extend_from_slice(
-                &resolved.ok_or_else(|| invalid("Route did not reach an atom leaf"))?,
-            );
+            let resolved = resolved.ok_or_else(|| invalid("Route did not reach an atom leaf"))?;
+            if let (Some(words), Some(start)) = (trace.as_deref_mut(), trace_start) {
+                words[start + 1] =
+                    root_id(&resolved).ok_or_else(|| invalid("Route output outside orbit"))? as u32;
+            }
+            out.extend_from_slice(&resolved);
         }
         Ok(out)
     }
@@ -565,6 +613,10 @@ impl ActiveLeafModel {
     }
 
     fn read(&self, prefix: &[u32]) -> Result<Vec<i32>> {
+        self.read_traced(prefix, None)
+    }
+
+    fn read_traced(&self, prefix: &[u32], mut trace: Option<&mut Vec<u32>>) -> Result<Vec<i32>> {
         let label = match self.mode {
             ActiveLeafMode::Flock => "Flock",
             ActiveLeafMode::Relation { .. } => "Relation",
@@ -582,13 +634,30 @@ impl ActiveLeafModel {
         let length = prefix.len();
         let last_token = prefix[length - 1] as usize;
         let mut out = Vec::with_capacity(self.blocks * 8);
+        let mut all_relation_scores =
+            matches!(self.mode, ActiveLeafMode::Relation { .. }).then(Vec::<i32>::new);
         for block in 0..self.blocks {
+            let trace_start = trace.as_ref().map(|words| words.len());
+            if let Some(words) = trace.as_deref_mut() {
+                words.resize(
+                    words.len()
+                        + DISCRETE_ACTIVE_TRACE_HEADER_WORDS
+                        + self.stages * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS,
+                    u32::MAX,
+                );
+            }
             let frame_block = if block == 0 { self.blocks - 1 } else { 0 };
             let query_frame = &self.token_blocks[last_token][frame_block];
             let query_frame_root = root_id(query_frame)
                 .ok_or_else(|| invalid("active-leaf query frame outside orbit"))?;
             let mut value = self.token_blocks[last_token][block];
             let mut terms = 1usize;
+            if let (Some(words), Some(start)) = (trace.as_deref_mut(), trace_start) {
+                words[start] = query_frame_root as u32;
+                words[start + 3] = root_id(&value)
+                    .ok_or_else(|| invalid("active-leaf query payload outside orbit"))?
+                    as u32;
+            }
 
             let mut frames = vec![0usize; plan.nodes.len()];
             let mut payload = vec![[0i32; 8]; plan.nodes.len()];
@@ -733,10 +802,13 @@ impl ActiveLeafModel {
                     previous.copy_from_slice(&relation_scores);
                 }
             }
+            if let Some(scores) = all_relation_scores.as_mut() {
+                scores.extend_from_slice(&relation_scores);
+            }
 
             for level in 0..self.stages {
                 let gate = self.level_gates[block][level];
-                if gate == 0 {
+                if gate == 0 && trace.is_none() {
                     continue;
                 }
                 let mut top = [0usize; 8];
@@ -744,10 +816,12 @@ impl ActiveLeafModel {
                 let mut key_distance = [u32::MAX; 8];
                 let mut key_hamming = [u32::MAX; 8];
                 let mut found = 0usize;
+                let mut eligible = 0usize;
                 for (node, candidate) in plan.nodes.iter().enumerate() {
                     if candidate.level != level || candidate.last + 1 >= length {
                         continue;
                     }
+                    eligible += 1;
                     let (distance, hamming) = root_cost(query_frame, frames[node]);
                     let relation = relation_scores[node];
                     let mut at = found;
@@ -784,12 +858,30 @@ impl ActiveLeafModel {
                     }
                 }
                 if found == 0 {
+                    if let (Some(words), Some(start)) = (trace.as_deref_mut(), trace_start) {
+                        let at = start
+                            + DISCRETE_ACTIVE_TRACE_HEADER_WORDS
+                            + level * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS;
+                        words[at] = (gate + 1) as u32;
+                        words[at + 1] = 0;
+                        words[at + 3] = eligible as u32;
+                    }
                     continue;
                 }
                 let mut sum = [0i32; 8];
-                for &node in &top[..found] {
+                for (slot, &node) in top[..found].iter().enumerate() {
                     let action = usize::from(BFS[(frames[node] << 4) + query_frame_root]);
                     let carried = self.act(action, &payload[node])?;
+                    if let (Some(words), Some(start)) = (trace.as_deref_mut(), trace_start) {
+                        let at = start
+                            + DISCRETE_ACTIVE_TRACE_HEADER_WORDS
+                            + level * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS;
+                        words[at + 4 + slot] = node as u32;
+                        words[at + 12 + slot] = action as u32;
+                        words[at + 20 + slot] = root_id(&carried)
+                            .ok_or_else(|| invalid("active-leaf carried root outside orbit"))?
+                            as u32;
+                    }
                     for dimension in 0..8 {
                         sum[dimension] += carried[dimension];
                     }
@@ -797,6 +889,18 @@ impl ActiveLeafModel {
                 let consensus = snap_root(&sum, found)?;
                 let root = orbit_root_coords(consensus as u8)
                     .map_err(|error| invalid(error.to_string()))?;
+                if let (Some(words), Some(start)) = (trace.as_deref_mut(), trace_start) {
+                    let at = start
+                        + DISCRETE_ACTIVE_TRACE_HEADER_WORDS
+                        + level * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS;
+                    words[at] = (gate + 1) as u32;
+                    words[at + 1] = found as u32;
+                    words[at + 2] = consensus as u32;
+                    words[at + 3] = eligible as u32;
+                }
+                if gate == 0 {
+                    continue;
+                }
                 for dimension in 0..8 {
                     value[dimension] += if gate > 0 {
                         root[dimension]
@@ -807,10 +911,17 @@ impl ActiveLeafModel {
                 terms += 1;
             }
             let output_root = snap_root(&value, terms)?;
+            if let (Some(words), Some(start)) = (trace.as_deref_mut(), trace_start) {
+                words[start + 1] = output_root as u32;
+                words[start + 2] = terms as u32;
+            }
             out.extend_from_slice(
                 &orbit_root_coords(output_root as u8)
                     .map_err(|error| invalid(error.to_string()))?,
             );
+        }
+        if let (Some(words), Some(scores)) = (trace, all_relation_scores.as_ref()) {
+            words.extend(scores.iter().map(|&score| score as u32));
         }
         Ok(out)
     }
@@ -852,6 +963,12 @@ impl CpuDiscreteFlock {
     pub fn read(&self, prefix: &[u32]) -> Result<Vec<i32>> {
         self.0.read(prefix)
     }
+
+    pub fn read_traced(&self, prefix: &[u32]) -> Result<CpuDiscreteReadTrace> {
+        let mut trace_words = Vec::new();
+        let query = self.0.read_traced(prefix, Some(&mut trace_words))?;
+        Ok(CpuDiscreteReadTrace { query, trace_words })
+    }
 }
 
 impl CpuDiscreteRelation {
@@ -883,6 +1000,12 @@ impl CpuDiscreteRelation {
 
     pub fn read(&self, prefix: &[u32]) -> Result<Vec<i32>> {
         self.0.read(prefix)
+    }
+
+    pub fn read_traced(&self, prefix: &[u32]) -> Result<CpuDiscreteReadTrace> {
+        let mut trace_words = Vec::new();
+        let query = self.0.read_traced(prefix, Some(&mut trace_words))?;
+        Ok(CpuDiscreteReadTrace { query, trace_words })
     }
 }
 
@@ -1176,6 +1299,13 @@ pub struct CpuDiscretePanelReading {
     pub top8_correct: u64,
     pub margin_loss_sum: u64,
     pub target_rank_sum: u64,
+}
+
+/// Exact CPU read words for finite backend parity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CpuDiscreteReadTrace {
+    pub query: Vec<i32>,
+    pub trace_words: Vec<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -1541,6 +1671,12 @@ impl CpuDiscreteProposalScorer {
         self.read(&self.model, &sample.prefix)
     }
 
+    pub fn query_traced(&self, sample: &CpuDiscreteProposalSample) -> Result<CpuDiscreteReadTrace> {
+        let mut trace_words = Vec::new();
+        let query = self.read_traced(&self.model, &sample.prefix, &mut trace_words)?;
+        Ok(CpuDiscreteReadTrace { query, trace_words })
+    }
+
     pub fn top8(&self, sample: &CpuDiscreteProposalSample) -> Result<[u32; 8]> {
         let query = self.query(sample)?;
         writer_observation(
@@ -1738,6 +1874,18 @@ impl CpuDiscreteProposalScorer {
         match model {
             CpuDiscreteProposalModel::Route(route) => route.read(prefix),
             CpuDiscreteProposalModel::Active(active) => active.read(prefix),
+        }
+    }
+
+    fn read_traced(
+        &self,
+        model: &CpuDiscreteProposalModel,
+        prefix: &[u32],
+        trace: &mut Vec<u32>,
+    ) -> Result<Vec<i32>> {
+        match model {
+            CpuDiscreteProposalModel::Route(route) => route.read_internal(prefix, Some(trace)),
+            CpuDiscreteProposalModel::Active(active) => active.read_traced(prefix, Some(trace)),
         }
     }
 
@@ -4683,6 +4831,47 @@ mod tests {
             .map_err(|error| error.to_string())
     }
 
+    fn clean_trace_words(artifact: &[u8]) -> Vec<Vec<u32>> {
+        let scorer = CpuDiscreteProposalScorer::from_bytes(artifact).unwrap();
+        let served = IntegerDiscreteModel::from_bytes(artifact).unwrap();
+        every_prefix_sample()
+            .iter()
+            .enumerate()
+            .map(|(row, sample)| {
+                let cpu = scorer.query_traced(sample).unwrap();
+                let serving = served.evaluate_prefix_traced(&sample.prefix).unwrap();
+                assert_eq!(
+                    cpu.query,
+                    scorer.query(sample).unwrap(),
+                    "traced CPU query row {row}"
+                );
+                assert_eq!(
+                    serving.evaluation,
+                    served.evaluate_prefix(&sample.prefix).unwrap(),
+                    "traced serving evaluation row {row}"
+                );
+                assert_eq!(cpu.query, serving.evaluation.read_vector, "trace row {row}");
+                assert_eq!(
+                    cpu.trace_words, serving.trace_words,
+                    "CPU/serving trace row {row}"
+                );
+                assert!(
+                    cpu.trace_words.iter().any(|&word| word != u32::MAX),
+                    "trace row {row} is vacuous"
+                );
+                cpu.trace_words
+            })
+            .collect()
+    }
+
+    fn changed_rows(before: &[Vec<u32>], after: &[Vec<u32>]) -> usize {
+        before
+            .iter()
+            .zip(after)
+            .filter(|(left, right)| left != right)
+            .count()
+    }
+
     /// K5: the learned-state and derived cell words a step changed, as (table name, index).
     fn touched_words(before: &[u8], after: &[u8]) -> Vec<(&'static str, usize)> {
         let mut touched = Vec::new();
@@ -4772,21 +4961,58 @@ mod tests {
     }
 
     #[test]
+    fn native_space_trace_contract_exposes_active_leaf_kept_slots() {
+        let flock = serialized_discrete(DiscreteFixture::flock());
+        let clean_flock = clean_trace_words(&flock);
+        let mut active_kept_slots = 0usize;
+        let mut active_action_slots = 0usize;
+        for trace in &clean_flock {
+            for block in trace.chunks_exact(
+                DISCRETE_ACTIVE_TRACE_HEADER_WORDS + 2 * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS,
+            ) {
+                for level in block[DISCRETE_ACTIVE_TRACE_HEADER_WORDS..]
+                    .chunks_exact(DISCRETE_ACTIVE_TRACE_LEVEL_WORDS)
+                {
+                    let found = level[1] as usize;
+                    active_kept_slots += level[4..4 + found]
+                        .iter()
+                        .filter(|&&node| node != u32::MAX)
+                        .count();
+                    active_action_slots += level[12..12 + found]
+                        .iter()
+                        .filter(|&&action| action != u32::MAX)
+                        .count();
+                }
+            }
+        }
+        assert!(active_kept_slots > 0, "kept-node trace is vacuous");
+        assert_eq!(active_kept_slots, active_action_slots);
+        println!(
+            "native_trace rows={} kept_slots={active_kept_slots} action_slots={active_action_slots}",
+            clean_flock.len()
+        );
+    }
+
+    #[test]
     fn native_space_parity_contract_catches_one_planted_fault_per_category() {
         let route = serialized_route();
         let flock = serialized_discrete(DiscreteFixture::flock());
 
-        // C-1 route choice: no route-port word exists on the serving side. A changed
-        // port is caught only through the carry it produces (K1). Over every single-word
-        // route fault (4 words x 63 other ports) K1 sees 108 and misses 144 on this
-        // fixture's 39 prefixes: a failing control, pinned so a route-choice word that
-        // later closes it shows here.
+        // C-1 route choice: every single-word route fault (4 words x 63 other ports)
+        // changes the direct trace. Output-only K1 still sees 108 and misses 144 on this
+        // fixture's 39 prefixes, so both counts remain pinned.
         let ports = table_words(&route, "discrete.routes");
-        let (mut seen, mut missed) = (0u32, 0u32);
+        let clean_route_trace = clean_trace_words(&route);
+        let (mut seen, mut missed, mut trace_seen) = (0u32, 0u32, 0u32);
         for (index, &port) in ports.iter().enumerate() {
             for value in (0..64u32).filter(|&value| value != port) {
                 let mut fault = route.clone();
                 set_table_u32(&mut fault, "discrete.routes", index, value);
+                assert!(
+                    changed_rows(&clean_route_trace, &clean_trace_words(&fault)) > 0,
+                    "C-1 trace at {index}/{value}"
+                );
+                trace_seen += 1;
                 let reading = contract_reading(&route, &fault).unwrap();
                 if reading.query_coordinate_mismatches > 0 {
                     seen += 1;
@@ -4798,22 +5024,29 @@ mod tests {
             }
         }
         assert_eq!(
-            (seen, missed),
-            (108, 144),
-            "C-1 route faults seen / missed by K1"
+            (seen, missed, trace_seen),
+            (108, 144, 252),
+            "C-1 route faults seen / missed by K1 and seen by the trace"
         );
 
         // C-2 complete carry: every gate trit the flock read adds, changed to each other
-        // trit. K1 sees 3 of the 8 on this fixture's 39 prefixes; the other 5 pass every
-        // read check. Pinned as measured.
+        // trit. The direct trace sees all 8; K1 still sees only 3 on this fixture's 39
+        // prefixes, and the other 5 pass every output-word check. Both counts are pinned.
         let trits = table_words(&flock, "discrete.gates");
+        let clean_flock_trace = clean_trace_words(&flock);
         let mut gate_seen = Vec::new();
         let mut gate_tried = 0u32;
+        let mut gate_trace_seen = 0u32;
         for (index, &trit) in trits.iter().enumerate() {
             for value in [-1i32, 0, 1].into_iter().filter(|&v| v as u32 != trit) {
                 gate_tried += 1;
                 let mut fault = flock.clone();
                 set_table_u32(&mut fault, "discrete.gates", index, value as u32);
+                assert!(
+                    changed_rows(&clean_flock_trace, &clean_trace_words(&fault)) > 0,
+                    "C-2 trace at {index}/{value}"
+                );
+                gate_trace_seen += 1;
                 let reading = contract_reading(&flock, &fault).unwrap();
                 if reading.query_coordinate_mismatches > 0 {
                     gate_seen.push((index, value));
@@ -4823,6 +5056,7 @@ mod tests {
             }
         }
         assert_eq!(gate_tried, 8, "C-2 gate faults tried");
+        assert_eq!(gate_trace_seen, 8, "C-2 gate faults seen by the trace");
         assert_eq!(
             gate_seen,
             vec![(0, -1), (2, -1), (2, 1)],
@@ -4836,8 +5070,9 @@ mod tests {
         set_table_u32(&mut fault, "discrete.cells", 0, cell ^ 1);
         assert_loader_refuses(contract_reading(&route, &fault), "C-3");
 
-        // C-4 memory read choice (the flock's kept list): no word on the serving side, so
-        // it cannot be planted from outside. Pinned as a failing control in PARITY.md.
+        // C-4 memory read choice (the flock's kept list): the read-only trace now exposes
+        // all kept nodes and their transport actions. There is no independent kept-list
+        // artifact word to mutate; the non-vacuity control pins 126 active slots.
 
         // C-5 learned-state words touched: a step on a different block than declared
         // is caught by the touched-word check (K5), not by any read.
@@ -4950,18 +5185,45 @@ mod tests {
             let snapshot = import_d11_for_qualification(&artifact).unwrap();
             let mut device = Device::from_snapshot_for_qualification(snapshot, 0).unwrap();
             let batch = device.carry_windows(&windows).unwrap();
-            let forward = device.forward(&batch, &targets).unwrap();
+            let plain = device.forward(&batch, &targets).unwrap();
+            let forward = device.forward_traced(&batch, &targets).unwrap();
             let evaluated = device.evaluate(&batch, &targets).unwrap();
+            assert!(
+                plain.read_trace().unwrap().is_none(),
+                "untraced forward allocated a trace"
+            );
+            assert_eq!(plain.vectors().unwrap(), forward.vectors().unwrap());
+            assert_eq!(plain.predictions, forward.predictions);
+            assert_eq!(plain.losses, forward.losses);
+            assert_eq!(plain.token_rivals, forward.token_rivals);
+            assert_eq!(plain.address_rivals, forward.address_rivals);
+            assert_eq!(plain.admitted_cells, forward.admitted_cells);
             let cuda_vectors = forward.vectors().unwrap();
+            let cuda_trace = forward
+                .read_trace()
+                .unwrap()
+                .expect("forward_traced retains a read trace");
             let scorer = CpuDiscreteProposalScorer::from_bytes(&artifact).unwrap();
             let serving = IntegerDiscreteModel::from_bytes(&artifact).unwrap();
             let kept_cells = usize::try_from(serving.shape().kept_cells).unwrap();
             let width = usize::try_from(serving.shape().blocks).unwrap() * 8;
             let mut vector_at = 0usize;
             let mut cell_at = 0usize;
+            let mut trace_at = 0usize;
             for (row, sample) in samples.iter().enumerate() {
                 let cpu = scorer.query(sample).unwrap();
+                let cpu_traced = scorer.query_traced(sample).unwrap();
+                assert_eq!(cpu, cpu_traced.query, "CPU traced query row {row}");
                 let served = serving.evaluate_prefix(&sample.prefix).unwrap();
+                let served_traced = serving.evaluate_prefix_traced(&sample.prefix).unwrap();
+                assert_eq!(
+                    served, served_traced.evaluation,
+                    "serving traced evaluation row {row}"
+                );
+                assert_eq!(
+                    cpu_traced.trace_words, served_traced.trace_words,
+                    "CPU/serving trace row {row}"
+                );
                 assert_eq!(cpu, served.read_vector, "CPU/serving read row {row}");
                 assert_eq!(
                     &cuda_vectors[vector_at..vector_at + width],
@@ -5000,8 +5262,16 @@ mod tests {
                     "row {row}: CUDA admitted-cell padding differs"
                 );
                 cell_at += 16;
+                let trace_end = trace_at + cpu_traced.trace_words.len();
+                assert_eq!(
+                    &cuda_trace[trace_at..trace_end],
+                    cpu_traced.trace_words.as_slice(),
+                    "CUDA/CPU/serving trace row {row}"
+                );
+                trace_at = trace_end;
             }
             assert_eq!(vector_at, cuda_vectors.len());
+            assert_eq!(trace_at, cuda_trace.len());
 
             let cuda_proposal = device.propose(&batch, &targets, parameter).unwrap();
             let cuda_losses = cuda_proposal.candidate_losses().unwrap();

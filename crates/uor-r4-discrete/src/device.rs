@@ -85,6 +85,12 @@ static NEXT_MODEL: AtomicU64 = AtomicU64::new(1);
 pub const FLOCK_TRACE_HEADER_WORDS: usize = 4;
 pub const FLOCK_TRACE_LEVEL_WORDS: usize = 28;
 pub const FLOCK_TRACE_KEPT_CAPACITY: usize = 8;
+/// Route trace ABI from `discrete.cu`, ordered by row then block:
+/// `[frontier_count, output_root, completed_stages, terminal_atom]`, followed
+/// by per-stage `[frame, parent_root, selected_port, goal_root, composed_action,
+/// next_node]`.
+pub const ROUTE_TRACE_HEADER_WORDS: usize = 4;
+pub const ROUTE_TRACE_STAGE_WORDS: usize = 6;
 pub const EVALUATION_AGGREGATE_WORDS: usize = objective::AGGREGATE_WORDS;
 
 /// Exact integer observations of the same production read and shared writer.
@@ -425,7 +431,7 @@ impl Forward {
     /// Optional completed device trace as storage observation only. This does
     /// not reconstruct, score, select or transport any model values on the host.
     /// Normal `forward` results return None and retain no trace allocation.
-    pub fn flock_trace(&self) -> Result<Option<Vec<u32>>> {
+    pub fn read_trace(&self) -> Result<Option<Vec<u32>>> {
         let Some(trace) = self.trace.as_ref() else {
             return Ok(None);
         };
@@ -434,6 +440,10 @@ impl Forward {
             words.truncate(count);
         }
         Ok(Some(words))
+    }
+    /// Compatibility name for the existing active-leaf trace tests.
+    pub fn flock_trace(&self) -> Result<Option<Vec<u32>>> {
+        self.read_trace()
     }
     /// Optional completed device per-node relation scores (`rows * blocks * nodes_count`)
     /// written by `discrete_forward` in `ReadSpec::Relation` mode. Storage readback only;
@@ -1561,9 +1571,6 @@ impl Device {
     /// Qualification observation of this same production forward path. The
     /// read/loss law is unchanged; only a bounded CUDA-written trace is retained.
     pub fn forward_traced(&self, batch: &CarriedBatch, targets: &[u32]) -> Result<Forward> {
-        if self.read_spec() == ReadSpec::Route {
-            return Err(invalid("forward_traced requires a flock model"));
-        }
         self.forward_internal(batch, targets, true)
     }
 
@@ -1600,8 +1607,14 @@ impl Device {
             .stream
             .alloc_zeros::<u32>(batch.rows as usize * 16)
             .map_err(cuda)?;
-        let trace_stride = traced
-            .then_some(FLOCK_TRACE_HEADER_WORDS + self.metadata.stages() * FLOCK_TRACE_LEVEL_WORDS);
+        let trace_stride = traced.then_some(match self.read_spec() {
+            ReadSpec::Route => {
+                ROUTE_TRACE_HEADER_WORDS + self.metadata.stages() * ROUTE_TRACE_STAGE_WORDS
+            }
+            ReadSpec::Flock { .. } | ReadSpec::Relation { .. } => {
+                FLOCK_TRACE_HEADER_WORDS + self.metadata.stages() * FLOCK_TRACE_LEVEL_WORDS
+            }
+        });
         let flock_trace_words = trace_stride
             .map(|stride| {
                 (batch.rows as usize)
@@ -1667,8 +1680,8 @@ impl Device {
         launch.arg(&mut status);
         // SAFETY: discrete_forward ABI and bounded rows/width/context checked
         // before launch; immutable inputs, disjoint owned result buffers. Trace
-        // is either the exact rows*blocks*(4+stages*28) allocation (plus
-        // rows*blocks*nodes_count in Relation mode) or a null
+        // is either the exact mode-specific rows*blocks stride allocation
+        // (plus rows*blocks*nodes_count in Relation mode) or a null
         // CUdeviceptr, which the kernel never dereferences. Its U* argument is
         // immediately before status in the explicit 64-bit driver ABI.
         unsafe { launch.launch(launch_config(batch.rows)) }.map_err(cuda)?;

@@ -120,8 +120,9 @@ pub use discrete_route::{
     CpuDiscretePanelReading, CpuDiscreteProposal, CpuDiscreteProposalApplier,
     CpuDiscreteProposalChooser, CpuDiscreteProposalKind, CpuDiscreteProposalMode,
     CpuDiscreteProposalSample, CpuDiscreteProposalScorer, CpuDiscreteProposalScoring,
-    CpuDiscreteRelation, CpuDiscreteRoute, CpuDiscreteSchedule, CpuDiscreteScoreError,
-    CpuDiscreteTrunkDecision, CpuDiscreteTrunkReader, CPU_DISCRETE_CHECKPOINT_SCHEMA,
+    CpuDiscreteReadTrace, CpuDiscreteRelation, CpuDiscreteRoute, CpuDiscreteSchedule,
+    CpuDiscreteScoreError, CpuDiscreteTrunkDecision, CpuDiscreteTrunkReader,
+    CPU_DISCRETE_CHECKPOINT_SCHEMA,
 };
 pub use fbs::{
     CpuFbsForward, CpuFbsHead, CpuFbsStep, FbsForwardError, WriterPortAnchorAudit,
