@@ -340,26 +340,26 @@ pub fn native_space_contract(paths: &StatePaths) -> Vec<Finding> {
             NATIVE_DECISION_SUFFIX,
         ),
         ("skills.protocol", protocol, NATIVE_PROTOCOL),
-        (
-            "skills.harness_pointer",
-            pointer,
-            NATIVE_HARNESS_POINTER,
-        ),
+        ("skills.harness_pointer", pointer, NATIVE_HARNESS_POINTER),
         (
             "protocol_marker",
             protocol_marker.as_str(),
             NATIVE_PROTOCOL_MARKER,
         ),
-        (
-            "charter_markers.start",
-            start,
-            NATIVE_CHARTER_START,
-        ),
+        ("charter_markers.start", start, NATIVE_CHARTER_START),
         ("charter_markers.end", end, NATIVE_CHARTER_END),
         ("plan_heading", plan_heading.as_str(), NATIVE_PLAN_HEADING),
         ("roadmap_item", roadmap_item.as_str(), NATIVE_ROADMAP_ITEM),
-        ("agents_phrase", agents_phrase.as_str(), NATIVE_AGENTS_PHRASE),
-        ("agents_prefix", agents_prefix.as_str(), NATIVE_AGENTS_PREFIX),
+        (
+            "agents_phrase",
+            agents_phrase.as_str(),
+            NATIVE_AGENTS_PHRASE,
+        ),
+        (
+            "agents_prefix",
+            agents_prefix.as_str(),
+            NATIVE_AGENTS_PREFIX,
+        ),
         (
             "milestone_rule",
             milestone_rule.as_str(),
