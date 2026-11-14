@@ -9,8 +9,8 @@ Order: [ORDER.md](ORDER.md). Result: [PARITY-RESULT.md](PARITY-RESULT.md).
   the trace pointer only for active-leaf modes. Passing the same pointer in Route mode fixed it.
 - The first implementation changed the independently qualified bucket-writer source hash even
   though the trace was a read-only observation, then briefly compiled two Route bodies. The final
-  version has one trace-capable production Route read; the bucket generator restores its exact
-  previously qualified helper/writer prefix from a literal anchor and pins that source hash.
+  version has one trace-capable production Route read; the bucket generator strips marked
+  trace-only blocks, checks the remaining qualified shape and pins its existing source hash.
 - The full CPU-training suite reports two failures in FBS ask/carry parity. Claude-371 already
   recorded both failing at the parent base with its change set aside. They are outside this
   trace unit; all other CPU-training tests pass.
@@ -19,7 +19,10 @@ Order: [ORDER.md](ORDER.md). Result: [PARITY-RESULT.md](PARITY-RESULT.md).
   non-vacuity without pinning the measured 126 words.
 - The next exact-head review found two more P2 issues: Relation trace layouts differed between
   CUDA and serving, and the temporary Route trace helper duplicated the production Route body.
-  Both are fixed at the head recorded in Git history and are submitted for delta re-review.
+- The following review found the bucket generator still carried a frozen Route body, CUDA's
+  `relation_scores()` retained padded rather than compact semantics, Relation fault controls were
+  missing, and the ORDER's file scope was stale. All four are fixed at the head recorded in Git
+  history and are submitted for delta re-review.
 
 ## What changed
 
@@ -32,9 +35,12 @@ Order: [ORDER.md](ORDER.md). Result: [PARITY-RESULT.md](PARITY-RESULT.md).
 - Route header and stage words pin the configured frame and selected port. Active-leaf levels
   trace selection even at gate zero, matching CUDA.
 - Relation keeps compact scores in `evaluation.relation_scores` and exposes separately padded
-  `relation_trace_words`, matching the CUDA batch tail without mixing row boundaries.
+  `relation_trace_words`, matching the CUDA batch tail without mixing row boundaries. CUDA's
+  `relation_scores()` compacts each block back to its row's actual node count.
 - CUDA compiles one `route_vector` with an optional trace sink. The bucket generator's explicit
-  compatibility anchor preserves the already-qualified bucket source.
+  checked un-instrumentation strips marked trace blocks from that same body and preserves the
+  already-qualified bucket source; a mutation of a decision line reaches generation and fails the
+  receipt.
 - The 39-prefix contract compares every trace word through CUDA, CPU and serving. Fault controls
   retain the output-only counts and add direct trace counts.
 
@@ -58,8 +64,9 @@ Fault visibility:
 
 - Route frames: direct trace `252 / 252`; output-only K1 remains `108 seen / 144 missed`.
 - Flock gates: direct trace `8 / 8`; output-only K1 remains `3 seen / 5 missed`.
-- Active trace: 126 kept-node words and 126 transport-action words over the fixture prefixes;
-  each slot has a one-word mutation control.
+- Relation level gates: direct trace `12 / 12`.
+- Active trace: 126 kept-node words and 126 transport-action words on each of the Flock and
+  Relation fixtures; every slot has a one-word mutation control.
 - Relation: 258 compact score words and 1,014 padded trace words over the 39 prefixes.
 - One planted carry word and stale proposal reuse remained detected.
 
@@ -77,9 +84,9 @@ No training run, capability, language result, throughput or performance claim is
 - `cargo test --locked -p uor-r4-cpu-train
   native_space_relation_trace_keeps_its_scores_separate --lib` - passed.
 - Full `uor-r4-discrete --lib`: **356 passed, 0 failed, 1 ignored**.
-- Full `uor-r4-cpu-train --lib`: **508 passed, 2 failed, 5 ignored**. Both failures are the
+- Full `uor-r4-cpu-train --lib`: **509 passed, 2 failed, 5 ignored**. Both failures are the
   parent-base FBS ask/carry tests named above. With those two named tests filtered:
-  **508 passed, 0 failed, 5 ignored**.
+  **509 passed, 0 failed, 5 ignored**.
 - `bucket_source::tests::committed_gpu_qualification_receipts_pass_b1_b2_b3_and_match_across_builds`
   - passed; the bucket helper/writer source and its committed receipt are unchanged.
 - `rustfmt --check` on the changed Rust files - passed.

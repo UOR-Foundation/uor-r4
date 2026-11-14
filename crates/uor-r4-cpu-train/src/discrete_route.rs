@@ -4940,6 +4940,52 @@ mod tests {
             .collect()
     }
 
+    fn clean_relation_trace(artifact: &[u8]) -> (Vec<Vec<u32>>, Vec<Vec<u32>>) {
+        let scorer = CpuDiscreteProposalScorer::from_bytes(artifact).unwrap();
+        let served = IntegerDiscreteModel::from_bytes(artifact).unwrap();
+        let mut base = Vec::new();
+        let mut tails = Vec::new();
+        for (row, sample) in every_prefix_sample().iter().enumerate() {
+            let cpu = scorer.query_traced(sample).unwrap();
+            let serving = served.evaluate_prefix_traced(&sample.prefix).unwrap();
+            assert_eq!(
+                cpu.query, serving.evaluation.read_vector,
+                "relation row {row}"
+            );
+            assert_eq!(
+                cpu.trace_words, serving.trace_words,
+                "relation base row {row}"
+            );
+            assert_eq!(
+                cpu.relation_scores, serving.evaluation.relation_scores,
+                "relation compact row {row}"
+            );
+            assert_eq!(
+                cpu.relation_trace_words, serving.relation_trace_words,
+                "relation padded row {row}"
+            );
+            base.push(cpu.trace_words);
+            tails.push(
+                cpu.relation_trace_words
+                    .unwrap_or_else(|| panic!("relation tail absent at row {row}")),
+            );
+        }
+        (base, tails)
+    }
+
+    fn changed_surface_rows(
+        before: &(Vec<Vec<u32>>, Vec<Vec<u32>>),
+        after: &(Vec<Vec<u32>>, Vec<Vec<u32>>),
+    ) -> usize {
+        before
+            .0
+            .iter()
+            .zip(&after.0)
+            .zip(before.1.iter().zip(&after.1))
+            .filter(|((base_l, base_r), (tail_l, tail_r))| base_l != base_r || tail_l != tail_r)
+            .count()
+    }
+
     fn changed_rows(before: &[Vec<u32>], after: &[Vec<u32>]) -> usize {
         before
             .iter()
@@ -5141,11 +5187,84 @@ mod tests {
                 .len();
         }
         assert_eq!(traces.len(), 39);
+        assert_eq!(score_words, 258, "compact Relation score words");
+        assert_eq!(padded_score_words, 1_014, "padded Relation trace words");
         assert!(score_words > 0, "relation score trace is vacuous");
         println!(
             "native_relation_trace rows={} base_words={} score_words={score_words} padded_score_words={padded_score_words}",
             traces.len(),
             traces.iter().map(Vec::len).sum::<usize>()
+        );
+    }
+
+    #[test]
+    fn native_space_relation_controls_observe_gates_and_active_slots() {
+        let artifact = trace_relation_fixture();
+        let clean = clean_relation_trace(&artifact);
+        let gates = table_words(&artifact, "discrete.gates");
+        let mut gate_faults = 0usize;
+        for (index, &trit) in gates.iter().take(6).enumerate() {
+            for value in [-1i32, 0, 1]
+                .into_iter()
+                .filter(|&value| value as u32 != trit)
+            {
+                let mut fault = artifact.clone();
+                set_table_u32(&mut fault, "discrete.gates", index, value as u32);
+                assert!(
+                    changed_surface_rows(&clean, &clean_relation_trace(&fault)) > 0,
+                    "Relation gate {index} -> {value} is invisible"
+                );
+                gate_faults += 1;
+            }
+        }
+        assert_eq!(gate_faults, 12, "Relation level-gate mutation controls");
+
+        let stride = DISCRETE_ACTIVE_TRACE_HEADER_WORDS + 3 * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS;
+        let (mut kept_slots, mut action_slots) = (0usize, 0usize);
+        let (mut kept_mutations, mut action_mutations) = (0usize, 0usize);
+        for (row, trace) in clean.0.iter().enumerate() {
+            for (block_index, block) in trace.chunks_exact(stride).enumerate() {
+                for (level_index, level) in block[DISCRETE_ACTIVE_TRACE_HEADER_WORDS..]
+                    .chunks_exact(DISCRETE_ACTIVE_TRACE_LEVEL_WORDS)
+                    .enumerate()
+                {
+                    let found = level[1] as usize;
+                    kept_slots += found;
+                    action_slots += found;
+                    for slot in 0..found {
+                        let mut changed = clean.clone();
+                        let base = block_index * stride
+                            + DISCRETE_ACTIVE_TRACE_HEADER_WORDS
+                            + level_index * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS
+                            + 4
+                            + slot;
+                        changed.0[row][base] ^= 1;
+                        assert_eq!(changed_surface_rows(&clean, &changed), 1);
+                        kept_mutations += 1;
+                    }
+                    for slot in 0..found {
+                        let mut changed = clean.clone();
+                        let base = block_index * stride
+                            + DISCRETE_ACTIVE_TRACE_HEADER_WORDS
+                            + level_index * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS
+                            + 12
+                            + slot;
+                        changed.0[row][base] ^= 1;
+                        assert_eq!(changed_surface_rows(&clean, &changed), 1);
+                        action_mutations += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(kept_slots, 126, "Relation kept-node trace slot count");
+        assert_eq!(
+            action_slots, 126,
+            "Relation transport-action trace slot count"
+        );
+        assert_eq!(kept_mutations, kept_slots);
+        assert_eq!(action_mutations, action_slots);
+        println!(
+            "native_relation_controls gate_faults={gate_faults} kept_slots={kept_slots} action_slots={action_slots}"
         );
     }
 
@@ -5371,9 +5490,9 @@ mod tests {
             let mut vector_at = 0usize;
             let mut cell_at = 0usize;
             let mut trace_at = 0usize;
-            let mut relation_at = 0usize;
             let mut relation_present = false;
             let mut expected_relation = Vec::new();
+            let mut expected_compact_relation = Vec::new();
             for (row, sample) in samples.iter().enumerate() {
                 let cpu = scorer.query(sample).unwrap();
                 let cpu_traced = scorer.query_traced(sample).unwrap();
@@ -5440,7 +5559,9 @@ mod tests {
                 if let Some(scores) = cpu_traced.relation_trace_words.as_ref() {
                     relation_present = true;
                     expected_relation.extend_from_slice(scores);
-                    relation_at += scores.len();
+                }
+                if let Some(scores) = cpu_traced.relation_scores.as_ref() {
+                    expected_compact_relation.extend_from_slice(scores);
                 }
             }
             assert_eq!(vector_at, cuda_vectors.len());
@@ -5452,9 +5573,14 @@ mod tests {
                     Some(expected_relation.as_slice()),
                     "CUDA/CPU/serving Relation tail"
                 );
-                assert_eq!(relation_at, expected_relation.len());
+                assert_eq!(
+                    forward.relation_scores().unwrap().as_deref(),
+                    Some(expected_compact_relation.as_slice()),
+                    "CUDA/CPU/serving compact Relation scores"
+                );
             } else {
                 assert!(cuda_relation.is_none(), "unexpected Relation tail");
+                assert!(forward.relation_scores().unwrap().is_none());
             }
 
             let cuda_proposal = device.propose(&batch, &targets, parameter).unwrap();

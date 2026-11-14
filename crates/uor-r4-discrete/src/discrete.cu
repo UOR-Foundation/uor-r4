@@ -48,25 +48,31 @@ __device__ bool route_vector(const int* input,const U* ids,const U* routes,const
     if(s[13]==1u){
         for(U block=0;block<s[1];++block){
             input_block(input,ids,g,row,length-1,block,s,kind,index,candidate,output+block*8);
+            // TRACE-BEGIN
             if(trace){
                 U* rec=trace+(row*s[1]+block)*(4u+s[5]*6u);for(U i=0;i<4u+s[5]*6u;++i)rec[i]=ABSENT;rec[0]=frontier;rec[2]=0;
                 for(U r=0;r<16;++r){bool equal=true;for(U d=0;d<8;++d)equal&=output[block*8+d]==(int)g[ROOT+r*8+d];if(equal)rec[1]=r;}
             }
+            // TRACE-END
         }
         return true;
     }
     for(U block=0;block<s[1];++block) {
         int query[8];input_block(input,ids,g,row,length-1,block,s,kind,index,candidate,query);
         U node=ABSENT,root=0,total=g[IDENTITY];
+        // TRACE-BEGIN
         U* rec=trace?trace+(row*s[1]+block)*(4u+s[5]*6u):0;
         if(rec){for(U i=0;i<4u+s[5]*6u;++i)rec[i]=ABSENT;rec[0]=frontier;}
+        // TRACE-END
         for(U stage=0;stage<s[5];++stage) {
             U parameter=block*s[5]+stage;
             U frame=routes[parameter];
             if(frame>=64) return false;
             if(kind==0 && index==parameter && candidate) frame=compose(g,move_action(g,candidate),frame);
+            // TRACE-BEGIN
             U* sr=rec?rec+4u+stage*6u:0;
             if(sr){sr[0]=frame;sr[1]=root;}
+            // TRACE-END
             int q[8];action(g,frame,query,q);
             U count=stage==0?frontier:3;
             U best=ABSENT,best_distance=ABSENT,best_hamming=ABSENT,goal=0;
@@ -81,18 +87,23 @@ __device__ bool route_vector(const int* input,const U* ids,const U* routes,const
             total=compose(g,g[BFS+root*16+goal],total);root=goal;
             node=stage==0?plan[s[6]*4+best]:plan[node*4+best];
             if(node>=nodes) return false;
+            // TRACE-BEGIN
             if(sr){sr[2]=best;sr[3]=goal;sr[4]=total;sr[5]=node;}
+            // TRACE-END
             U atom=plan[node*4+3];
             if(atom!=ABSENT) {
                 if(atom>=length) return false;
                 int carrier[8];input_block(input,ids,g,row,atom,block,s,kind,index,candidate,carrier);
-                action(g,total,carrier,output+block*8);
+                // TRACE-BEGIN
                 if(rec){rec[2]=stage+1;rec[3]=atom;}
-                break;
+                // TRACE-END
+                action(g,total,carrier,output+block*8);break;
             }
             if(stage+1==s[5]) return false;
         }
+        // TRACE-BEGIN
         if(rec)for(U r=0;r<16;++r){bool equal=true;for(U d=0;d<8;++d)equal&=output[block*8+d]==(int)g[ROOT+r*8+d];if(equal)rec[1]=r;}
+        // TRACE-END
     }
     return true;
 }
@@ -462,8 +473,8 @@ extern "C" __global__ void discrete_export_token_cells(const int* table,const U*
     if(cell==ABSENT || cell>255u){atomicExch(status,8u);return;}
     cells[token]=cell;
 }
-// trace: Flock/Relation mode only, rows*blocks*(TRACE_ROW+stages*TRACE_LEVEL) words
-// (+ rows*blocks*nodes_count relation score words in Relation mode); ignored in Route mode.
+// trace: mode-specific rows*blocks*(header+stages*level) words for Route and
+// active-leaf reads, plus rows*blocks*max_nodes Relation-score words.
 extern "C" __global__ void discrete_forward(const int* table,const U* routes,const int* gates,const U* ids,const int* input,const U* targets,const U* plan,const U* g,const U* s,const U* position_steps,int* out,U* predictions,W* losses,U* token_rivals,U* address_rivals,U* admitted,U* trace,U* status) {
     U row=blockIdx.x*blockDim.x+threadIdx.x;if(row>=s[4])return;
     int q[MAX_WIDTH];if(!read_vector(input,ids,routes,gates,plan,g,s,position_steps,row,2,0,0,q,trace)){atomicExch(status,2u);return;}

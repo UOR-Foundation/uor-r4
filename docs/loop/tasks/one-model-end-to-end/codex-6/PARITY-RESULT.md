@@ -33,14 +33,16 @@ the qualification-only loaders recorded by codex-5; production loading remains s
 |---|---:|---:|
 | Route-frame alternatives: 4 words x 63 other ports | **108 seen, 144 missed** | **252 / 252 seen** |
 | Flock gate alternatives: 4 words x other two trits | **3 seen, 5 missed** | **8 / 8 seen** |
-| Active kept-node slots over the 39 prefixes | not exposed before this unit | **126 words** |
-| Active transport-action slots over the 39 prefixes | not exposed before this unit | **126 words** |
-| Active kept/action mutation controls | not exposed before this unit | **126 / 126 detected** |
+| Relation level-gate alternatives: 6 words x other two trits | not separately controlled before this unit | **12 / 12 seen** |
+| Active kept-node slots per Flock/Relation 39-prefix fixture | not exposed before this unit | **126 / 126 words** |
+| Active transport-action slots per Flock/Relation 39-prefix fixture | not exposed before this unit | **126 / 126 words** |
+| Active kept/action mutation controls per fixture | not exposed before this unit | **126 / 126 each detected** |
 | Relation compact / padded score words | not exposed before this unit | **258 / 1,014 exact** |
 | One-word carry fault | caught | still caught |
 
 Result: the direct trace closes C-1 and C-4 and makes C-2's five output-only misses visible.
-The bucket writer's committed source hash remains unchanged because its generated source stops at
-the previously qualified helper/writer prefix. The literal generation anchor restores that prefix
-from the one trace-capable production Route read; CUDA no longer compiles a second Route body.
+The bucket writer's committed source hash remains unchanged because its generated source strips
+the marked trace-only blocks from the one trace-capable production Route read and checks the
+remaining qualified shape. A mutation of the production Route decision line reaches generated
+bucket source and fails the retained source hash; CUDA compiles no second Route body.
 

@@ -413,6 +413,7 @@ pub struct Forward {
     trace: Option<CudaSlice<u32>>,
     trace_stride: Option<usize>,
     flock_trace_words: Option<usize>,
+    relation_node_counts: Option<Vec<u32>>,
     binding: Binding,
     epoch: u64,
     stream: Arc<CudaStream>,
@@ -462,6 +463,29 @@ impl Forward {
         Ok(Some(tail.to_vec()))
     }
     pub fn relation_scores(&self) -> Result<Option<Vec<i32>>> {
+        let Some(words) = self.relation_trace_words()? else {
+            return Ok(None);
+        };
+        let counts = self
+            .relation_node_counts
+            .as_ref()
+            .ok_or_else(|| invalid("relation row counts missing"))?;
+        let max_nodes = BinderPlan::new(self.binding.spec.context as usize)?.nodes_count();
+        let blocks = self.binding.spec.blocks as usize;
+        let mut compact =
+            Vec::with_capacity(counts.iter().map(|&count| count as usize * blocks).sum());
+        for (row, &nodes) in counts.iter().enumerate() {
+            let nodes = nodes as usize;
+            for block in 0..blocks {
+                let base = (row * blocks + block) * max_nodes;
+                compact.extend(words[base..base + nodes].iter().map(|&word| word as i32));
+            }
+        }
+        Ok(Some(compact))
+    }
+    /// Padded relation-score words retained for the earlier Relation
+    /// qualification instrument's batch layout.
+    pub fn padded_relation_scores(&self) -> Result<Option<Vec<i32>>> {
         Ok(self
             .relation_trace_words()?
             .map(|words| words.into_iter().map(|word| word as i32).collect()))
@@ -1586,6 +1610,17 @@ impl Device {
         traced: bool,
     ) -> Result<Forward> {
         let epoch = self.admit_batch(batch, targets)?;
+        let relation_node_counts = matches!(self.read_spec(), ReadSpec::Relation { .. })
+            .then(|| {
+                batch
+                    .valid_lengths()
+                    .iter()
+                    .map(|&length| {
+                        BinderPlan::new(length as usize).map(|plan| plan.nodes_count() as u32)
+                    })
+                    .collect::<Result<Vec<_>>>()
+            })
+            .transpose()?;
         let target = self.stream.clone_htod(targets).map_err(cuda)?;
         let spec = self.gpu_spec(batch.rows)?;
         let mut out = self
@@ -1706,6 +1741,7 @@ impl Device {
             trace,
             trace_stride,
             flock_trace_words,
+            relation_node_counts,
             binding: self.binding.clone(),
             epoch,
             stream: Arc::clone(&self.stream),

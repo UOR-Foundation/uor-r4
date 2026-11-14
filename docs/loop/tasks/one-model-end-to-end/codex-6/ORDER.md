@@ -19,6 +19,8 @@ The trace is a qualification observation over the same production read. It must 
    and next binder node at every stage;
 2. each Flock/Relation block's query/source roots, output root, residual term count, level gate,
    selected kept node and its transport/carry roots, at every stage, including gate-zero stages.
+3. the Relation score tail in CUDA's context-padded batch layout, separately from each backend's
+   compact score accessor.
 
 The same artifact bytes and prompt prefixes must produce the same trace words on all three
 backends. Normal production calls retain no trace allocation.
@@ -33,16 +35,26 @@ backends. Normal production calls retain no trace allocation.
   `[frame_root, output_root, residual_terms, query_payload_root]`, then per level
   `[gate+1, kept_count, consensus_root, eligible_count, kept_node_ids[8],
   transport_actions[8], carried_root_ids[8]]`.
+- Relation padded scores contain `max_nodes` words per `(row, block)`, with `ABSENT` padding;
+  compact `relation_scores()` contains only each row's actual node count.
+- CUDA has one production Route body. Bucket generation may remove explicitly marked trace-only
+  blocks from that body; a decision-line mutation must reach generated source and invalidate the
+  retained source receipt rather than compile a second body.
 - `ABSENT` (`u32::MAX`) marks unused route fields and level slots.
 
 ## Files in scope
 
 - `crates/uor-r4-discrete/src/discrete.cu`
+- `crates/uor-r4-discrete/src/bucket_source.rs`
 - `crates/uor-r4-discrete/src/device.rs`
+- `crates/uor-r4-discrete/src/relation_qualification.rs`
+- `crates/uor-r4-discrete/src/writer_bucket_device.rs`
 - `crates/uor-r4-discrete/src/driver_source_pin.rs`
 - `crates/uor-r4-cpu-train/src/discrete_route.rs`
 - `crates/uor-r4-integer/src/discrete_d11.rs`
 - `docs/loop/tasks/one-model-end-to-end/codex-6/**`
+- `docs/loop/tasks/one-model-end-to-end/claude-371/PARITY.md`
+- `docs/loop/tasks/one-model-end-to-end/codex-5/ROADMAP.md`
 - `docs/roadmap/items/one-model-end-to-end.md`
 - `docs/research/notebook/cpu-training.md`, one result row
 
