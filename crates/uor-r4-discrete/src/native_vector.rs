@@ -198,6 +198,20 @@ impl Q31HamiltonModel {
                     .into(),
             ));
         }
+        if !q31_batch_len_admitted(records.len()) {
+            return Err(Error::Invalid(
+                "native Q31 model batch exceeds the admitted 2^30-item bound".into(),
+            ));
+        }
+        if values
+            .iter()
+            .chain(targets)
+            .any(|quaternion| !q31_quaternion_admitted(*quaternion))
+        {
+            return Err(Error::Invalid(
+                "native Q31 model values and targets must be in -2^31..=2^31".into(),
+            ));
+        }
         let gate_before = self.gate.words();
         let mut delta = [0_i128; 4];
         for record in records {
@@ -214,28 +228,45 @@ impl Q31HamiltonModel {
         let candidate_gate = std::array::from_fn(|index| {
             q31_saturate((i128::from(gate_before[index]) + delta[index] / count) as i64)
         });
-        let mut loss_before = 0_u64;
-        let mut loss_after = 0_u64;
-        for (&value, &target) in values.iter().zip(targets) {
-            loss_before += q31_l1_loss(q31_hamilton_rotate(gate_before, value)?, target);
-            loss_after += q31_l1_loss(q31_hamilton_rotate(candidate_gate, value)?, target);
-        }
+        let loss_before =
+            checked_q31_loss_sum(values.iter().zip(targets).map(|(&value, &target)| {
+                Ok(q31_l1_loss(
+                    q31_hamilton_rotate(gate_before, value)?,
+                    target,
+                ))
+            }))?;
+        let loss_after =
+            checked_q31_loss_sum(values.iter().zip(targets).map(|(&value, &target)| {
+                Ok(q31_l1_loss(
+                    q31_hamilton_rotate(candidate_gate, value)?,
+                    target,
+                ))
+            }))?;
         let accepted = loss_after < loss_before;
         let epoch_before = self.epoch;
-        if accepted {
-            self.gate = Q31VectorState::new(candidate_gate)?;
-            self.epoch = self
-                .epoch
+        let epoch_after = if accepted {
+            self.epoch
                 .checked_add(1)
-                .ok_or_else(|| Error::Invalid("native Q31 model epoch overflow".into()))?;
+                .ok_or_else(|| Error::Invalid("native Q31 model epoch overflow".into()))?
+        } else {
+            self.epoch
+        };
+        let gate_after = if accepted {
+            Q31VectorState::new(candidate_gate)?
+        } else {
+            self.gate
+        };
+        if accepted {
+            self.gate = gate_after;
+            self.epoch = epoch_after;
         }
         Ok(Q31ModelStep {
             gate_before,
-            gate_after: self.gate.words(),
+            gate_after: gate_after.words(),
             loss_before,
             loss_after,
             epoch_before,
-            epoch_after: self.epoch,
+            epoch_after,
             accepted,
             items: records.len(),
         })
@@ -318,6 +349,17 @@ pub fn q31_l1_loss(actual: Q31Transport, expected: Q31Transport) -> u64 {
         .zip(expected)
         .map(|(actual, expected)| actual.abs_diff(expected))
         .sum()
+}
+
+fn checked_q31_loss_sum<I>(losses: I) -> Result<u64>
+where
+    I: IntoIterator<Item = Result<u64>>,
+{
+    let total = losses.into_iter().try_fold(0_u128, |sum, loss| {
+        sum.checked_add(u128::from(loss?))
+            .ok_or_else(|| Error::Invalid("native Q31 aggregate loss overflow".into()))
+    })?;
+    u64::try_from(total).map_err(|_| Error::Invalid("native Q31 aggregate loss exceeds u64".into()))
 }
 
 /// One bounded geometric credit step against a target Q31 transport.
@@ -508,5 +550,41 @@ mod tests {
         let mut model = model;
         assert!(model.step_reference(&[], &[]).is_err());
         assert!(model.step_reference(&[[ONE, 0, 0, 0]], &[]).is_err());
+    }
+
+    #[test]
+    fn a_failed_epoch_increment_leaves_the_model_unchanged() {
+        let target = [1_518_500_249, 1_518_500_249, 0, 0];
+        let values = vec![[ONE, 0, 0, 0]; 8];
+        let targets = vec![target; 8];
+        let model = Q31HamiltonModel::new([ONE, 0, 0, 0], 8).unwrap();
+        let mut bytes = model.to_bytes();
+        bytes[32..40].copy_from_slice(&u64::MAX.to_le_bytes());
+        let mut model = Q31HamiltonModel::from_bytes(bytes).unwrap();
+        let before = model;
+
+        let error = model.step_reference(&values, &targets).unwrap_err();
+
+        assert!(error.to_string().contains("epoch overflow"), "{error}");
+        assert_eq!(model, before);
+    }
+
+    #[test]
+    fn invalid_model_targets_leave_the_model_unchanged() {
+        let model = Q31HamiltonModel::new([ONE, 0, 0, 0], 8).unwrap();
+        let mut model = model;
+        let before = model;
+        let error = model
+            .step_reference(&[[ONE, 0, 0, 0]], &[[Q31_MAX + 1, 0, 0, 0]])
+            .unwrap_err();
+
+        assert!(error.to_string().contains("training words"), "{error}");
+        assert_eq!(model, before);
+    }
+
+    #[test]
+    fn aggregate_loss_refuses_u64_overflow() {
+        let error = checked_q31_loss_sum([Ok(u64::MAX), Ok(1)]).unwrap_err();
+        assert!(error.to_string().contains("exceeds u64"), "{error}");
     }
 }

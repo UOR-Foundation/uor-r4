@@ -11,7 +11,7 @@ gh pr view 3968 --json state,isDraft,headRefOid,baseRefName,url
 ```
 
 Expected: a clean `codex/cuda-native-train` containing the Q31 model work, merge-forward head
-`76f9aa3e2`, and the `codex-6` metadata repair. PR #3968 is based directly on `main`. The
+`76f9aa3e2`, and the `codex-7` atomic-state repair. PR #3968 is based directly on `main`. The
 repository wins over this note.
 
 ## Current state
@@ -22,6 +22,8 @@ repository wins over this note.
   all Q31 CUDA source and tests remained intact.
 - The finalized ORDER parser required the roadmap item link on the same line; `codex-6` repairs
   that metadata across the existing chain.
+- `codex-7` makes every model-step error atomic, checks aggregate loss before conversion and
+  restores the final `main` skill dependency.
 
 ## Current model path
 
@@ -66,7 +68,7 @@ MANIFEST
 - PR 3968 head: current branch HEAD at push  check: test "$(git rev-parse HEAD)" = "$(gh pr view 3968 --json headRefOid -q .headRefOid)"
 - shared model evidence: codex-5/REPORT.md  check: sed -n '/## Measurements/,/## Checks/p' docs/loop/tasks/native-space-state-contract/codex-5/REPORT.md
 - CUDA integration tests: 4 passed  check: NVCC=/usr/local/cuda/bin/nvcc UOR_NVCC_ARCH=compute_89 UOR_REQUIRE_CUDA=1 cargo test -p uor-r4-discrete --features cuda --test native_vector_cuda
-- discrete library tests: 367 passed / 1 ignored  check: cargo test -p uor-r4-discrete --lib
+- discrete library tests: 370 passed / 1 ignored  check: cargo test -p uor-r4-discrete --lib
 - full harness package: 685 passed / 1 ignored  check: TMPDIR=/var/tmp/uor-harness.KQCj53 cargo test --locked -p uor-r4-harness
 - CUDA PR: 3968 based on main  check: gh pr view 3968 --json state,isDraft,baseRefName
 - next: integer serving consumes the shared Q31 model state  check: top of this file
