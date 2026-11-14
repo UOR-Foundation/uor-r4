@@ -14,6 +14,10 @@ Order: [ORDER.md](ORDER.md). Result: [PARITY-RESULT.md](PARITY-RESULT.md).
 - The full CPU-training suite reports two failures in FBS ask/carry parity. Claude-371 already
   recorded both failing at the parent base with its change set aside. They are outside this
   trace unit; all other CPU-training tests pass.
+- The exact-head review at `1c925165e` found two P2 issues: an untraced Relation read still
+  allocated and copied trace-only relation scores, and the active-slot control asserted
+  non-vacuity without pinning the measured 126 words. Both are fixed at the head recorded in the
+  Git history; the delta is re-reviewed before delivery.
 
 ## What changed
 
@@ -53,6 +57,15 @@ Fault visibility:
 
 No training run, capability, language result, throughput or performance claim is made.
 
+## Skills used
+
+- `uor-research-architect`: kept the unit finite, artifact-bound and separate from language
+  qualification.
+- `working-discipline`: read the existing state first, compared the shipped paths, retained row
+  words and reported the parent-base failures separately.
+- `compaction`: recovered the interrupted CUDA-parity state without reconstructing measurements
+  from memory.
+
 ## Checks run at the head
 
 - `cargo test --locked -p uor-r4-cpu-train
@@ -74,8 +87,9 @@ No training run, capability, language result, throughput or performance claim is
 - `UOR_LAB=codex uor-harness check` - **0 errors, 314 warnings**.
 - `loop pr-check --local --base e978e53ef` - **PASS**, with the repository's scope, commit-order
   and FILEMAP advisories.
-- Fresh-context exact-head review: pending the committed head. External PR publication requires
-  owner approval under the repository AGENTS instruction.
+- Fresh-context exact-head review: the first pass returned CHANGES with the two P2 findings above;
+  the repaired head is submitted for delta re-review. External PR publication requires owner
+  approval under the repository AGENTS instruction.
 
 ## Still open
 

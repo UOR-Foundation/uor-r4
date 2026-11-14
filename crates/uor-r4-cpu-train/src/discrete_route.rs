@@ -634,8 +634,9 @@ impl ActiveLeafModel {
         let length = prefix.len();
         let last_token = prefix[length - 1] as usize;
         let mut out = Vec::with_capacity(self.blocks * 8);
-        let mut all_relation_scores =
-            matches!(self.mode, ActiveLeafMode::Relation { .. }).then(Vec::<i32>::new);
+        let mut all_relation_scores = (trace.is_some()
+            && matches!(self.mode, ActiveLeafMode::Relation { .. }))
+        .then(Vec::<i32>::new);
         for block in 0..self.blocks {
             let trace_start = trace.as_ref().map(|words| words.len());
             if let Some(words) = trace.as_deref_mut() {
@@ -4985,8 +4986,11 @@ mod tests {
                 }
             }
         }
-        assert!(active_kept_slots > 0, "kept-node trace is vacuous");
-        assert_eq!(active_kept_slots, active_action_slots);
+        assert_eq!(active_kept_slots, 126, "kept-node trace slot count");
+        assert_eq!(
+            active_action_slots, 126,
+            "transport-action trace slot count"
+        );
         println!(
             "native_trace rows={} kept_slots={active_kept_slots} action_slots={active_action_slots}",
             clean_flock.len()
