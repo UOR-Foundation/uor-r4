@@ -1,7 +1,7 @@
 # ORDER: one-model-end-to-end, claude-371 (native-space inventory and first parity contract)
 
 Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407).
-Base: `origin/main` at `675f5eb4334a5d4f87a2b5fa45ec8a46e0b81fc4`.
+Base: `origin/main` at `675f5eb43b99e5ee634cd45b5fd517f69a638c52`.
 
 ## Goal
 
