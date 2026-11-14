@@ -26,10 +26,18 @@ language capability or a completed end-to-end generation model.
 ## Files in scope
 
 - `Cargo.lock`
+- `Cargo.toml`
 - `crates/uor-r4-integer/Cargo.toml`
+- `crates/uor-r4-discrete/Cargo.toml`
+- `crates/uor-r4-discrete/src/lib.rs`
+- `crates/uor-r4-discrete/src/native_vector.rs`
+- `crates/uor-r4-discrete/src/native_vector_device.rs`
+- `crates/uor-r4-native-vector/Cargo.toml`
+- `crates/uor-r4-native-vector/src/lib.rs`
 - `crates/uor-r4-integer/src/stack/mod.rs`
 - `crates/uor-r4-integer/src/stack/q31_serving.rs`
 - `docs/roadmap/items/native-space-state-contract.md`
+- `docs/start/FILEMAP.md`
 - `docs/loop/tasks/native-space-state-contract/codex-8/**`
 
 ## Size
@@ -39,7 +47,7 @@ About 80 to 180 lines.
 ## Done when
 
 1. The integer crate can load and save the exact 48-byte Q31 model state without conversion.
-2. Its serving transition calls the shared `uor_r4_discrete::native_vector` Q31 Hamilton operator.
+2. Its serving transition calls the shared `uor_r4_native_vector` Q31 Hamilton operator.
 3. A trained gate loaded from bytes produces exactly the same raw words as the Rust oracle.
 4. Invalid version, trailing bytes, gate words or step shifts are refused.
 5. Focused serving tests, the integer crate build, formatting, Clippy, `git diff --check`, and the
