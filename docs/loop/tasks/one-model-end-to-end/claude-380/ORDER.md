@@ -1,7 +1,7 @@
 # ORDER: one-model-end-to-end, claude-380 (V1: train as served, the state carried across windows)
 
 Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407).
-Base: `origin/main` at `d5eb4a5562ba1ee8b6ff6c36b3dbbc12e1e4ccb6`. Follows V0, claude-376 (PR #3970). Roadmap: `local/claude/one-vector-roadmap-2026-11-14.md` §4, step V1. Kit, not committed: `local/claude/claude-380/`.
+Base: `origin/main` at `d5eb4a55656726b04ea79b06968f91905933c925`. Follows V0, claude-376 (PR #3970). Roadmap: `local/claude/one-vector-roadmap-2026-11-14.md` §4, step V1. Kit, not committed: `local/claude/claude-380/`.
 
 ## Goal
 
