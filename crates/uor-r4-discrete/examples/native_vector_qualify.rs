@@ -4,7 +4,9 @@
 //! uor-r4-discrete --features cuda --example native_vector_qualify`
 
 use std::time::Instant;
-use uor_r4_discrete::native_vector::{q31_hamilton_rotate, q31_hamilton_train_step};
+use uor_r4_discrete::native_vector::{
+    q31_hamilton_rotate, q31_hamilton_train_step, Q31HamiltonModel,
+};
 use uor_r4_discrete::native_vector_device::{
     compiled_native_vector_image, native_vector_entry, native_vector_training_entry,
     NativeVectorEngine,
@@ -76,6 +78,18 @@ fn main() -> uor_r4_discrete::Result<()> {
         gate = step[0].accepted_gate;
     }
     let final_loss = q31_hamilton_train_step(gate, [one, 0, 0, 0], target, 8)?.loss_before;
+
+    let mut model = Q31HamiltonModel::new([one, 0, 0, 0], 8)?;
+    let batch_values = vec![[one, 0, 0, 0]; 8];
+    let batch_targets = vec![target; 8];
+    let first_model_step = engine.train_model_step(&mut model, &batch_values, &batch_targets)?;
+    for _ in 1..64 {
+        engine.train_model_step(&mut model, &batch_values, &batch_targets)?;
+    }
+    let mut model_probe = model;
+    let final_model_loss = engine
+        .train_model_step(&mut model_probe, &batch_values, &batch_targets)?
+        .loss_before;
     println!(
         "{}",
         serde_json::json!({
@@ -94,6 +108,10 @@ fn main() -> uor_r4_discrete::Result<()> {
             "finite_training_final_loss": final_loss,
             "finite_training_steps": 64,
             "finite_training_accepted_steps": accepted_steps,
+            "shared_model_initial_loss": first_model_step.loss_before,
+            "shared_model_final_loss": final_model_loss,
+            "shared_model_epoch": model.epoch(),
+            "shared_model_gate": model.gate(),
             "image_source_ptx_cubin_report_sha256": compiled_native_vector_image(),
             "first": cuda.first(),
             "last": cuda.last(),

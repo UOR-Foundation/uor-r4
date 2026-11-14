@@ -1,6 +1,7 @@
 #![cfg(feature = "cuda")]
 
 use uor_r4_discrete::native_vector::q31_hamilton_rotate;
+use uor_r4_discrete::native_vector::Q31HamiltonModel;
 use uor_r4_discrete::native_vector_device::NativeVectorEngine;
 
 fn values(seed: u64, count: usize) -> Vec<[i64; 4]> {
@@ -122,6 +123,49 @@ fn cuda_training_steps_match_the_rust_oracle_and_lower_loss() -> uor_r4_discrete
         final_step[0].loss_before < initial,
         "initial {initial}, final {}",
         final_step[0].loss_before
+    );
+    Ok(())
+}
+
+#[test]
+fn cuda_and_rust_shared_model_steps_keep_the_same_gate_and_epoch() -> uor_r4_discrete::Result<()> {
+    let engine = match NativeVectorEngine::new(0) {
+        Ok(engine) => engine,
+        Err(error) if std::env::var("UOR_REQUIRE_CUDA").as_deref() != Ok("1") => {
+            println!("SKIPPED (no CUDA device): {error}");
+            return Ok(());
+        }
+        Err(error) => return Err(error),
+    };
+    let one = 1 << 31;
+    let target = [1_518_500_249, 1_518_500_249, 0, 0];
+    let values = vec![[one, 0, 0, 0]; 8];
+    let targets = vec![target; 8];
+    let mut cuda_model = Q31HamiltonModel::new([one, 0, 0, 0], 8)?;
+    let mut expected = Q31HamiltonModel::new([one, 0, 0, 0], 8)?;
+    let first_cuda = engine.train_model_step(&mut cuda_model, &values, &targets)?;
+    let first_rust =
+        NativeVectorEngine::train_model_step_reference(&mut expected, &values, &targets)?;
+    assert_eq!(first_cuda, first_rust);
+    let initial_loss = first_cuda.loss_before;
+    for step in 1..64 {
+        let cuda = engine.train_model_step(&mut cuda_model, &values, &targets)?;
+        let rust =
+            NativeVectorEngine::train_model_step_reference(&mut expected, &values, &targets)?;
+        assert_eq!(cuda, rust, "shared model step differs after step {step}");
+        assert_eq!(cuda_model.gate(), cuda.gate_after);
+        assert_eq!(cuda_model.epoch(), step + 1);
+    }
+    let mut probe = cuda_model;
+    let final_loss =
+        NativeVectorEngine::train_model_step_reference(&mut probe, &values, &targets)?.loss_before;
+    assert!(
+        final_loss < initial_loss,
+        "initial {initial_loss}, final {final_loss}"
+    );
+    assert_eq!(
+        Q31HamiltonModel::from_bytes(cuda_model.to_bytes())?,
+        cuda_model
     );
     Ok(())
 }

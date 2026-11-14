@@ -3,7 +3,8 @@
 
 use crate::native_vector::{
     q31_batch_len_admitted, q31_hamilton_rotate, q31_hamilton_train_step, q31_quaternion_admitted,
-    Q31Quaternion, Q31TrainingStep, Q31Transport, MAX_Q31_STEP_SHIFT,
+    Q31HamiltonModel, Q31ModelStep, Q31Quaternion, Q31TrainingStep, Q31Transport,
+    MAX_Q31_STEP_SHIFT,
 };
 use crate::{Error, Result};
 use cudarc::driver::{CudaContext, CudaFunction, CudaStream, LaunchConfig, Ptx, PushKernelArg};
@@ -256,6 +257,32 @@ impl NativeVectorEngine {
         step_shift: u32,
     ) -> Result<Q31TrainingStep> {
         q31_hamilton_train_step(gate, value, target, step_shift)
+    }
+
+    /// Apply one shared Q31 model step: CUDA per-item credit, then deterministic aggregation.
+    pub fn train_model_step(
+        &self,
+        model: &mut Q31HamiltonModel,
+        values: &[Q31Quaternion],
+        targets: &[Q31Quaternion],
+    ) -> Result<Q31ModelStep> {
+        if values.is_empty() || values.len() != targets.len() {
+            return Err(invalid(
+                "native Q31 model step needs nonempty equal-length values and targets",
+            ));
+        }
+        let gates = vec![model.gate(); values.len()];
+        let records = self.hamilton_train_step(&gates, values, targets, model.step_shift())?;
+        model.step_from_records(&records, values, targets)
+    }
+
+    /// Run the shared model step through the Rust oracle.
+    pub fn train_model_step_reference(
+        model: &mut Q31HamiltonModel,
+        values: &[Q31Quaternion],
+        targets: &[Q31Quaternion],
+    ) -> Result<Q31ModelStep> {
+        model.step_reference(values, targets)
     }
 }
 

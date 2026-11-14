@@ -26,12 +26,33 @@ pub struct Q31TrainingStep {
     pub accepted: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Q31ModelStep {
+    pub gate_before: Q31Quaternion,
+    pub gate_after: Q31Quaternion,
+    pub loss_before: u64,
+    pub loss_after: u64,
+    pub epoch_before: u64,
+    pub epoch_after: u64,
+    pub accepted: bool,
+    pub items: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Q31HamiltonModel {
+    gate: Q31VectorState,
+    step_shift: u32,
+    epoch: u64,
+}
+
 const Q31_MIN: i64 = -(1 << 31);
 const Q31_MAX: i64 = 1 << 31;
 /// Largest admitted batch: the last `item * 4` index remains in the lower 32 bits.
 pub const MAX_Q31_BATCH_ITEMS: usize = 1 << 30;
 /// Largest admitted per-word learning-rate shift; `0` applies the full credit.
 pub const MAX_Q31_STEP_SHIFT: u32 = 31;
+const Q31_MODEL_VERSION: u8 = 1;
+const Q31_MODEL_BYTES: usize = 48;
 
 /// Whether one word is inside the closed native Q31 domain.
 pub fn q31_coordinate_admitted(word: i64) -> bool {
@@ -95,6 +116,149 @@ impl Q31VectorState {
             );
         }
         Self::new(words)
+    }
+}
+
+impl Q31HamiltonModel {
+    pub fn new(gate: Q31Quaternion, step_shift: u32) -> Result<Self> {
+        if step_shift > MAX_Q31_STEP_SHIFT {
+            return Err(Error::Invalid(
+                "native Q31 model step_shift must be in 0..=31".into(),
+            ));
+        }
+        Ok(Self {
+            gate: Q31VectorState::new(gate)?,
+            step_shift,
+            epoch: 0,
+        })
+    }
+
+    pub fn gate(self) -> Q31Quaternion {
+        self.gate.words()
+    }
+
+    pub fn step_shift(self) -> u32 {
+        self.step_shift
+    }
+
+    pub fn epoch(self) -> u64 {
+        self.epoch
+    }
+
+    /// Versioned little-endian model state: gate words, epoch, step shift and version.
+    pub fn to_bytes(self) -> [u8; Q31_MODEL_BYTES] {
+        let mut bytes = [0; Q31_MODEL_BYTES];
+        bytes[..32].copy_from_slice(&self.gate.to_bytes());
+        bytes[32..40].copy_from_slice(&self.epoch.to_le_bytes());
+        bytes[40..44].copy_from_slice(&self.step_shift.to_le_bytes());
+        bytes[44] = Q31_MODEL_VERSION;
+        bytes
+    }
+
+    /// Restore the exact gate and optimizer cursor, refusing any unknown bytes.
+    pub fn from_bytes(bytes: [u8; Q31_MODEL_BYTES]) -> Result<Self> {
+        if bytes[44] != Q31_MODEL_VERSION || bytes[45..].iter().any(|byte| *byte != 0) {
+            return Err(Error::Invalid(
+                "native Q31 model state has an unknown version or nonzero trailing bytes".into(),
+            ));
+        }
+        let gate = Q31VectorState::from_bytes(bytes[..32].try_into().expect("fixed gate width"))?;
+        let epoch = u64::from_le_bytes(
+            bytes[32..40]
+                .try_into()
+                .expect("fixed native model epoch width"),
+        );
+        let step_shift = u32::from_le_bytes(
+            bytes[40..44]
+                .try_into()
+                .expect("fixed native model shift width"),
+        );
+        if step_shift > MAX_Q31_STEP_SHIFT {
+            return Err(Error::Invalid(
+                "native Q31 model step_shift must be in 0..=31".into(),
+            ));
+        }
+        Ok(Self {
+            gate,
+            step_shift,
+            epoch,
+        })
+    }
+
+    /// Apply one shared model step from already-computed per-item training records.
+    pub fn step_from_records(
+        &mut self,
+        records: &[Q31TrainingStep],
+        values: &[Q31Quaternion],
+        targets: &[Q31Quaternion],
+    ) -> Result<Q31ModelStep> {
+        if records.is_empty() || records.len() != values.len() || values.len() != targets.len() {
+            return Err(Error::Invalid(
+                "native Q31 model step needs nonempty equal-length records, values and targets"
+                    .into(),
+            ));
+        }
+        let gate_before = self.gate.words();
+        let mut delta = [0_i128; 4];
+        for record in records {
+            if !q31_quaternion_admitted(record.candidate_gate) {
+                return Err(Error::Invalid(
+                    "native Q31 model candidate is outside the closed domain".into(),
+                ));
+            }
+            for (index, sum) in delta.iter_mut().enumerate() {
+                *sum += i128::from(record.candidate_gate[index] - gate_before[index]);
+            }
+        }
+        let count = records.len() as i128;
+        let candidate_gate = std::array::from_fn(|index| {
+            q31_saturate((i128::from(gate_before[index]) + delta[index] / count) as i64)
+        });
+        let mut loss_before = 0_u64;
+        let mut loss_after = 0_u64;
+        for (&value, &target) in values.iter().zip(targets) {
+            loss_before += q31_l1_loss(q31_hamilton_rotate(gate_before, value)?, target);
+            loss_after += q31_l1_loss(q31_hamilton_rotate(candidate_gate, value)?, target);
+        }
+        let accepted = loss_after < loss_before;
+        let epoch_before = self.epoch;
+        if accepted {
+            self.gate = Q31VectorState::new(candidate_gate)?;
+            self.epoch = self
+                .epoch
+                .checked_add(1)
+                .ok_or_else(|| Error::Invalid("native Q31 model epoch overflow".into()))?;
+        }
+        Ok(Q31ModelStep {
+            gate_before,
+            gate_after: self.gate.words(),
+            loss_before,
+            loss_after,
+            epoch_before,
+            epoch_after: self.epoch,
+            accepted,
+            items: records.len(),
+        })
+    }
+
+    /// Run one shared model step through the Rust operator oracle.
+    pub fn step_reference(
+        &mut self,
+        values: &[Q31Quaternion],
+        targets: &[Q31Quaternion],
+    ) -> Result<Q31ModelStep> {
+        if values.is_empty() || values.len() != targets.len() {
+            return Err(Error::Invalid(
+                "native Q31 model step needs nonempty equal-length values and targets".into(),
+            ));
+        }
+        let gate = self.gate.words();
+        let records = values
+            .iter()
+            .zip(targets)
+            .map(|(&value, &target)| q31_hamilton_train_step(gate, value, target, self.step_shift))
+            .collect::<Result<Vec<_>>>()?;
+        self.step_from_records(&records, values, targets)
     }
 }
 
@@ -308,5 +472,41 @@ mod tests {
         assert!(q31_hamilton_train_step(valid, invalid, valid, 8).is_err());
         assert!(q31_hamilton_train_step(valid, valid, invalid, 8).is_err());
         assert!(q31_hamilton_train_step(valid, valid, valid, 32).is_err());
+    }
+
+    #[test]
+    fn a_shared_model_step_lowers_batch_loss_and_serializes_its_epoch() {
+        let one = 1 << 31;
+        let target = [1_518_500_249, 1_518_500_249, 0, 0];
+        let values = vec![[one, 0, 0, 0]; 8];
+        let targets = vec![target; 8];
+        let mut model = Q31HamiltonModel::new([one, 0, 0, 0], 8).unwrap();
+        let first = model.step_reference(&values, &targets).unwrap();
+        assert_eq!(first.epoch_before, 0);
+        for _ in 1..64 {
+            model.step_reference(&values, &targets).unwrap();
+        }
+        assert_eq!(model.epoch(), 64);
+        let final_loss = targets
+            .iter()
+            .zip(&values)
+            .map(|(target, value)| {
+                q31_l1_loss(q31_hamilton_rotate(model.gate(), *value).unwrap(), *target)
+            })
+            .sum::<u64>();
+        assert!(final_loss < first.loss_before);
+        let restored = Q31HamiltonModel::from_bytes(model.to_bytes()).unwrap();
+        assert_eq!(restored, model);
+    }
+
+    #[test]
+    fn shared_model_state_refuses_unknown_bytes_and_wrong_shapes() {
+        let model = Q31HamiltonModel::new([ONE, 0, 0, 0], 8).unwrap();
+        let mut bytes = model.to_bytes();
+        bytes[44] = 2;
+        assert!(Q31HamiltonModel::from_bytes(bytes).is_err());
+        let mut model = model;
+        assert!(model.step_reference(&[], &[]).is_err());
+        assert!(model.step_reference(&[[ONE, 0, 0, 0]], &[]).is_err());
     }
 }
