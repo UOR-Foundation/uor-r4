@@ -18,18 +18,18 @@ When each pair row is weighed by 1 + 1/R, so that frame pairs keep claude-370's 
 
 ## Data split
 
-The inputs are claude-370's, at its sheet's hashes, copied to each pod from the laptop (`local/claude/claude-370/in/`) and hashed again there (`local/claude/claude-374/in-374.sha256`).
+The inputs are claude-370's, at its sheet's hashes, copied to each pod from the laptop (`local/claude/claude-370/in/`) into `/workspace/in374/` and hashed again there (`local/claude/claude-374/in-374.sha256`).
 
-| Input | Path on the pod | SHA-256 |
+| Input | Path on the pod (under `/workspace/in374/`) | SHA-256 |
 |---|---|---|
-| TRAIN tokens | `/workspace/in/tr/train/tokens.u16` | `e25775f3aad4548e238736e02a3185e6c57062b8962a4147aafb655a6d865f32` |
-| TRAIN mask | `/workspace/in/tr/train/response_mask.u8` | `d8ee0add4286293bf6471659f275e77346994accae41be53be8b47d8bd6e93d1` |
-| P14 tokens (1,108 scored replies) | `/workspace/in/p14/train/tokens.u16` | `b8ad9fe401226b6df8677d06b3f2ad60ea4ffdf6a0b8092970c69e57c4355fe4` |
-| P14 mask | `/workspace/in/p14/train/response_mask.u8` | `67eed533b50fb685d75875050cdd88205a34033d51f491ce19b36795ea75674b` |
-| P23 tokens (1,110 scored replies) | `/workspace/in/p23/train/tokens.u16` | `d2da2c2c46ce69c13a6ed06107b7511b448578a5997b3aa6e70070816b1b440d` |
-| P23 mask | `/workspace/in/p23/train/response_mask.u8` | `b40477356a820f48c7a69d2251b77e79a928f1dc752560a351adba3ddff03e05` |
-| Place kit | `/workspace/in/kit/train-places.json` | `8d28571a614e4e038fcb52e2661787f38af62933dbf7ddad2ad64582c8a0a9b3` |
-| Tokenizer | `/workspace/in/driver-data/tokenizer.json` | `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89` |
+| TRAIN tokens | `tr/train/tokens.u16` | `e25775f3aad4548e238736e02a3185e6c57062b8962a4147aafb655a6d865f32` |
+| TRAIN mask | `tr/train/response_mask.u8` | `d8ee0add4286293bf6471659f275e77346994accae41be53be8b47d8bd6e93d1` |
+| P14 tokens (1,108 scored replies) | `p14/train/tokens.u16` | `b8ad9fe401226b6df8677d06b3f2ad60ea4ffdf6a0b8092970c69e57c4355fe4` |
+| P14 mask | `p14/train/response_mask.u8` | `67eed533b50fb685d75875050cdd88205a34033d51f491ce19b36795ea75674b` |
+| P23 tokens (1,110 scored replies) | `p23/train/tokens.u16` | `d2da2c2c46ce69c13a6ed06107b7511b448578a5997b3aa6e70070816b1b440d` |
+| P23 mask | `p23/train/response_mask.u8` | `b40477356a820f48c7a69d2251b77e79a928f1dc752560a351adba3ddff03e05` |
+| Place kit | `kit/train-places.json` | `8d28571a614e4e038fcb52e2661787f38af62933dbf7ddad2ad64582c8a0a9b3` |
+| Tokenizer | `driver-data/tokenizer.json` | `d36d3e8700a123e620012df77de195f244fbdb4d05d9e1aa7e77fa9407590f89` |
 
 - The pair dictionary and R are counted from TRAIN's user turns and their replies only. No panel is read while training.
 
@@ -118,7 +118,7 @@ Two RTX 5090 Vast pods (offers near $0.56/h each). claude-373 trained a run in a
 ## Compute and stop rule
 
 - **Where.** Two Vast pods of one GPU kind (RTX 5090) through `scripts/pod/uor-pod`, leased and inside the caps, with a completion watcher armed at launch (L-004). `wick` is not used: on 14 Nov another lab's job holds its card, and this lab does not start beside another lab's job (I-6). Every model of the comparison comes from one GPU kind.
-- **How.** Each lane is a detached chain on its pod (`chain-374.sh`), one job script a stage with a log and an exit file. The laptop's watcher (`watch-374.sh`) renews the lease every 10 minutes and waits for the chain's exit file.
+- **How.** Each lane is a detached chain on its pod (`chain-374.sh`), one job script a stage with a log and an exit file. The laptop's watcher (`watch-374.sh`) renews the lease every 10 minutes and waits for the chain's exit file. Lane b is launched only after lane a's `up` returns, so the caps check is never raced.
 - **Stop.** A run whose loss is not finite stops itself. For arm `pair` that is an instrument failure (claude-370 and claude-373 ran it to its end) and it starts again. For arm `boost` it is classified first (§4.2): with every weight between 1 and 2 the rows add at most twice what they add in `pair`, so a non-finite loss is first read as a defect in the build and repaired, with the run started again. Only if no defect is found is it a result about this configuration, and then it falls under "Not called".
   - A healthy run is never cancelled for time.
   - A training log that has not grown for 60 minutes is hung (an eval prints every 2,048 steps). The job stops its own trainer by its pid; that is an instrument failure, and the run starts again as a crashed run does.
@@ -129,5 +129,8 @@ Two RTX 5090 Vast pods (offers near $0.56/h each). claude-373 trained a run in a
 ## FIT
 
 - **First read** (fresh, non-author, 14 Nov): NOT_FIT on two points. The job's I-8 compared only the weight lines, so a `boost` checkpoint with zero rows, another dictionary or few bag readers kept its mark and census and could read "Does not add" (L-007); and I-4's smoke checks did not gate the long runs, one (the step-0 line beside a pair smoke) had no pair smoke to compare with. The job's I-8 now checks the training log's last rows line, the loaded rows and dictionary against training, and 90 in 100 bag readers, each tested to fail on claude-373's real logs broken one at a time; the smoke's I-8 now ends pre non-zero; the step-0 sub-check is replaced by the dictionary SHA-256. Its notes are taken: the reader refuses a second pass of one model and panel and prints no verdict when I-8 is skipped (its SHA-256 above is the new file's, and it still gives claude-373's published counts); the census comparison is named as this lab's, quoted in the REPORT.
+- **Second read** (another fresh non-author reader, 14 Nov): FIT, no blocking point, for the sheet, the order, the job script, the reader and the seal's lane paths. It confirmed the first read's points are closed in the files. Its notes are taken: the job's I-8 comments describe all of I-8, and an unparsable bag line now fails with its own reason. It did not read the launcher, the watcher, the fetch or the down gate, so a third reader read those.
+- **Third read** (another fresh non-author reader, 14 Nov), for the launcher, the watcher, the fetch, the down gate and the input hashes: NOT_FIT on two points. The down gate required all five stages even when the chain skipped some (a failed pre, a crashed run's scoring stage), so a pod would have been held forever; and the watcher released the lease before `down` and exited whatever `down` returned, so a failed `down` would have left an unleased, unwatched pod (L-004). The gate now checks every stage the lane ran (its `STAGE job=` line) and always `pre`, and refuses without the stage list, tested on a crashed run, an unfetched `pre` and a failed `pre`; the watcher now runs `down` first, retried with the lease renewed until it succeeds, and releases after. Its notes are taken: the pods' input folder is `/workspace/in374/` (the table is corrected), and lane b launches after lane a's `up` returns.
+- **Fourth read** (another fresh non-author reader, 14 Nov), for the third read's two fixes: FIT, no blocking point. The gate's `^STAGE job=` match is anchored and agrees with the chain's stage list, written whole before the exit file; `down` is retried with the lease renewed and the lease is released only after. Its notes are taken where cheap (the watcher unsets the gate's test folder variable); a failed fetch or seal holds a watched pod for a person to act, as before.
 
-TEST FITNESS: PENDING
+TEST FITNESS: FIT
