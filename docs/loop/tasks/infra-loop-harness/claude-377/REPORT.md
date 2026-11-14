@@ -23,8 +23,13 @@ None. This unit makes no run.
 
 - `cargo xtask roadmap check`: 146 items OK.
 - `cargo xtask roadmap render --check`: current.
-- `uor-harness loop report --check` and `loop pr-check --local`: see the PR's review record.
-- A fresh exact-head review: see the PR's review record.
+- `uor-harness loop report --check`: PASS. `loop pr-check --local`: verdict PASS (two D76 advisories, `read-path` and `filemap`, both about files outside this diff).
+- `gh issue view 3972`: the body is the item's text, the owner's "All of it (Recommended)" and the m7 note included.
+- **A fresh exact-head review** at `ef801e7a5`: APPROVE WITH CHANGES. It confirmed the 104 SUMMARY links, the workflow's pins (lines 72 and 77–78), the merge-base refusal at `loopprcheck.rs:356`, the three owner paths, the verbatim quotes and that `issues.json` and the README hold only what sync wrote. Its findings, and what was done:
+  - SHOULD: add `docs/harness/README.md` to the scope. Not done: it is one of the nine shared files every PR may edit (`loopclaim::SHARED_FILES`), and `loop claim` refuses an item whose scope covers one.
+  - NIT: `xtask/Cargo.toml` is not in scope. Not needed: `book-fresh` uses std and the `serde_json` xtask already has.
+  - NIT: `docs/mechanisms/*.md` and `docs/model/*.md` take in #3969's five pages. Accepted knowingly: the item names them and its unit leaves them unedited; `loop claim`, which compares scopes, is not used.
+  - NIT: this section pointed at the review record instead of the results. Fixed here.
 
 ## Skills used
 
