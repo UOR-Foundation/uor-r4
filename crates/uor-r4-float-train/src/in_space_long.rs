@@ -310,6 +310,13 @@ pub struct LongConfig {
     /// The address memory's band `τ`; the arm's default when absent. Needs `address_memory`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub address_band: Option<f64>,
+    /// The pair rows' minimum turn count (`--pair-rows`), `None` when off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pair_rows: Option<u32>,
+    /// Whether each pair row is weighed by one over its count of different replies
+    /// (`--pair-weight replies`, claude-373).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pair_weight: bool,
 }
 
 /// What TRAIN's scored targets are ([`LongConfig::train_targets`], claude-296).
@@ -709,6 +716,7 @@ impl Drop for ArmGuard {
         crate::flock_read_memory::set_memory_rows(None);
         crate::flock_read_memory::set_reply_rows(None);
         crate::e8_address::set_address_memory(None);
+        crate::pair_rows::set_pair_rows(None);
         set_trained_cut(None);
         crate::flock_read_hamming::set_row_cut(None);
     }
@@ -801,13 +809,48 @@ fn load_reads(directory: &Path, device: &Device) -> Result<()> {
     crate::e8_address::set_address_memory(crate::e8_address::AddressMemory::load(
         directory, device,
     )?);
+    let pair = crate::pair_rows::PairRows::load(directory, device)?;
+    if let Some(rows) = &pair {
+        let (nonzero, rms) = rows.census()?;
+        println!(
+            "[pair] loaded {} pairs; dictionary sha256 {}; rows nonzero {nonzero}, rms {rms:.6}",
+            rows.dict().len(),
+            sha256_bytes(&rows.dict().to_bytes())
+        );
+        // claude-373: say whether the rows are weighed, in the trainer's census form, so a
+        // weighed checkpoint that lost its weights reads "none" here.
+        match rows.reply_counts_of_weights()? {
+            Some(counts) => println!(
+                "[pair] loaded weight replies: {}",
+                crate::pair_rows::reply_census(&counts)
+            ),
+            None => println!("[pair] loaded weight replies: none"),
+        }
+    }
+    crate::pair_rows::set_pair_rows(pair);
     Ok(())
+}
+
+/// The tokens of `\nUser:`, a user turn's marker; the same ids as `USER_MARKER` in
+/// `bin/train-question-reach.rs:26-28`.
+const PAIR_USER_MARKER: [u32; 3] = [55, 2728, 28];
+/// The tokens of `\nAssistant:`, a reply's header; the same ids as `ASSISTANT_HEADER` in
+/// `bin/train-question-reach.rs:26-28`.
+const PAIR_ASSISTANT_HEADER: [u32; 6] = [201, 35, 560, 652, 714, 28];
+
+/// The marks the pair rows find a turn and its reply by.
+pub(crate) fn pair_marks() -> crate::pair_rows::PairMarks {
+    crate::pair_rows::PairMarks {
+        user: PAIR_USER_MARKER.to_vec(),
+        assistant: PAIR_ASSISTANT_HEADER.to_vec(),
+    }
 }
 
 const INIT_RECORD_SCHEMA: &str = "uor-r4.train-in-space-init/1";
 const HAMMING_SIDECAR: &str = "hamming_read.safetensors";
-const UNSUPPORTED_INIT_SIDECARS: [&str; 7] = [
+const UNSUPPORTED_INIT_SIDECARS: [&str; 8] = [
     "address_memory.safetensors",
+    "pair_rows.safetensors",
     "flock_read.safetensors",
     "content_read.safetensors",
     "opening_read.safetensors",
@@ -901,6 +944,12 @@ fn validate_checkpoint_selection(config: &LongConfig) -> Result<()> {
     if config.address_memory.is_some() {
         return Err(invalid(
             "--init-from does not start an address memory; --address-memory trains from a fresh start",
+        ));
+    }
+    // claude-370: the pair rows likewise start at zero beside a fresh trunk.
+    if config.pair_rows.is_some() {
+        return Err(invalid(
+            "--init-from does not start the pair rows; --pair-rows trains from a fresh start",
         ));
     }
     if !checkpoint.is_dir() {
@@ -3406,6 +3455,9 @@ fn unserved_reads() -> Vec<&'static str> {
     }
     if crate::e8_address::address_memory().is_some() {
         set.push("the address memory");
+    }
+    if crate::pair_rows::pair_rows().is_some() {
+        set.push("the pair rows");
     }
     set
 }
@@ -10109,6 +10161,20 @@ pub fn score_rows(
                     context: split.context,
                 });
             }
+            // The pair rows (claude-370): the sampled prompts, as the decode is fed them, whose
+            // reply reads a bag. Once per panel, in the memory pass.
+            if let Some(rows) = crate::pair_rows::pair_rows().filter(|_| on) {
+                let fed: Vec<&[u32]> = prompts
+                    .iter()
+                    .map(|window| &window.input_ids[..=window.scored_offsets[0]])
+                    .collect();
+                let readers = crate::pair_rows::bag_readers(rows.dict(), rows.marks(), &fed)?;
+                println!(
+                    "[pair] {}: {readers} of {} sampled replies read a bag",
+                    split.name,
+                    fed.len()
+                );
+            }
             // A chained panel's queries (claude-275), greedy at full scope with the memory on and
             // off: each from a prompt ending at its opening, graded by whether the reply states
             // its note's value.
@@ -13935,6 +14001,11 @@ pub fn run_recall(
             "the address memory trains with --out's long run, not under --recall",
         ));
     }
+    if config.pair_rows.is_some() {
+        return Err(invalid(
+            "the pair rows train with --out's long run, not under --recall",
+        ));
+    }
     if form.query && pairs_per_bucket != RECALL_QUERY_EPISODES {
         return Err(invalid(format!(
             "the two-class task holds {RECALL_QUERY_EPISODES} episodes a window, not {pairs_per_bucket}"
@@ -14870,6 +14941,20 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             "--address-band sets the address memory's band; turn the memory on with --address-memory",
         ));
     }
+    if config.pair_rows == Some(0) {
+        return Err(invalid("--pair-rows wants a minimum of 1 or more"));
+    }
+    if config.pair_weight && config.pair_rows.is_none() {
+        return Err(invalid(
+            "--pair-weight replies weighs the pair rows; turn them on with --pair-rows",
+        ));
+    }
+    // claude-370: the export has no section for the pair rows, so no artifact holds them.
+    if config.pair_rows.is_some() && config.train_as_served {
+        return Err(invalid(
+            "--train-as-served rounds what the export carries; the pair rows have no exported form",
+        ));
+    }
     // Training as served (claude-258) rounds what the export carries: the trunk, the Hamming
     // read and the turn memory. A read it does not carry would train at values no artifact holds,
     // and a run with folded or reflected rate scores has no export at all (`run_rate_reading`).
@@ -14993,6 +15078,46 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             );
             let opt = crate::flock_read::FlockAdamW::for_vars(&memory.variables())?;
             Some((memory, opt))
+        }
+        None => None,
+    };
+    // The pair rows (claude-370), when on: a zero row for each pair of turn tokens seen in at
+    // least `min` user turns of TRAIN, their own optimizer, added at every reply position.
+    let mut pair = match config.pair_rows {
+        Some(min) => {
+            let (tokens, _) = match config.train_split.as_ref() {
+                None => load_train_split(data_root)?,
+                Some(split) => load_named_split(split)?,
+            };
+            let rows = crate::pair_rows::PairRows::from_tokens(
+                model.config.vocab_size,
+                &tokens,
+                &pair_marks(),
+                min,
+                config.width,
+                device,
+            )?;
+            // claude-373: each row weighed by one over its count of different TRAIN replies.
+            let rows = if config.pair_weight {
+                let counts = crate::pair_rows::reply_counts(rows.dict(), &tokens, &pair_marks())?;
+                println!(
+                    "[pair] weight replies: {}",
+                    crate::pair_rows::reply_census(&counts)
+                );
+                rows.with_reply_weights(&counts)?
+            } else {
+                rows
+            };
+            crate::pair_rows::set_pair_rows(Some(rows.clone()));
+            println!(
+                "[pair] min {min}: {} pairs have rows; width {}; dictionary sha256 {}",
+                rows.dict().len(),
+                config.width,
+                sha256_bytes(&rows.dict().to_bytes())
+            );
+            let vars = rows.variables();
+            let opt = crate::flock_read::FlockAdamW::for_vars(&vars.iter().collect::<Vec<_>>())?;
+            Some((rows, opt))
         }
         None => None,
     };
@@ -15241,6 +15366,15 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             append_line(&out.join("address.jsonl"), &serde_json::to_string(&line)?)?;
             address.save(&directory)?;
         }
+        // The pair rows (claude-370), at the values this checkpoint holds.
+        if let Some(rows) = crate::pair_rows::pair_rows() {
+            rows.save(&directory)?;
+            let (nonzero, rms) = rows.census()?;
+            println!(
+                "[pair] step {step}: rows nonzero {nonzero} of {}, rms {rms:.6}",
+                rows.dict().len()
+            );
+        }
         if let Some(served) = served {
             served.restore()?;
         }
@@ -15373,6 +15507,10 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         // same gradient, so each steps at the rate over the block count.
         if let Some((address, opt)) = address.as_mut() {
             opt.step_vars(&address.variables(), &grads, lr * address.rate())?;
+        }
+        // The pair rows (claude-370), at the trainer's rate, only on a step that read a bag.
+        if let Some((rows, opt)) = pair.as_mut() {
+            rows.step(opt, &grads, lr)?;
         }
         crate::flock_read_memory::set_memory_rows(None);
         crate::flock_read_memory::set_reply_rows(None);
@@ -16894,6 +17032,8 @@ mod tests {
             init_from: None,
             address_memory: None,
             address_band: None,
+            pair_rows: None,
+            pair_weight: false,
         }
     }
 
@@ -19599,6 +19739,87 @@ mod tests {
         assert!(refusal(usize::MAX, 72).contains("too large"));
         assert!(refusal(3, 13).contains("needs at least 14 steps"));
         assert!(refusal(3, 14).contains("needs a CUDA device"));
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn a_zero_pair_minimum_is_refused() {
+        let missing = std::env::temp_dir().join(format!("claude-370-zero-{}", std::process::id()));
+        let mut config = config(0, None);
+        config.pair_rows = Some(0);
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("--pair-rows wants a minimum of 1 or more")),
+            "{refused:?}"
+        );
+        // claude-373: the weight alone has no rows to weigh.
+        (config.pair_rows, config.pair_weight) = (None, true);
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("--pair-weight replies weighs the pair rows")),
+            "{refused:?}"
+        );
+        config.pair_weight = false;
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn pair_rows_refuse_training_as_served() {
+        let missing = std::env::temp_dir().join(format!("claude-370-served-{}", std::process::id()));
+        let mut config = config(0, None);
+        (config.pair_rows, config.train_as_served) = (Some(2), true);
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("the pair rows have no exported form")),
+            "{refused:?}"
+        );
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn pair_rows_refuse_a_checkpoint_start() {
+        let missing = std::env::temp_dir().join(format!("claude-370-init-{}", std::process::id()));
+        let mut config = config(0, None);
+        (config.pair_rows, config.init_from) = (Some(2), Some(missing.join("checkpoint")));
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("--init-from does not start the pair rows")),
+            "{refused:?}"
+        );
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn pair_rows_refuse_the_recall_task() {
+        let missing = std::env::temp_dir().join(format!("claude-370-recall-{}", std::process::id()));
+        let mut config = config(0, None);
+        config.pair_rows = Some(2);
+        let form = RecallForm::default();
+        let refused = run_recall(&missing, &config, RECALL_QUERY_EPISODES, form, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("the pair rows train with --out's long run")),
+            "{refused:?}"
+        );
         assert!(!missing.exists());
     }
 

@@ -1681,6 +1681,18 @@ impl StackModel {
                 x = q16(memory.apply(layer, &x, ids)?)?;
                 stage_clock::mark_with(|| format!("layer{layer}.address"));
             }
+            // The turn's pair rows (claude-370), when set on this thread: added once, at the
+            // first layer's seam, to every reply position of a turn whose pairs have rows. A
+            // step reads the bag from its carried window, so it needs no carry of its own.
+            if layer == 0 {
+                if let Some(rows) = crate::pair_rows::pair_rows() {
+                    x = q16(match carry.as_ref() {
+                        Some(c) if c.mode == CarryMode::Step => rows.apply_last(&x, c.window)?,
+                        _ => rows.apply(&x, ids)?,
+                    })?;
+                    stage_clock::mark("layer0.pair_rows");
+                }
+            }
             // The content read (claude-145), when one is set on this thread: after layer 3, keyed
             // on the input tokens' own points.
             if layer + 1 == crate::flock_read_content::CONTENT_AFTER_LAYER {
@@ -3941,6 +3953,157 @@ mod decode_cache_tests {
             assert_ne!(bits(&model.hidden(&windows(&rows, 10), 2, 10)?)?, plain, "{arm:?}");
             let (differing, first) = compare_steps(&model, &rows, 7, 3, None, &none)?;
             assert_eq!(differing, 0, "{arm:?}: first {first:?}");
+        }
+        Ok(())
+    }
+
+    /// claude-370: the pair-rows tests' marks (user `[3]`, assistant `[4, 5]`) and three windows
+    /// of 16: (a) a turn with pairs whose reply is open from position 5; (b) no turn at all; (c)
+    /// a turn whose reply a user marker at 8 closes, then a second turn whose reply opens at 12.
+    #[cfg(feature = "cuda")]
+    fn pair_rows_windows() -> Vec<Vec<u32>> {
+        vec![
+            vec![3, 10, 11, 12, 4, 5, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
+            (30..46).collect(),
+            vec![3, 13, 14, 4, 5, 40, 41, 42, 3, 15, 16, 4, 5, 43, 44, 46],
+        ]
+    }
+
+    /// Rows for every pair of [`pair_rows_windows`] and of one turn (50, 51) none of them holds,
+    /// `width` wide: zero, or drawn from a fixed generator.
+    #[cfg(feature = "cuda")]
+    fn pair_rows_for(model: &StackModel, zero: bool) -> Result<crate::pair_rows::PairRows> {
+        use crate::pair_rows::{PairDictionary, PairMarks, PairRows};
+        let marks = PairMarks {
+            user: vec![3],
+            assistant: vec![4, 5],
+        };
+        let mut stream: Vec<u32> = pair_rows_windows().concat();
+        stream.extend([3, 50, 51, 4, 5, 60]);
+        let dict = PairDictionary::count(model.config.vocab_size, &stream, &marks, 1)?;
+        let (count, width) = (dict.len(), model.config.width);
+        let rows = PairRows::new(dict, marks, width, model.device())?;
+        if !zero {
+            let mut rng = Lcg(370);
+            let values: Vec<f32> = (0..count * width).map(|_| rng.unit()).collect();
+            rows.variables()[0].set(&Tensor::from_vec(values, (count, width), model.device())?)?;
+        }
+        Ok(rows)
+    }
+
+    /// Clears the thread's pair rows on every exit, a failed assertion included.
+    #[cfg(feature = "cuda")]
+    struct ClearPairRows;
+    #[cfg(feature = "cuda")]
+    impl Drop for ClearPairRows {
+        fn drop(&mut self) {
+            crate::pair_rows::set_pair_rows(None);
+        }
+    }
+
+    /// claude-370: a cached step adds the bag its carried window names, so every step's points
+    /// equal the whole-window forward's at that position, bit for bit: inside an open reply, in
+    /// a row with no turn, and across a user marker and a second header.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_pair_rows_step_as_the_whole_window_does() -> Result<()> {
+        let _clear = ClearPairRows;
+        let device = Device::new_cuda(0)?;
+        let model = small_model(&device, 64)?;
+        let rows = pair_rows_windows();
+        let none = |_: &mut DecodeCache| -> Result<()> { Ok(()) };
+        let plain = bits(&model.hidden(&windows(&rows, 16), 3, 16)?)?;
+        crate::pair_rows::set_pair_rows(Some(pair_rows_for(&model, false)?));
+        // The rows are in the forward the steps are compared with.
+        assert_ne!(bits(&model.hidden(&windows(&rows, 16), 3, 16)?)?, plain);
+        let (differing, first) = compare_steps(&model, &rows, 7, 9, None, &none)?;
+        assert_eq!(differing, 0, "first {first:?}");
+        Ok(())
+    }
+
+    /// claude-370: zero rows add nothing, so the forward is the one with no rows set, bit for
+    /// bit: a `-0.0` turned `+0.0` counts as a change.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn zero_pair_rows_leave_the_forward_bit_for_bit() -> Result<()> {
+        let _clear = ClearPairRows;
+        let device = Device::new_cuda(0)?;
+        let model = small_model(&device, 64)?;
+        let ids = windows(&pair_rows_windows(), 16);
+        let plain = bits(&model.hidden(&ids, 3, 16)?)?;
+        crate::pair_rows::set_pair_rows(Some(pair_rows_for(&model, true)?));
+        assert_eq!(bits(&model.hidden(&ids, 3, 16)?)?, plain);
+        Ok(())
+    }
+
+    /// claude-370: the rows reach reply positions only: every position before a window's first
+    /// reply position is the no-rows forward's, and some reply position is not.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn pair_rows_change_reply_positions_only() -> Result<()> {
+        let _clear = ClearPairRows;
+        let device = Device::new_cuda(0)?;
+        let model = small_model(&device, 64)?;
+        let (batch, time) = (3, 16);
+        let ids = windows(&pair_rows_windows(), time);
+        let plain = bits(&model.hidden(&ids, batch, time)?)?;
+        let rows = pair_rows_for(&model, false)?;
+        let plan = crate::pair_rows::plan(rows.dict(), rows.marks(), &ids, batch, time)?;
+        crate::pair_rows::set_pair_rows(Some(rows));
+        let read = bits(&model.hidden(&ids, batch, time)?)?;
+        let width = plain.len() / (batch * time);
+        let point = |v: &[u32], b: usize, t: usize| v[(b * time + t) * width..][..width].to_vec();
+        let mut changed = 0;
+        for b in 0..batch {
+            let first = (0..time)
+                .find(|&t| plan.turn_of[b * time + t] as usize != plan.turns)
+                .unwrap_or(time);
+            for t in 0..time {
+                let same = point(&read, b, t) == point(&plain, b, t);
+                if t < first {
+                    assert!(same, "row {b} position {t} changed before the first reply");
+                } else if !same {
+                    changed += 1;
+                }
+            }
+        }
+        assert!(changed > 0, "no reply position changed");
+        Ok(())
+    }
+
+    /// claude-370: the trunk's error reaches exactly the rows the windows name: each gets a
+    /// non-zero gradient, and the row of a turn no window holds gets none.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_trunk_error_reaches_the_pair_rows() -> Result<()> {
+        let _clear = ClearPairRows;
+        let device = Device::new_cuda(0)?;
+        let model = small_model(&device, 64)?;
+        let (batch, time) = (3, 16);
+        let ids = windows(&pair_rows_windows(), time);
+        let rows = pair_rows_for(&model, false)?;
+        let plan = crate::pair_rows::plan(rows.dict(), rows.marks(), &ids, batch, time)?;
+        let var = rows.variables()[0].clone();
+        crate::pair_rows::set_pair_rows(Some(rows));
+        let hidden = model.hidden(&ids, batch, time)?;
+        let mut rng = Lcg(3700);
+        let weights: Vec<f32> = (0..hidden.elem_count()).map(|_| rng.unit()).collect();
+        let weights = Tensor::from_vec(weights, hidden.dims(), &device)?;
+        let grads = hidden.mul(&weights)?.sum_all()?.backward()?;
+        let grad = grads
+            .get(var.as_tensor())
+            .expect("the pair rows got no gradient")
+            .abs()?
+            .sum(1)?
+            .to_vec1::<f32>()?;
+        let named: std::collections::BTreeSet<u32> = plan.hit_row.iter().copied().collect();
+        assert!(named.len() < grad.len(), "every row is named: the test needs one that is not");
+        for (row, &g) in grad.iter().enumerate() {
+            if named.contains(&(row as u32)) {
+                assert!(g > 0.0, "named row {row} got no gradient");
+            } else {
+                assert_eq!(g, 0.0, "unnamed row {row} got a gradient");
+            }
         }
         Ok(())
     }
