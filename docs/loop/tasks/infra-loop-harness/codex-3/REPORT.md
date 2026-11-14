@@ -16,6 +16,8 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   instruction" wording, and the tracked PICKUP had duplicate step numbering and old test counts.
 - The architect skill pointer and native-space pointer required each other, creating a
   circular skill dependency.
+- The repair-chain ORDERs omitted `Setup row: 2`, so the review gate correctly refused to count
+  an exact-head APPROVE.
 
 ## What changed
 
@@ -29,7 +31,8 @@ planted; a regression fixture covers the retained-marker case. The architect ski
 the current D80 integer-multiply permission, and the tracked PICKUP has a single current next-step
 list and the latest check counts. The redundant architect pointer edge was removed, so the skill
 dependency graph is no longer cyclic. No new rule or harness abstraction was added. The historical
-evidence and old decision rows were not edited.
+evidence and old decision rows were not edited. All three unmerged ORDERs now name the same
+`Setup row: 2`.
 
 Size: 8 code/test changes plus 26 documentation changes across six files; this REPORT and the
 separate ORDER are additional record material.

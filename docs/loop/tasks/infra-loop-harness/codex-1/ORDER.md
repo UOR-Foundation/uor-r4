@@ -1,6 +1,6 @@
 # ORDER: infra-loop-harness, codex-1
 
-Lab: codex. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md).
+Lab: codex. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md). Setup row: 2.
 Base: `88b7bd5c`.
 
 ## Owner approval
