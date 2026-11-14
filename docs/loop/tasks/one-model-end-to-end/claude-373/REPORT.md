@@ -17,7 +17,7 @@ The order asked for claude-370's pair rows to be weighed by 1/R, where R is the 
 4. **Reading: frame-word pairs carry where the reply ends.** A pair such as (say, exactly) is seen with thousands of different replies, so 1/R scales its row to almost nothing. That is the pair claude-370's rows learned the reply's shape from, including where a copy stops. Content pairs keep their share, and the content of the copy survives. This is the reading of items 2 and 3, not a separate measurement.
 5. **Instrument slip 1: both lanes sealed `pre` to one store path.** Lane b's `pre` seal was refused because the path already held lane a's (seal exit 2). Only lane a's `pre` record is kept: the build, the GPU tests and the I-4 census. Lane b's chain goes past `pre` only when its own `pre` passed I-1, I-6 and I-4. Lane b's training census for `rare-s3` equals lane a's I-4 census character for character. Both lanes' binaries are byte-identical (below). Nothing read here rests on the missing record. The next kit must put the lane in every sealed path.
 6. **Instrument slip 2: the reader breaks when OUT is a relative path.** read-373.sh's staging links are relative, so `subst-373.sh` found no rows and the first read stopped with "subst-373.sh failed", writing no verdict. It was run again with absolute paths into a new folder (`run/read-try-1b`) by the same reader, SHA-256 `2c02c22d05f6fcccee37191ff89ed478be2fab7d4f81e60c32349a994446ab46`. Nothing in the reader changed.
-7. **Departure from the order: R is capped at 4,096.** The order says 1/R. The code stores min(R, 4096), and the census prints the cap. 4,096 is the census's own maximum, so the weight of the most common pairs is 1/4096 and not smaller.
+7. **Departure from the order: R is capped at 4,096.** The order says 1/R. The code stores min(R, 4096), and the census prints the cap. The census max of 4,096 shows the cap is reached: the most common pairs weigh 1/4096 rather than less. The cap was set before any run, not chosen from a result.
 8. **Not run.** No serving or export (the integer export refuses pair rows, as in claude-370). No third seed. No arm, seed or step count was added after reading.
 
 ## What changed
@@ -25,7 +25,7 @@ The order asked for claude-370's pair rows to be weighed by 1/R, where R is the 
 - **`crates/uor-r4-float-train/src/pair_rows.rs`:**
   - R per kept pair: the number of different TRAIN reply runs among the turns that hold it, counted in the dictionary's own pass and capped at 4,096. The weight is 1/R, saved with the rows.
   - A census line, `N pairs; R min … p50 … p90 … p99 … max … (cap 4096)`.
-  - Refusals of half a weighted checkpoint.
+  - Refusal of half a checkpoint (one of its two files missing). A rows file that lost its `weights` tensor still loads, unweighted: in this run only I-8's `none` line would catch it (Still open).
   - Tests: R counts each different reply once; a pair seen with one reply weighs 1; the bag is the weighted sum; without the flag it is claude-370's, bit for bit; save and load; cached decode equals the whole window.
 - **`in_space_long.rs`:** the bag reads the weights when they are present.
 - **`bin/train-in-space.rs`:** `--pair-weight replies` (with `--pair-rows MIN`). Training prints `[pair] weight replies: <census>`. Scoring prints `[pair] loaded weight replies: <census>`, or `none` for unweighted rows (I-8).
@@ -106,6 +106,7 @@ None.
 
 - **Weigh shape and content apart.** Frame pairs carry where the reply ends (items 3 and 4). A next configuration keeps them at full weight for the end decision, and weighs only the content rows by 1/R. One concrete form: two bags, the plain sum (claude-370) and the 1/R sum, each with its own seam. The other form: a floor on the weight. The order's mechanism is not closed by this result.
 - **Facts are still not reached by pair rows in either form.** Capital stays at 0 to 2 of 34. The address may need triples, or the key word's own row.
+- **`load` should refuse a checkpoint whose config says weighted but whose rows file has no `weights` tensor** (review, low). It loads unweighted today.
 - **The kit must put the lane in sealed paths** (item 5), and the reader must refuse a relative OUT or make absolute links (item 6).
 - **Counting and number work** still need a mechanism on the operands.
 
