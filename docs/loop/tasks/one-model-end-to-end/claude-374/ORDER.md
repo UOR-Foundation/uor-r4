@@ -14,7 +14,7 @@ Base: `origin/main` at `c615085ff22ea7009605fdeb3855a7f8b7837cc3`. Follows claud
 - **The weight.** The R of claude-373, counted in the same pass and capped at 4,096. A row's weight is 1 + 1/R. A pair seen with one reply weighs 2. A pair seen with thousands weighs just over 1, so it is claude-370's row. The weight is a fixed number per row, counted once at start-up and saved with the rows. It is not learned.
 - **The read.** The bag of a reply is the sum over its turn's pairs of (1 + 1/R) × row. Everything else is claude-370's: the address (the product of the two tokens' primes), where the bag is added, the zero start, the training by the output error and the rows' own optimizer. Equivalently, the plain bag of claude-370 plus claude-373's 1/R bag, from the same rows at the same seam.
 - **The flag.** `--pair-weight boost` with `--pair-rows MIN`. `--pair-weight replies` stays claude-373's, and without the flag everything is claude-370's, bit for bit. The saved rows say which weight they carry, and scoring prints it.
-- **One repair, from claude-373's review.** A checkpoint whose saved config says the rows are weighed is refused when its rows file holds no weights. A boosted mark without weights is refused too.
+- **One repair, from claude-373's review.** A boosted rows file carries a `boost` mark beside its weights, and a mark without weights is refused. Scoring prints the kind it loaded, so I-8 can compare it with training. A `replies` file stays claude-373's byte for byte, so a lost weights tensor there is still caught only by I-8.
 
 **Rules check** (CHARTER §3). Geometry only: the address stays the prime route. The weight is a sum of 1 and an exact count's reciprocal, a fixed scale on each row. There is no learned gate and no squashing function, and division and addition are allowed (D81). The read is a gather, a scale and a sum: no dense matrix product. Training runs on a GPU. Nothing is served. The control is claude-370's arm `pair` at this unit's pin, not a neural comparator.
 
@@ -38,7 +38,7 @@ Written by hand, as claude-359 to claude-373 were. No code of this unit exists a
 1. `--pair-weight boost` exists with tests that fail without the rule they pin:
    - a row's weight is 1 + 1/R. A pair seen with one reply weighs 2, and the bag is the weighted sum of its turn's rows and nothing else;
    - without the flag the bag, the saved files and the forward are claude-370's bit for bit, and `--pair-weight replies` is claude-373's bit for bit;
-   - the weight and its kind are saved and loaded with the rows. A boosted mark without weights is refused, and so is a config that says weighed over rows that hold none;
+   - the weight and its kind are saved and loaded with the rows. A boosted mark without weights is refused, and scoring prints the kind it loaded (none, replies or boost);
    - a reply decoded with cached steps equals the whole-window reply.
 2. The sheet is committed with a non-author FIT before any training run.
 3. The REPORT gives, for every model: exact replies on both panels, the fact and number rows (exact, and ended with the answer word), replies by kind and by need, replies that did not end, the trainer's speed, and replies word for word. Negatives come first.
