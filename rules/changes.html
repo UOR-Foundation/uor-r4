@@ -1,5 +1,5 @@
 <!DOCTYPE HTML>
-<html lang="en" class="light" dir="ltr">
+<html lang="en" class="light sidebar-visible" dir="ltr">
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
@@ -7,45 +7,59 @@
 
 
         <!-- Custom HTML head -->
-        
+
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="../favicon.svg">
-        <link rel="shortcut icon" href="../favicon.png">
-        <link rel="stylesheet" href="../css/variables.css">
-        <link rel="stylesheet" href="../css/general.css">
-        <link rel="stylesheet" href="../css/chrome.css">
-        <link rel="stylesheet" href="../css/print.css" media="print">
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="../fonts/fonts.css">
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" href="../highlight.css">
-        <link rel="stylesheet" href="../tomorrow-night.css">
-        <link rel="stylesheet" href="../ayu-highlight.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
 
         <!-- MathJax -->
         <script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-    </head>
-    <body class="sidebar-visible no-js">
-    <div id="body-container">
-        <!-- Provide site root to javascript -->
-        <script>
-            var path_to_root = "../";
-            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
-        </script>
 
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-368620ef.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-78e3d836.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
         <script>
             try {
-                var theme = localStorage.getItem('mdbook-theme');
-                var sidebar = localStorage.getItem('mdbook-sidebar');
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
 
                 if (theme.startsWith('"') && theme.endsWith('"')) {
                     localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
@@ -59,87 +73,69 @@
 
         <!-- Set the theme before any content is loaded, prevents flash -->
         <script>
-            var theme;
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
             try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
             if (theme === null || theme === undefined) { theme = default_theme; }
-            var html = document.querySelector('html');
+            const html = document.documentElement;
             html.classList.remove('light')
             html.classList.add(theme);
-            var body = document.querySelector('body');
-            body.classList.remove('no-js')
-            body.classList.add('js');
+            html.classList.add("js");
         </script>
 
-        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
 
         <!-- Hide / unhide sidebar before it is displayed -->
         <script>
-            var body = document.querySelector('body');
-            var sidebar = null;
-            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
             } else {
                 sidebar = 'hidden';
+                sidebar_toggle.checked = false;
             }
-            sidebar_toggle.checked = sidebar === 'visible';
-            body.classList.remove('sidebar-visible');
-            body.classList.add("sidebar-" + sidebar);
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
         </script>
 
-        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
-            <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../index.html">UOR-R4 documentation</a></li><li class="chapter-item expanded affix "><li class="part-title">Start here</li><li class="chapter-item expanded "><a href="../start/what-is-uor-r4.html"><strong aria-hidden="true">1.</strong> What UOR-R4 is</a></li><li class="chapter-item expanded "><a href="../start/transformer-vs-geometry.html"><strong aria-hidden="true">2.</strong> Transformer parts and their geometric replacements</a></li><li class="chapter-item expanded "><a href="../start/where-we-are.html"><strong aria-hidden="true">3.</strong> Where UOR-R4 is today</a></li><li class="chapter-item expanded "><a href="../start/where-were-going.html"><strong aria-hidden="true">4.</strong> Where UOR-R4 is going</a></li><li class="chapter-item expanded "><a href="../start/faq.html"><strong aria-hidden="true">5.</strong> Frequently asked questions</a></li><li class="chapter-item expanded "><a href="../start/glossary.html"><strong aria-hidden="true">6.</strong> Glossary</a></li><li class="chapter-item expanded affix "><li class="part-title">Products</li><li class="chapter-item expanded "><a href="../products/index.html"><strong aria-hidden="true">7.</strong> The three products</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../products/language-model.html"><strong aria-hidden="true">7.1.</strong> The language model</a></li><li class="chapter-item expanded "><a href="../products/web-client.html"><strong aria-hidden="true">7.2.</strong> The web client</a></li><li class="chapter-item expanded "><a href="../products/desktop-client.html"><strong aria-hidden="true">7.3.</strong> The desktop client (specification)</a></li><li class="chapter-item expanded "><a href="../products/releases-and-artifacts.html"><strong aria-hidden="true">7.4.</strong> Releases and artifacts</a></li></ol></li><li class="chapter-item expanded "><li class="part-title">The model</li><li class="chapter-item expanded "><a href="../model/architecture.html"><strong aria-hidden="true">8.</strong> The model, end to end</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../model/training.html"><strong aria-hidden="true">8.1.</strong> How the model learns</a></li><li class="chapter-item expanded "><a href="../model/data-and-tokenizer.html"><strong aria-hidden="true">8.2.</strong> Data and tokenizer</a></li><li class="chapter-item expanded "><a href="../model/serving-and-export.html"><strong aria-hidden="true">8.3.</strong> Serving and export</a></li><li class="chapter-item expanded "><a href="../model/gpu-and-cuda.html"><strong aria-hidden="true">8.4.</strong> GPUs and CUDA</a></li></ol></li><li class="chapter-item expanded "><li class="part-title">Geometry</li><li class="chapter-item expanded "><a href="../geometry/index.html"><strong aria-hidden="true">9.</strong> The geometry of UOR-R4</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../geometry/quaternions-and-rotation.html"><strong aria-hidden="true">9.1.</strong> Quaternions and rotation</a></li><li class="chapter-item expanded "><a href="../geometry/e8-h4-and-the-600-cell.html"><strong aria-hidden="true">9.2.</strong> E8, H4 and the 600-cell</a></li><li class="chapter-item expanded "><a href="../geometry/golden-integers.html"><strong aria-hidden="true">9.3.</strong> Golden integers</a></li><li class="chapter-item expanded "><a href="../geometry/hopf-observation.html"><strong aria-hidden="true">9.4.</strong> The Hopf map and the kept fibre</a></li><li class="chapter-item expanded "><a href="../geometry/primes-and-zeta.html"><strong aria-hidden="true">9.5.</strong> Primes and zeta phases</a></li><li class="chapter-item expanded "><a href="../geometry/vsa-and-hamming.html"><strong aria-hidden="true">9.6.</strong> VSA and Hamming distance</a></li><li class="chapter-item expanded "><a href="../geometry/spiralcore.html"><strong aria-hidden="true">9.7.</strong> SpiralCore</a></li></ol></li><li class="chapter-item expanded "><li class="part-title">Mechanisms</li><li class="chapter-item expanded "><a href="../mechanisms/index.html"><strong aria-hidden="true">10.</strong> The mechanism board</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../mechanisms/route-read.html"><strong aria-hidden="true">10.1.</strong> Routed read</a></li><li class="chapter-item expanded "><a href="../mechanisms/flock-read.html"><strong aria-hidden="true">10.2.</strong> Flock read</a></li><li class="chapter-item expanded "><a href="../mechanisms/relation-read.html"><strong aria-hidden="true">10.3.</strong> Relation read</a></li><li class="chapter-item expanded "><a href="../mechanisms/admission.html"><strong aria-hidden="true">10.4.</strong> Admission</a></li><li class="chapter-item expanded "><a href="../mechanisms/prime-zeta-codebook.html"><strong aria-hidden="true">10.5.</strong> Prime-zeta codebook</a></li><li class="chapter-item expanded "><a href="../mechanisms/address-cells.html"><strong aria-hidden="true">10.6.</strong> Address-structured cells</a></li><li class="chapter-item expanded "><a href="../mechanisms/vsa.html"><strong aria-hidden="true">10.7.</strong> Vector-symbolic binding</a></li><li class="chapter-item expanded "><a href="../mechanisms/hopf-observation.html"><strong aria-hidden="true">10.8.</strong> Hopf observation with a kept fibre</a></li><li class="chapter-item expanded "><a href="../mechanisms/tokenizer.html"><strong aria-hidden="true">10.9.</strong> Tokenizer</a></li><li class="chapter-item expanded "><a href="../mechanisms/discrete-learning.html"><strong aria-hidden="true">10.10.</strong> Discrete geometric learning</a></li><li class="chapter-item expanded "><a href="../mechanisms/rank-margin.html"><strong aria-hidden="true">10.11.</strong> Rank-margin hinge objective</a></li><li class="chapter-item expanded "><a href="../mechanisms/legal-construction.html"><strong aria-hidden="true">10.12.</strong> Protected legal construction</a></li><li class="chapter-item expanded "><a href="../mechanisms/carrier-credit.html"><strong aria-hidden="true">10.13.</strong> Live geometric carrier credit</a></li><li class="chapter-item expanded "><a href="../mechanisms/exact-memory.html"><strong aria-hidden="true">10.14.</strong> Exact addressed memory</a></li><li class="chapter-item expanded "><a href="../mechanisms/object-store.html"><strong aria-hidden="true">10.15.</strong> Exact byte object store</a></li><li class="chapter-item expanded "><a href="../mechanisms/read-binding.html"><strong aria-hidden="true">10.16.</strong> Read binding</a></li><li class="chapter-item expanded "><a href="../mechanisms/pointer-key.html"><strong aria-hidden="true">10.17.</strong> Pointer copy with an exact identity key</a></li><li class="chapter-item expanded "><a href="../mechanisms/e8-orbit-memory.html"><strong aria-hidden="true">10.18.</strong> E8 orbit memory</a></li><li class="chapter-item expanded "><a href="../mechanisms/ternary-xor.html"><strong aria-hidden="true">10.19.</strong> Ternary and XOR/Hamming arithmetic</a></li><li class="chapter-item expanded "><a href="../mechanisms/spin-weights.html"><strong aria-hidden="true">10.20.</strong> Spin-native weights</a></li><li class="chapter-item expanded "><a href="../mechanisms/hamilton-gate.html"><strong aria-hidden="true">10.21.</strong> Hamilton rotation gate</a></li><li class="chapter-item expanded "><a href="../mechanisms/recurrence-gates.html"><strong aria-hidden="true">10.22.</strong> Geometric recurrence gates</a></li><li class="chapter-item expanded "><a href="../mechanisms/spiralcore-fbs.html"><strong aria-hidden="true">10.23.</strong> SpiralCore transport with ternary tree binders</a></li><li class="chapter-item expanded "><a href="../mechanisms/geometric-stack.html"><strong aria-hidden="true">10.24.</strong> Geometric stack</a></li><li class="chapter-item expanded "><a href="../mechanisms/r4g1-graph.html"><strong aria-hidden="true">10.25.</strong> R4G1 compiled lookup graph</a></li><li class="chapter-item expanded "><a href="../mechanisms/lut-serving.html"><strong aria-hidden="true">10.26.</strong> D11 integer table serving</a></li><li class="chapter-item expanded "><a href="../mechanisms/native-geometric.html"><strong aria-hidden="true">10.27.</strong> Native geometric engine</a></li></ol></li><li class="chapter-item expanded "><li class="part-title">Research</li><li class="chapter-item expanded "><a href="../research/index.html"><strong aria-hidden="true">11.</strong> How research is done now</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../research/findings.html"><strong aria-hidden="true">11.1.</strong> What the project knows</a></li><li class="chapter-item expanded "><a href="../research/open-questions.html"><strong aria-hidden="true">11.2.</strong> What is still open</a></li><li class="chapter-item expanded "><a href="../research/history.html"><strong aria-hidden="true">11.3.</strong> How the project got here</a></li><li class="chapter-item expanded "><a href="../research/lines/index.html"><strong aria-hidden="true">11.4.</strong> The research lines</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../research/lines/m1-discrete-attention.html"><strong aria-hidden="true">11.4.1.</strong> Discrete attention for the language base (M1)</a></li><li class="chapter-item expanded "><a href="../research/lines/m1-prime-zeta.html"><strong aria-hidden="true">11.4.2.</strong> The prime-zeta codebook (M1)</a></li><li class="chapter-item expanded "><a href="../research/lines/m1-float-rung0.html"><strong aria-hidden="true">11.4.3.</strong> The float route to rung 0 (M1)</a></li><li class="chapter-item expanded "><a href="../research/lines/m2-exact-memory.html"><strong aria-hidden="true">11.4.4.</strong> Grounded replies from exact memory (M2)</a></li><li class="chapter-item expanded "><a href="../research/lines/m3-durable-memory.html"><strong aria-hidden="true">11.4.5.</strong> Durable memory and the object store (M3)</a></li><li class="chapter-item expanded "><a href="../research/lines/m4-serving.html"><strong aria-hidden="true">11.4.6.</strong> Integer serving (M4)</a></li><li class="chapter-item expanded "><a href="../research/lines/m5-energy.html"><strong aria-hidden="true">11.4.7.</strong> Laptop energy and cost (M5)</a></li><li class="chapter-item expanded "><a href="../research/lines/m7-distribution.html"><strong aria-hidden="true">11.4.8.</strong> API, browser runtime and Studio (M7)</a></li><li class="chapter-item expanded "><a href="../research/lines/geometric-stack-pretraining.html"><strong aria-hidden="true">11.4.9.</strong> The geometric stack</a></li><li class="chapter-item expanded "><a href="../research/lines/native-geometric-sept.html"><strong aria-hidden="true">11.4.10.</strong> The September native geometric model</a></li><li class="chapter-item expanded "><a href="../research/lines/geometric-intelligence-aug.html"><strong aria-hidden="true">11.4.11.</strong> The August geometric intelligence programme</a></li><li class="chapter-item expanded "><a href="../research/lines/r4g1-transformerless.html"><strong aria-hidden="true">11.4.12.</strong> Compiling a teacher into tables (R4G1)</a></li><li class="chapter-item expanded "><a href="../research/lines/spiralcore-wire.html"><strong aria-hidden="true">11.4.13.</strong> SpiralCore wire transport</a></li><li class="chapter-item expanded "><a href="../research/lines/data-tokenizer.html"><strong aria-hidden="true">11.4.14.</strong> Data and tokenizer</a></li><li class="chapter-item expanded "><a href="../research/lines/eval-panels.html"><strong aria-hidden="true">11.4.15.</strong> Evaluation panels and graders</a></li><li class="chapter-item expanded "><a href="../research/lines/compute-ops.html"><strong aria-hidden="true">11.4.16.</strong> GPU and pod operations</a></li><li class="chapter-item expanded "><a href="../research/lines/harness-governance.html"><strong aria-hidden="true">11.4.17.</strong> Research tooling and rules</a></li></ol></li><li class="chapter-item expanded "><a href="../research/notebook/index.html"><strong aria-hidden="true">11.5.</strong> Research notebooks</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../research/notebook/m1-discrete-attention.html"><strong aria-hidden="true">11.5.1.</strong> Discrete attention for the language base (M1)</a></li><li class="chapter-item expanded "><a href="../research/notebook/m1-prime-zeta.html"><strong aria-hidden="true">11.5.2.</strong> Prime and zeta starting codebook (M1)</a></li><li class="chapter-item expanded "><a href="../research/notebook/m3-durable-memory.html"><strong aria-hidden="true">11.5.3.</strong> Durable memory (M3)</a></li><li class="chapter-item expanded "><a href="../research/notebook/m4-serving.html"><strong aria-hidden="true">11.5.4.</strong> Integer serving (M4)</a></li><li class="chapter-item expanded "><a href="../research/notebook/data-tokenizer.html"><strong aria-hidden="true">11.5.5.</strong> Data and tokenizer</a></li><li class="chapter-item expanded "><a href="../research/notebook/harness-governance.html"><strong aria-hidden="true">11.5.6.</strong> Research tooling and governance</a></li></ol></li></ol></li><li class="chapter-item expanded "><li class="part-title">Rules</li><li class="chapter-item expanded "><a href="../rules/index.html"><strong aria-hidden="true">12.</strong> The rules in plain language</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../rules/decision-map.html"><strong aria-hidden="true">12.1.</strong> Where each old decision went</a></li><li class="chapter-item expanded "><a href="../rules/changes.html" class="active"><strong aria-hidden="true">12.2.</strong> Change log for the rules</a></li></ol></li><li class="chapter-item expanded "><a href="../CHARTER.html"><strong aria-hidden="true">13.</strong> The charter</a></li><li class="chapter-item expanded affix "><li class="part-title">Reference</li><li class="chapter-item expanded "><a href="../formal_vocabulary.html"><strong aria-hidden="true">14.</strong> Formal vocabulary and claim classes</a></li><li class="chapter-item expanded "><a href="../CONFIGURATION.html"><strong aria-hidden="true">15.</strong> Configuration reference</a></li><li class="chapter-item expanded "><a href="../reproducibility.html"><strong aria-hidden="true">16.</strong> Canonical artifact byte equality</a></li><li class="chapter-item expanded "><a href="../minimal_client.html"><strong aria-hidden="true">17.</strong> Minimal terminal client and local API</a></li><li class="chapter-item expanded "><a href="../RELEASE_PIPELINE.html"><strong aria-hidden="true">18.</strong> Release pipeline</a></li><li class="chapter-item expanded affix "><li class="part-title">Side projects</li><li class="chapter-item expanded "><a href="../projects/index.html"><strong aria-hidden="true">19.</strong> Side projects</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../projects/ai-research/index.html"><strong aria-hidden="true">19.1.</strong> AI-Research: the original root research workspace</a></li><li class="chapter-item expanded "><a href="../projects/msa/index.html"><strong aria-hidden="true">19.2.</strong> MSA: Modular Structural Arithmetic</a></li><li class="chapter-item expanded "><a href="../projects/prime-analysis/index.html"><strong aria-hidden="true">19.3.</strong> Prime Analysis: the Prime Phase and Chebyshev psi spectral program</a></li><li class="chapter-item expanded "><a href="../projects/research-archives/index.html"><strong aria-hidden="true">19.4.</strong> Research archives: the Gemini-era sandbox</a></li><li class="chapter-item expanded "><a href="../projects/riemann-lean/index.html"><strong aria-hidden="true">19.5.</strong> Riemann-Lean: a Lean 4 scaffold for a prime-number proof chain</a></li><li class="chapter-item expanded "><a href="../projects/spiralcore/index.html"><strong aria-hidden="true">19.6.</strong> SpiralCore: networking protocols and compression</a></li><li class="chapter-item expanded "><a href="../projects/wasm-gemm-gnaf/index.html"><strong aria-hidden="true">19.7.</strong> WASM-GEMM-GNAF: a Lean proof project about a matrix-multiply kernel</a></li></ol></li></ol>
-            </div>
-            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
             </div>
         </nav>
 
-        <!-- Track and set sidebar scroll position -->
-        <script>
-            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
-            sidebarScrollbox.addEventListener('click', function(e) {
-                if (e.target.tagName === 'A') {
-                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
-                }
-            }, { passive: true });
-            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
-            sessionStorage.removeItem('sidebar-scroll');
-            if (sidebarScrollTop) {
-                // preserve sidebar scroll position when navigating via links within sidebar
-                sidebarScrollbox.scrollTop = sidebarScrollTop;
-            } else {
-                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
-                var activeSection = document.querySelector('#sidebar .active');
-                if (activeSection) {
-                    activeSection.scrollIntoView({ block: 'center' });
-                }
-            }
-        </script>
-
-        <div id="page-wrapper" class="page-wrapper">
+        <div id="mdbook-page-wrapper" class="page-wrapper">
 
             <div class="page">
-                                <div id="menu-bar-hover-placeholder"></div>
-                <div id="menu-bar" class="menu-bar sticky">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
                     <div class="left-buttons">
-                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
-                            <i class="fa fa-bars"></i>
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
                         </label>
-                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
-                            <i class="fa fa-paint-brush"></i>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
                         </button>
-                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
-                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
                         </ul>
-                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
-                            <i class="fa fa-search"></i>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
                         </button>
                     </div>
 
@@ -147,46 +143,296 @@
 
                     <div class="right-buttons">
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
-                            <i id="print-button" class="fa fa-print"></i>
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
                         <a href="https://github.com/UOR-Foundation/uor-r4" title="Git repository" aria-label="Git repository">
-                            <i id="git-repository-button" class="fa fa-github"></i>
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
 
                     </div>
                 </div>
 
-                <div id="search-wrapper" class="hidden">
-                    <form id="searchbar-outer" class="searchbar-outer">
-                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
                     </form>
-                    <div id="searchresults-outer" class="searchresults-outer hidden">
-                        <div id="searchresults-header" class="searchresults-header"></div>
-                        <ul id="searchresults">
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
                         </ul>
                     </div>
                 </div>
 
                 <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
                 <script>
-                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
-                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
-                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
                         link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
                     });
                 </script>
 
-                <div id="content" class="content">
+                <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="change-log-for-the-projects-rules"><a class="header" href="#change-log-for-the-projects-rules">Change log for the project's rules</a></h1>
+                        <p class="page-freshness"><small>Not yet checked: this page has no freshness record.</small></p>
+
+<h1 id="change-log-for-the-projects-rules"><a class="header" href="#change-log-for-the-projects-rules">Change log for the project's rules</a></h1>
 <p>This is the dated record of every change to the project's rulebook, the <a href="../CHARTER.html">charter</a>. Only the owner changes the charter, and every change is written here as a new entry, newest first. If you want to know why a rule is the way it is, or when it last moved, start here. The log began on 19 October 2026 with the charter's adoption.</p>
 <pre class="mermaid">flowchart LR
-  a[&quot;Old rules&lt;br/&gt;D0 to D41, AGENTS.md&quot;] -- &quot;19 Oct 2026&lt;br/&gt;checkpoint 1&quot; --&gt; b[&quot;CHARTER.md&lt;br/&gt;adopted&quot;]
-  b -- &quot;owner changes only,&lt;br/&gt;one dated entry each&quot; --&gt; c[&quot;Next entry&lt;br/&gt;in this log&quot;]
+  a["Old rules&lt;br/&gt;D0 to D41, AGENTS.md"] -- "19 Oct 2026&lt;br/&gt;checkpoint 1" --&gt; b["CHARTER.md&lt;br/&gt;adopted"]
+  b -- "owner changes only,&lt;br/&gt;one dated entry each" --&gt; c["Next entry&lt;br/&gt;in this log"]
 </pre>
+
 <p><em>The charter replaced the older rules in one step on 19 October 2026. Later changes are added to this log as dated entries.</em></p>
 <h2 id="how-an-entry-is-written"><a class="header" href="#how-an-entry-is-written">How an entry is written</a></h2>
 <p>An entry gives the date, what changed, which charter clauses it touches, and who decided. The owner's own words are recorded verbatim when they are the reason. Old text is never edited or deleted: it moves unchanged to the <code>archive/</code> folder, and the live decision index keeps one line saying where each decision went (see the <a href="decision-map.html">decision map</a>).</p>
+<h2 id="13-november-2026-one-persistent-native-trainserve-state-d85"><a class="header" href="#13-november-2026-one-persistent-native-trainserve-state-d85">13 November 2026: one persistent native train/serve state (D85)</a></h2>
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+<p><strong>Decided by:</strong> the owner (Casey), 13 November 2026, recorded at <code>2026-11-14T02:57:18Z</code>.
+He wrote:</p>
+<blockquote>
+<p>"see here I thought we were training directly to vector space, carrying the same space,
+and serving the same space with identical attention mechanisms in training and serving"</p>
+</blockquote>
+<p>Then:</p>
+<blockquote>
+<p>"yes please update your corvuswing loopkit and harness too so that you can continue down
+the correct path"</p>
+</blockquote>
+<p><strong>What changed:</strong></p>
+<ol>
+<li>
+<p><strong>§1 and §2.1.</strong> The model's native state is trained, carried and serialized to D11; the
+artifact is no longer described as the result of a different model's export.</p>
+</li>
+<li>
+<p><strong>§3.6.</strong> Serving remains integer and now states explicitly that its artifact packages the
+same state training updated.</p>
+</li>
+<li>
+<p><strong>§3.7.</strong> The default route is one persistent integer/fixed-point geometric state with
+the same typed operators in training and serving. Route choices, carry, reads, memory
+addresses and emitted ids must replay bit for bit. Float is reference/diagnostic code
+outside the default path. An export gap cannot qualify the default path.</p>
+</li>
+<li>
+<p><strong>Historical route preserved.</strong> The prior §3.7 text was:</p>
+<blockquote>
+<p>Float forward, gradients and optimizers are legal offline, in a separately scanned
+module, never in the discrete crate. Every float candidate reports its export gap on
+the same evaluator; a gap above the two-seed noise band disqualifies it. The D32
+discrete path stays active; its qualification uses exact arithmetic.</p>
+</blockquote>
+<p>D37, D73, the float trainer, exporter and all measured evidence remain. They become
+historical/reference or diagnostic work, not the default architecture.</p>
+</li>
+<li>
+<p><strong>Control plane.</strong> AGENTS.md, the project Codex skills and <code>uor-harness</code> now carry the same
+invariant. <code>harness.native_space_contract</code> fails when the owner decision, charter markers,
+milestone rule, plan section, skills or required native-parity contract disagree.</p>
+</li>
+</ol>
+<h2 id="1-november-2026-owner-authorized-cpu-training-program-d84"><a class="header" href="#1-november-2026-owner-authorized-cpu-training-program-d84">1 November 2026: owner-authorized CPU training program (D84)</a></h2>
+<p><strong>Decided by:</strong> the owner (Casey), in the DeepSeek/Codex session on the project workstation, recorded by the lab at <code>2026-11-01T21:51:23Z</code>. He wrote:</p>
+<blockquote>
+<p>"dude I am the owner and I am giving you approval... please go ahead and plan to systematically repair these cpu training methods, all of them, and begin to work your way through them, remember you need to be comitting work to github main so we know it's there, and I do not want your work to directly break anything claude is doing on the main track, but we do need all of this stuff done as well, so please plan and execute this all as a goal, use subagents and whatever you need locally to install or whatever"</p>
+</blockquote>
+<p><strong>What changed:</strong></p>
+<ol>
+<li><strong>Clause 3.5 is now GPU-first.</strong> GPU remains the default for training, qualification and parity references. A named CPU training program authorized by the owner may run CPU training, evaluation and parity as development research in a separately scanned Rust module. It cannot substitute for a GPU qualification bar without a later owner decision.</li>
+<li><strong>The CPU path must be explicit.</strong> It names its CPU hardware, uses the same deterministic evaluator and controls where comparison is claimed, has no silent GPU fallback, and preserves every historical negative. The geometric, no-squashing and no-matmul rules are unchanged.</li>
+<li><strong>The program is registered.</strong> <code>cpu-training-program</code> records the ordered CPU workstreams and the disposition of every historical training family. Implementation proceeds in isolated crates and branches so Claude's active float/integer serving path is not edited.</li>
+</ol>
+<h2 id="30-october-2026-m1-closes-mission-status-records-1-of-8-d83"><a class="header" href="#30-october-2026-m1-closes-mission-status-records-1-of-8-d83">30 October 2026: M1 closes; mission status records 1 of 8 (D83)</a></h2>
+<p><strong>Decided by:</strong> M1's close and its supersession of the older D39 closing criteria were approved through claude-211's D67–D69 whole-chain decision review, recorded in the #2029 owner log at <a href="https://github.com/UOR-Foundation/uor-r4/issues/2029#issuecomment-6515151261">decision log 6515151261</a>; the log is explicit that this is a reversible lab decision, not a direct owner sign-off. Claude-211 also supplies bar (f). Kimi records the decision here under the owner-approved documentation plan, answer <strong>"Approved Plan"</strong> at <code>2026-10-30T15:30:07Z</code>.</p>
+<p><strong>What changed:</strong></p>
+<ol>
+<li><strong>Mission status and the approved record.</strong> CHARTER §1 and AGENTS.md now record pre-alpha, 1 of 8 milestones complete; DECISIONS.md appends D83. The approved close-grade contract and its supersession are cited explicitly rather than relabelled. The desktop product line now names the synthetic-verified shell rather than "spec only."</li>
+<li><strong>No new rule invented by this documentation.</strong> D83 records the approved close and its supersession; it does not invent a new bar. Status-only plan pointers now use <code>PLAN.md</code> and rendered <code>STATE.md</code>/<code>HANDOFF.md</code> for current records; retired <code>NOW.md</code>/<code>STATUS.md</code> citations remain historical.</li>
+<li><strong>Evidence and limit.</strong> antigravity-110's saved integer artifacts pass all six bars at both seeds. The older close grade covers (a)–(e), and claude-211 supplies bar (f): p-f 7,850 / 7,872 against T2 7,375, band 81. The 0.625 reference-reply overlap with TRAIN means this is reading new phrasings into known reply kinds, not useful conversation.</li>
+</ol>
+<h2 id="29-october-2026-m1-adds-a-held-out-phrasing-bar-d82"><a class="header" href="#29-october-2026-m1-adds-a-held-out-phrasing-bar-d82">29 October 2026: M1 adds a held-out-phrasing bar (D82)</a></h2>
+<p><strong>Decided by:</strong> the owner (Casey), in Claude's chat, 2026-10-29 (recorded on #2028, 6511159403). He was asked "Should M1 also require a held-out-phrasing panel?", and chose "Yes, add the bar (Recommended)": "M1 also requires beating the T2 bigram and unigram on a fresh held-out-phrasing panel (drawn by heldout-panel at a new seed, with its own census), with the same paired band as bar (e). It proves the model reads new phrasings, not just recalls templates."</p>
+<p><strong>What changed:</strong></p>
+<ol>
+<li><strong>Clause 4.8.</strong> After D39's bars, a bar (f): on a fresh held-out-phrasing panel, the same saved model's integer top-1 beats both the unigram table and the T2 successor table, on each of two seeds, with bar (e)'s paired band. The panel is drawn by <code>heldout-panel</code> at a new seed, with its own census.</li>
+<li><strong>No other clause changes.</strong> Bars (a) to (e) stand as D39 set them.</li>
+<li><strong>What it means for M1:</strong> M1 stays open until a saved model passes (a) to (f). antigravity-110's passed (a)–(e), and the roadmap item <code>m1-heldout-phrasing-transfer</code> measures it on (f) first.</li>
+</ol>
+<h2 id="28-october-2026-integer-serving-may-use-the-divide-instruction-floats-stay-banned-d81"><a class="header" href="#28-october-2026-integer-serving-may-use-the-divide-instruction-floats-stay-banned-d81">28 October 2026: integer serving may use the divide instruction; floats stay banned (D81)</a></h2>
+<p><strong>Decided by:</strong> the owner (Casey), in Claude's chat, by 2026-10-29T03:20:23Z, after Claude priced divide and floats: "allow divide, hold on floats for now as you have recommended and fix the exporter".</p>
+<p><strong>What changed:</strong></p>
+<ol>
+<li><strong>Clause 3.6.</strong> The exported artifact has "no float or transcendental instruction (D11 R1–R5)". The words "or integer-divide" leave that list, and the D80 sentence now reads that the artifact may use the hardware integer multiply and, since D81, the hardware integer divide. Serving stays integer-only and deterministic.</li>
+<li><strong>No other clause changes.</strong> The float ban, the transcendental ban and the dense-matmul ban (3.3) stand.</li>
+<li><strong>Also decided, not charter text:</strong> fixing the FBS exporter (the map's R6) is the next line of work, so that the integer artifact computes what was trained.</li>
+</ol>
+<h2 id="28-october-2026-integer-serving-may-use-the-multiply-instruction-d80"><a class="header" href="#28-october-2026-integer-serving-may-use-the-multiply-instruction-d80">28 October 2026: integer serving may use the multiply instruction (D80)</a></h2>
+<p><strong>Decided by:</strong> the owner (Casey), in Claude's chat, by 2026-10-29T03:09:43Z.</p>
+<ul>
+<li>He wrote: "ok I think the integer serving for determinism that gets us out of matmul is a worthy goal, unless the other mechanism is just ridiculously faster...".</li>
+<li>Then: "sounds like reverse d11 is the answer".</li>
+<li>Asked "Which D11 change do you want: keep serving integer-only and deterministic but allow the hardware multiply instruction, or something wider?", he chose "Allow integer multiply (Recommended)".</li>
+</ul>
+<p><strong>What changed:</strong></p>
+<ol>
+<li><strong>Clause 3.6.</strong> The exported artifact still has "no float, transcendental or integer-divide instruction (D11 R1–R5)". The word "multiplier" leaves that list, and a sentence adds that since D80 the artifact may use the hardware integer multiply. Serving stays integer-only and deterministic.</li>
+<li><strong>Clause 3.9.</strong> The efficiency report names "integer kernels" in place of "multiplier-free kernels".</li>
+<li><strong>No other clause changes.</strong> The dense-matmul ban (3.3), the integer-divide ban and the float ban stand. Relaxing the zero-multiply audit for integer multiply is a follow-up unit, not charter text.</li>
+</ol>
+<h2 id="25-october-2026-one-plan-and-the-plan-file-renamed-in-the-charter-d77"><a class="header" href="#25-october-2026-one-plan-and-the-plan-file-renamed-in-the-charter-d77">25 October 2026: one plan, and the plan file renamed in the charter (D77)</a></h2>
+<p><strong>Decided by:</strong> the owner (Casey), in Claude's chat, 24 Oct, by 2026-10-25T00:03:59Z: "please reign in the project sprawl and get us back to a workable central source of truth we can run off of". He also wrote "our mandate should be enablement for moving forward and moving forward".</p>
+<ol>
+<li><strong>The plan file is <code>PLAN.md</code> (D77).</strong> Clause 5.3 now reads "Labs self-direct from <code>PLAN.md</code>". Clause 5.8 places the approved sequences in <code>PLAN.md</code>. <code>NOW.md</code> was retired on 22 Oct, so the charter no longer points at it.</li>
+<li>No other clause changes. The holds released under D67 and the owner calls recorded as D78–D79 are decisions, not charter text.</li>
+</ol>
+<h2 id="24-october-2026-the-single-lab-rule-d65d71"><a class="header" href="#24-october-2026-the-single-lab-rule-d65d71">24 October 2026: the single-lab rule (D65–D71)</a></h2>
+<p><strong>Decided by:</strong> the owner (Casey), in Claude's chat, after Claude's review of why the loop stalled. From 23 Oct 14:10Z to 24 Oct 13:43Z the labs merged 70 PRs and closed no issue. Then every lab stopped behind asks nobody answered, and when the owner restarted the laptop at 13:58Z nothing restarted the labs. Claude asked four design questions, each with options worded by Claude. The owner answered:</p>
+<ul>
+<li>"One queue (Recommended)";</li>
+<li>"Yes, where headless (Recommended)";</li>
+<li>"The finishing PR (Recommended)";</li>
+<li>on held work, in his own words: "i never see these requests for released, so I would say do not park any work at all for any reason - if there was only one single lab running what would the process be? a single lab can't park and wait for another lab or me to review. It must be able to accurately judge whether or not, with an advesareal review, whether or not the GPU run is the correct test at that time, and whether the correct tools exist in either the repo or the huggingface repo that will make them successful. We don't want to be doing runs if they are not going to unlock further work, like when we finish a mechanism and are simply waiting on the gpu training or something to happen which unlocks further work, we want to do those as highest priority. It's all about removing blockers at this point."</li>
+</ul>
+<p>Claude read the rule back, including that the current holds become runnable through a pre-run review within the caps; the owner answered "Accurate (Recommended)". Asked what should still wait for him, he wrote: "in theory the project structure should be build in the github issues so there should not be a point where anything is waiting on my decision - make sure before the decisions are made that the entire project is understood and that we understand from a whole project context what this step is for and what it is achieving and that it makes sense to do it - do not approve without larger context". Claude's read-back had kept a 30-minute wait for another lab's review; the owner rejected it: "Reviewers waiting 30 minutes for other labs to see it is the entire problem. Posting and waiting for an answer is where we lose." He then approved this record: "Yes, start phase 0: open the records PR with my words verbatim (single-lab rule, review inside the unit, pre-run and decision reviews, post-merge audits, owner queue as a log) and post the #2028 note with each lab's first move. I'll reopen the labs."</p>
+<ol>
+<li><strong>The single-lab rule (D65).</strong> Every step is one a single lab can finish alone. Other labs and the owner speed work up or reverse it, never hold it, and no step posts a question and waits for the answer. An unanswered PM ask becomes the asking lab's own decision review. (Clauses 5.1, 5.2, 5.10.)</li>
+<li><strong>Review inside the unit; audits after the merge (D66).</strong> The lab's own fresh-context adversarial review is the exact-head review, and the PR queues in the same session. Other labs audit merged work and file repairs. (Clause 5.5.)</li>
+<li><strong>The pre-run review replaces the owner release (D67).</strong> A GPU or training run, held work included, goes ahead when the lab's own pre-run review passes, inside the caps, highest unblock value first. (Clauses 5.1, 5.10.)</li>
+<li><strong>The decision review replaces decision cards to the PM or owner (D68).</strong> Each review reads the whole project before it approves. (Clauses 5.1, 5.2.)</li>
+<li><strong>The owner's queue is a log (D69).</strong> The owner sets only the charter, §3 with its exceptions, and the GPU caps; everything done on his behalf is logged and reversible. (Clause 5.1.)</li>
+<li><strong>The finishing PR closes its issue (D70)</strong> (clause 5.5), and <strong>a supervisor restarts idle labs (D71)</strong> (clause 5.10).</li>
+</ol>
+<p><strong>Side effects on earlier rules:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Rule</th><th>New fate</th><th>Source</th></tr>
+</thead>
+<tbody>
+<tr><td>Owner release in the asking lab's own chat (D56) and the holds on Training, M2 and Stage B (D40)</td><td>Retired as gates; replaced by the pre-run review (D67)</td><td><code>CHARTER.md</code> §5.1, §6</td></tr>
+<tr><td>Decision cards to the PM or the owner (§5.2)</td><td>Replaced by the lab's own decision review (D68)</td><td><code>CHARTER.md</code> §5.2</td></tr>
+<tr><td>Pre-merge review by another vendor's lab (D46)</td><td>Replaced by the in-unit review and post-merge audits (D66)</td><td><code>CHARTER.md</code> §5.5, §6</td></tr>
+<tr><td>"A pending owner question means wait"</td><td>Retired (D65)</td><td><code>CHARTER.md</code> §5.1, §6</td></tr>
+<tr><td>D41's donor pass, §3 and the GPU caps</td><td>Unchanged: this record does not touch §3 or the caps</td><td><code>CHARTER.md</code> §3.10, §5.4</td></tr>
+<tr><td>§4.1 "Stopping a mechanism needs the owner" and §5.2's owner as the PM seat's last fallback</td><td>Not changed here (§4 was outside this record's scope), but in conflict with D65 and D68; brought in line by the next record unit</td><td><code>CHARTER.md</code> §4.1, §5.2</td></tr>
+<tr><td>The loop page, <code>loop review</code>, <code>loop queue</code>, <code>loop next</code> and <code>loop close</code></td><td>Still state or enforce the old waits; brought in line by the next loop units</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/README.md">docs/loop/README.md</a></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="21-october-2026-claude-builds-the-loop-setup-while-it-runs-alone-d52-amended"><a class="header" href="#21-october-2026-claude-builds-the-loop-setup-while-it-runs-alone-d52-amended">21 October 2026: Claude builds the loop setup while it runs alone (D52 amended)</a></h2>
+<p><strong>Decided by:</strong> the owner (Casey), in chat. The owner wrote: "I think it'll only be claude running at first, so what is next?" Claude replied that D52 leaves most setup PRs to labs that will not be running, and offered two answers, both worded by Claude. The owner chose: "Yes: record a D52 amendment that Claude builds every loop setup PR while it runs alone (other labs' adapters added when they join), then start loop PR 2 (#2905) and PR 4 (#2907) through the delivery path."</p>
+<ol>
+<li><strong>Claude builds the setup while it runs alone (D52, amended).</strong>
+<ul>
+<li>While Claude is the only lab running, Claude builds every loop setup PR. That includes the PRs D52 gave to Codex and DeepSeek (2–7 and 10–12) and to Antigravity (9).</li>
+<li>PR 9 ships the Claude Code adapter first. Each other client's adapter, with that lab's probes on #2028, is added when the lab joins.</li>
+<li>Reviews are unchanged: Claude's fresh-context reviewers review every setup PR (D59).</li>
+<li>The rest of D52 is unchanged: the GPU caps, the owner as last fallback, and the kill switch.</li>
+<li>The charter does not state the team split, so no charter clause changes.</li>
+</ul>
+</li>
+</ol>
+<h2 id="21-october-2026-claude-reviews-every-loop-setup-pr-d59-amended"><a class="header" href="#21-october-2026-claude-reviews-every-loop-setup-pr-d59-amended">21 October 2026: Claude reviews every loop setup PR (D59 amended)</a></h2>
+<p><strong>Decided by:</strong> the owner (Casey), in chat, the same day. Claude's round-2 review of #2899 found a gap. As merged, D59 would have left a setup PR built by Codex, DeepSeek or Antigravity to its own lab's reviewers alone. Claude asked the owner who should review those PRs and offered two answers, worded by Claude. The owner chose: "Setup PRs built by Codex, DeepSeek or Antigravity get fresh-context Claude reviews (Claude leads the architecture). Record it as a small D59 amendment after #2899 merges."</p>
+<ol>
+<li><strong>Claude reviews the setup, whichever lab builds it (D59, amended).</strong> Until the other labs are running the loop, every loop setup PR gets its exact-head review from Claude's fresh-context reviewers, because Claude leads the architecture (D52). No other lab is asked to review the setup. D59's scope and end condition are unchanged. Once the other labs run the loop, D46 applies again. (Clause 5.5.)</li>
+</ol>
+<h2 id="21-october-2026-no-lab-review-of-the-loop-setup-d59"><a class="header" href="#21-october-2026-no-lab-review-of-the-loop-setup-d59">21 October 2026: no lab review of the loop setup (D59)</a></h2>
+<p><strong>Decided by:</strong> the owner (Casey), in chat, twice. First: "none of the other labs are onboarded yet so having them review the onboarding will be problematic - anyway, go". Then, after Claude had asked Kimi to review loop PR 1 (#2898) anyway: "I TOLD YOU NOT TO ASK OTHER LABS FOR REVIEWS ON THE SETUP THAT THEY AREN'T RUNNING YET".</p>
+<ol>
+<li><strong>The setup is reviewed without the other labs (D59).</strong> Until the other labs are running the loop, the loop's own setup PRs (the build plan in <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/README.md">docs/loop/README.md</a>) are reviewed by fresh-context reviewers of the authoring lab, not by the other labs. This is an exception to D46 for the setup only; once the other labs run the loop, D46 applies again. The Kimi review requests for #2898 were withdrawn on #2898 and #2028. (Clause 5.5.)</li>
+</ol>
+<h2 id="20-october-2026-the-loop-harness-adapted-from-the-loop-kit"><a class="header" href="#20-october-2026-the-loop-harness-adapted-from-the-loop-kit">20 October 2026: the loop harness, adapted from the Loop Kit</a></h2>
+<p><strong>Decided by:</strong> the owner (Casey), in chat. He answered the Loop Kit's own start-here interview, confirmed the read-back as "Accurate", then answered ten design questions on the loop-harness review page. The Loop Kit is by Ron Brazil and was given to the owner. Its text is not for redistribution, so this repository holds only our own words (D44). Details and the build plan: <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/README.md">docs/loop/README.md</a>. Decision rows D43–D58: <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/integration/DECISIONS.md#decisions-after-the-charter-from-d43">the decision index</a>.</p>
+<p>The interview:</p>
+<ol>
+<li>
+<p><strong>Adopt the loop for every lab and subagent (D43).</strong> All four failure modes had happened: tooling over research, rules broken quietly, records drifting, and work lost or duplicated. The costliest was records drifting, which becomes lesson L-001. (Clause 5.10, new.)</p>
+</li>
+<li>
+<p><strong>The kit's text stays private (D44).</strong> Ron's skills are installed only in each client's local skills folder on the owner's laptop. The repository gets our own rules in our own words and credits the Loop Kit by name. The kit's sealed local snapshot is not used, because GitHub <code>main</code>, the protected branches, the immutable archive and the HF store already do that job. (Clause 5.10.)</p>
+</li>
+<li>
+<p><strong>Continuous autonomy (D45).</strong> After each close, a lab starts the next ready task by itself in a fresh session from its PICKUP. It stops only for a pending owner decision, held work or an empty queue. (Clause 5.10.)</p>
+</li>
+<li>
+<p><strong>Cross-vendor review (D46).</strong> Every code or model PR needs an exact-head review from a lab of a different vendor before the queue. A fresh-context self-review is enough only for a doc-only or generated-file PR. (Clause 5.5.)</p>
+</li>
+<li>
+<p><strong>The kit's note names, rendered by the harness (D47).</strong> The notes are STATE, HANDOFF, PLAN, DECISIONS, LESSONS and FILEMAP. The harness renders STATE and HANDOFF, and <code>NOW.md</code> and <code>STATUS.md</code> fold into them. Each lab has its own PICKUP, ORDER and REPORT. The owner also approved four refinements:</p>
+<ul>
+<li>the rendered views on <code>main</code> may lag one refresh;</li>
+<li>claims are draft PRs;</li>
+<li>PICKUP stays local;</li>
+<li>ORDER and REPORT are committed in task folders.</li>
+</ul>
+<p>(Clauses 5.6 and 5.10.)</p>
+</li>
+<li>
+<p><strong>No line cap (D48).</strong> The owner's words: "I don't think we can do our work honestly with a 200 line cap on PR's. Please allow any length since this is a research project and bookkeeping is the key". Size is reported, never capped; scope is still enforced. (Clause 5.10.)</p>
+</li>
+<li>
+<p><strong>No agent-usage budget (D49).</strong> Only the GPU cap applies: 4 pods and $8 an hour. (No clause change; clause 5.4 keeps the GPU cap.)</p>
+</li>
+<li>
+<p><strong>Subagents inherit the order (D50).</strong> The same or a narrower scope, at any depth. A subagent never claims, opens or merges a PR, posts as the lab or decides. (Clause 5.10.)</p>
+</li>
+<li>
+<p><strong>The harness freeze is lifted entirely (D51).</strong> (Clause 5.3.)</p>
+</li>
+</ol>
+<p>The design questions:</p>
+<ol start="10">
+<li>
+<p><strong>The charter edits and the teams (D52).</strong></p>
+<ul>
+<li>The owner approved all the charter edits. Labs can no longer lift the GPU caps themselves. NOW, STATUS, ROADMAP, <code>current-state.md</code> and <code>claims.json</code> move to the archive when the migration lands. The owner is the last fallback when the PM and its cover lab are both offline. The owner's kill switch stops every lab at once.</li>
+<li>Teams: architecture is led by Claude, with Kimi as PM reviewing. Codex and DeepSeek build the automation. Antigravity builds the client adapters and onboarding. Every review comes from a different vendor.</li>
+</ul>
+<p>(Clauses 5.2, 5.4, 5.5 and 5.10.)</p>
+</li>
+<li>
+<p><strong>The 2-hour check-in (D53).</strong> The owner's words: "2 hour limit should actually be a soft limit. If there is truly good work being done, it may be continue past 2 hours, but otherwise, the 2 hour cap is a checkin to close out sessions that have spiraled and/or stopped. (Although the PM should be prompting anyone stopped.)" (Clause 5.10.)</p>
+</li>
+<li>
+<p><strong>No org admin (D54).</strong> The owner's words: "I do not have a admin, so we must work around it". The policy gate stays advisory on GitHub and is enforced locally: a lab queues a PR only when the gate is green and the review §5.5 requires is at the head (another vendor's review for code and model PRs; a fresh-context self-review is enough for doc-only or generated PRs). (No clause change; the loop page describes it.)</p>
+</li>
+<li>
+<p><strong>Identity by tags (D55).</strong> The owner's words: "each lab is just a session from that vendor on my laptop, so maybe just have them all tag what they are doing as themselves so others will know not to pick it up unless it needs to be". There are no signing keys. (Clause 5.3.)</p>
+</li>
+<li>
+<p><strong>Releases approved in chat (D56).</strong> The owner's words: "you prompt for authority and i approve, no typed phrase needed". A lab asks the owner in its own chat, the owner approves there, and the lab records his words verbatim with the time. Only that approval counts. (Clause 5.1; the typed phrase is retired.)</p>
+</li>
+<li>
+<p><strong>One rulebook (D57).</strong> Client private memories keep only pointers to the charter, this log, the decision index and the lessons. Codex memories are off for this repository. A local check, run before each push, keeps the kit's text out of the repository; no hashes of it are stored. (Clause 5.10.)</p>
+</li>
+<li>
+<p><strong>Codex keeps full access (D58).</strong> Codex's sandbox is not narrowed.</p>
+</li>
+</ol>
+<h2 id="20-october-2026-roadmap-issues-and-outside-contributors"><a class="header" href="#20-october-2026-roadmap-issues-and-outside-contributors">20 October 2026: roadmap issues and outside contributors</a></h2>
+<p><strong>Decided by:</strong> the owner (Casey), in chat, on the roadmap-plan review page.</p>
+<ol>
+<li><strong>Roadmap as issues.</strong> The 73 gaps the documentation names (the stitching map, the transformer-to-geometry map, the mechanism board, the milestone issues, <code>NOW.md</code> and the open questions) each become one item file in <code>docs/roadmap/items/</code>, written as a planned issue. <code>cargo xtask roadmap</code> checks them, turns them into GitHub issues with milestones and labels, keeps a checklist of child issues on each milestone issue, and renders <code>docs/roadmap/README.md</code>. Every piece of work has an issue before it starts, a newly found gap is a new item file in a PR, and the PM runs <code>sync</code> and <code>render</code> weekly. The tooling freeze is lifted for this tool only. (Clause 5.3.)</li>
+<li><strong>Outside contributors and GPU work.</strong> The owner's words: "I'm open to letting people run it on gpu's as long as they have the specs sent with it, not everyone will have a 5090, so we can let them submit whatever, but if they don't have the equivalent of our baseline we will just do another run after they submit their PR with the FIT". Outsiders may run GPU steps on their own GPU with the hardware specs attached; when the hardware is not equivalent to the RTX 5090 baseline, a maintainer re-runs the step under the same FIT. A CPU run is still not research compute. (Clause 5.3.)</li>
+<li><strong>Published inputs.</strong> The inputs of the sealed S1.4 snap-parity record are public in the HF dataset <code>caseyallard/uor-r4-data</code> (<code>s1-4-parity-2026-09-29/</code>, with SHA256SUMS) so outside contributors can reproduce it.</li>
+<li><strong>Owner decisions as issues.</strong> The owner's open decisions are issues labelled <code>owner-decision</code>, assigned to the owner.</li>
+</ol>
+<h2 id="20-october-2026-workspace-reset"><a class="header" href="#20-october-2026-workspace-reset">20 October 2026: workspace reset</a></h2>
+<p><strong>Decided by:</strong> the owner (Casey), in chat, on the workspace-reset review page. Source: <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/workspace.md"><code>docs/labs/workspace.md</code></a> and <code>archive/storage/README.md</code>.</p>
+<p>The owner approved four decisions. One line each, with the clause it touches:</p>
+<ol>
+<li><strong>Results storage.</strong> iCloud <code>UOR-R4/results/</code> and <code>X10 Pro backup 2026-10-01/workspace/</code> (198 GB together) become a read-only cold archive with its index committed to GitHub in <code>archive/storage/</code>. All new results go to the private HF store <code>caseyallard/uor-r4-store</code> under <code>results/&lt;lab&gt;/&lt;topic-date&gt;/</code>, with a <code>SHA256SUMS</code>. (Clause 5.6.)</li>
+<li><strong>One clone.</strong> One local clone, <code>~/uor-r4</code>, with the owner checkout on clean <code>main</code>. Each lab works in <code>~/uor-r4/.worktrees/&lt;lab&gt;-&lt;topic&gt;</code>, keeps scratch in <code>~/uor-r4/local/&lt;lab&gt;/&lt;topic&gt;/</code> and builds into <code>~/uor-r4/target/&lt;lab&gt;</code>. Nothing project-related lives elsewhere on the laptop. After a task merges, upload what is worth keeping, then remove the worktree, the branch (both sides), the claim and the scratch. <code>uor-hygiene</code> runs after every merge. (Clause 5.9, new.)</li>
+<li><strong>Branches.</strong> <code>main</code>, <code>gh-pages</code> and <code>gh-pages-preview</code> are long-lived and never deleted, and are listed in the registry <code>docs/harness/branches.json</code>. Every other branch is <code>&lt;lab&gt;/&lt;topic&gt;</code>, one per open PR, deleted after its merge. (Clause 5.5.)</li>
+<li><strong>Freeze exception.</strong> The freeze on discretionary harness features is lifted for the hygiene tooling only, at the owner's request. The freeze is otherwise unchanged, and its wording in clause 5.3 is not edited. (Clause 5.3.)</li>
+</ol>
 <h2 id="19-october-2026-charter-adopted-at-checkpoint-1"><a class="header" href="#19-october-2026-charter-adopted-at-checkpoint-1">19 October 2026: charter adopted at checkpoint 1</a></h2>
 <p><strong>Decided by:</strong> the owner (Casey), in chat, at checkpoint 1 of the repository renormalisation. The charter replaces the stacked directions in <code>AGENTS.md</code> and decisions D0 to D41 as the project's rules (decision D42). Source: <code>CHARTER.md</code>, the final <code>DECISIONS.md</code> index, and the checkpoint notes in <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/repo-renormalization-2026-10-19/audit/charter-diff-notes.md"><code>charter-diff-notes.md</code></a>.</p>
 <p>The owner answered eight questions. One line each, with the clause it changed:</p>
@@ -202,20 +448,32 @@
 </ol>
 <p><strong>Approved in the same session:</strong> archive everything byte-identical with nothing deleted; side projects under <code>projects/</code>; documentation as GitHub markdown plus an mdBook site with the Studio at <code>/studio</code>; the web client as a local in-browser WebAssembly integer model; the desktop client as a Tauri app (specification only); and D22 kept, so mechanism statuses are ACTIVE, READY and PARKED with no terminal state. Source: <code>CHARTER.md</code> and decision D42 in <code>docs/integration/DECISIONS.md</code>.</p>
 <p><strong>Side effects on earlier rules:</strong></p>
-<div class="table-wrapper"><table><thead><tr><th>Rule</th><th>New fate</th><th>Source</th></tr></thead><tbody>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Rule</th><th>New fate</th><th>Source</th></tr>
+</thead>
+<tbody>
 <tr><td>D14 council and fixed roster</td><td>Retired; owner boundaries stay at 5.1 and GitHub authority at 5.2</td><td><code>charter-diff-notes.md</code></td></tr>
 <tr><td>Five-, twenty- and thirty-minute check-in cadences, and queue entries called by the manager</td><td>Retired</td><td><code>CHARTER.md</code> section 6</td></tr>
 <tr><td>Per-PR dated records</td><td>Retired in favour of notebook rows</td><td><code>CHARTER.md</code> section 6</td></tr>
 <tr><td><code>adopt_policy</code> hold</td><td>Retired</td><td><code>CHARTER.md</code> section 6</td></tr>
 <tr><td>Already superseded, now listed in charter 6: decisions D0, D0-b, D1, D3, D7, D8, D10, D13, D15, D16, D25, D32 item 1, D33, D35, and the expired D18 window</td><td>Listed as history only in the charter; most were superseded long before this date. See the <a href="decision-map.html">decision map</a></td><td><code>CHARTER.md</code> section 6</td></tr>
-</tbody></table>
+</tbody>
+</table>
 </div>
 <h2 id="where-it-stands"><a class="header" href="#where-it-stands">Where it stands</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>Item</th><th>State</th><th>Source</th></tr></thead><tbody>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Item</th><th>State</th><th>Source</th></tr>
+</thead>
+<tbody>
 <tr><td>Charter in force</td><td>Yes, since 19 October 2026.</td><td><code>CHARTER.md</code></td></tr>
-<tr><td>Entries in this log</td><td>1</td><td>this page</td></tr>
+<tr><td>Entries in this log</td><td>9</td><td>this page</td></tr>
 <tr><td>Open owner questions on the charter</td><td>None recorded at adoption: all 16 rows marked "owner decision needed" in the working rule map were resolved by the eight answers.</td><td><code>charter-diff-notes.md</code></td></tr>
-</tbody></table>
+</tbody>
+</table>
 </div>
 <h2 id="go-deeper"><a class="header" href="#go-deeper">Go deeper</a></h2>
 <ul>
@@ -230,11 +488,11 @@
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
                             <a rel="prev" href="../rules/decision-map.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                                <i class="fa fa-angle-left"></i>
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
                             <a rel="next prefetch" href="../CHARTER.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <i class="fa fa-angle-right"></i>
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
                         <div style="clear: both"></div>
@@ -244,16 +502,21 @@
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
                     <a rel="prev" href="../rules/decision-map.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                        <i class="fa fa-angle-left"></i>
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
                     <a rel="next prefetch" href="../CHARTER.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <i class="fa fa-angle-right"></i>
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
 
         </div>
 
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
 
 
@@ -262,17 +525,18 @@
         </script>
 
 
-        <script src="../elasticlunr.min.js"></script>
-        <script src="../mark.min.js"></script>
-        <script src="../searcher.js"></script>
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
 
-        <script src="../clipboard.min.js"></script>
-        <script src="../highlight.js"></script>
-        <script src="../book.js"></script>
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../mermaid.min.js"></script>
-        <script src="../mermaid-init.js"></script>
+        <script src="../mermaid-eefea253.min.js"></script>
+        <script src="../mermaid-init-53b67c53.js"></script>
+
 
 
     </div>
