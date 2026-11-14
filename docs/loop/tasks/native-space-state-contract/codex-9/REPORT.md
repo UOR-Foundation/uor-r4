@@ -33,7 +33,7 @@ Size: two record corrections, about 10 changed lines plus this report.
 - Package-wide integer Clippy with `-D warnings` - remains red on the existing baseline.
 - `loop report --check` - passed.
 - `git diff --check` - passed.
-- A fresh exact-head review remains required after this repair commit.
+- Exact-head review records are posted on PR #3977; this report does not substitute for them.
 
 ## Skills used
 
@@ -44,7 +44,6 @@ Size: two record corrections, about 10 changed lines plus this report.
 
 ## Still open
 
-- The repaired exact head needs a fresh review.
 - `IntegerStackSession` still needs to consume the loaded Q31 state in its actual token recurrence.
 - PR CI, queue, merge and fresh-main verification remain.
 
