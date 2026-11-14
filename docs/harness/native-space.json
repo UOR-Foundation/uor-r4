@@ -1,6 +1,8 @@
 {
   "schema": 1,
   "owner_decision": "D85",
+  "canonical_assertion": "Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only.",
+  "decision_suffix": "The historical float/export systems and evidence are preserved but are no longer the default route. Amends §1, §2.1, §3.6 and replaces the default-path meaning of §3.7.",
   "charter_markers": {
     "start": "<!-- native-space-cycle:start -->",
     "end": "<!-- native-space-cycle:end -->"
@@ -30,6 +32,7 @@
     "bit-identical"
   ],
   "agents_phrase": "one persistent native train/serve",
+  "agents_prefix": "5. **One persistent native train/serve space.**",
   "milestone_rule": "D85",
   "change_log_phrase": "one persistent native train/serve state (D85)",
   "model_surfaces": [
@@ -49,6 +52,5 @@
   "forbidden_default_path": [
     "F32 master model",
     "export gap"
-  ],
-  "legacy_boundary": "Float code and historical export-gap evidence remain preserved as reference or compatibility work, but cannot qualify the default native-space path."
+  ]
 }

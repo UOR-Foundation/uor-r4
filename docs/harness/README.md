@@ -76,8 +76,11 @@ index is [`native-space.json`](native-space.json); the protocol is
 
 `uor-harness check --only harness.native_space_contract` verifies that the owner decision,
 charter marker block, both project skills, milestone owner rule, PLAN path, first roadmap item,
-AGENTS instruction, change log and owner-path registration agree. Every disagreement is an
-error. A future model-training item must pass this check before touching a training path.
+AGENTS instruction, change log, owner-path registration and model surfaces carry the exact
+canonical assertion from `native-space.json`. Missing or reworded records are errors; the
+assertion deliberately uses a canonical marker so a sentence that merely contains the relevant
+words cannot pass. A future model-training item must pass this check before touching a training
+path.
 
 ### `loop render` (loop PR 3)
 

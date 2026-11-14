@@ -22,6 +22,7 @@ Use before any unit that trains, updates, exports or serves model state.
    `.agents/skills/native-space-cycle/SKILL.md`.
 2. Read `CHARTER.md` §3.7, `D85`, and `docs/harness/native-space.json`.
 3. Run `uor-harness check --only harness.native_space_contract`.
+4. Keep the exact canonical marker from `native-space.json`; do not paraphrase it.
 
 ## Output
 

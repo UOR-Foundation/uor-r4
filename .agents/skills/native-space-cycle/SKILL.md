@@ -8,6 +8,8 @@ description: Keep UOR-R4 training and serving in one persistent native geometric
 Read `CHARTER.md` §3.7, `D85`, and `docs/harness/native-space.json` before changing a model
 path.
 
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+
 ## Invariant
 
 Training and serving are two phases of one state transition:

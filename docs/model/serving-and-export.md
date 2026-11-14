@@ -11,14 +11,14 @@ now been exported and served.** That is not useful-chat qualification or an M4/M
 
 Labels: **proof**, **measurement**, **hypothesis**. See [`docs/formal_vocabulary.md`](../formal_vocabulary.md) and the [glossary](../start/glossary.md).
 
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+
 ## D85: one state, one operator path
 
-The default model path now trains directly in the integer/fixed-point geometric representation
-it serves. Weights, activations, SpiralCore carry, routes, memory and optimizer updates remain in
-that representation. Training and serving call the same typed operators; same-prompt replay
-must match route choices, carry, read choices, memory addresses and token ids bit for bit. The
-artifact may pack or compress those words losslessly, but it may not quantize a different F32
-master into the served model.
+Under D85, the default path is required to train directly in the integer/fixed-point geometric
+representation it serves. That implementation does not exist yet: the first bounded unit is the
+state/operator contract linked below. Until it lands, the measured float-to-integer route remains
+historical evidence rather than a native-space qualification.
 
 Float training and the FBS export remain preserved below as historical/reference evidence. Their
 measured export gaps show how the old boundary behaved; they do not qualify the D85 path.

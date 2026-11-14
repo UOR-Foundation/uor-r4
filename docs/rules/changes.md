@@ -16,6 +16,8 @@ An entry gives the date, what changed, which charter clauses it touches, and who
 
 ## 13 November 2026: one persistent native train/serve state (D85)
 
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+
 **Decided by:** the owner (Casey), 13 November 2026, recorded at `2026-11-14T02:57:18Z`.
 He wrote:
 

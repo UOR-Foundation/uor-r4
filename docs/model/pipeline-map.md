@@ -17,12 +17,15 @@ It answers the owner's direction of 27 October 2026 (recorded verbatim in the it
 - the saved discrete M1 close and claude-211's bar-f result, and claude-217's current new-phrasing opening failure;
 - a section on [the archived prime and angular router](#the-archived-prime-and-angular-router).
 
-**D85 correction (13 Nov, owner).** The default pipeline is one persistent native
-integer/fixed-point geometric state. Training and serving use the same typed operators and
-transition, and replay route, carry, read, memory-address and token decisions bit for bit. The
-float-trunk/export material on this page is retained as historical measurement and mechanism
-evidence; it is not the default architecture after D85. The first implementation item is
-[`native-space-state-contract`](../roadmap/items/native-space-state-contract.md).
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+
+**D85 correction (13 Nov, owner).** Under D85, the default pipeline is required to carry one
+persistent native integer/fixed-point geometric state through the same typed training and serving
+operators, replaying route, carry, read, memory-address and token decisions bit for bit. The
+first implementation item is
+[`native-space-state-contract`](../roadmap/items/native-space-state-contract.md). Until it lands,
+the float-trunk/export material on this page remains historical measurement and mechanism
+evidence, not a native-space qualification.
 
 The page ends with:
 - the scale arithmetic for the goal;

@@ -12,6 +12,8 @@ scope: [AGENTS.md, CHARTER.md, PLAN.md, docs/harness/native-space.json, docs/loo
 
 ## Why it matters
 
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+
 D85 makes one persistent native geometric state the default model path. The current float
 trainer and D11 exporter demonstrate a historical route: F32 master state is rounded,
 exported and measured against the served artifact. It cannot show that training and serving

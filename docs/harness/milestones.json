@@ -466,7 +466,7 @@
     },
     {
       "id": "D85",
-      "rule": "One persistent native geometric state is the default model path: token addresses, vector coordinates, SpiralCore carry, routes, memory keys and reads, learned state, gradients and optimizer updates use one integer/fixed-point representation. Training and serving call the same typed operators and transition path; same prompt/state replay must match route choices, carry state, read choices, memory addresses and token ids bit for bit. An artifact may losslessly serialize that state but may not convert a different F32 master, and an export gap cannot qualify the default path. Float remains only in separately scanned reference, diagnostic or compatibility code. D11 integer serving, no matmul/GEMM and no softmax/squashing remain in force.",
+      "rule": "Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only.",
       "scope": "all",
       "source": "docs/integration/DECISIONS.md"
     }

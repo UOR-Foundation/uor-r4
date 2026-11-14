@@ -1,6 +1,7 @@
 # AGENTS.md — UOR-R4 Geometric Language Model
 
 UOR-R4 builds a fast, non-transformer language model that predicts text with geometry and exact memory, served as an integer artifact on ordinary devices. It is pre-alpha: 1 of 8 milestones (M1–M8, issues #2029–#2036) is complete — M1 closed on 30 October 2026 — and no model holds a useful conversation. This page is onboarding for every agent; it summarizes, and never overrides, the charter.
+
 ## Read CHARTER.md first; it is the rules
 
 [CHARTER.md](CHARTER.md) is the single rule book. Where anything else disagrees with it, the charter wins.
@@ -12,9 +13,11 @@ Only the owner changes it; changes are logged in [docs/rules/changes.md](docs/ru
 2. **No softmax or squashing.** No softmax, log-softmax, softplus, sigmoid, tanh, GELU or normalized exponential anywhere, including losses, gradients, sampling and renamed or table forms (§3.2).
 3. **No matmul.** No dense matrix multiplication or GEMM in training or serving, including wrappers and hand loops (§3.3).
 4. **GPU-first research compute.** GPU results qualify training and evaluation by default. Only a named, separately scanned CPU program authorized by the owner (D84) may run CPU training or evaluation as development research; it cannot replace a GPU bar without a later owner decision. Serving the exported integer artifact on client devices remains the product and is allowed (§3.5, §3.6).
-5. **One persistent native train/serve space.** The default model path carries the same integer/fixed-point geometric state, carry, memory and typed operators through training and serving. A same-prompt replay must match route, memory and token decisions bit for bit. Do not use an F32 master or an export gap as the default model boundary (§3.7, D85; read `.agents/skills/native-space-cycle/SKILL.md`).
+5. **One persistent native train/serve space.** Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only.
+   References: §3.7, D85, and `.agents/skills/native-space-cycle/SKILL.md`.
 6. **Never park; never wait.** Every step is one your lab can finish alone: a GPU or training run, held work included, goes ahead on your own pre-run review, and a bar or other decision on your own decision review, each reading the whole project first and logged for Casey, who can reverse it (§5.1).
 7. **Deliver through the full path:** PR → your own fresh-context adversarial exact-head review, in the same session → merge queue → verify on fresh `main` → delete the branch and worktree; other labs audit after the merge (§5.5).
+
 ## Lessons the project paid for — the PM's top ten from [LESSONS.md](docs/harness/LESSONS.md), rendered between the markers, never hand-edited
 
 <!-- loop:lessons-top-ten:start -->
