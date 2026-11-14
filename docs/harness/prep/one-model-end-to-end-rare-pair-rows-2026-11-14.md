@@ -11,7 +11,7 @@ When each pair row is weighed by 1/R, with R the number of different TRAIN repli
 
 ## Base artifact
 
-- **The unit's build:** `cargo build --release --locked -p uor-r4-float-train --features cuda --bin train-in-space --bin fbs-snapshot`, `UOR_NVCC_ARCH=compute_89`, at this unit's head once the weights and their tests are committed. The head and the binaries' SHA-256 go into the REPORT. One build trains the `rare` arm and scores every model.
+- **The unit's build:** `cargo build --release --locked -p uor-r4-float-train --features cuda --bin train-in-space --bin fbs-snapshot`, `UOR_NVCC_ARCH=compute_89`, at this unit's head once the weights and their tests are committed. That head is `d7c9155766c74a5dde67395bffb4b6a63808fd25`. The head and the binaries' SHA-256 go into the REPORT. One build trains the `rare` arm and scores every model.
 - **claude-370's build:** `/workspace/bin/float-00bd4c415839956e163cfcba78d5b66a3c3c6d78-sm89` on `wick`, which trained and scored claude-370's `pair-s2` and `pair-s3` (`/workspace/out/c370/try-1/pair-s{2,3}/run`).
 - **The control, reused when I-3 holds.** With `--pair-rows 2` and no `--pair-weight`, the unit's code is claude-370's (a test pins the bag, the saved files and the forward bit for bit). If I-3 holds on `wick`, claude-370's two `pair` checkpoints are arm `pair` of this unit and are scored again by the unit's build. If I-3 fails, or if the runs move to a pod (see Compute), `pair-s2` and `pair-s3` are trained again by the unit's build on the same GPU as `rare`.
 - **The recipe** is claude-370's arm `pair`: claude-358's `p` recipe with `--pair-rows 2`:
@@ -41,7 +41,7 @@ The inputs are claude-370's, at its sheet's hashes. They are already in the `wic
 | `pair-s2`, `pair-s3` | the recipe | 2, 3 | 16,384 (claude-370's checkpoints when I-3 holds; trained again otherwise) |
 | `rare-s2`, `rare-s3` | the recipe with `--pair-weight replies` | 2, 3 | 16,384 |
 
-`--pair-weight replies`: each pair row's weight is 1/R, with R the number of different replies (exact token sequences, from the header's last token to the token before the next user marker) of the TRAIN turns that hold the pair. The weights are fixed at start-up, printed as a census (R at min, 50 %, 90 %, 99 %, max), and saved with the rows. A reply's bag is the weighted sum of its turn's rows; all else is claude-370's.
+`--pair-weight replies`: each pair row's weight is 1/min(R, 4096), with R the number of different replies (exact token sequences, from the header's last token to the token before the next user marker) of the TRAIN turns that hold the pair. The weights are fixed at start-up, printed as a census (R at min, 50 %, 90 %, 99 %, max), and saved with the rows. A reply's bag is the weighted sum of its turn's rows; all else is claude-370's.
 
 ## Readings
 
@@ -89,7 +89,7 @@ The order's bars, repeated with their counts spelled out before any run.
   - the training log's last rows line shows rows with a non-zero entry, above zero;
   - the scoring log's dictionary SHA-256 equals the training log's;
   - on each panel, 90 or more in 100 scored replies read a bag;
-  - for `rare` only: the scoring log prints the weights as loaded, with a census equal to training's; for `pair`: the scoring log shows that no weights were loaded.
+  - the scoring log's line `[pair] loaded weight replies: …`: for `rare` it is the training log's `[pair] weight replies: …` census, character for character (both are printed by one function, `reply_census`, the load side from R read back from the saved weights); for `pair` it reads `none`. A `rare` checkpoint that lost its weights reads `none` and fails here.
   - For claude-370's reused `pair` checkpoints, also: the unit's per-row files (`pair-s{2,3}-p{14,23}.rows.tsv`, written by the unit's reading script by `read-370.sh`'s rule) have the SHA-256 sealed in claude-370's `rows.sha256` for both seeds on both panels. A loader that skipped the rows of an unweighted checkpoint would fail here before any bar is read.
   - A failed I-8 is an instrument failure: it is reported as that, never as "Does not add" or "Adds" (L-007).
 
@@ -119,7 +119,7 @@ On `wick`: no rented compute. claude-370's runs took 5,842–5,846 s each, two s
 ## Compute and stop rule
 
 - **Where.** First choice: the owner's own server `wick`, as in claude-370, on the owner's word of 13 Nov 2026: "if you ssh to my other server (wick) there is a 4090 installed in it that I own locally and can use instead of renting pods". On 14 Nov another lab's trainer held the card (6.8 GiB, 100 % use). This lab does not start beside another lab's job (I-6).
-  - If I-6 does not hold on `wick` when step 1 is ready, the runs go to two Vast pods of one GPU kind (RTX 5090) through `scripts/pod/uor-pod`, leased and inside the caps, with a completion watcher armed at launch (L-004). Each pod builds the unit's head itself, and the two builds' SHA-256 must match.
+  - If I-6 does not hold on `wick` when step 1 is ready, the runs go to two Vast pods of one GPU kind (RTX 5090) through `scripts/pod/uor-pod`, leased and inside the caps, with a completion watcher armed at launch (L-004). Each pod builds the unit's head itself, and the two builds' SHA-256 must match. Builds whose SHA-256 differ are an instrument failure: both pods rebuild from a clean checkout before any run starts.
   - On a pod, all four arms are trained by the unit's build and I-3 is not used, since claude-370's models came from another GPU kind.
   - Once the pod is chosen, the runs do not move back to `wick`. Every model of the comparison comes from one GPU kind. On a pod the build is for its own card (`UOR_NVCC_ARCH=compute_120` for an RTX 5090, as claude-358's pods were), not `compute_89`.
   - Once `wick` is chosen at step 1, a later job whose I-6 does not hold waits there for the card. It is never run elsewhere, so no model of the comparison comes from another card.
@@ -133,4 +133,5 @@ On `wick`: no rented compute. claude-370's runs took 5,842–5,846 s each, two s
 
 ## FIT
 
-(to be filled by fresh non-author reads before any run)
+- **First read** (fresh, non-author, 14 Nov): NOT_FIT on two points. I-8 checked only the `rare` checkpoints, so a loader that skipped the rows of an unweighted checkpoint could have shown a false "Adds"; and the power paragraph misquoted the `b` spread (17, not 15) and the gain it compared with. I-8 now covers every scored checkpoint and checks the reused ones against claude-370's sealed per-row files; the power paragraph is corrected. Its notes are taken: the dictionary SHA-256 in I-4, the answer-word fallback and "bigger" shown apart, the unit's own reading script, a repeat baseline in I-3(a), a non-finite `rare` loss classified first, one card per comparison, the 5090 build target, and seed 1 as its own unit.
+- **Second read** (another fresh non-author reader, 14 Nov): NOT_FIT on two points. The scoring pass printed nothing about weights, so I-8's weight check could not be read and a `rare` checkpoint without its weights would load as unweighted unseen; and the weight's definition left out the cap. The code now prints `[pair] loaded weight replies: …` at load (commit `d7c91557`, pinned by tests on `wick`'s GPU, 36 passed), I-8 reads that line, and the weight is stated as 1/min(R, 4096). Its note on differing pod builds is taken (Compute).
