@@ -24,6 +24,9 @@ import { SessionList } from './SessionList.js';
 import { Settings } from './Settings.js';
 import { LOCAL_SESSIONS_LABEL_ID, TaskRail } from './TaskRail.js';
 import { WorkspaceEditor } from './WorkspaceEditor.js';
+import { LexWorkbench } from './LexWorkbench.js';
+import { MvmClient } from '../mvm/client.js';
+import { createMvmWorkspaceAdapter } from '../mvm/workspaceAdapter.js';
 import { createDesktopActions } from '../adapters/desktopActions.js';
 import type { DesktopActions } from '../adapters/desktopActions.js';
 import { ChangesPanel, TerminalPanel } from './DesktopTools.js';
@@ -31,7 +34,7 @@ import { McpConnections } from './McpConnections.js';
 import type { McpConnect } from '../adapters/mcpConnections.js';
 import type { PaletteCommand, ShellStatus, StudioSection } from './types.js';
 
-interface StudioAppProps { store: LifecycleStore; adapter: ModelSourceAdapter; sources: ModelSourcesApi; files: WorkspaceApi; sessions: SessionApi; ui: StudioUiApi; download?(name: string, content: string): void; desktop?: DesktopActions; mcpConnect?: McpConnect; agentClient?: AgentClient | null }
+interface StudioAppProps { store: LifecycleStore; adapter: ModelSourceAdapter; sources: ModelSourcesApi; files: WorkspaceApi; sessions: SessionApi; ui: StudioUiApi; download?(name: string, content: string): void; desktop?: DesktopActions; mcpConnect?: McpConnect; agentClient?: AgentClient | null; mvmClient?: MvmClient }
 
 interface TaskListState {
     phase: 'loading' | 'ready' | 'runtime_unavailable' | 'error';
@@ -44,7 +47,7 @@ function browserDownload(name: string, content: string) {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function StudioApp({ store, adapter, sources, files, sessions, ui, download = browserDownload, desktop, mcpConnect, agentClient = null }: StudioAppProps) {
+export function StudioApp({ store, adapter, sources, files, sessions, ui, download = browserDownload, desktop, mcpConnect, agentClient = null, mvmClient: injectedMvmClient }: StudioAppProps) {
     const state = useLifecycle(store);
     const [activeSection, setActiveSection] = useState<StudioSection>('agent');
     const [secondarySection, setSecondarySection] = useState<StudioSection | null>(null);
@@ -64,7 +67,10 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     useScopedShortcuts({ onPalette: () => setPaletteOpen(true), onSettings: () => setSettingsOpen(true) });
     const agent = useMemo(() => createAgentSessionController(store, sessions), [store, sessions]);
     const desktopActions = useMemo(() => desktop ?? createDesktopActions(), [desktop]);
+    const mvmClient = useMemo(() => injectedMvmClient ?? new MvmClient(), [injectedMvmClient]);
+    const mvmWorkspace = useMemo(() => createMvmWorkspaceAdapter(mvmClient), [mvmClient]);
     useEffect(() => () => agent.dispose(), [agent]);
+    useEffect(() => () => { void mvmClient.dispose(); }, [mvmClient]);
     useEffect(() => {
         if (agentClient === null) {
             setTaskList({ phase: 'ready', message: null });
@@ -276,8 +282,12 @@ export function StudioApp({ store, adapter, sources, files, sessions, ui, downlo
     ];
     const renderSection = (section: StudioSection, secondary = false) => {
         const idPrefix = secondary ? 'secondary-' : '';
-        if (section === 'agent') return <AgentComposer key={`${state.session.activeId || 'new'}:${state.session.revision}:${sessionRevision}`} store={store} sessions={sessions} files={files} ui={ui} generation={agent} draft={agentDraft} pasted={agentPasted} onDraftChange={setAgentDraft} onPastedChange={setAgentPasted} agentClient={agentClient} agentTask={selectedRuntime?.task ?? null} activeRun={selectedRuntime?.activeRun ?? null} unresolvedRun={selectedRuntime?.unresolvedRun ?? false} runtimeTasksLoading={taskList.phase === 'loading'} runtimeTasksReady={taskList.phase === 'ready'} runtimeTaskCount={tasks.length} showTaskDetail={detailOpen} onTaskBack={closeDetail} onNewRun={startNewRun} onCreateTask={agentClient !== null ? createTaskForSend : undefined} onOpenSurface={(surface) => setActiveSection(surface === 'changes' ? 'changes' : 'terminal')} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} download={download} />;
-        if (section === 'workspace') return <WorkspaceEditor store={store} files={files} operations={operations} onError={reportFile} onSuccess={succeed} settings={editorSettings} agentClient={agentClient} />;
+        const composer = <AgentComposer key={`${state.session.activeId || 'new'}:${state.session.revision}:${sessionRevision}`} store={store} sessions={sessions} files={files} ui={ui} generation={agent} draft={agentDraft} pasted={agentPasted} onDraftChange={setAgentDraft} onPastedChange={setAgentPasted} agentClient={agentClient} agentTask={selectedRuntime?.task ?? null} activeRun={selectedRuntime?.activeRun ?? null} unresolvedRun={selectedRuntime?.unresolvedRun ?? false} runtimeTasksLoading={taskList.phase === 'loading'} runtimeTasksReady={taskList.phase === 'ready'} runtimeTaskCount={tasks.length} showTaskDetail={detailOpen} onTaskBack={closeDetail} onNewRun={startNewRun} onCreateTask={agentClient !== null ? createTaskForSend : undefined} onOpenSurface={(surface) => setActiveSection(surface === 'changes' ? 'changes' : 'terminal')} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} download={download} />;
+        if (section === 'agent' || section === 'workspace') {
+            if (injectedMvmClient !== undefined) return <LexWorkbench store={store} workspace={mvmWorkspace} client={mvmClient} operations={operations} onError={reportFile} onSuccess={succeed} settings={editorSettings} assistant={composer} />;
+            if (section === 'agent') return composer;
+            return <WorkspaceEditor store={store} files={files} operations={operations} onError={reportFile} onSuccess={succeed} settings={editorSettings} agentClient={agentClient} />;
+        }
         if (section === 'changes') return <ChangesPanel actions={desktopActions} files={files} idPrefix={idPrefix} agentClient={agentClient} taskId={selectedTaskId} copy={(text) => { if (navigator.clipboard) return navigator.clipboard.writeText(text); ui.toast('Clipboard unavailable.', 'error'); }} />;
         if (section === 'pr') return <PrPanel summary={null} unavailableReason="No local or imported pull request summary is available in this session." />;
         if (section === 'artifacts') return <ArtifactPanel client={agentClient} reference={null} />;

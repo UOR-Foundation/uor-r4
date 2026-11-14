@@ -209,6 +209,7 @@ test('390_has_no_horizontal_overflow', async ({ page }) => {
     const rail = root.locator('[data-region="task-rail"]');
     await expect(rail).toBeHidden();
     await expect(root.locator('main[data-region="task-detail"]')).toBeVisible();
+    await root.getByRole('button', { name: 'Assistant', exact: true }).click();
     await expect(root.locator('.agent-composer')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
     expect(await page.evaluate(() => document.body.scrollWidth - document.body.clientWidth)).toBeLessThanOrEqual(0);

@@ -13,6 +13,7 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 pub mod agent_data;
+pub mod agent_github;
 pub mod agent_host;
 pub mod agent_server;
 pub mod mcp;

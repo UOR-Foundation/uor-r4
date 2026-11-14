@@ -20,6 +20,9 @@ use sha2::{Digest, Sha256};
 use uor_r4_studio_agent::{canonical_json, is_valid_id};
 
 use crate::agent_data::{AgentArtifactRange, MAX_AGENT_ARTIFACT_BYTES};
+use crate::agent_github::{
+    target_from_arguments, validate_request, FixedGhExecutor, GithubExecutor,
+};
 use crate::{
     reject_parent_dir_traversal, sha256_bytes, DesktopBackend, DesktopClientError,
     MAX_WRITE_FILE_BYTES,
@@ -187,6 +190,8 @@ enum ToolKind {
     TerminalOpen,
     TerminalInput,
     McpCall,
+    GitHubRead,
+    GitHubWrite,
 }
 
 impl ToolKind {
@@ -202,6 +207,8 @@ impl ToolKind {
             "terminal.open" => Some(Self::TerminalOpen),
             "terminal.input" => Some(Self::TerminalInput),
             "mcp.call" => Some(Self::McpCall),
+            "github.read" => Some(Self::GitHubRead),
+            "github.write" => Some(Self::GitHubWrite),
             _ => None,
         }
     }
@@ -214,7 +221,7 @@ impl ToolKind {
     }
 
     fn needs_approval(self) -> bool {
-        matches!(self, Self::FileRead | Self::FileWrite)
+        matches!(self, Self::FileRead | Self::FileWrite | Self::GitHubWrite)
     }
 }
 
@@ -409,7 +416,7 @@ fn bounded_approval_text(text: &str) -> String {
 /// Host-derived preview for the native approval dialog. The page can never
 /// supply this text; [`ARGUMENT_AUTHORITY_FIELDS`] refuses that argument.
 fn approval_preview(arguments: &Value) -> String {
-    const FIELDS: [&str; 9] = [
+    const FIELDS: [&str; 12] = [
         "path",
         "cwd",
         "command",
@@ -419,6 +426,9 @@ fn approval_preview(arguments: &Value) -> String {
         "artifact_id",
         "url",
         "content",
+        "repository",
+        "branch",
+        "action",
     ];
     let Some(object) = arguments.as_object() else {
         return String::new();
@@ -744,6 +754,7 @@ pub struct AgentHost {
     next_subscriber_id: u64,
     confirmed_mcp_sessions: BTreeSet<String>,
     approval_ttl_ms: u64,
+    github: Option<Box<dyn GithubExecutor>>,
 }
 
 impl fmt::Debug for AgentHost {
@@ -776,6 +787,9 @@ impl AgentHost {
             next_subscriber_id: 1,
             confirmed_mcp_sessions: BTreeSet::new(),
             approval_ttl_ms: HOST_APPROVAL_TTL_MS,
+            github: FixedGhExecutor::detect()
+                .ok()
+                .map(|executor| Box::new(executor) as Box<dyn GithubExecutor>),
         })
     }
 
@@ -785,6 +799,12 @@ impl AgentHost {
 
     pub fn backend_mut(&mut self) -> &mut DesktopBackend {
         &mut self.backend
+    }
+
+    /// Replace the host-owned executor, principally for deterministic Rust fixtures.
+    /// Page intents cannot select an executable or inject this authority.
+    pub fn set_github_executor(&mut self, executor: Box<dyn GithubExecutor>) {
+        self.github = Some(executor);
     }
 
     /// Host-owned policy: how long a request stays decidable/executable.
@@ -1324,6 +1344,22 @@ impl AgentHost {
                         .map_err(backend_failure)?;
                 }
             }
+            ToolKind::GitHubRead | ToolKind::GitHubWrite => {
+                let target = target_from_arguments(arguments)
+                    .map_err(|error| HostFailure::new(error.code, error.message))?;
+                let method = string_argument(arguments, "method", false)?;
+                if (kind == ToolKind::GitHubRead && method != "GET")
+                    || (kind == ToolKind::GitHubWrite && method == "GET")
+                {
+                    return Err(HostFailure::invalid_arguments(
+                        "GitHub tool and method disagree",
+                    ));
+                }
+                let path = string_argument(arguments, "path", false)?;
+                let body = arguments.get("body").filter(|value| !value.is_null());
+                validate_request(method, path, &target, body)
+                    .map_err(|error| HostFailure::new(error.code, error.message))?;
+            }
             ToolKind::TerminalRun => {
                 let cwd = string_argument(arguments, "cwd", false)?;
                 let command = string_argument(arguments, "command", false)?;
@@ -1519,6 +1555,18 @@ impl AgentHost {
                     artifact,
                 ))
             }
+            ToolKind::GitHubRead | ToolKind::GitHubWrite => {
+                let method = string_argument(arguments, "method", false)?;
+                let path = string_argument(arguments, "path", false)?;
+                let body = arguments.get("body").filter(|value| !value.is_null());
+                let executor = self.github.as_mut().ok_or_else(|| {
+                    HostFailure::new("host_unavailable", "the fixed gh companion is unavailable")
+                })?;
+                let output = executor
+                    .execute(method, path, body)
+                    .map_err(|error| HostFailure::new(error.code, error.message))?;
+                Ok((output, None))
+            }
             ToolKind::TerminalRun => {
                 let cwd = string_argument(arguments, "cwd", false)?;
                 let command = string_argument(arguments, "command", false)?;
@@ -1710,7 +1758,10 @@ mod approval_preview_and_entropy_tests {
         assert!(!preview.contains('\r'));
         assert!(!preview.contains('\t'));
         assert_eq!(
-            preview.chars().filter(|character| *character == '\n').count(),
+            preview
+                .chars()
+                .filter(|character| *character == '\n')
+                .count(),
             0,
             "a field value must not introduce an approval-preview line"
         );
