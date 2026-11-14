@@ -24,6 +24,8 @@ pub mod decomposition;
 mod decomposition_source;
 #[cfg(feature = "cuda")]
 pub mod device;
+#[cfg(all(test, feature = "cuda"))]
+mod cpu_oracle_parity;
 #[cfg(feature = "cuda")]
 pub mod driver_qualification;
 pub mod driver_source_pin;
