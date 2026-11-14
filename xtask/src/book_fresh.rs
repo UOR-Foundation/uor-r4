@@ -16,7 +16,9 @@
 //! For each page this counts the commits after `checked` that touch its
 //! sources, using `git log` with every `GIT_*` variable removed from its
 //! environment. The report lists the stale, unchecked, unrecorded and broken
-//! pages. It is advisory (D76): it reports and exits 0 whatever it finds.
+//! pages. It is advisory (D76): it exits 0 whatever freshness it finds, and a
+//! page it cannot read or assess is listed as broken. Only a bad argument, an
+//! unreadable SUMMARY or a missing HEAD (no git history) exits 1.
 //! `book-stage` uses the same assessment for the banner on each staged page.
 
 use std::collections::BTreeMap;
@@ -142,15 +144,27 @@ pub struct GitCli {
 }
 
 impl GitCli {
-    fn run(&self, args: &[&str]) -> Result<std::process::Output, String> {
+    /// The `git` command for `args`, removing each `GIT_*` name in `env_keys`
+    /// (the caller's environment in `run`; a fixed list in the test).
+    fn command<I: IntoIterator<Item = std::ffi::OsString>>(
+        &self,
+        args: &[&str],
+        env_keys: I,
+    ) -> Command {
         let mut cmd = Command::new("git");
         cmd.arg("-C").arg(&self.root).args(args);
-        for (key, _) in std::env::vars_os() {
+        for key in env_keys {
             if key.to_string_lossy().starts_with("GIT_") {
                 cmd.env_remove(&key);
             }
         }
-        cmd.output().map_err(|e| format!("run git: {e}"))
+        cmd
+    }
+
+    fn run(&self, args: &[&str]) -> Result<std::process::Output, String> {
+        self.command(args, std::env::vars_os().map(|(k, _)| k))
+            .output()
+            .map_err(|e| format!("run git: {e}"))
     }
 
     fn ok(&self, args: &[&str]) -> Result<String, String> {
@@ -203,7 +217,14 @@ impl Git for GitCli {
         let range = format!("{commit}..HEAD");
         let mut specs: Vec<String> = sources.iter().map(|s| pathspec(s)).collect();
         specs.push(format!(":(exclude,literal){page}"));
-        let mut args = vec!["log", "--format=%H", range.as_str(), "--"];
+        // --no-show-signature: a user's log.showSignature would add lines to %H.
+        let mut args = vec![
+            "log",
+            "--no-show-signature",
+            "--format=%H",
+            range.as_str(),
+            "--",
+        ];
         args.extend(specs.iter().map(String::as_str));
         Ok(self
             .ok(&args)?
@@ -330,6 +351,24 @@ pub fn assess(page: &str, text: &str, git: &dyn Git) -> Result<Assessment, Strin
     Ok(a)
 }
 
+/// `assess`, with a page that cannot be read or a git call that fails
+/// reported as that page being broken, so one bad page never stops the report.
+pub fn assess_or_broken(page: &str, text: Result<String, String>, git: &dyn Git) -> Assessment {
+    let failed = |problem: String| Assessment {
+        page: page.to_string(),
+        status: Status::Broken,
+        record: None,
+        later: Vec::new(),
+        checked_date: None,
+        missing_sources: Vec::new(),
+        problem: Some(problem),
+    };
+    match text {
+        Err(e) => failed(e),
+        Ok(t) => assess(page, &t, git).unwrap_or_else(failed),
+    }
+}
+
 fn escape_html(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -454,8 +493,8 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let head = git.ok(&["rev-parse", "HEAD"])?.trim().to_string();
     let mut all = Vec::new();
     for page in book_pages(root)? {
-        let text = fs::read_to_string(root.join(&page)).map_err(|e| format!("read {page}: {e}"))?;
-        all.push(assess(&page, &text, &git)?);
+        let text = fs::read_to_string(root.join(&page)).map_err(|e| format!("read {page}: {e}"));
+        all.push(assess_or_broken(&page, text, &git));
     }
     let counts = summary_counts(&all);
     let line: Vec<String> = counts.iter().map(|(k, v)| format!("{k} {v}")).collect();
@@ -796,5 +835,85 @@ mod tests {
         );
         assert_eq!(git.commit_date(&base).unwrap().len(), 10);
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn git_command_removes_every_git_variable() {
+        let git = GitCli {
+            root: PathBuf::from("/repo"),
+        };
+        let keys = ["GIT_DIR", "GIT_WORK_TREE", "HOME", "XGIT_DIR"].map(std::ffi::OsString::from);
+        let cmd = git.command(&["status"], keys);
+        let removed: Vec<String> = cmd
+            .get_envs()
+            .filter(|(_, v)| v.is_none())
+            .map(|(k, _)| k.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(removed, vec!["GIT_DIR", "GIT_WORK_TREE"]);
+        let args: Vec<String> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(args, vec!["-C", "/repo", "status"]);
+    }
+
+    /// A git whose every call fails, as with a damaged repository.
+    struct BrokenGit;
+
+    impl Git for BrokenGit {
+        fn matches_any(&self, _: &str) -> Result<bool, String> {
+            Err("git ls-files failed: not a git repository".into())
+        }
+        fn is_ancestor_of_head(&self, _: &str) -> Result<bool, String> {
+            Err("no".into())
+        }
+        fn commits_since(&self, _: &str, _: &[String], _: &str) -> Result<Vec<String>, String> {
+            Err("no".into())
+        }
+        fn commit_date(&self, _: &str) -> Result<String, String> {
+            Err("no".into())
+        }
+    }
+
+    #[test]
+    fn unreadable_pages_and_git_errors_are_broken() {
+        let a = assess_or_broken("docs/x.md", Err("read docs/x.md: gone".into()), &fake());
+        assert_eq!(a.status, Status::Broken);
+        assert_eq!(a.problem.as_deref(), Some("read docs/x.md: gone"));
+        let a = assess_or_broken(
+            "docs/y.md",
+            Ok(page("<!-- freshness: sources=a/** -->")),
+            &BrokenGit,
+        );
+        assert_eq!(a.status, Status::Broken);
+        assert!(a.problem.unwrap().contains("not a git repository"));
+        // A page that needs no git call is still assessed normally.
+        let a = assess_or_broken("docs/z.md", Ok(page("# Title")), &BrokenGit);
+        assert_eq!(a.status, Status::Unrecorded);
+    }
+
+    #[test]
+    fn json_has_schema_every_count_and_null_sources_when_unrecorded() {
+        let git = fake();
+        let all = vec![
+            assess("docs/a.md", &page("# Only a title"), &git).unwrap(),
+            assess(
+                "docs/b.md",
+                &page(&format!("<!-- freshness: sources=b.rs checked={SHA} -->")),
+                &git,
+            )
+            .unwrap(),
+        ];
+        let v = to_json("head1", &all);
+        assert_eq!(v["schema"], "uor-r4.book-fresh/1");
+        assert_eq!(v["head"], "head1");
+        let summary = v["summary"].as_object().unwrap();
+        assert_eq!(summary.len(), 7);
+        assert_eq!(summary["unrecorded"], 1);
+        assert_eq!(summary["stale"], 1);
+        assert_eq!(summary["fresh"], 0);
+        assert!(v["pages"][0]["sources"].is_null());
+        assert_eq!(v["pages"][1]["later_count"], 2);
+        assert_eq!(v["pages"][1]["checked"], SHA);
     }
 }
