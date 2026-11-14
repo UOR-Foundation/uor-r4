@@ -170,13 +170,19 @@ fn compare_forward(
 }
 
 /// Losses and choice for every parameter. Returns the first parameter whose
-/// CUDA proposal commits, for the apply step.
+/// CUDA proposal commits, for the apply step. CUDA reads `rows`; the CPU
+/// scores `cpu_rows` (the same rows in a clean pass). With `swap_lane`, the
+/// CPU chooser gets the CUDA losses with CUDA's chosen lane swapped into lane
+/// 0, so the planted losses and choose faults run through this same code.
+#[allow(clippy::too_many_arguments)]
 fn compare_proposals(
     device: &Device,
     read: ReadSpec,
     scorer: &CpuDiscreteProposalScorer,
     chooser: &CpuDiscreteProposalChooser,
     rows: &[CpuDiscreteProposalSample],
+    cpu_rows: &[CpuDiscreteProposalSample],
+    swap_lane: bool,
     r: &mut Reading,
 ) -> Option<(Parameter, CpuDiscreteProposalKind, usize)> {
     let batch = device.carry_windows(&windows(rows)).expect("carry");
@@ -188,8 +194,13 @@ fn compare_proposals(
         let proposal = match device.propose(&batch, &targets, parameter) {
             Ok(proposal) => proposal,
             Err(error) => {
-                match scorer.score(kind, index, rows, epoch) {
-                    Err(_) => r.refusals += 1,
+                match scorer.score(kind, index, cpu_rows, epoch) {
+                    Err(cpu_error) => {
+                        r.refusals += 1;
+                        r.notes.push(format!(
+                            "refused {parameter:?}: cuda ({error}) cpu ({cpu_error})"
+                        ));
+                    }
                     Ok(_) => r.mismatches.push(format!(
                         "losses {parameter:?}: cuda refused ({error}), cpu scored"
                     )),
@@ -199,7 +210,7 @@ fn compare_proposals(
         };
         let gpu_losses = proposal.candidate_losses().expect("losses");
         let observed = proposal.observation().expect("observation");
-        let host = match scorer.score(kind, index, rows, epoch) {
+        let host = match scorer.score(kind, index, cpu_rows, epoch) {
             Ok(host) => host,
             Err(error) => {
                 r.mismatches
@@ -216,7 +227,7 @@ fn compare_proposals(
         }
         // The chooser runs on the CUDA loss words, so a choice mismatch is a
         // choose-rule difference, not an inherited loss difference.
-        let gpu_words: [u64; 16] = match gpu_losses.clone().try_into() {
+        let mut gpu_words: [u64; 16] = match gpu_losses.clone().try_into() {
             Ok(words) => words,
             Err(_) => {
                 r.mismatches.push(format!(
@@ -226,6 +237,9 @@ fn compare_proposals(
                 continue;
             }
         };
+        if swap_lane && observed.candidate != 0 {
+            gpu_words.swap(0, observed.candidate as usize);
+        }
         let chosen = chooser
             .choose(kind, index, &gpu_words, epoch)
             .expect("cpu choose");
@@ -385,7 +399,7 @@ fn run(read: ReadSpec, cpu_bytes: Option<Vec<u8>>, rows: &[CpuDiscreteProposalSa
     let scorer = CpuDiscreteProposalScorer::from_bytes(&cpu_bytes).expect("cpu scorer");
     let chooser = CpuDiscreteProposalChooser::from_bytes(&cpu_bytes).expect("cpu chooser");
     compare_forward(&gpu, &scorer, rows, &mut r);
-    let pick = compare_proposals(&gpu, read, &scorer, &chooser, rows, &mut r);
+    let pick = compare_proposals(&gpu, read, &scorer, &chooser, rows, rows, false, &mut r);
     match pick {
         Some(pick) => compare_apply(&mut gpu, &cpu_bytes, pick, rows, &mut r),
         None => r
@@ -434,100 +448,91 @@ fn cuda_and_cpu_oracle_agree_word_for_word_from_identical_bytes() {
 fn cuda_parity_catches_one_planted_fault_per_step() {
     let rows = samples();
     let read = ReadSpec::Route;
-    let targets: Vec<u32> = rows.iter().map(|s| s.target).collect();
     let gpu = device(read);
     let start = bytes_of(&gpu);
-    let batch = gpu.carry_windows(&windows(&rows)).unwrap();
+    let scorer = CpuDiscreteProposalScorer::from_bytes(&start).unwrap();
+    let chooser = CpuDiscreteProposalChooser::from_bytes(&start).unwrap();
+
+    // Every fault below runs through the same compare_* function the clean
+    // test uses, and must be reported at exactly its own step.
 
     // F-forward: the CPU loads the CUDA export with one byte of the data
     // section changed. Some loadable one-byte fault must change a read word.
-    let mut caught_forward = false;
-    for offset in (start.len().saturating_sub(4096)..start.len()).step_by(4) {
+    let (header, data) = split(&start).unwrap();
+    let data_start = 16 + header.len();
+    let caught_forward = (data_start..data_start + data.len()).any(|offset| {
         let mut fault = start.clone();
         fault[offset] ^= 2;
-        let Ok(scorer) = CpuDiscreteProposalScorer::from_bytes(&fault) else {
-            continue;
+        let Ok(faulted) = CpuDiscreteProposalScorer::from_bytes(&fault) else {
+            return false;
         };
         let mut r = Reading::default();
-        compare_forward(&gpu, &scorer, &rows, &mut r);
-        if r.steps() == vec!["forward"] {
-            caught_forward = true;
-            break;
-        }
-    }
+        compare_forward(&gpu, &faulted, &rows, &mut r);
+        r.steps() == vec!["forward"]
+    });
     assert!(
         caught_forward,
-        "no loadable one-byte fault changed a read word"
+        "no loadable one-byte data fault changed a read word"
     );
 
-    // F-losses: one target moved on the CPU side only.
-    let scorer = CpuDiscreteProposalScorer::from_bytes(&start).unwrap();
-    let chooser = CpuDiscreteProposalChooser::from_bytes(&start).unwrap();
+    // F-losses: one target moved on the CPU side only. The choice runs on the
+    // CUDA loss words, so only the loss step may report it.
     let mut shifted = rows.clone();
     shifted[0].target = (shifted[0].target + 1) % 3;
-    let caught_losses = parameters(&gpu, read)
-        .into_iter()
-        .any(|(parameter, kind, index)| {
-            let losses = gpu
-                .propose(&batch, &targets, parameter)
-                .unwrap()
-                .candidate_losses()
-                .unwrap();
-            losses.as_slice()
-                != scorer
-                    .score(kind, index, &shifted, 0)
-                    .unwrap()
-                    .losses
-                    .as_slice()
-        });
-    assert!(caught_losses, "a moved target changed no loss word");
+    let mut r = Reading::default();
+    compare_proposals(
+        &gpu, read, &scorer, &chooser, &rows, &shifted, false, &mut r,
+    );
+    assert_eq!(r.steps(), vec!["losses"], "{:?}", r.mismatches);
 
-    // F-choose: the CPU chooser gets the CUDA losses with the chosen lane
-    // swapped into lane 0; its choice must then differ from CUDA's.
-    let caught_choose = parameters(&gpu, read)
-        .into_iter()
-        .any(|(parameter, kind, index)| {
-            let p = gpu.propose(&batch, &targets, parameter).unwrap();
-            let obs = p.observation().unwrap();
-            if obs.candidate == 0 {
-                return false;
-            }
-            let mut words: [u64; 16] = p.candidate_losses().unwrap().try_into().unwrap();
-            words.swap(0, obs.candidate as usize);
-            chooser.choose(kind, index, &words, 0).unwrap().lane as u64 != obs.candidate
-        });
-    assert!(caught_choose, "a lane swap left the choice unchanged");
+    // F-choose: the CPU chooser gets the CUDA losses with CUDA's chosen lane
+    // swapped into lane 0. Only the choice step may report it.
+    let mut r = Reading::default();
+    compare_proposals(&gpu, read, &scorer, &chooser, &rows, &rows, true, &mut r);
+    assert_eq!(r.steps(), vec!["choose"], "{:?}", r.mismatches);
 
     // F-apply: CUDA commits a proposal; the CPU commits the noop lane for the
-    // same parameter. Either the CPU refuses or the bytes differ.
+    // same parameter, which it accepts as "not applied". The after-step data
+    // section must differ.
     let mut gpu = device(read);
     let mut r_pick = Reading::default();
-    let (parameter, kind, index) =
-        compare_proposals(&gpu, read, &scorer, &chooser, &rows, &mut r_pick)
-            .expect("a committing parameter");
+    let (parameter, kind, index) = compare_proposals(
+        &gpu,
+        read,
+        &scorer,
+        &chooser,
+        &rows,
+        &rows,
+        false,
+        &mut r_pick,
+    )
+    .expect("a committing parameter");
+    assert!(r_pick.mismatches.is_empty(), "{:?}", r_pick.mismatches);
+    let targets: Vec<u32> = rows.iter().map(|s| s.target).collect();
     let batch = gpu.carry_windows(&windows(&rows)).unwrap();
     let proposal = gpu.propose(&batch, &targets, parameter).unwrap();
     assert!(gpu.apply(&proposal).unwrap());
     let after_gpu = bytes_of(&gpu);
-    let host = scorer.score(kind, index, &rows, 0).unwrap();
-    let mut noop = host.proposal;
+    let mut noop = scorer.score(kind, index, &rows, 0).unwrap().proposal;
     noop.lane = 0;
     noop.selected_loss = noop.current_loss;
     let mut applier = CpuDiscreteProposalApplier::from_bytes(&start).unwrap();
-    let caught_apply = match applier.apply(kind, index, noop) {
-        Err(_) => true,
-        Ok(_) => {
-            let mut r = Reading::default();
-            compare_bytes(
-                "apply",
-                &after_gpu,
-                &applier.artifact_bytes().unwrap(),
-                &mut r,
-            );
-            !r.mismatches.is_empty()
-        }
-    };
-    assert!(caught_apply, "a CPU noop commit matched the CUDA commit");
+    let receipt = applier
+        .apply(kind, index, noop)
+        .expect("a noop commit is accepted");
+    assert!(!receipt.applied);
+    let mut r = Reading::default();
+    compare_bytes(
+        "apply",
+        &after_gpu,
+        &applier.artifact_bytes().unwrap(),
+        &mut r,
+    );
+    assert!(
+        r.mismatches.iter().any(|m| m.contains("data differs")),
+        "{:?}",
+        r.mismatches
+    );
 
     // F-bytes: one data byte changed in an otherwise identical copy is a data
     // mismatch, and a key-order-only re-save is not.

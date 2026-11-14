@@ -16,7 +16,7 @@ No training run, no corpus, no capability or speed claim.
 
 ## What changed
 
-- `crates/uor-r4-discrete/src/cpu_oracle_parity.rs` (new, 548 lines, `#[cfg(all(test, feature = "cuda"))]` only). Two tests: `cuda_and_cpu_oracle_agree_word_for_word_from_identical_bytes` and `cuda_parity_catches_one_planted_fault_per_step`.
+- `crates/uor-r4-discrete/src/cpu_oracle_parity.rs` (new, 553 lines, `#[cfg(all(test, feature = "cuda"))]` only). Two tests: `cuda_and_cpu_oracle_agree_word_for_word_from_identical_bytes` and `cuda_parity_catches_one_planted_fault_per_step`.
 - `crates/uor-r4-discrete/src/lib.rs`: one test-only module line.
 - `crates/uor-r4-discrete/Cargo.toml`, `Cargo.lock`: `uor-r4-cpu-train` as a dev-dependency. It is test-only (not a normal dependency) and only bytes and integer words cross between the crates.
 - `docs/research/notebook/cpu-training.md`: one row.
@@ -36,12 +36,12 @@ No training run, no corpus, no capability or speed claim.
 | CPU load-then-save of the CUDA export | data equal; header keys reordered | same |
 | After one committed step (Route(0); VectorBlock(2)) | committed on both sides; data section byte-equal; epoch 1 on both; `snapshot_sha256` differs | same |
 
-| Planted fault (Route fixture) | Caught by |
+| Planted fault (Route fixture; each runs through the same compare function as the clean test and must be reported at its own step only) | Caught by |
 |---|---|
-| One byte of the CPU's copy changed (a loadable fault that changes a read) | the read-vector check |
+| One byte of the data section of the CPU's copy changed (a loadable fault that changes a read) | the read-vector check |
 | One target moved on the CPU side | the loss-word check |
 | The chosen lane swapped into lane 0 of the loss words | the choice check |
-| The CPU commits the no-op lane where CUDA committed | the after-step section check |
+| The CPU commits the no-op lane where CUDA committed | the after-step section check, as a data difference |
 | One data byte changed in a copy | the section check, as a data difference; a key-order-only re-save is not reported |
 
 **Backend identities.**
@@ -53,9 +53,9 @@ No training run, no corpus, no capability or speed claim.
 | `kernel_sha256` | `c08595e3ff0e3c1ef3f80624b728b36812f5dcb8a53c8b91eae3bdadb08a7b4c` |
 | `source_sha256` | `7c854830a0442d4b1370b248350aba599abb9c43d808f645ed32548c01f487bb` |
 | `geometry_sha256` | `46ddbb76b7fbe6ac6222ea24779fc10055b1d6cea6a8da786895676fd29fe327` |
-| Test file run | `cpu_oracle_parity.rs` sha256 `beb2ed4e262d728d616442e79827d448eec7556ab2924139512aa9880fea00a5` |
+| Test file run | `cpu_oracle_parity.rs` sha256 `3fb5aac0952dc55be1addd4e9f3b8558a064acf65df839183c1b9556bacdb1cd` |
 
-The GPU was shared: another lab's `train_gllm_v10` held 6.8 GB and 100 % utilization throughout. That process was not touched. The test used one device, ran in 4.8 s, and needs no exclusive GPU.
+The GPU was shared: another lab's `train_gllm_v10` held 6.8 GB and 100 % utilization throughout. That process was not touched. The test used one device, ran in 2.6 s, and needs no exclusive GPU.
 
 ## Checks run at the head
 
@@ -65,6 +65,8 @@ The GPU was shared: another lab's `train_gllm_v10` held 6.8 GB and 100 % utiliza
 | `cargo check` and `cargo clippy -p uor-r4-discrete --features cuda --lib --tests` on the laptop with a stub nvcc | clean; no clippy finding in the new file |
 | `rustfmt --edition 2021 --check` on the new file | clean |
 | `cargo test -p uor-r4-discrete --lib driver_source` (laptop, no cuda) | 1 passed; the driver-source pin is unmoved (`lib.rs` and `Cargo.toml` are not hashed sources) |
+| Negative gate on `wick`: the loss-word comparison disabled in the container copy | the fault test fails at the loss step (`left: []`, `right: ["losses"]`); the file was restored to the same sha256 |
+| Fresh-context adversarial review (Opus, spec and diff only) | one medium and four low findings, all applied: every planted fault now runs through the shared compare functions, the read fault scans the data section, the apply fault must report a data difference, refusal reasons are recorded, and the summary wording is exact |
 
 ## Skills used
 
@@ -80,6 +82,6 @@ None.
 
 ## Plain summary
 
-The project trains its discrete model with GPU kernels and keeps a separate CPU program that is meant to compute exactly the same thing. This unit checked that on the real GPU. Both sides loaded the same file, read the same 39 short prompts, scored every possible one-word change, picked the same change, and wrote the same model afterwards. Every number in the model matched.
+The project trains its discrete model with GPU kernels and keeps a separate CPU program that is meant to compute exactly the same thing. This unit checked that on the real GPU. Both sides loaded the same file, read the same 39 short prompts, scored the 16 candidate changes of every parameter, picked the same change, and wrote the same model afterwards. Every number in the model matched.
 
 Two labels in the file's header did not match. The CPU side writes the header in a different order, and after a training step it forgets to update the label that says which model the file came from. Neither changes what the model computes, but the second one would mislabel a CPU-trained model. Fixing it is the next small step.
