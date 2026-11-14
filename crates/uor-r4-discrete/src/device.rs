@@ -1264,14 +1264,32 @@ impl Device {
     }
 
     pub fn from_snapshot(snapshot: Snapshot, ordinal: usize) -> Result<Self> {
+        Self::from_snapshot_with_provenance(snapshot, ordinal, true)
+    }
+
+    /// Load an exact fixture state for finite parity. This skips the provenance
+    /// hash requirement only; the full table/route/gate inventory is still
+    /// validated on CUDA before the model can execute.
+    #[doc(hidden)]
+    pub fn from_snapshot_for_qualification(snapshot: Snapshot, ordinal: usize) -> Result<Self> {
+        Self::from_snapshot_with_provenance(snapshot, ordinal, false)
+    }
+
+    fn from_snapshot_with_provenance(
+        snapshot: Snapshot,
+        ordinal: usize,
+        require_provenance: bool,
+    ) -> Result<Self> {
         snapshot.read_spec.validate(snapshot.spec)?;
         let metadata = BinderPlan::new(snapshot.spec.context as usize)?;
         if snapshot.schema != SCHEMA
-            || snapshot.operator_kappa != geometry::OPERATOR_KAPPA
-            || snapshot.composition_kappa != geometry::COMPOSITION_KAPPA
-            || snapshot.kernel_sha256 != kernel_sha256()
-            || snapshot.source_sha256 != hex_digest(&source_sha256())
-            || snapshot.geometry_sha256 != hex_digest(&geometry_digest(&packed_geometry()))
+            || (require_provenance
+                && (snapshot.operator_kappa != geometry::OPERATOR_KAPPA
+                    || snapshot.composition_kappa != geometry::COMPOSITION_KAPPA
+                    || snapshot.kernel_sha256 != kernel_sha256()
+                    || snapshot.source_sha256 != hex_digest(&source_sha256())
+                    || snapshot.geometry_sha256
+                        != hex_digest(&geometry_digest(&packed_geometry()))))
         {
             return Err(invalid(
                 "snapshot schema/geometry/AOT kernel/compiler source binding differs",
@@ -2230,6 +2248,12 @@ impl Device {
         unsafe { launch.launch(launch_config(1)) }.map_err(cuda)?;
         check_status(&self.stream, &status, "apply")?;
         Ok(self.epoch()? != before)
+    }
+
+    /// Finite contract observation over the same exact apply kernel.
+    #[doc(hidden)]
+    pub fn apply_for_qualification(&mut self, proposal: &Proposal) -> Result<bool> {
+        self.apply(proposal)
     }
 }
 

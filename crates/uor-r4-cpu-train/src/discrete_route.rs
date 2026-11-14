@@ -4904,6 +4904,168 @@ mod tests {
         assert_loader_refuses(contract_reading(&route, &fault), "C-8 K4");
     }
 
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn native_space_cuda_parity_contract_runs_the_same_words() {
+        use uor_r4_discrete::d11_export::import_d11_for_qualification;
+        use uor_r4_discrete::device::Device;
+        use uor_r4_discrete::metadata::ABSENT;
+        use uor_r4_discrete::{Identity, Parameter};
+
+        let samples = every_prefix_sample();
+        let windows = samples
+            .iter()
+            .map(|sample| {
+                sample
+                    .prefix
+                    .iter()
+                    .enumerate()
+                    .map(|(position, &token)| Identity {
+                        token,
+                        occurrence: position as u64,
+                        record: position as u64,
+                        version: 0,
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let targets = samples
+            .iter()
+            .map(|sample| sample.target)
+            .collect::<Vec<_>>();
+        let mut applied_any = false;
+
+        for (artifact, kind, parameter) in [
+            (
+                serialized_route(),
+                CpuDiscreteProposalKind::Route,
+                Parameter::Route(0),
+            ),
+            (
+                serialized_discrete(DiscreteFixture::flock()),
+                CpuDiscreteProposalKind::Gate,
+                Parameter::Gate(0),
+            ),
+        ] {
+            let snapshot = import_d11_for_qualification(&artifact).unwrap();
+            let mut device = Device::from_snapshot_for_qualification(snapshot, 0).unwrap();
+            let batch = device.carry_windows(&windows).unwrap();
+            let forward = device.forward(&batch, &targets).unwrap();
+            let evaluated = device.evaluate(&batch, &targets).unwrap();
+            let cuda_vectors = forward.vectors().unwrap();
+            let scorer = CpuDiscreteProposalScorer::from_bytes(&artifact).unwrap();
+            let serving = IntegerDiscreteModel::from_bytes(&artifact).unwrap();
+            let kept_cells = usize::try_from(serving.shape().kept_cells).unwrap();
+            let width = usize::try_from(serving.shape().blocks).unwrap() * 8;
+            let mut vector_at = 0usize;
+            let mut cell_at = 0usize;
+            for (row, sample) in samples.iter().enumerate() {
+                let cpu = scorer.query(sample).unwrap();
+                let served = serving.evaluate_prefix(&sample.prefix).unwrap();
+                assert_eq!(cpu, served.read_vector, "CPU/serving read row {row}");
+                assert_eq!(
+                    &cuda_vectors[vector_at..vector_at + width],
+                    cpu.as_slice(),
+                    "CUDA/CPU read row {row}"
+                );
+                let mut planted = cpu.clone();
+                planted[0] ^= 1;
+                assert_ne!(
+                    &cuda_vectors[vector_at..vector_at + width],
+                    planted.as_slice(),
+                    "row {row}: a one-word carry fault was not detected"
+                );
+                vector_at += width;
+                assert_eq!(
+                    forward.predictions[row], served.prediction,
+                    "CUDA/serving emitted id row {row}"
+                );
+                let mut served_top8 = [ABSENT; 8];
+                for (slot, &token) in served.top8.iter().take(8).enumerate() {
+                    served_top8[slot] = token;
+                }
+                assert_eq!(
+                    evaluated.rows[row].top8, served_top8,
+                    "CUDA/serving top-8 row {row}"
+                );
+                assert_eq!(
+                    &forward.admitted_cells[cell_at..cell_at + kept_cells],
+                    served.admitted_cells.as_slice(),
+                    "CUDA/serving memory addresses row {row}"
+                );
+                assert!(
+                    forward.admitted_cells[cell_at + kept_cells..cell_at + 16]
+                        .iter()
+                        .all(|&cell| cell == ABSENT),
+                    "row {row}: CUDA admitted-cell padding differs"
+                );
+                cell_at += 16;
+            }
+            assert_eq!(vector_at, cuda_vectors.len());
+
+            let cuda_proposal = device.propose(&batch, &targets, parameter).unwrap();
+            let cuda_losses = cuda_proposal.candidate_losses().unwrap();
+            let cuda_choice = cuda_proposal.observation().unwrap();
+            let cpu_scoring = scorer.score(kind, 0, &samples, 0).unwrap();
+            assert_eq!(
+                cuda_losses, cpu_scoring.losses,
+                "counterfactual loss words differ"
+            );
+            assert_eq!(
+                cuda_choice.candidate, cpu_scoring.proposal.lane as u64,
+                "chooser candidate differs"
+            );
+            assert_eq!(cuda_choice.before, cpu_scoring.proposal.current_loss);
+            assert_eq!(cuda_choice.after, cpu_scoring.proposal.selected_loss);
+            assert_eq!(cuda_choice.epoch, cpu_scoring.proposal.epoch);
+            assert_eq!(
+                cuda_choice.any_candidate_cost_differs_from_identity,
+                cpu_scoring.proposal.sensitive
+            );
+
+            let mut applier = CpuDiscreteProposalApplier::from_bytes(&artifact).unwrap();
+            let cpu_receipt = applier.apply(kind, 0, cpu_scoring.proposal).unwrap();
+            let cuda_applied = device.apply_for_qualification(&cuda_proposal).unwrap();
+            assert_eq!(cuda_applied, cpu_receipt.applied, "apply decision differs");
+            println!(
+                "cuda_parity kind={kind:?} rows={} vector_words={} losses={cuda_losses:?} candidate={} applied={} epoch={}->{}",
+                samples.len(),
+                cuda_vectors.len(),
+                cuda_choice.candidate,
+                cuda_applied,
+                cpu_receipt.epoch_before,
+                cpu_receipt.epoch_after
+            );
+
+            let cuda_state = device.snapshot().unwrap();
+            let cpu_state =
+                import_d11_for_qualification(&applier.artifact_bytes().unwrap()).unwrap();
+            assert_eq!(cuda_state.table, cpu_state.table, "table words differ");
+            assert_eq!(cuda_state.routes, cpu_state.routes, "route words differ");
+            assert_eq!(cuda_state.gates, cpu_state.gates, "gate words differ");
+            assert_eq!(cuda_state.epoch, cpu_state.epoch, "epoch differs");
+
+            if cpu_receipt.applied {
+                applied_any = true;
+                let replay = applier
+                    .apply(kind, 0, cpu_scoring.proposal)
+                    .expect_err("CPU accepted a reused proposal");
+                assert_eq!(replay.status, 3, "CPU stale status differs");
+                let cuda_replay = device
+                    .apply_for_qualification(&cuda_proposal)
+                    .expect_err("CUDA accepted a reused proposal");
+                assert!(
+                    cuda_replay.to_string().contains("stale"),
+                    "CUDA stale refusal differs: {cuda_replay}"
+                );
+            }
+        }
+        assert!(
+            applied_any,
+            "the CUDA parity fixtures produced only no-op proposals"
+        );
+    }
+
     #[test]
     fn cpu_discrete_checkpoint_preserves_nonzero_source_epoch() {
         let artifact = set_route_epoch(serialized_route(), 420);

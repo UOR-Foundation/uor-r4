@@ -364,6 +364,13 @@ mod tests {
                 ),
                 1,
             ),
+            (
+                (
+                    "device.rs".into(),
+                    ["self", ".", "apply", "(proposal)"].concat(),
+                ),
+                1,
+            ),
         ]);
         assert_eq!(
             observed, expected,
