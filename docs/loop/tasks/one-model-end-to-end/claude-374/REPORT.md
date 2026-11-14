@@ -22,11 +22,12 @@ The order asked for claude-370's pair rows to be weighed by 1 + 1/R, so frame pa
 ## What changed
 
 - **`crates/uor-r4-float-train/src/pair_rows.rs`:** a `boost` mark on the saved weights. `with_boost_weights` turns the stored 1/R into a forward weight of 1 + 1/R: `add_bags` uses `affine(1, 1)` on the weights. `weight_kind()` returns `none`, `replies` or `boost`, and it is saved and loaded with the rows. Tests cover these:
-  - `boost` with R = 1 weighs 2;
-  - large R tends to 1;
-  - the bag is the boosted sum;
-  - save and load keep the kind;
-  - without the flag, rows are claude-370's bit for bit.
+  - the bag is the boosted sum: a pair seen with one reply adds 2× its row (`a_boosted_bag_is_the_sum_of_one_plus_inverse_count_rows`);
+  - a cached decode step equals the whole window, with R = 8 weighing 1.125 (`a_boosted_cached_step_equals_the_whole_window`);
+  - save and load keep the `boost` mark, and a mark without weights is refused (`boost_round_trips_and_a_mark_without_weights_is_refused`);
+  - `replies` rows write no mark.
+
+  No test compares the unflagged path bit for bit with the old output. That path's code is unchanged in the diff.
 - **`in_space_long.rs`:** `pair_weight_boost` and the kind prints.
 - **`bin/train-in-space.rs`:** `--pair-weight replies|boost`. Training prints `[pair] weight kind: boost`; scoring prints `[pair] loaded weight kind: none|replies|boost` (I-8).
 - No panel, recipe, bar or saved model of another unit is changed.
@@ -103,7 +104,11 @@ None.
 - **Weigh shape and content apart, by what the pair is, not by how rare.** Neither 1/R (claude-373) nor 1 + 1/R (here) moves facts. Rarity does not tell a content pair from single-conversation noise. The next form to try keys the row on the question's content word: the noun after "capital of", the operand of "add". It would not key on all pairs. Alternatively, keep claude-370's plain bag for the reply's shape and give a second, content-only bag its own seam.
 - **Facts are still not reached by pair rows in any of the three forms.** Exact capital is 0 to 2 of 68 across all six models of claude-370, claude-373 and this unit. The reply has the frame ("The capital of Kenya is") and no answer.
 - **The answer-word bar counts a reply that only echoes the question's last noun.** For capital, both arms get credit for "…the capital of Norway." The verdict here does not rest on it, because the exact fact rows fall too. A next sheet should bar on exact fact rows, or on the answer word excluding words of the turn.
-- **`load` should refuse a checkpoint whose config says weighted but whose rows file has no `weights` tensor** (carried from claude-373, low).
+- **`load` should refuse rows whose kind disagrees with the checkpoint's config.** Two cases, both low:
+  - the config says weighted, but the rows file has no `weights` tensor (carried from claude-373);
+  - the config says `boost`, but the rows file has lost its mark, so it loads as `replies`.
+
+  Today only the printed kind and I-8 catch these (review).
 - **Counting and number work** still need a mechanism on the operands.
 
 ## Plain summary
