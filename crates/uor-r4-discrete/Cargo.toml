@@ -105,3 +105,8 @@ path = "src/bin/within-cell-writer-run.rs"
 
 
 
+
+[dev-dependencies]
+# Test-only: the CUDA leg of the native-space parity contract (src/cpu_oracle_parity.rs)
+# compares the kernels with the CPU training oracle. Bytes and integer words cross; no types.
+uor-r4-cpu-train = { path = "../uor-r4-cpu-train" }
