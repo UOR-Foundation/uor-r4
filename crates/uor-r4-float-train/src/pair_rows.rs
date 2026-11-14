@@ -43,6 +43,27 @@ const LIMIT: u64 = 1 << 31;
 /// this count, so its weight is `1 / REPLY_CAP`.
 pub const REPLY_CAP: usize = 4096;
 
+/// The census of reply counts the trainer prints at start-up and the scoring pass prints at load,
+/// in one form so the two lines compare as text: the row count and R at the minimum, 50 %, 90 %,
+/// 99 % and the maximum (the value at `(n - 1) · q / 100` of the sorted counts).
+pub fn reply_census(counts: &[u32]) -> String {
+    let mut sorted = counts.to_vec();
+    sorted.sort_unstable();
+    if sorted.is_empty() {
+        return format!("0 pairs (cap {REPLY_CAP})");
+    }
+    let at = |q: usize| sorted[(sorted.len() - 1) * q / 100];
+    format!(
+        "{} pairs; R min {} p50 {} p90 {} p99 {} max {} (cap {REPLY_CAP})",
+        sorted.len(),
+        at(0),
+        at(50),
+        at(90),
+        at(99),
+        at(100)
+    )
+}
+
 thread_local! {
     static ACTIVE: RefCell<Option<PairRows>> = const { RefCell::new(None) };
 }
@@ -504,6 +525,21 @@ impl PairRows {
     /// The fixed row weights, when the rows are weighed.
     pub fn weights(&self) -> Option<&Tensor> {
         self.weights.as_ref()
+    }
+
+    /// Each row's count of different replies, read back from its weight (`R = 1 / w`, rounded),
+    /// when the rows are weighed. A count up to [`REPLY_CAP`] survives the f32 weight exactly.
+    pub fn reply_counts_of_weights(&self) -> Result<Option<Vec<u32>>> {
+        let Some(weights) = &self.weights else {
+            return Ok(None);
+        };
+        let weights = weights.to_vec1::<f32>()?;
+        Ok(Some(
+            weights
+                .iter()
+                .map(|&w| (1.0f64 / w as f64).round() as u32)
+                .collect(),
+        ))
     }
 
     /// The dictionary the rows are numbered by.
@@ -1094,6 +1130,22 @@ mod tests {
     /// claude-373: pair (5,6) is in three turns with replies `3 10`, `3 10`, `3 11`; pair (7,8) in
     /// two turns, both with reply `3 12`, the last of which runs to the stream's end.
     #[test]
+    fn the_census_reads_back_from_the_weights_and_names_its_quantiles() {
+        // R from 1 to the cap survives 1/R stored as f32 and read back rounded.
+        let counts: Vec<u32> = (1..=REPLY_CAP as u32).collect();
+        let back: Vec<u32> = counts
+            .iter()
+            .map(|&r| (1.0f64 / (1.0f32 / r as f32) as f64).round() as u32)
+            .collect();
+        assert_eq!(back, counts);
+        assert_eq!(
+            reply_census(&[5, 1, 3, 2, 4]),
+            "5 pairs; R min 1 p50 3 p90 4 p99 4 max 5 (cap 4096)"
+        );
+        assert_eq!(reply_census(&[]), "0 pairs (cap 4096)");
+    }
+
+    #[test]
     fn a_reply_count_counts_each_different_reply_once() {
         let stream = [
             1, 4, 5, 6, 2, 3, 10, 1, 4, 5, 6, 2, 3, 10, 1, 4, 5, 6, 2, 3, 11, 1, 4, 7, 8, 2, 3, 12,
@@ -1174,6 +1226,7 @@ mod tests {
         assert_eq!(names, ["assistant", "rows", "user"]);
         let loaded = PairRows::load(&directory, &device).unwrap().unwrap();
         assert!(loaded.weights().is_none());
+        assert_eq!(loaded.reply_counts_of_weights().unwrap(), None);
         std::fs::remove_dir_all(&directory).unwrap();
     }
 
@@ -1187,6 +1240,10 @@ mod tests {
         let loaded = PairRows::load(&directory, &device).unwrap().unwrap();
         let back = loaded.weights().unwrap().to_vec1::<f32>().unwrap();
         assert_eq!(back, vec![1.0, 0.5, 0.25, 0.125]);
+        assert_eq!(
+            loaded.reply_counts_of_weights().unwrap(),
+            Some(vec![1, 2, 4, 8])
+        );
         let path = directory.join(FILE);
         let bad: [Vec<f32>; 4] = [
             vec![1.0, 0.5, 0.25],

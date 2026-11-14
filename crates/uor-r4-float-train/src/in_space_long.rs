@@ -817,6 +817,15 @@ fn load_reads(directory: &Path, device: &Device) -> Result<()> {
             rows.dict().len(),
             sha256_bytes(&rows.dict().to_bytes())
         );
+        // claude-373: say whether the rows are weighed, in the trainer's census form, so a
+        // weighed checkpoint that lost its weights reads "none" here.
+        match rows.reply_counts_of_weights()? {
+            Some(counts) => println!(
+                "[pair] loaded weight replies: {}",
+                crate::pair_rows::reply_census(&counts)
+            ),
+            None => println!("[pair] loaded weight replies: none"),
+        }
     }
     crate::pair_rows::set_pair_rows(pair);
     Ok(())
@@ -15091,18 +15100,9 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             // claude-373: each row weighed by one over its count of different TRAIN replies.
             let rows = if config.pair_weight {
                 let counts = crate::pair_rows::reply_counts(rows.dict(), &tokens, &pair_marks())?;
-                let mut sorted = counts.clone();
-                sorted.sort_unstable();
-                let at = |q: usize| sorted[(sorted.len() - 1) * q / 100];
                 println!(
-                    "[pair] weight replies: {} pairs; R min {} p50 {} p90 {} p99 {} max {} (cap {})",
-                    sorted.len(),
-                    at(0),
-                    at(50),
-                    at(90),
-                    at(99),
-                    at(100),
-                    crate::pair_rows::REPLY_CAP
+                    "[pair] weight replies: {}",
+                    crate::pair_rows::reply_census(&counts)
                 );
                 rows.with_reply_weights(&counts)?
             } else {
