@@ -38,7 +38,7 @@ Neither setting uses the counted asks table, serve-again or the pair experts. Th
    - greeting 4 / 4 / 4;
    - news of a thing 2 / 2 / 2.
 
-   Without it, these vary by seed: goodbye 13 / 9 / 9, first letter 0 / 0 / 0. The memory is an exact table keyed on the turn's ids and counted from TRAIN, so on those rows it replays TRAIN's commonest reply. Replies, P14, seed 1 (reference, V, VM):
+   Without it, these vary by seed: goodbye 13 / 9 / 9, first letter 0 / 0 / 0. The memory is an exact table keyed on the turn's ids and counted from TRAIN. Equal counts at three seeds are consistent with it replaying the same stored reply on those rows; this unit did not read which reply the table holds. Replies, P14, seed 1 (reference, V, VM):
    - "Good night!": reference "See you later!"; V "Goodbye! Have a great day."; VM "See you later!".
    - "Thank you so much!": reference "You're welcome!"; V "Anytime!"; VM "You're welcome!".
    - "Tell me about yourself.": V "I'm a helpful assistant that runs on your computer."; VM the reference word for word.
@@ -122,7 +122,7 @@ Neither setting uses the counted asks table, serve-again or the pair experts. Th
 
 The two panels are not the same rows, and the numbers are not added together.
 
-**Speed** (`step_time` from the receipts, P14 + P23, 251,059 prompt ids read and about 31,000 reply tokens served a run; load average at the start of the run):
+**Speed** (`step_time` from the receipts, P14 + P23, 251,059 prompt ids read and 30,106 to 33,877 reply tokens served a run; load average at the start of the run):
 
 | model | setting | prompt ids/s | served tokens/s | load |
 |---|---|---|---|---|
