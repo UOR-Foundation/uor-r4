@@ -65,7 +65,7 @@ The GPU was shared: another lab's `train_gllm_v10` held 6.8 GB and 100 % utiliza
 | `cargo check` and `cargo clippy -p uor-r4-discrete --features cuda --lib --tests` on the laptop with a stub nvcc | clean; no clippy finding in the new file |
 | `rustfmt --edition 2021 --check` on the new file | clean |
 | `cargo test -p uor-r4-discrete --lib driver_source` (laptop, no cuda) | 1 passed; the driver-source pin is unmoved (`lib.rs` and `Cargo.toml` are not hashed sources) |
-| Negative gate on `wick`: the loss-word comparison disabled in the container copy | the fault test fails at the loss step (`left: []`, `right: ["losses"]`); the file was restored to the same sha256 |
+| Negative gates on `wick`, each comparison disabled in the container copy in turn | loss comparison off: the fault test fails at the loss step (`right: ["losses"]`); choice comparison off: it fails at the choice step (`right: ["choose"]`); after each, the file was restored to the same sha256 and both tests passed again |
 | Fresh-context adversarial review (Opus, spec and diff only) | one medium and four low findings, all applied: every planted fault now runs through the shared compare functions, the read fault scans the data section, the apply fault must report a data difference, refusal reasons are recorded, and the summary wording is exact |
 
 ## Skills used
