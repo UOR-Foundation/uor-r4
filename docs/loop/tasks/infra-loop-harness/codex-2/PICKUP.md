@@ -14,10 +14,10 @@ git -C local/worktrees/codex-native-space-cycle status --short --branch
 git -C local/worktrees/codex-cuda-native-train status --short --branch
 ```
 
-The previous control-plane head is `0a9737c6e`; this tracked note is updated after it. At the
-note's parent, `origin/main` is `f40f06abe82447b3174418ffcd2f7245125e5c8f`; PR #3967 is open and
-draft; the control-plane branch is `codex/native-space-cycle`; and
-`codex/cuda-native-train` is at `ebeca85cb6c126c559df91c14ca2d6ea04c20b6b`. Report any
+The previous control-plane merge head is `74deb0a6b`; this tracked note is updated after it.
+`origin/main` is `085ff55d92c31ded738913ae8907251e4dcd8a21`; PR #3967 is open and ready for
+review; the control-plane branch is `codex/native-space-cycle`; and
+`codex/cuda-native-train` is at `48298622d`, with draft PR #3968 stacked on it. Report any
 disagreement before acting.
 
 ## Off limits
@@ -41,8 +41,8 @@ exception with D85, and added `crates/uor-r4-discrete/**` plus
 `crates/uor-r4-integer/src/discrete_d11.rs` to the next item's scope.
 
 Focused native-space tests pass 7. The clean full harness package run with `TMPDIR` outside the
-checkout passed 684 tests with 0 failures and 1 ignored. Formatting and `git diff --check` pass;
-the full harness check, PR check and a fresh exact-head review remain.
+checkout passed 685 tests with 0 failures and 1 ignored. Formatting and `git diff --check` pass.
+The remaining gate is the fresh exact-head review and queue on the merged-forward head.
 
 `codex/cuda-native-train` carries the actual Q31 vector operator in
 `crates/uor-r4-discrete/src/native_vector.{rs,cu}` and `native_vector_device.rs`, with
@@ -53,18 +53,15 @@ registers for forward and 44 for training, both with 0 spills. The Q31 training 
 records word-for-word. One shared serializable gate/epoch model now aggregates those CUDA records;
 64 accepted model steps lower aggregate L1 loss from `17,179,869,184` to `13,373,147,056`, with
 CPU/CUDA gate-and-epoch parity after every step. The branch is pushed and stacked on the control
-plane; it has no PR and serving does not consume the shared state yet.
+plane as draft PR #3968; serving does not consume the shared state yet.
 
 ## Next task
 
-1. Push the repaired control-plane head and update PR #3967.
-2. Rerun the full package with a temp root outside the checkout, for example
-   `TMPDIR=$(mktemp -d /var/tmp/uor-harness.XXXXXX)`.
-3. Pass formatting, full tests, Clippy, focused/full harness checks, stack-contract and roadmap
-   checks, report check, local PR check and a fresh exact-head review.
-4. Mark #3967 ready, queue, merge, and verify fresh `origin/main`.
-5. Merge `origin/main` into the already pushed `codex/cuda-native-train` and open its standalone
-   PR once #3967 lands.
+1. Merge PR #3967 through the protected queue and verify fresh `origin/main`.
+2. Retarget PR #3968 to `main`, merge current `main` into `codex/cuda-native-train`, and merge
+   the CUDA training PR.
+3. Run the serving wiring so the integer session consumes the shared serialized
+   `Q31HamiltonModel` gate/epoch transition.
 6. Make integer serving consume the shared serialized `Q31HamiltonModel` gate/epoch transition.
    That is the immediate project implementation, not more harness bookkeeping.
 
@@ -99,13 +96,13 @@ moving worktree before this tracked repair commit; it is not evidence for the ne
 
 ```text
 MANIFEST
-- origin/main: f40f06abe82447b3174418ffcd2f7245125e5c8f  check: git rev-parse origin/main
-- PR 3967 remote head: e4ae7301b440ec628cca007d23dde41b04832f3b  check: gh pr view 3967 --json headRefOid
+- origin/main: 085ff55d92c31ded738913ae8907251e4dcd8a21  check: git rev-parse origin/main
+- PR 3967 remote head: 74deb0a6bca7989dc316f8d28e7d8f5501da282f  check: gh pr view 3967 --json headRefOid
 - focused native-space tests: 7 passed  check: cd local/worktrees/codex-native-space-cycle && CARGO_TARGET_DIR=local/harness-target cargo test --locked -p uor-r4-harness native_space_contract
 - full harness package: 684 passed / 0 failed / 1 ignored  check: docs/loop/tasks/infra-loop-harness/codex-2/REPORT.md
-- CUDA branch head: ebeca85cb6c126c559df91c14ca2d6ea04c20b6b  check: git -C local/worktrees/codex-cuda-native-train rev-parse HEAD
-- CUDA branch tree: 1e4d901f5b0019e57ed3c59de1ef4daf35657670  check: git -C local/worktrees/codex-cuda-native-train rev-parse HEAD^{tree}
-- CUDA PR: none yet  check: gh pr list --state open --head codex/cuda-native-train
+- CUDA branch head: 48298622d  check: git -C local/worktrees/codex-cuda-native-train rev-parse HEAD
+- CUDA branch tree: 3331bd3023156fc874ff50a8f610cf7dfe5aad4a  check: git -C local/worktrees/codex-cuda-native-train rev-parse HEAD^{tree}
+- CUDA PR: #3968 draft stacked on #3967  check: gh pr view 3968 --json state,isDraft,baseRefName
 - RTX 4090 Q31 parity: 16,384 raw i64 words bit-identical  check: UOR_REQUIRE_CUDA=1 cargo test -p uor-r4-discrete --features cuda --test native_vector_cuda
 - next action: make integer serving consume the shared Q31 model state  check: sed -n '/## Next task/,/## Orders/p' docs/loop/tasks/infra-loop-harness/codex-2/PICKUP.md
 ```

@@ -65,6 +65,8 @@ const NATIVE_PARITY_FIELDS: [&str; 5] = [
     "token ids",
 ];
 const NATIVE_FORBIDDEN_DEFAULT: [&str; 2] = ["F32 master model", "export gap"];
+const NATIVE_MODEL_CONTRADICTIONS: [&str; 2] =
+    ["D85 is rejected", "float master remains the default"];
 const NATIVE_CHARTER_START: &str = "<!-- native-space-cycle:start -->";
 const NATIVE_CHARTER_END: &str = "<!-- native-space-cycle:end -->";
 
@@ -849,6 +851,19 @@ pub fn native_space_contract(paths: &StatePaths) -> Vec<Finding> {
                         "add the exact model_status line from docs/harness/native-space.json",
                     );
                 }
+                if text.lines().any(|line| {
+                    let lower = normalized(line).to_ascii_lowercase();
+                    NATIVE_MODEL_CONTRADICTIONS
+                        .iter()
+                        .any(|phrase| lower.contains(&phrase.to_ascii_lowercase()))
+                }) {
+                    push(
+                        &mut out,
+                        &surface,
+                        "model surface contradicts the native default",
+                        "remove the contradictory model claim from the D85 surface",
+                    );
+                }
             }
             Err(e) => push(
                 &mut out,
@@ -1293,6 +1308,28 @@ mod tests {
         std::fs::write(&path, item).expect("complete item");
         let f = native_space_contract(&paths_of(dir.path()));
         assert!(f.is_empty(), "{f:?}");
+    }
+
+    #[test]
+    fn the_native_space_contract_refuses_a_contradictory_model_surface() {
+        let dir = native_space_fixture();
+        let path = dir.path().join("docs/model/architecture.md");
+        std::fs::write(
+            &path,
+            format!(
+                "{NATIVE_MODEL_STATUS}\n{}\nD85 is rejected; float master remains the default.\n",
+                native_marker()
+            ),
+        )
+        .expect("mutate model surface");
+        let f = native_space_contract(&paths_of(dir.path()));
+        assert!(
+            f.iter().any(|finding| {
+                finding.path == "docs/model/architecture.md"
+                    && finding.message.contains("contradicts the native default")
+            }),
+            "{f:?}"
+        );
     }
 
     #[test]
