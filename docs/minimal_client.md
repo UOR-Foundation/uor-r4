@@ -54,7 +54,7 @@ Commands & Shortcuts:
 ```
 
 ### Slash command completion
-Typing `/` lists the slash commands: `/help`, `/status`, `/models`, `/switch`, `/engine`, `/corpus`, `/compile`, `/audit`, `/clear`, `/reset`, `/export` and `/quit`. Typing more of a command narrows the list to the commands that start with what has been typed, for example `/mo` to `/models` and `/st` to `/status`.
+Typing `/` lists the slash commands: `/help`, `/status`, `/models`, `/switch`, `/engine`, `/corpus`, `/compile`, `/audit`, `/clear`, `/reset`, `/export`, `/quit` and `/exit` (another name for `/quit`). Typing more of a command narrows the list to the commands that start with what has been typed, for example `/mo` to `/models` and `/st` to `/status`.
 
 ---
 
