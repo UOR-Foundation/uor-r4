@@ -10,7 +10,7 @@ The source pages are partly current: `README.md` says 1 of 8 and links the 14 No
 
 1. **A source-linked facts sheet first**, `FACTS.md` in this folder: every number the changed pages state, each with the merged REPORT, notebook row or record it comes from, from the merged work since 31 Oct. Pages are edited only from it.
 2. **The forward-facing pages:** `README.md`, `docs/README.md`, `docs/start/where-we-are.md`, `where-were-going.md`, `what-is-uor-r4.md`, `faq.md`, `ROADMAP.md`, `docs/products/web-client.md` (its status header) and the Studio's visible status text in `web/studio/index.html`.
-3. **Other book pages whose current-status lines are stale:** `docs/products/README.md`, `docs/products/language-model.md`, `docs/model/architecture.md`, `docs/model/serving-and-export.md`, `docs/research/findings.md`, `docs/research/open-questions.md`, `docs/research/history.md`, and the status headers of `crates/uor-r4-integer/README.md` and `crates/uor-r4-float-train/README.md`. Only lines that state the current state change; dated rows stay.
+3. **Other book pages whose current-status lines are stale:** `docs/products/README.md`, `docs/products/language-model.md`, `docs/model/architecture.md`, `docs/model/serving-and-export.md`, `docs/research/findings.md`, `docs/research/open-questions.md`, and `docs/research/history.md`. Only lines that state the current state change; dated rows stay.
 4. **Freshness records:** each page edited here that has a freshness record gets `checked=` set to the commit it was read against, so `book-fresh` reports it fresh.
 
 Claims are scoped (CHARTER §5.6): a number names its unit, seeds and panel. M1 is complete; no model holds a useful conversation. V1 (PR #3979) and V2(a) (PR #3978) are described as in progress only.
