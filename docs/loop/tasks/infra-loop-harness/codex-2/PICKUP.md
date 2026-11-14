@@ -62,8 +62,6 @@ plane as draft PR #3968; serving does not consume the shared state yet.
    the CUDA training PR.
 3. Run the serving wiring so the integer session consumes the shared serialized
    `Q31HamiltonModel` gate/epoch transition.
-6. Make integer serving consume the shared serialized `Q31HamiltonModel` gate/epoch transition.
-   That is the immediate project implementation, not more harness bookkeeping.
 
 Cancel if the compiled CUDA source no longer matches the reviewed arithmetic, the 4090 does not
 reproduce the Rust words bit-for-bit, or serving needs a numerically different operator.
@@ -98,8 +96,8 @@ moving worktree before this tracked repair commit; it is not evidence for the ne
 MANIFEST
 - origin/main: 085ff55d92c31ded738913ae8907251e4dcd8a21  check: git rev-parse origin/main
 - PR 3967 remote head: 74deb0a6bca7989dc316f8d28e7d8f5501da282f  check: gh pr view 3967 --json headRefOid
-- focused native-space tests: 7 passed  check: cd local/worktrees/codex-native-space-cycle && CARGO_TARGET_DIR=local/harness-target cargo test --locked -p uor-r4-harness native_space_contract
-- full harness package: 684 passed / 0 failed / 1 ignored  check: docs/loop/tasks/infra-loop-harness/codex-2/REPORT.md
+- focused native-space tests: 8 passed  check: cd local/worktrees/codex-native-space-cycle && CARGO_TARGET_DIR=local/harness-target cargo test --locked -p uor-r4-harness native_space_contract
+- full harness package: 685 passed / 0 failed / 1 ignored  check: docs/loop/tasks/infra-loop-harness/codex-3/REPORT.md
 - CUDA branch head: 48298622d  check: git -C local/worktrees/codex-cuda-native-train rev-parse HEAD
 - CUDA branch tree: 3331bd3023156fc874ff50a8f610cf7dfe5aad4a  check: git -C local/worktrees/codex-cuda-native-train rev-parse HEAD^{tree}
 - CUDA PR: #3968 draft stacked on #3967  check: gh pr view 3968 --json state,isDraft,baseRefName

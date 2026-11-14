@@ -12,6 +12,8 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 - The tracked PICKUP still named the old main, old CUDA branch and no CUDA PR.
 - The model-surface check accepted a page that retained the canonical marker and status but
   added a contradictory sentence.
+- The architect skill's revised paragraph still retained the pre-D80 "no multiplier
+  instruction" wording, and the tracked PICKUP had duplicate step numbering and old test counts.
 
 ## What changed
 
@@ -21,8 +23,10 @@ native default from the retained historical float-master/export-gap evidence. Th
 now records current `main`, the ready control-plane PR and the stacked CUDA PR.
 
 The model-surface check now rejects the two explicit contradictory claims that the fresh review
-planted; a regression fixture covers the retained-marker case. No new rule or harness abstraction
-was added. The historical evidence and old decision rows were not edited.
+planted; a regression fixture covers the retained-marker case. The architect skill now carries
+the current D80 integer-multiply permission, and the tracked PICKUP has a single current next-step
+list and the latest check counts. No new rule or harness abstraction was added. The historical
+evidence and old decision rows were not edited.
 
 Size: 8 code/test changes plus 26 documentation changes across six files; this REPORT and the
 separate ORDER are additional record material.

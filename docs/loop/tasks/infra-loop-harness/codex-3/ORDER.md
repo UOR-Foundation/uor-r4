@@ -37,6 +37,7 @@ assertion.
 - `docs/geometry/README.md`
 - `docs/integration/project-track.md`
 - `crates/uor-r4-harness/src/harnessrules.rs`
+- `.agents/skills/uor-research-architect/SKILL.md`
 
 ## Size
 
