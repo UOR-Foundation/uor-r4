@@ -24,7 +24,7 @@
 //! token is known, the best earlier row followed by the same token above every row followed by
 //! another; and its counts ([`take_stats`]). [`reference`] writes every closed form a second time in
 //! plain f64 Rust.
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::f64::consts::{PI, TAU};
 use std::path::Path;
 
@@ -49,8 +49,20 @@ const FAR: f32 = 1.0e30;
 /// The 120 icosian cells.
 pub const CELLS: usize = 120;
 
+/// A run's vector read as `config.json` records it: the kind, the layer it follows (the last
+/// when absent), the credit's margin and weight.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
+pub struct VectorReadArm {
+    pub kind: VectorReadKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depth: Option<usize>,
+    pub margin: f32,
+    pub credit: f32,
+}
+
 /// Which read.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum VectorReadKind {
     StarlingLorentz,
     StarlingL2,
@@ -99,6 +111,16 @@ thread_local! {
     static ACTIVE: RefCell<Option<VectorRead>> = const { RefCell::new(None) };
     static CREDIT: RefCell<Option<Tensor>> = const { RefCell::new(None) };
     static STATS: RefCell<Option<ReadStats>> = const { RefCell::new(None) };
+    static COLLECT: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Run `f` with credit and counts collected: only forwards inside it record them, so an eval
+/// forward never keeps a credit graph alive. The previous setting is restored on return.
+pub fn collecting<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
+    let before = COLLECT.with(|cell| cell.replace(true));
+    let out = f();
+    COLLECT.with(|cell| cell.set(before));
+    out
 }
 
 /// Make `read` the vector read the trunk applies on this thread, or none.
@@ -570,6 +592,9 @@ impl VectorRead {
         let out = flat
             .add(&contribution.broadcast_mul(&weight)?)?
             .reshape((batch, time, width))?;
+        if !COLLECT.with(Cell::get) {
+            return Ok(out);
+        }
 
         // The margin credit over every earlier position, masks from the ids.
         let masks = CreditMasks::build(ids, batch, time, self.kind.is_starling());
@@ -1273,7 +1298,7 @@ mod tests {
                 clear_credit();
                 let _ = take_stats();
                 let f = fixture(kind, DEFAULT_MARGIN, 381)?;
-                let out = host(&f.read.apply(&f.x, &IDS, &f.table)?)?;
+                let out = host(&collecting(|| f.read.apply(&f.x, &IDS, &f.table))?)?;
                 let want = reference_of(&f)?;
                 for (i, (a, b)) in out.iter().zip(&want.out).enumerate() {
                     assert!((a - b).abs() < 1e-5, "{kind:?} [{i}]: {a} vs {b}");
@@ -1303,7 +1328,7 @@ mod tests {
                 let f = fixture(kind, 5.0, 382)?;
                 let loss = |f: &Fixture| -> Result<Tensor> {
                     clear_credit();
-                    f.read.apply(&f.x, &IDS, &f.table)?;
+                    collecting(|| f.read.apply(&f.x, &IDS, &f.table))?;
                     take_credit().ok_or_else(|| invalid("no credit"))
                 };
                 let grads = loss(&f)?.backward()?;
@@ -1358,8 +1383,9 @@ mod tests {
                 };
                 assert_eq!(bits(&out)?, bits(&f.x)?, "{kind:?}");
             }
-            clear_credit();
-            let _ = take_stats();
+            // Outside `collecting` (an eval forward) nothing is recorded.
+            assert!(take_credit().is_none());
+            assert!(take_stats().is_none());
             set_vector_read(Some(fixture(kinds()[0], 1.0, 384)?.read));
             assert!(vector_read().is_some());
             set_vector_read(None);
