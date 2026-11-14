@@ -1,7 +1,6 @@
 # ORDER: native-space-state-contract, codex-1
 
-Lab: codex. Item:
-[native-space-state-contract](../../../../roadmap/items/native-space-state-contract.md).
+Lab: codex. Item: [native-space-state-contract](../../../../roadmap/items/native-space-state-contract.md).
 Base: `ef2a89bce`.
 
 ## Owner approval

@@ -13,6 +13,12 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   result.
 - The dependency-inclusive Clippy baseline remains red on unrelated `uor-r4-integer` warnings.
   The package-scoped `--no-deps` run passed and the baseline is not presented as green.
+- Retargeting PR #3968 with `gh pr edit` failed on GitHub's deprecated classic Projects query;
+  the REST pull-request endpoint changed the base without touching code.
+- Merging the final control plane produced duplicated control-record conflicts. The CUDA source
+  did not conflict; each duplicated control record was resolved to its newer `main` version.
+- The finalized ORDER parser then found that this chain's roadmap link was wrapped onto the next
+  line. `codex-6` records the metadata-only repair.
 
 ## What changed
 
@@ -29,6 +35,10 @@ model transition, gate and epoch after every step.
 
 Size: 291 changed code/example/test lines across four files. The REPORT is additional record
 material. This is within the ORDER's 300-line code estimate but reports the exact basis.
+
+After PR #3967 merged as `e2175455e`, the CUDA branch merged that squash forward at `d12c29a11`.
+The merge keeps the final native-space contract and harness checks from `main` and preserves the
+Q31 CUDA operator, shared-model transition and integration tests unchanged in capability.
 
 ## Measurements
 
@@ -59,6 +69,16 @@ The forward/training image identities remain:
   native_vector_cuda -- -D warnings` - passed; dependency-inclusive Clippy remains red on the
   existing `uor-r4-integer` baseline.
 - Release `native_vector_qualify` example - passed with the shared-model fields above.
+- Merged-head CUDA integration rerun with `NVCC=/usr/local/cuda/bin/nvcc`,
+  `UOR_NVCC_ARCH=compute_89` and `UOR_REQUIRE_CUDA=1` - 4 passed on the RTX 4090.
+- Merged-head discrete library rerun - 367 passed, 1 ignored.
+- Merged-head full harness package with `TMPDIR=/var/tmp/uor-harness.KQCj53` - 685 passed,
+  0 failed, 1 ignored, plus every integration and doc test.
+- Package-scoped formatting for `uor-r4-discrete` and `uor-r4-harness` - passed.
+- Package-scoped CUDA Clippy with `--no-deps ... -D warnings` - passed.
+- Release `native_vector_qualify` rerun - 16,384 raw words bit-identical, 4,096 training records
+  bit-identical, and 64 shared-model steps lowering loss from `17,179,869,184` to
+  `13,373,147,056`.
 - `git diff --check` - passed.
 
 ## Skills used
@@ -75,11 +95,12 @@ The forward/training image identities remain:
   admitted CUDA kernel.
 - The integer serving session still needs to consume this same model state.
 - No language-model or serving result is claimed.
-- PR #3967 remains the control-plane base; this branch is stacked on it.
+- PR #3967 is merged; PR #3968 is based directly on fresh `main`.
 
 ## Plain summary
 
 The Q31 CUDA training step now trains one shared model gate instead of independent test records.
 On the RTX 4090, CPU and CUDA agree on the gate and epoch after every step, and 64 accepted steps
-reduce the finite aggregate loss by about 22.2%. The next missing link is serving the serialized
-state through the same transition.
+reduce the finite aggregate loss by about 22.2%. The branch now contains the final native-space
+control plane and passes the merged-head CUDA, CPU, harness, formatting and Clippy checks. The
+next missing link is serving the serialized state through the same transition.

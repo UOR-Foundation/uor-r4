@@ -1,7 +1,6 @@
 # ORDER: native-space-state-contract, codex-4
 
-Lab: codex. Item:
-[native-space-state-contract](../../../../roadmap/items/native-space-state-contract.md).
+Lab: codex. Item: [native-space-state-contract](../../../../roadmap/items/native-space-state-contract.md).
 Parent: [codex-3](../codex-3/ORDER.md). Reviewed head: `01521bbb6`.
 
 ## Goal

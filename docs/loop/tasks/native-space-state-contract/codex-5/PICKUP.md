@@ -10,9 +10,17 @@ git -C local/worktrees/codex-cuda-native-train rev-parse HEAD
 gh pr view 3968 --json state,isDraft,headRefOid,baseRefName,url
 ```
 
-Expected: clean `codex/cuda-native-train` at
-`ebeca85cb6c126c559df91c14ca2d6ea04c20b6b` plus this tracked pickup commit; PR #3968 is a draft
-stacked on `codex/native-space-cycle` until PR #3967 merges. The repository wins over this note.
+Expected: a clean `codex/cuda-native-train` containing the Q31 model work, merge-forward head
+`d12c29a11`, and the `codex-6` metadata repair. PR #3968 is based directly on `main` after PR
+#3967 merged. The repository wins over this note.
+
+## Current state
+
+- Fresh `origin/main` is `e2175455e79d377f724658ed2486e7f22a389f48`, the squash merge of PR #3967.
+- The CUDA branch merged that control plane at `d12c29a11`; all conflicting duplicated control
+  records resolved to `main`, while every Q31 CUDA source and test remained intact.
+- The finalized ORDER parser required the roadmap item link on the same line; `codex-6` repairs
+  that metadata across the existing chain.
 
 ## Current model path
 
@@ -52,10 +60,13 @@ words in serving and Rust oracle.
 
 ```text
 MANIFEST
-- CUDA branch head: ebeca85cb6c126c559df91c14ca2d6ea04c20b6b  check: git rev-parse ebeca85cb
+- origin/main: e2175455e79d377f724658ed2486e7f22a389f48  check: git rev-parse origin/main
+- CUDA merge-forward: d12c29a11  check: git merge-base --is-ancestor d12c29a11 HEAD
+- PR 3968 head: current branch HEAD at push  check: test "$(git rev-parse HEAD)" = "$(gh pr view 3968 --json headRefOid -q .headRefOid)"
 - shared model evidence: codex-5/REPORT.md  check: sed -n '/## Measurements/,/## Checks/p' docs/loop/tasks/native-space-state-contract/codex-5/REPORT.md
-- CUDA integration tests: 4 passed  check: UOR_REQUIRE_CUDA=1 cargo test -p uor-r4-discrete --features cuda --test native_vector_cuda
+- CUDA integration tests: 4 passed  check: NVCC=/usr/local/cuda/bin/nvcc UOR_NVCC_ARCH=compute_89 UOR_REQUIRE_CUDA=1 cargo test -p uor-r4-discrete --features cuda --test native_vector_cuda
 - discrete library tests: 367 passed / 1 ignored  check: cargo test -p uor-r4-discrete --lib
-- CUDA PR: 3968 draft stacked on PR 3967  check: gh pr view 3968 --json state,isDraft,baseRefName
+- full harness package: 685 passed / 1 ignored  check: TMPDIR=/var/tmp/uor-harness.KQCj53 cargo test --locked -p uor-r4-harness
+- CUDA PR: 3968 based on main  check: gh pr view 3968 --json state,isDraft,baseRefName
 - next: integer serving consumes the shared Q31 model state  check: top of this file
 ```
