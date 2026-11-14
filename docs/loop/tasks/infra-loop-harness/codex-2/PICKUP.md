@@ -39,11 +39,11 @@ attributed findings to the failing source, accepted the roadmap lifecycle, align
 exception with D85, and added `crates/uor-r4-discrete/**` plus
 `crates/uor-r4-integer/src/discrete_d11.rs` to the next item's scope.
 
-At the repair commit, focused native-space tests passed 6. The full harness package reported
+At the repair commit, focused native-space tests passed 7. The full harness package reported
 663 passed, 20 failed and 1 ignored because `TMPDIR` was inside the shared checkout; the R10
-guard correctly refused synthetic writes. This is NOT GREEN. Rerun with `TMPDIR` outside the
-checkout. Formatting and `git diff --check` pass; Clippy, full harness check, report check, PR
-check and a fresh exact-head review remain.
+guard correctly refused synthetic writes. The clean rerun with `TMPDIR` outside the checkout then
+passed 684 tests with 0 failures and 1 ignored. Formatting and `git diff --check` pass; Clippy,
+full harness check, report check, PR check and a fresh exact-head review remain.
 
 `codex/cuda-native-train` carries the actual Q31 vector operator in
 `crates/uor-r4-discrete/src/native_vector.{rs,cu}` and `native_vector_device.rs`, with
@@ -99,8 +99,8 @@ MANIFEST
 - origin/main: f40f06abe82447b3174418ffcd2f7245125e5c8f  check: git rev-parse origin/main
 - PR 3967 remote head: e4ae7301b440ec628cca007d23dde41b04832f3b  check: gh pr view 3967 --json headRefOid
 - previous repair head: 8674c78631f469df5596d53e67838377b646a4f9  check: git -C local/worktrees/codex-native-space-cycle rev-parse HEAD~1
-- focused native-space tests: 6 passed  check: cd local/worktrees/codex-native-space-cycle && CARGO_TARGET_DIR=local/harness-target cargo test --locked -p uor-r4-harness native_space_contract
-- full harness package: NOT GREEN, 663 passed / 20 failed / 1 ignored  check: docs/loop/tasks/infra-loop-harness/codex-2/REPORT.md
+- focused native-space tests: 7 passed  check: cd local/worktrees/codex-native-space-cycle && CARGO_TARGET_DIR=local/harness-target cargo test --locked -p uor-r4-harness native_space_contract
+- full harness package: 684 passed / 0 failed / 1 ignored  check: docs/loop/tasks/infra-loop-harness/codex-2/REPORT.md
 - CUDA branch head: 01521bbb629c5aae4a910350cf10960172d13c55  check: git -C local/worktrees/codex-cuda-native-train rev-parse HEAD
 - CUDA branch tree: da7b796c1acae62ccf3876e896c37a4d9dbda1cb  check: git -C local/worktrees/codex-cuda-native-train rev-parse HEAD^{tree}
 - CUDA PR: none yet  check: gh pr list --state open --head codex/cuda-native-train

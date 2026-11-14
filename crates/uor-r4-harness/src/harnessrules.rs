@@ -636,14 +636,11 @@ pub fn native_space_contract(paths: &StatePaths) -> Vec<Finding> {
     let item_path = format!("docs/roadmap/items/{roadmap_item}.md");
     match read(&paths.repo, &item_path) {
         Ok(item) => {
-            if !matches!(
-                frontmatter_value(&item, "status"),
-                Some("ready" | "in-progress" | "done")
-            ) {
+            if !matches!(frontmatter_value(&item, "status"), Some("ready" | "done")) {
                 push(
                     &mut out,
                     &item_path,
-                    "native-state item is not ready, in progress or done",
+                    "native-state item is not ready or done",
                     "restore an active lifecycle status or replace the contract's roadmap_item",
                 );
             }
@@ -1296,6 +1293,26 @@ mod tests {
         std::fs::write(&path, item).expect("complete item");
         let f = native_space_contract(&paths_of(dir.path()));
         assert!(f.is_empty(), "{f:?}");
+    }
+
+    #[test]
+    fn the_native_space_contract_refuses_an_unknown_roadmap_status() {
+        let dir = native_space_fixture();
+        let path = dir
+            .path()
+            .join("docs/roadmap/items/native-space-state-contract.md");
+        let item = std::fs::read_to_string(&path)
+            .expect("read item")
+            .replace("status: ready", "status: in-progress");
+        std::fs::write(&path, item).expect("mutate item");
+        let f = native_space_contract(&paths_of(dir.path()));
+        assert!(
+            f.iter().any(|finding| {
+                finding.path == "docs/roadmap/items/native-space-state-contract.md"
+                    && finding.message.contains("not ready or done")
+            }),
+            "{f:?}"
+        );
     }
 
     #[test]
