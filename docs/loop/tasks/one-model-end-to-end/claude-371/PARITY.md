@@ -1,6 +1,6 @@
 # PARITY: the native-space parity contract (claude-371)
 
-Lab: claude. The contract checks training-mode simulation against the integer serving runtime on the discrete path ([INVENTORY.md](INVENTORY.md)). The CPU and CUDA legs now run on the same fixtures. Codex-6 closes the direct route/read trace gap this page first recorded.
+Lab: claude. The contract checks training-mode simulation against the integer serving runtime on the discrete path ([INVENTORY.md](INVENTORY.md)). The CPU and CUDA proposal/apply legs now run on the same fixtures (claude-372). Codex-6 closes the direct route/read trace gap this page first recorded.
 
 ## The start
 
@@ -44,7 +44,7 @@ The clean start passes K1 to K6 on both fixtures (`native_space_parity_contract_
 - **The serving loader accepts what training refuses** (C-8). An artifact only serving can load is a model no training run produced. The serving loader should refuse non-zero gates in Route mode, as the CPU loader does.
 - **The serving runtime still has one internal choice it does not expose:** stop state, which does not exist yet. Route frames/ports, the active-leaf kept list and Relation scores now have separate read-only trace surfaces.
 
-## The CUDA leg (completed by codex-5 and codex-6 on `wick`)
+## The CUDA leg (completed by claude-372, codex-5 and codex-6 on `wick`)
 
 - **Build:** `uor-r4-discrete --features cuda` with `UOR_NVCC_ARCH=compute_89` (RTX 4090), on `wick`, in the `uor-r4-claude` container. No rented GPU.
 - **Start:** the same two fixture artifacts, loaded into device buffers. `table`, `routes` and `gates` are copied word for word from the artifact sections; the spec words `s[]` come from the header; `s[11]`–`s[15]` are 0.
