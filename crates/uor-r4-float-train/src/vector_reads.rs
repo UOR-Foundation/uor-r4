@@ -636,7 +636,7 @@ impl VectorRead {
             Some(total.affine(scale, 0.0)?)
         };
         let chosen = columns
-            .broadcast_eq(&plus1.unsqueeze(2)?)?
+            .broadcast_eq(&plus1.reshape((batch, time))?.unsqueeze(2)?)?
             .to_dtype(DType::F32)?;
         let scalar = |v: usize| Tensor::new(v as f32, device);
         let stats = ReadStats {
@@ -1376,7 +1376,8 @@ mod tests {
                             Ok(f64::from(loss(&f)?.to_scalar::<f32>()?))
                         };
                         let fd = (at(h)? - at(-h)?) / (2.0 * h);
-                        var.set(&base)?;
+                        // A copy, not `base`, which shares the variable's own storage.
+                        var.set(&Tensor::from_vec(f32s(&flat), base.shape(), base.device())?)?;
                         let ad = grad[e];
                         let tol = 2e-2 * fd.abs().max(ad.abs()) + 1e-4;
                         assert!(
