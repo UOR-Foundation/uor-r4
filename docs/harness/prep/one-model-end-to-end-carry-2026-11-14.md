@@ -170,4 +170,15 @@ $0 in rent: `wick` is the owner's own RTX 4090. Smoke 3 timed each arm alone at 
     - the synthetic cases are a script in the kit (`test-read-380.sh`, 15 cases, all ok).
   - The reader's SHA-256 above is the file after that one line.
 
+- **Try 1, an instrument failure in pre, repaired by this lab** (14 Nov, 23:52 UTC), recorded here before try 2 starts.
+  - What passed: I-1; I-5 (33 tests, both carry tests `ok`); I-5n (the set-aside failed on "retain false: the carried second window"); I-3; both smokes trained.
+  - What failed: pre ended 8 at I-4, "config.json is not arm off's". The check had two defects of its own:
+    - The trainer writes no `context` field at 192, the sheet context (`skip_serializing_if = "is_sheet_context"`). So `.context == 192` could never hold. It now reads `(has("context") | not)`, which also refuses any other window.
+    - The inner quotes of `has("context")` needed escaping inside the shell string.
+  - The repaired check was run, copied from the chain, on try 1's real smoke configs:
+    - both arms read `ok`;
+    - it refuses swapped arms, context 256, K = 2 and the wrong seed;
+    - `trained_ok` passes both smokes and refuses a diverged run and a wrong step count.
+  - No bar, arm, step count or reading changed. Try 1 stays sealed as it is; try 2 is a new start (L-002), and the reader reads it beside try 1, which has no `score-s2.exit`.
+
 TEST FITNESS: FIT
