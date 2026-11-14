@@ -731,3 +731,150 @@ fn any_offers_the_milestone_path_item_that_unblocks_most_first() {
         decision(&o)
     );
 }
+
+const ROUTE_HEADER: &str = "| Step | Work | Lab | Status |";
+
+/// A PLAN.md whose newest owner direction is `routed` (carried by the route), with one older
+/// open direction below it, the given `## Route` table, and a later section whose heading also
+/// holds the word "route".
+fn plan_with_route(header: &str, rows: &str) -> String {
+    format!(
+        "# PLAN\n\n## Owner directions\n\n| Direction | Status | Date | Note |\n|---|---|---|---|\n| R0 the routed direction | routed | 2026-11-14 | x |\n| D1 the older open direction | open | 2026-11-01 | y |\n\n## Route to the complete model\n\n{header}\n|---|---|---|---|\n{rows}\n## The route M2 to M8\n\nProse, no table.\n"
+    )
+}
+
+fn next_with_plan(plan: &str) -> Output {
+    Repo::new(
+        &[("PLAN.md", plan), ("docs/harness/labs.json", &labs(None))],
+        &[],
+    )
+    .next()
+}
+
+#[test]
+fn the_routes_first_open_step_is_offered_before_an_owner_direction() {
+    let plan = plan_with_route(
+        ROUTE_HEADER,
+        "| 1 | score the four models | deepseek | done |\n| 2 | export every trained part | deepseek | open |\n| 3 | serve it on the laptop | deepseek | open |\n",
+    );
+    let o = next_with_plan(&plan);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert_eq!(
+        decision(&o),
+        "GO route step 2 of 3: export every trained part — PLAN route step 2 of 3 is open for deepseek",
+        "the route's first open step must be the decision"
+    );
+    assert!(
+        stdout(&o).contains("route: PLAN route step 2 of 3 is open for deepseek"),
+        "{}",
+        stdout(&o)
+    );
+    assert!(
+        !stdout(&o).contains("owner-direction"),
+        "the route decides before the owner directions are read: {}",
+        stdout(&o)
+    );
+}
+
+#[test]
+fn a_step_held_by_another_lab_is_named_and_the_next_open_direction_is_offered() {
+    let plan = plan_with_route(
+        ROUTE_HEADER,
+        "| 1 | score the four models | claude | open |\n| 2 | export every trained part | deepseek | open |\n",
+    );
+    let o = next_with_plan(&plan);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    assert!(
+        stdout(&o).contains("route: step 1 of 2 is held by claude (score the four models)"),
+        "{}",
+        stdout(&o)
+    );
+    assert!(
+        !stdout(&o).contains("GO route"),
+        "a later step is never offered while an earlier one is open: {}",
+        stdout(&o)
+    );
+    // The routed direction's own words are not offered; the older open direction is.
+    assert!(
+        decision(&o).starts_with("GO owner-direction D1 the older open direction"),
+        "{}",
+        decision(&o)
+    );
+}
+
+#[test]
+fn any_and_a_list_of_labs_both_offer_the_step() {
+    for labs_cell in ["any", "claude, DeepSeek", "kimi deepseek"] {
+        let plan = plan_with_route(
+            ROUTE_HEADER,
+            &format!("| 1 | read the replies | {labs_cell} | open |\n"),
+        );
+        let o = next_with_plan(&plan);
+        assert_eq!(o.status.code(), Some(0), "{labs_cell}: {o:?}");
+        assert!(
+            decision(&o).starts_with("GO route step 1 of 1: read the replies — "),
+            "{labs_cell}: {}",
+            decision(&o)
+        );
+    }
+}
+
+#[test]
+fn a_finished_route_and_a_plan_without_one_print_no_route_line() {
+    let finished = plan_with_route(
+        ROUTE_HEADER,
+        "| 1 | score the four models | deepseek | done |\n| 2 | export every trained part | deepseek | done |\n",
+    );
+    let without = "# PLAN\n\n## Owner directions\n\n| Direction | Status | Date | Note |\n|---|---|---|---|\n| D1 the older open direction | open | 2026-11-01 | y |\n\n## The route M2 to M8\n\nProse, no table.\n";
+    for plan in [finished.as_str(), without] {
+        let o = next_with_plan(plan);
+        assert_eq!(o.status.code(), Some(0), "{o:?}");
+        assert!(
+            !stdout(&o).lines().any(|l| l.starts_with("route:")),
+            "no route line without an open step: {}",
+            stdout(&o)
+        );
+        assert!(
+            decision(&o).starts_with("GO owner-direction D1 the older open direction"),
+            "{}",
+            decision(&o)
+        );
+    }
+}
+
+#[test]
+fn a_malformed_route_is_named_and_no_later_step_is_offered() {
+    // No Lab column: the route cannot say whose the step is.
+    let no_lab = plan_with_route(
+        "| Step | Work | Status |",
+        "| 1 | score the four models | open |\n",
+    );
+    let o = next_with_plan(&no_lab);
+    assert!(
+        stdout(&o)
+            .contains("route: not built — PLAN.md table `## Route` has no `Lab` column header"),
+        "{}",
+        stdout(&o)
+    );
+    assert!(!stdout(&o).contains("GO route"), "{}", stdout(&o));
+
+    // The first open step has no Work: the valid open step after it is not offered in its place.
+    let empty_work = plan_with_route(
+        ROUTE_HEADER,
+        "| 1 |  | deepseek | open |\n| 2 | export every trained part | deepseek | open |\n",
+    );
+    let o = next_with_plan(&empty_work);
+    assert!(
+        stdout(&o).contains(
+            "route: not built — the Route table's first open row (step 1) has an empty Work or Lab cell"
+        ),
+        "{}",
+        stdout(&o)
+    );
+    assert!(!stdout(&o).contains("GO route"), "{}", stdout(&o));
+    assert!(
+        decision(&o).starts_with("GO owner-direction D1 the older open direction"),
+        "{}",
+        decision(&o)
+    );
+}

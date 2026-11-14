@@ -1,7 +1,8 @@
 //! `uor-harness loop next [--json] [--wait [--poll SECS] [--max SECS]]`: loop step 1, decide go, wait or stop (loop PR 7b).
 //!
 //! **Why this exists.** The loop page's step 1 decides go or stop and which kind of session, in a
-//! fixed order of preference: owner direction, repairs to the lab's own PRs, reviews, GPU
+//! fixed order of preference: the route's open step (PLAN.md's `## Route` table, when the plan has
+//! one), owner direction, repairs to the lab's own PRs, reviews, GPU
 //! collections, premise probes, the top of the lab's lane, then `any`. It stops only on the kill
 //! switch (`local/loop/STOP` in the main checkout, or the label `loop:pause` on issue #2028); on
 //! held work, a full open-PR limit or an empty queue it waits (`WAIT … — check again in 600s`).
@@ -586,6 +587,60 @@ fn owner_direction(root: &Path) -> Result<Option<(String, Vec<String>)>, String>
     }
     Ok(None)
 }
+
+/// The first open step of PLAN.md's `## Route` table.
+struct RouteStep {
+    /// Its place among the table's data rows, from 1.
+    number: usize,
+    /// How many data rows the table has.
+    total: usize,
+    work: String,
+    /// The Lab cell as written: `any`, or lab names separated by commas or spaces.
+    labs: String,
+}
+
+impl RouteStep {
+    /// Whether the Lab cell names `lab` or `any`.
+    fn offered_to(&self, lab: &str) -> bool {
+        self.labs
+            .split(|c: char| c == ',' || c.is_whitespace())
+            .filter(|l| !l.is_empty())
+            .any(|l| l.eq_ignore_ascii_case("any") || l.eq_ignore_ascii_case(lab))
+    }
+}
+
+/// The route's current step: the first open row of PLAN.md's `## Route` table, which carries an
+/// owner direction as ordered steps. `Ok(None)` when PLAN.md has no such table (a plan without a
+/// route is whole) or every step is closed. The Work, Lab and Status columns are found by header
+/// name. An open row with an empty Work or Lab cell is an error and is never skipped: skipping it
+/// would offer a later step out of order.
+fn route_step(root: &Path) -> Result<Option<RouteStep>, String> {
+    let Ok(table) = plan_table(root, "Route") else {
+        return Ok(None);
+    };
+    let work = table.column("Work")?;
+    let labs = table.column("Lab")?;
+    let status = table.column("Status")?;
+    let total = table.rows.len();
+    let Some((line, row)) = table.open_rows(status).into_iter().next() else {
+        return Ok(None);
+    };
+    // `open_rows` counts the header as table row 1.
+    let number = line - 1;
+    let cell = |i: usize| row.get(i).map(String::as_str).unwrap_or("").trim();
+    if cell(work).is_empty() || cell(labs).is_empty() {
+        return Err(format!(
+            "the Route table's first open row (step {number}) has an empty Work or Lab cell"
+        ));
+    }
+    Ok(Some(RouteStep {
+        number,
+        total,
+        work: cell(work).to_string(),
+        labs: cell(labs).to_string(),
+    }))
+}
+
 /// The lane the owner assigned this lab in the owner-only registry, if any.
 fn lab_lane(root: &Path, lab: &str) -> Result<String, String> {
     let Some(text) = origin_file(root, "docs/harness/labs.json") else {
@@ -787,7 +842,35 @@ pub fn run(
         "none",
         format!("off (no local/loop/STOP, no {PAUSE_LABEL} on #{PAUSE_ISSUE})"),
     ));
-    // 2. owner direction: the first open row of PLAN.md's `## Owner directions` table.
+    // 2. the route: the first open step of PLAN.md's `## Route` table, when the plan has one. The
+    // route carries an owner direction step by step, so its step comes before any direction's own
+    // words. A step held by another lab is named and passed over; a plan without a route prints
+    // no line.
+    match route_step(root) {
+        Ok(Some(step)) => {
+            let place = format!("step {} of {}", step.number, step.total);
+            if step.offered_to(lab) {
+                let reason = format!("PLAN route {place} is open for {}", step.labs);
+                out.push(source("route", "work", reason.clone()));
+                return Ok((
+                    out,
+                    Decision::Go {
+                        kind: "route",
+                        target: format!("{place}: {}", step.work),
+                        reason,
+                    },
+                ));
+            }
+            out.push(source(
+                "route",
+                "none",
+                format!("{place} is held by {} ({})", step.labs, step.work),
+            ));
+        }
+        Ok(None) => {}
+        Err(why) => out.push(not_built("route", &why)),
+    }
+    // 3. owner direction: the first open row of PLAN.md's `## Owner directions` table.
     match owner_direction(root) {
         Ok(Some((target, malformed))) => {
             let mut reason = format!("PLAN owner direction {target:?} is open");
@@ -819,7 +902,7 @@ pub fn run(
         .open_prs()
         .map_err(|e| format!("cannot list open PRs: {e}"))?;
     prs.sort_by_key(|p| p.number);
-    // 3. repairs to the lab's own PRs.
+    // 4. repairs to the lab's own PRs.
     let prefix = format!("{lab}/");
     let own: Vec<&NextPr> = prs
         .iter()
@@ -874,7 +957,7 @@ pub fn run(
     }
     let detail = format!("{} own open PR(s), none needs a repair", own.len());
     out.push(source("repairs", "none", detail));
-    // 4. reviews.
+    // 5. reviews.
     let mut skipped = Vec::new();
     for pr in prs.iter().filter(|p| !p.is_draft) {
         let order = match pr_order(root, gh, pr) {
@@ -949,7 +1032,7 @@ pub fn run(
         detail.push_str(&format!(" (skipped: {})", skipped.join(", ")));
     }
     out.push(source("reviews", "none", detail));
-    // 5. GPU collections: the lease watcher keeps one record per leased GPU run under
+    // 6. GPU collections: the lease watcher keeps one record per leased GPU run under
     // `local/<lab>/gpu-collections/`. A finished uncollected record is work: its artifacts must be
     // saved off the pod before it is down. A record still `running` waits while it is recent, and
     // is offered as stale after `STALE_COLLECTION_SECS` (a killed watcher writes no note). No
@@ -1015,7 +1098,7 @@ pub fn run(
             &format!("cannot read GPU collection records: {error}"),
         )),
     }
-    // 6. premise probes: the first open row of PLAN.md's `## Premises` table. The probe cell
+    // 7. premise probes: the first open row of PLAN.md's `## Premises` table. The probe cell
     // holds the command in backticks; a row is offered only when its status cell reads `open`.
     match premise_probe(root) {
         Ok(Some((premise, probe))) => {
@@ -1037,7 +1120,7 @@ pub fn run(
         )),
         Err(why) => out.push(not_built("premise-probes", &why)),
     }
-    // 7. lane: the top of the lab's lane. The lab's lane comes from the owner-only registry
+    // 8. lane: the top of the lab's lane. The lab's lane comes from the owner-only registry
     // (`docs/harness/labs.json`, an optional `lane` key); the ranking comes from the PM's
     // `lane:` and `rank:` item keys. With either absent the source says what is missing.
     let ready_state = ready_items(root);
@@ -1091,7 +1174,7 @@ pub fn run(
         },
         Err(why) => out.push(not_built("lane", &why)),
     }
-    // 8. any: ready, scoped items whose dependencies are all done and that `loop claim` would
+    // 9. any: ready, scoped items whose dependencies are all done and that `loop claim` would
     // accept, ranked by effective milestone, then unblock count, then id.
     let (held, ready, waiting) = ready_state?;
     let mut refused = Vec::new();

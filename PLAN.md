@@ -31,10 +31,13 @@ A premise row's Status is `open` until its probe has run; `closed` means the pro
 ## Owner directions
 
 Directions from the owner, recorded verbatim with the time (the same day). Status: `open`,
-`done`, `superseded`. Newest first.
+`done`, `superseded`, or `routed`. A `routed` direction is open and is carried step by step by
+the [route](#route-to-the-complete-model) below: `loop next` offers the route's current step, not
+the direction's words. Newest first.
 
 | Direction | Status | Date | Note |
 |---|---|---|---|
+| "please update loop next into our current roadmap for the current run you are working on and toward a complete model that trains and serves the same format and runs locally on the laptop with and/or in browser without matmul or other wasteful operations" | routed | 2026-11-14 | Claude's chat. Carried by the [route](#route-to-the-complete-model) below (claude-371). `loop next` gives Claude the route's first open step. The other labs' `loop next` is unchanged: it names the step, passes the route over and offers the next open direction. How the owner's words are read is written under the route and is the owner's to correct. |
 | "Can you not just go copy what claude code desktop looks like and how it works for the desktop app? the only hard one should be building the browser functionality... there are certain things you can't do in a webapp I think, like auth them to github (but maybe you can?)" | done | 2026-11-04 | Kimi's chat. The installed Claude Code desktop was inspected for observable interaction patterns, not proprietary code. The shared Studio now has a Claude-inspired session toolbar with working sidebar, initial section history, native session selection, direct Files/Changes/Terminal/New chat/view options and the existing UOR theme. Browser and Tauri share one frontend; no second desktop backend or feature-parity claim. GitHub device flow is a native candidate with a configured public OAuth client ID and no secret; ordinary web flow requires a secret, and a live direct-browser CORS probe was not established, so no sign-in control is claimed. |
 | "I think your other window froze, can you please pick the work back up over here also can you add the below to what the last session was doing? Also please try and keep local hdd space more clean because we are running out. And remember, you want it to actually serve our live chat engine we are currently using (I think its currently uor-chat) anyway, can you also please make the AI webstudio to have a conversational window that works exactly like the ones in LLMs do, where you can press up to select last input, you can press enter to send a message (etc) and if possible to track the tokens/s and all of the other openai endpoints that it should have (they may not all be setup correctly yet so its ok to build failsafes for now) but again I want the input window to like accept long pastes, or pastes of files or pictures too (although we have no algorithmim to break pictures down at all yet so we will need that part first) but yes, I want it to function like your own chat windows do" | done | 2026-11-02 | Kimi's chat. **Delivered through 3 November:** recovered/live Studio (#3593), native `uor-chat` OpenAI-compatible loopback (#3606), complete conversational Studio (#3617), mixed text/file paste (#3621), deterministic parallel integer R4 image decomposition (#3625), bounded native ingestion (#3626), experimental Studio Canvas input with memory-only blobs and explicit Send (#3628), and checked evidence (#3630). The composer covers history recall, Enter/Shift+Enter, long text, files and images; exact usage, TTFT and tok/s metrics and truthful unsupported-endpoint 501 handling are tested. Disk hygiene remains an ongoing `uor-hygiene` operation. Protocol/UX evidence only: no useful-chat or visual-understanding claim and no production publish. |
 | "dude I am the owner and I am giving you approval... please go ahead and plan to systematically repair these cpu training methods, all of them, and begin to work your way through them, remember you need to be comitting work to github main so we know it's there, and I do not want your work to directly break anything claude is doing on the main track, but we do need all of this stuff done as well, so please plan and execute this all as a goal, use subagents and whatever you need locally to install or whatever" | open | 2026-11-01 | Owner-authorized CPU training program, recorded by D84 and item `cpu-training-program`. The program repairs CPU research paths in isolated modules while Claude's current FBS/integer serving work remains untouched. GPU remains the qualification authority; CPU results label their substrate and cannot replace a GPU bar without a later owner decision. |
@@ -60,6 +63,41 @@ Directions from the owner, recorded verbatim with the time (the same day). Statu
 
 Pending owner *answers* are not directions and never enter this table. Since D65–D69 no step
 waits for one: an unanswered ask becomes the lab's own decision review, logged for the owner.
+
+## Route to the complete model
+
+The owner's direction of 14 Nov, as ordered steps. The complete model is one model that:
+
+- holds a multi-turn conversation: it answers the turn it was asked, from what the conversation told it;
+- trains and serves in one format;
+- runs on the laptop and in the browser from the integer artifact (D11);
+- uses no matmul, no squashing function and no other wasteful operation, in training or in serving (§3.2, §3.3).
+
+**How `loop next` reads this table.** It reads it before the owner directions. The first `open` row is the current step, and its Work cell is the line `loop next` prints. The step is offered to the lab in its Lab cell; `any` offers it to every lab. A lab the cell does not name passes the route over and is offered the next open direction above.
+
+**How a step moves.** A step becomes `done` in the PR that delivers its "Done when", with the record linked. A reading that misses keeps the step `open` and names the next configuration in the Record cell: a negative closes a configuration, never a mechanism (§4.1). Each unit's numbers are set in its own pre-registration sheet (§4.5). This table moves no bar.
+
+| Step | Work | Done when | Lab | Status | Record |
+|---|---|---|---|---|---|
+| 1 | The current run, pair rows (claude-370, PR 3961): score the four trained models (seeds 2 and 3, with and without the rows) on panels P14 and P23, read the replies, write the REPORT and merge. | The sheet's reading is recorded: Adds, Does not add or Not called, over 2,218 scored replies. | claude | open | [PR 3961](https://github.com/UOR-Foundation/uor-r4/pull/3961). The four models finished training on 14 Nov. |
+| 2 | Answer the turn that was asked: act on step 1's reading as its sheet says (a third seed, seed 1 of both arms, or the learned pair rows moved to the output cell), until a trained model answers what the turn asks. | In float, at two seeds, the unit sheet's bar passes on P14 and P23, and the gain holds on turns that are not in TRAIN word for word. | claude | open | |
+| 3 | Use what the conversation said: join the exact addressed memory read to the same trained model, so that a told value is copied and a question that was never told is answered as not told. | In float, at two seeds, against a no-memory control (L-010), the told-value and never-told readings pass their sheet's bar. Today the trained models say "not told" on 0 of 79 never-told questions ([claude-359](docs/loop/tasks/one-model-end-to-end/claude-359/REPORT.md)). | claude | open | |
+| 4 | One format for training and serving: the trainer reads the conversation layout the server feeds (memory line, reply mark, turn memory), and every trained part (trunk, memory read, pair rows) is written as the integer tables the server reads, at the same addresses. | The integer model gives the float model's replies on P14 and P23, every reply that differs is counted and shown, and no trained part is left out of the export. | claude | open | |
+| 5 | Run it on the laptop: serve step 4's artifact in `uor-chat`, where each token costs table reads, adds, compares and exact address reads only, and replace any scan that a table read can do. | A multi-turn conversation on the laptop gives the float model's replies. Tokens/s is reported for decode and for context, with the cost per token of each part. | claude | open | |
+| 6 | Run it in the browser: the same artifact through the WASM build, in the Studio chat window. | The browser gives the laptop's replies on the same conversation, and tokens/s in the browser is reported. | claude | open | |
+| 7 | Read it: a fresh multi-turn panel that no decision has used, and the model handed to the owner to talk to. | The owner has talked to it. Progress is judged by reading its replies. | claude | open | |
+
+**How the owner's words are read** (Claude's reading, 14 Nov; the owner's to correct).
+
+- "the current run you are working on" is step 1.
+- "trains and serves the same format" is step 4, and it has two parts.
+  - The conversation layout. A model served with a line of text that its training text never showed it reads that line badly, so the trainer must read exactly what the server feeds.
+  - The model's parts. A part that exists only in the float trainer is not served. claude-370's pair rows are such a part: its export refuses a checkpoint that holds them.
+  - If the owner means that the trainer itself writes the served integer tables, with no float trainer at all, step 4 changes and the order of steps 2 to 4 is the owner's to set. Today float training is offline with an export (D37).
+- "runs locally on the laptop with and/or in browser" is steps 5 and 6.
+- "without matmul or other wasteful operations" holds at every step (§3.3) and is measured at step 5 as the cost per token of each part.
+
+Steps 2 and 3 give the model M2 and M3 need, step 4 is M4's export, step 5 is M5's laptop cost, and step 6 is M7's WASM and Studio. The order of the M2–M8 route below is unchanged.
 
 ## The path to M1, by unblock count (historical completion record)
 
@@ -133,7 +171,7 @@ earlier path is free.
   - W3 BVG-K discrete batched-coordinate law: C1/C2 qualified and Stage T completed, reaching 5,009 of 14,287 with G-Adm/G-Occ ([record](docs/labs/m1-bvg-k-stage-t-training/README.md)).
   - W4's conditional float-credit sheet was not needed for M1's close; its original H_law-plus-W3-failure condition remains historical.
 - **The K16 outcome follow-ups** stay pending with fresh UNAVAILABLE_NOT_RUN (sealed).
-- **The loop.** PRs 2–12 are merged. The reset is D76 (gates) and D77 (this plan). Next, `loop next` ranks by unblock count.
+- **The loop.** PRs 2–12 are merged. The reset is D76 (gates) and D77 (this plan). Next, `loop next` ranks by unblock count. Since 14 Nov (claude-371) it reads the [route](#route-to-the-complete-model)'s open step first.
 
 ## Not doing
 
