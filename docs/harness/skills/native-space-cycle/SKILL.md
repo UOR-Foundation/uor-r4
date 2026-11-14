@@ -12,6 +12,8 @@ forbidden: [treating this pointer as the protocol]
 milestones: [m1, m2, m3, m4]
 ---
 
+<!-- native-space-protocol: .agents/skills/native-space-cycle/SKILL.md -->
+
 ## When to use
 
 Use before any unit that trains, updates, exports or serves model state.

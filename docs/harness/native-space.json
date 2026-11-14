@@ -18,6 +18,7 @@
     "protocol": ".agents/skills/native-space-cycle/SKILL.md",
     "harness_pointer": "docs/harness/skills/native-space-cycle/SKILL.md"
   },
+  "protocol_marker": "<!-- native-space-protocol: .agents/skills/native-space-cycle/SKILL.md -->",
   "skill_phrases": [
     "one persistent state",
     "one operator definition",
@@ -42,6 +43,7 @@
     "docs/model/serving-and-export.md",
     "docs/model/training.md"
   ],
+  "model_status": "**D85 status:** the persistent native state/operator implementation is pending; all float-to-integer measurements on this page are historical/export evidence.",
   "parity_fields": [
     "route choices",
     "carry state",
