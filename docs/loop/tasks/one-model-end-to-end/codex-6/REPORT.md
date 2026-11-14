@@ -23,6 +23,9 @@ Order: [ORDER.md](ORDER.md). Result: [PARITY-RESULT.md](PARITY-RESULT.md).
   `relation_scores()` retained padded rather than compact semantics, Relation fault controls were
   missing, and the ORDER's file scope was stale. All four are fixed at the head recorded in Git
   history and are submitted for delta re-review.
+- Its final pass found that untraced Relation forwards still built row-node metadata and that the
+  ORDER omitted the CPU re-export file. The metadata is now trace-only, the public regression
+  observation is pinned, the padded layout has a structural guard and the ORDER lists `lib.rs`.
 
 ## What changed
 
@@ -37,6 +40,8 @@ Order: [ORDER.md](ORDER.md). Result: [PARITY-RESULT.md](PARITY-RESULT.md).
 - Relation keeps compact scores in `evaluation.relation_scores` and exposes separately padded
   `relation_trace_words`, matching the CUDA batch tail without mixing row boundaries. CUDA's
   `relation_scores()` compacts each block back to its row's actual node count.
+- CUDA retains Relation row-node counts only for traced forwards; ordinary Relation `forward()`
+  keeps both the trace and its metadata absent.
 - CUDA compiles one `route_vector` with an optional trace sink. The bucket generator's explicit
   checked un-instrumentation strips marked trace blocks from that same body and preserves the
   already-qualified bucket source; a mutation of a decision line reaches generation and fails the

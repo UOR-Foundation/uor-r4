@@ -51,6 +51,7 @@ backends. Normal production calls retain no trace allocation.
 - `crates/uor-r4-discrete/src/writer_bucket_device.rs`
 - `crates/uor-r4-discrete/src/driver_source_pin.rs`
 - `crates/uor-r4-cpu-train/src/discrete_route.rs`
+- `crates/uor-r4-cpu-train/src/lib.rs`
 - `crates/uor-r4-integer/src/discrete_d11.rs`
 - `docs/loop/tasks/one-model-end-to-end/codex-6/**`
 - `docs/loop/tasks/one-model-end-to-end/claude-371/PARITY.md`

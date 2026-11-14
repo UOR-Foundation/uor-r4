@@ -462,6 +462,11 @@ impl Forward {
             .ok_or_else(|| invalid("relation trace buffer truncated"))?;
         Ok(Some(tail.to_vec()))
     }
+    /// Per-row actual binder-node counts retained only by traced Relation
+    /// forwards; ordinary forwards leave this empty.
+    pub fn relation_node_counts(&self) -> Option<&[u32]> {
+        self.relation_node_counts.as_deref()
+    }
     pub fn relation_scores(&self) -> Result<Option<Vec<i32>>> {
         let Some(words) = self.relation_trace_words()? else {
             return Ok(None);
@@ -1610,17 +1615,18 @@ impl Device {
         traced: bool,
     ) -> Result<Forward> {
         let epoch = self.admit_batch(batch, targets)?;
-        let relation_node_counts = matches!(self.read_spec(), ReadSpec::Relation { .. })
-            .then(|| {
-                batch
-                    .valid_lengths()
-                    .iter()
-                    .map(|&length| {
-                        BinderPlan::new(length as usize).map(|plan| plan.nodes_count() as u32)
-                    })
-                    .collect::<Result<Vec<_>>>()
-            })
-            .transpose()?;
+        let relation_node_counts = (traced
+            && matches!(self.read_spec(), ReadSpec::Relation { .. }))
+        .then(|| {
+            batch
+                .valid_lengths()
+                .iter()
+                .map(|&length| {
+                    BinderPlan::new(length as usize).map(|plan| plan.nodes_count() as u32)
+                })
+                .collect::<Result<Vec<_>>>()
+        })
+        .transpose()?;
         let target = self.stream.clone_htod(targets).map_err(cuda)?;
         let spec = self.gpu_spec(batch.rows)?;
         let mut out = self

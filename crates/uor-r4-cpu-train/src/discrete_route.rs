@@ -5180,11 +5180,34 @@ mod tests {
                 .unwrap_or_else(|| panic!("relation scores absent at row {row}"));
             assert!(!scores.is_empty(), "relation scores empty at row {row}");
             score_words += scores.len();
-            padded_score_words += traced
+            let padded = traced
                 .relation_trace_words
                 .as_ref()
-                .unwrap_or_else(|| panic!("padded relation trace absent at row {row}"))
-                .len();
+                .unwrap_or_else(|| panic!("padded relation trace absent at row {row}"));
+            padded_score_words += padded.len();
+            let blocks = traced.query.len() / 8;
+            assert_eq!(scores.len() % blocks, 0);
+            let actual_nodes = scores.len() / blocks;
+            let max_nodes = padded.len() / blocks;
+            assert_eq!(padded.len() % blocks, 0);
+            for block in 0..blocks {
+                let compact = &scores[block * actual_nodes..(block + 1) * actual_nodes];
+                let padded_block = &padded[block * max_nodes..(block + 1) * max_nodes];
+                assert_eq!(
+                    padded_block[..actual_nodes],
+                    compact
+                        .iter()
+                        .map(|&score| score as u32)
+                        .collect::<Vec<_>>(),
+                    "padded prefix row {row} block {block}"
+                );
+                assert!(
+                    padded_block[actual_nodes..]
+                        .iter()
+                        .all(|&word| word == u32::MAX),
+                    "padded suffix row {row} block {block}"
+                );
+            }
         }
         assert_eq!(traces.len(), 39);
         assert_eq!(score_words, 258, "compact Relation score words");
@@ -5472,6 +5495,10 @@ mod tests {
                 plain.read_trace().unwrap().is_none(),
                 "untraced forward allocated a trace"
             );
+            assert!(
+                plain.relation_node_counts().is_none(),
+                "untraced forward allocated Relation trace metadata"
+            );
             assert_eq!(plain.vectors().unwrap(), forward.vectors().unwrap());
             assert_eq!(plain.predictions, forward.predictions);
             assert_eq!(plain.losses, forward.losses);
@@ -5568,6 +5595,7 @@ mod tests {
             assert_eq!(trace_at, cuda_trace.len());
             let cuda_relation = forward.relation_trace_words().unwrap();
             if relation_present {
+                assert!(forward.relation_node_counts().is_some());
                 assert_eq!(
                     cuda_relation.as_deref(),
                     Some(expected_relation.as_slice()),
@@ -5579,6 +5607,7 @@ mod tests {
                     "CUDA/CPU/serving compact Relation scores"
                 );
             } else {
+                assert!(forward.relation_node_counts().is_none());
                 assert!(cuda_relation.is_none(), "unexpected Relation tail");
                 assert!(forward.relation_scores().unwrap().is_none());
             }

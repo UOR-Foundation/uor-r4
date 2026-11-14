@@ -25,7 +25,7 @@ the qualification-only loaders recorded by codex-5; production loading remains s
 | Active-leaf levels | gate, eligible count, kept count, consensus root, kept nodes, transport actions and carried roots |
 | Relation tail | per-node scores padded to the context's maximum binder-node count, CUDA vs CPU vs serving |
 | Trace parity | every base and Relation-tail word for all 39 rows and all three fixtures |
-| Untraced control | no allocation, with identical carry, predictions, losses, rivals and admitted cells |
+| Untraced control | no trace or Relation node-count allocation, with identical carry, predictions, losses, rivals and admitted cells |
 
 ## Fault controls
 
@@ -45,4 +45,3 @@ The bucket writer's committed source hash remains unchanged because its generate
 the marked trace-only blocks from the one trace-capable production Route read and checks the
 remaining qualified shape. A mutation of the production Route decision line reaches generated
 bucket source and fails the retained source hash; CUDA compiles no second Route body.
-
