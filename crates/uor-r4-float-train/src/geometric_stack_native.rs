@@ -1609,6 +1609,7 @@ impl StackModel {
                 "prompt register",
                 crate::flock_read_register::prompt_register().is_some(),
             ),
+            ("vector read", crate::vector_reads::vector_read().is_some()),
         ];
         if let Some((name, _)) = reads.iter().find(|(_, set)| *set) {
             return Some(CacheRefusal::ReadHook(name));
@@ -1680,6 +1681,20 @@ impl StackModel {
             if let Some(memory) = crate::e8_address::address_memory() {
                 x = q16(memory.apply(layer, &x, ids)?)?;
                 stage_clock::mark_with(|| format!("layer{layer}.address"));
+            }
+            // A state-keyed look-back read (claude-381), when one is set on this thread: after
+            // layer `depth`, each position reads one earlier position chosen by its own state.
+            if let Some(read) = crate::vector_reads::vector_read() {
+                if layer + 1 == read.depth() {
+                    let table = self
+                        .variables()
+                        .get("embedding.weight")
+                        .ok_or_else(|| invalid("the model has no shared vector table"))?
+                        .as_tensor()
+                        .clone();
+                    x = q16(read.apply(&x, ids, &table)?)?;
+                    stage_clock::mark_with(|| format!("layer{layer}.vector_read"));
+                }
             }
             // The turn's pair rows (claude-370), when set on this thread: added once, at the
             // first layer's seam, to every reply position of a turn whose pairs have rows. A
