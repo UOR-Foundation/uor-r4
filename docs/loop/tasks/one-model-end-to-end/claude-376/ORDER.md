@@ -1,7 +1,8 @@
-# ORDER: one-model-end-to-end, claude-375 (V0: the pure-vector baseline)
+# ORDER: one-model-end-to-end, claude-376 (V0: the pure-vector baseline)
 
 Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407).
 Base: `origin/main` at `085ff55d92c31ded738913ae8907251e4dcd8a21`. Follows claude-374 (PR #3965) and the 14 Nov audit (`local/claude/one-vector-roadmap-2026-11-14.md`).
+Renumbered from claude-375 on 14 Nov, before any result was read: the docs session's PR #3969 had taken that number first. The kit folder is `local/claude/claude-376/`.
 
 ## Goal
 
@@ -63,7 +64,7 @@ Every model is served by `raw-id-replies` at this unit's head, greedy, 48 tokens
 ## Files in scope
 
 - `docs/labs/one-model-end-to-end/instrument/src/bin/raw-id-replies.rs`
-- `docs/loop/tasks/one-model-end-to-end/claude-375/**`
+- `docs/loop/tasks/one-model-end-to-end/claude-376/**`
 - `docs/research/notebook/float-training.md`
 
 ## Done when

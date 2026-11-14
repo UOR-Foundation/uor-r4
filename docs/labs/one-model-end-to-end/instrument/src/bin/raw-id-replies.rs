@@ -84,7 +84,7 @@
 //! SHA-256, `bos`, how many rows were lengthened, how many were shortened and the longest
 //! prompt. It is refused with `--place-rows 1`, whose places are read as rows of the window.
 //!
-//! `--turn-memory 0|1` (claude-375, default 1) serves the artifact with its exact turn memory
+//! `--turn-memory 0|1` (claude-376, default 1) serves the artifact with its exact turn memory
 //! dropped (`IntegerStackModel::drop_turn_memory`, the call `uor-chat --no-turn-memory` makes)
 //! when 0. An artifact with no turn memory is refused. `--mark-reply 1` stays allowed, as
 //! `StackChat::feed` marks every reply and the copy heads read the reply opening. The receipt
@@ -803,7 +803,7 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<Value> {
             return Err("--copy-rule needs an artifact with a Hamming read".to_owned());
         }
     }
-    // claude-375: the artifact served with its exact turn memory dropped, the call
+    // claude-376: the artifact served with its exact turn memory dropped, the call
     // `uor-chat --no-turn-memory` makes. What is left is the vector state's own reply.
     let turn_memory = match flag(&args, "--turn-memory").as_deref() {
         None | Some("1") => true,
