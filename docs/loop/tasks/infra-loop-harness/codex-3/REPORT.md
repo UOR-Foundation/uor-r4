@@ -14,6 +14,8 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   added a contradictory sentence.
 - The architect skill's revised paragraph still retained the pre-D80 "no multiplier
   instruction" wording, and the tracked PICKUP had duplicate step numbering and old test counts.
+- The architect skill pointer and native-space pointer required each other, creating a
+  circular skill dependency.
 
 ## What changed
 
@@ -25,7 +27,8 @@ now records current `main`, the ready control-plane PR and the stacked CUDA PR.
 The model-surface check now rejects the two explicit contradictory claims that the fresh review
 planted; a regression fixture covers the retained-marker case. The architect skill now carries
 the current D80 integer-multiply permission, and the tracked PICKUP has a single current next-step
-list and the latest check counts. No new rule or harness abstraction was added. The historical
+list and the latest check counts. The redundant architect pointer edge was removed, so the skill
+dependency graph is no longer cyclic. No new rule or harness abstraction was added. The historical
 evidence and old decision rows were not edited.
 
 Size: 8 code/test changes plus 26 documentation changes across six files; this REPORT and the
@@ -47,6 +50,11 @@ No model, training, serving or performance result was measured.
   0 failed, 1 ignored; all integration and doc tests passed.
 - `UOR_LAB=codex local/harness-target/release/uor-harness check --only
   harness.native_space_contract` - 1 rule, 0 failed.
+- `CARGO_TARGET_DIR=local/harness-target cargo fmt --package uor-r4-harness -- --check` - passed.
+- `CARGO_TARGET_DIR=local/harness-target cargo run --locked -p xtask -- links` - ran; 7,512
+  sources and 27,142 links checked, with 1,288 repository-reported broken links and exit 0.
+- `UOR_LAB=codex local/harness-target/release/uor-harness loop report --check --order
+  docs/loop/tasks/infra-loop-harness/codex-3/ORDER.md` - passed.
 - `git diff --check` - passed.
 
 ## Skills used
