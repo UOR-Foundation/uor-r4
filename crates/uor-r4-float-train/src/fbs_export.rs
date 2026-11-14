@@ -2324,6 +2324,24 @@ mod tests {
         Ok(())
     }
 
+    /// claude-370: the pair rows are a read the export does not carry, so a checkpoint that holds
+    /// them is refused by name even by the caller that carries the address memory.
+    #[test]
+    fn a_checkpoint_with_pair_rows_is_refused() -> Result<()> {
+        let scratch = Scratch::new("claude-370-pair-rows");
+        std::fs::create_dir_all(&scratch.0)?;
+        for file in ["model.safetensors", CHECKPOINT_ADDRESS] {
+            std::fs::write(scratch.0.join(file), b"")?;
+        }
+        check_checkpoint_reads_carrying(&scratch.0, &[CHECKPOINT_ADDRESS])?;
+        std::fs::write(scratch.0.join("pair_rows.safetensors"), b"")?;
+        let message = check_checkpoint_reads_carrying(&scratch.0, &[CHECKPOINT_ADDRESS])
+            .expect_err("pair rows beside the trunk")
+            .to_string();
+        assert!(message.contains("pair_rows.safetensors"), "{message}");
+        Ok(())
+    }
+
     #[test]
     fn geometry_tables_match_the_integer_crate() {
         check_geometry_tables().expect("the float geometry is the integer crate's");

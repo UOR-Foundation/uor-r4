@@ -1,0 +1,92 @@
+b-s2  N 0 of 79  T 102 of 604  A 67 of 172  B 24 of 134  C 13 of 83  D 5 of 36
+    A: a feeling	6 of 10
+    A: goodbye	17 of 43
+    A: greeting	2 of 9
+    A: other	24 of 48
+    A: thanks	18 of 62
+    B: first letter	3 of 11
+    B: news of a thing	2 of 9
+    B: repeat words	19 of 105
+    B: sentence with a word	0 of 8
+    B: spell a word	0 of 1
+    C: capital	1 of 20
+    C: colour	4 of 9
+    C: day after	1 of 15
+    C: legs	1 of 15
+    C: list N of a class	0 of 6
+    C: opposite	3 of 4
+    C: sound	3 of 14
+    D: add	0 of 13
+    D: bigger	5 of 11
+    D: count	0 of 12
+    N: never told	0 of 79
+    T: told value	102 of 604
+b-s3  N 0 of 79  T 93 of 604  A 67 of 172  B 27 of 134  C 10 of 83  D 5 of 36
+    A: a feeling	6 of 10
+    A: goodbye	17 of 43
+    A: greeting	2 of 9
+    A: other	24 of 48
+    A: thanks	18 of 62
+    B: first letter	3 of 11
+    B: news of a thing	2 of 9
+    B: repeat words	21 of 105
+    B: sentence with a word	1 of 8
+    B: spell a word	0 of 1
+    C: capital	0 of 20
+    C: colour	3 of 9
+    C: day after	0 of 15
+    C: legs	4 of 15
+    C: list N of a class	0 of 6
+    C: opposite	0 of 4
+    C: sound	3 of 14
+    D: add	0 of 13
+    D: bigger	5 of 11
+    D: count	0 of 12
+    N: never told	0 of 79
+    T: told value	93 of 604
+pair-s2  N 0 of 79  T 101 of 604  A 67 of 172  B 73 of 134  C 17 of 83  D 5 of 36
+    A: a feeling	6 of 10
+    A: goodbye	17 of 43
+    A: greeting	2 of 9
+    A: other	24 of 48
+    A: thanks	18 of 62
+    B: first letter	3 of 11
+    B: news of a thing	2 of 9
+    B: repeat words	66 of 105
+    B: sentence with a word	2 of 8
+    B: spell a word	0 of 1
+    C: capital	0 of 20
+    C: colour	5 of 9
+    C: day after	1 of 15
+    C: legs	5 of 15
+    C: list N of a class	0 of 6
+    C: opposite	3 of 4
+    C: sound	3 of 14
+    D: add	0 of 13
+    D: bigger	5 of 11
+    D: count	0 of 12
+    N: never told	0 of 79
+    T: told value	101 of 604
+pair-s3  N 0 of 79  T 100 of 604  A 71 of 172  B 70 of 134  C 18 of 83  D 5 of 36
+    A: a feeling	6 of 10
+    A: goodbye	17 of 43
+    A: greeting	2 of 9
+    A: other	24 of 48
+    A: thanks	22 of 62
+    B: first letter	3 of 11
+    B: news of a thing	2 of 9
+    B: repeat words	63 of 105
+    B: sentence with a word	2 of 8
+    B: spell a word	0 of 1
+    C: capital	1 of 20
+    C: colour	5 of 9
+    C: day after	1 of 15
+    C: legs	5 of 15
+    C: list N of a class	0 of 6
+    C: opposite	3 of 4
+    C: sound	3 of 14
+    D: add	0 of 13
+    D: bigger	5 of 11
+    D: count	0 of 12
+    N: never told	0 of 79
+    T: told value	100 of 604
