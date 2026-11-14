@@ -38,6 +38,11 @@ fn cuda_and_rust_return_identical_q31_transport_words() -> uor_r4_discrete::Resu
         }
         Err(error) => return Err(error),
     };
+    let valid = [[0, 1 << 31, 0, 0]];
+    for invalid in [[[(1 << 31) + 1, 0, 0, 0]], [[-((1 << 31) + 1), 0, 0, 0]]] {
+        assert!(engine.hamilton_rotate(&invalid, &valid).is_err());
+        assert!(engine.hamilton_rotate(&valid, &invalid).is_err());
+    }
     let gates = values(0x6a09_e667_f3bc_c909, 4096);
     let held = values(0xbb67_ae85_84ca_a73b, 4096);
     let cuda = engine.hamilton_rotate(&gates, &held)?;

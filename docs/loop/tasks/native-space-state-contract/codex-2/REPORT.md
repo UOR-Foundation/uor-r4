@@ -24,9 +24,10 @@ and `movmatrix` in addition to the existing float/tensor families.
 The ORDER and REPORT now describe the actual sign-extended 64-bit multiply of admitted
 32-bit-range coordinates.
 
-Size: 358 added/deleted lines across ten files, about 1.4 times the ORDER's 250-line upper
-estimate. The repair touched both implementation and its retained records; size is reported,
-not capped (D48).
+Size: the full `2c1a7b120..838087961` repair is 359 changed lines across ten files, about
+1.44 times the ORDER's 250-line upper estimate. The requested range excluding only the codex-2
+ORDER is 298 lines across nine files: 168 code lines across six code files and 130
+documentation/record lines. Size is reported, not capped (D48).
 
 ## Measurements
 

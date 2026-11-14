@@ -39,10 +39,25 @@ pub fn q31_batch_len_admitted(items: usize) -> bool {
 /// The serialized word layout of one native vector carry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Q31VectorState {
-    pub words: Q31Quaternion,
+    words: Q31Quaternion,
 }
 
 impl Q31VectorState {
+    /// Construct one serializable state only when all four words are admitted.
+    pub fn new(words: Q31Quaternion) -> Result<Self> {
+        if !q31_quaternion_admitted(words) {
+            return Err(Error::Invalid(
+                "native Q31 state must be in -2^31..=2^31".into(),
+            ));
+        }
+        Ok(Self { words })
+    }
+
+    /// Raw words in canonical `(w, x, y, z)` order.
+    pub fn words(self) -> Q31Quaternion {
+        self.words
+    }
+
     /// Lossless little-endian carrier: four consecutive signed 64-bit words.
     pub fn to_bytes(self) -> [u8; 32] {
         let mut bytes = [0; 32];
@@ -62,12 +77,7 @@ impl Q31VectorState {
                     .expect("fixed Q31 word width"),
             );
         }
-        if !q31_quaternion_admitted(words) {
-            return Err(Error::Invalid(
-                "serialized Q31 words leave -2^31..=2^31".into(),
-            ));
-        }
-        Ok(Self { words })
+        Self::new(words)
     }
 }
 
@@ -153,9 +163,7 @@ mod tests {
 
     #[test]
     fn serialization_preserves_every_raw_word() {
-        let state = Q31VectorState {
-            words: [1 << 31, -(1 << 31), -1, 0x0123_4567],
-        };
+        let state = Q31VectorState::new([1 << 31, -(1 << 31), -1, 0x0123_4567]).unwrap();
         assert_eq!(Q31VectorState::from_bytes(state.to_bytes()).unwrap(), state);
     }
 
@@ -164,8 +172,14 @@ mod tests {
         let invalid = [Q31_MAX + 1, 0, 0, 0];
         assert!(q31_hamilton_rotate(invalid, [ONE, 0, 0, 0]).is_err());
         assert!(q31_hamilton_rotate([ONE, 0, 0, 0], invalid).is_err());
-        let state = Q31VectorState { words: invalid };
-        assert!(Q31VectorState::from_bytes(state.to_bytes()).is_err());
+        for words in [[Q31_MAX + 1, 0, 0, 0], [Q31_MIN - 1, 0, 0, 0]] {
+            assert!(Q31VectorState::new(words).is_err());
+            let mut bytes = [0; 32];
+            for (index, word) in words.iter().enumerate() {
+                bytes[index * 8..(index + 1) * 8].copy_from_slice(&word.to_le_bytes());
+            }
+            assert!(Q31VectorState::from_bytes(bytes).is_err());
+        }
     }
 
     #[test]
