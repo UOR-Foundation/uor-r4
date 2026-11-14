@@ -182,7 +182,15 @@
 <p>The discrete model learns by trying every legal geometric move of a table entry and keeping a move
 only when the integer loss strictly improves. The method is exact and runs on the GPU. <strong>It has now
 produced a saved model that passes M1 on two seeds.</strong> Earlier failures remain useful negative
-evidence, not the current best. A separate FBS path trains offline in float under D37.</p>
+evidence, not the current best.</p>
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+<p><strong>D85 status:</strong> the persistent native state/operator implementation is pending; all float-to-integer measurements on this page are historical/export evidence.</p>
+<p><strong>D85 changes the default route.</strong> The model to train next carries one persistent native
+integer/fixed-point geometric state through weights, activations, SpiralCore carry, routes,
+memory, gradients and optimizer updates. Training and serving must call the same typed
+operators and replay the same route, carry, read and token decisions bit for bit. The FBS path
+below is retained as historical/reference work; an F32 master plus export gap is not the
+default model boundary.</p>
 <p><img src="../figures/model/discrete-learning-loop.svg" alt="The discrete learning loop: score every legal move, choose the lowest integer loss, commit only a strict gain, then verify the stored result. A side panel shows BVG-K scoring several coordinates per launch." /></p>
 <p><em>Discrete learning: exact counterfactual moves, strict acceptance and verification on the GPU.</em></p>
 <p>Labels follow <a href="../formal_vocabulary.html"><code>docs/formal_vocabulary.md</code></a>: <strong>proof</strong>, <strong>measurement</strong>,
@@ -221,14 +229,17 @@ lineage. The exact export then reproduces the saved discrete model on all 14,287
 <p>The saved model reads new prompt phrasings into known reply kinds. It does not show new reply kinds
 or useful conversation; 62.5% of p-f's reference replies are verbatim TRAIN replies
 (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/m1-close-saved-model/README.md">M1 close</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/m1-fresh-panel-transfer/README.md">Fresh V2</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md">bar-f report</a>).</p>
-<h2 id="offline-float-training-under-d37"><a class="header" href="#offline-float-training-under-d37">Offline float training under D37</a></h2>
-<p>The separate FBS trunk uses float forward passes, gradients and an optimizer offline, in its own
+<h2 id="historical-offline-float-training-under-d37"><a class="header" href="#historical-offline-float-training-under-d37">Historical offline float training under D37</a></h2>
+<p>Before D85, the separate FBS trunk used float forward passes, gradients and an optimizer offline, in its own
 scanned module. Softmax, squashing and dense matmul remain banned. Every float candidate must report
 its export gap on the same evaluator, and the shipped artifact must be integer.</p>
 <p>Since claude-179, the FBS backward uses a fixed-order reduction, so two runs give the same model
 byte for byte. The <code>lut-stack/5</code> export is inside the gap bar at DEV scope. Determinism is not a
 quality claim: on new phrasing, the model still starts replies poorly
 (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-217/REPORT.md">claude-217</a>).</p>
+<p>The native-space item <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/roadmap/items/native-space-state-contract.md"><code>native-space-state-contract</code></a>
+now starts from the state and operator inventory. No new default-path training run may treat
+this historical float route as its model architecture.</p>
 <h2 id="pre-registration-and-runs"><a class="header" href="#pre-registration-and-runs">Pre-registration and runs</a></h2>
 <p>Before GPU training or evaluation, and before any run a milestone claim rests on, a one-page sheet
 states the bar, noise, controls, seeds, cost and what each outcome decides. A non-author reviews it

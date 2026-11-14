@@ -1371,6 +1371,14 @@ memory, and chooses the next token without softmax or dense matrix multiplicatio
 complete</strong>: a saved discrete model passed all six bars on two seeds. No model holds a useful
 conversation. Two model paths exist and have not joined: the discrete M1 path and the float-trained
 FBS trunk.</p>
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+<p><strong>D85 status:</strong> the persistent native state/operator implementation is pending; all float-to-integer measurements on this page are historical/export evidence.</p>
+<p><strong>D85 correction:</strong> these two paths record how the model arrived at M1. Under D85, the default
+path is required to carry one persistent native integer/fixed-point geometric state through the
+same typed training and serving operators. The first implementation item is
+<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/roadmap/items/native-space-state-contract.md"><code>native-space-state-contract</code></a>. The diagrams and
+measurements below remain historical evidence until that contract and a joined native-space model
+replace them.</p>
 <p><img src="model/../figures/model/pipeline.svg" alt="Two separate pipelines: the completed discrete M1 lane uses PositionHolonomyV1, Flock plus an orbit-root causal pointer, discrete Hamilton mixing, OrbitRootSnapNormV1 and OuterL1V1 readout; the float-trained FBS lane separately uses SpiralCore position, FBS recurrence, Hamming copy heads, exact turn memory and whole-table nearest readout." /></p>
 <p><em>The upper discrete M1 lane and lower FBS research lane are different models, not one joined pipeline; only the D11 integer serving boundary is shared.</em></p>
 <p>Labels follow <a href="model/../formal_vocabulary.html"><code>docs/formal_vocabulary.md</code></a>: <strong>proof</strong>, <strong>measurement</strong>,
@@ -1477,6 +1485,15 @@ not erase the later saved model's result (<a href="https://github.com/UOR-Founda
 <li>the saved discrete M1 close and claude-211's bar-f result, and claude-217's current new-phrasing opening failure;</li>
 <li>a section on <a href="model/pipeline-map.html#the-archived-prime-and-angular-router">the archived prime and angular router</a>.</li>
 </ul>
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+<p><strong>D85 status:</strong> the persistent native state/operator implementation is pending; all float-to-integer measurements on this page are historical/export evidence.</p>
+<p><strong>D85 correction (13 Nov, owner).</strong> Under D85, the default pipeline is required to carry one
+persistent native integer/fixed-point geometric state through the same typed training and serving
+operators, replaying route, carry, read, memory-address and token decisions bit for bit. The
+first implementation item is
+<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/roadmap/items/native-space-state-contract.md"><code>native-space-state-contract</code></a>. Until it lands,
+the float-trunk/export material on this page remains historical measurement and mechanism
+evidence, not a native-space qualification.</p>
 <p>The page ends with:</p>
 <ul>
 <li>the scale arithmetic for the goal;</li>
@@ -1517,8 +1534,10 @@ not erase the later saved model's result (<a href="https://github.com/UOR-Founda
 <tr><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-hamming-read/claude-188/REPORT.md">claude-188</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-hamming-read/claude-189/REPORT.md">189</a></td><td><code>lut-stack/6</code> carries the Hamming reads; the copy heads' integer kernel matches an f64 reference. Session hooks next.</td><td>Stage 5; R5</td></tr>
 </tbody></table>
 </div>
-<h2 id="two-model-paths"><a class="header" href="#two-model-paths">Two model paths</a></h2>
+<h2 id="historical-two-model-paths"><a class="header" href="#historical-two-model-paths">Historical two model paths</a></h2>
 <p>The repository trains two different models, and they do not meet:</p>
+<p>This section records the architecture that D85 superseded. A new default-path training item
+must first complete <code>native-space-state-contract</code>.</p>
 <div class="table-wrapper"><table><thead><tr><th></th><th>Float in-space trunk ("FBS trunk")</th><th>Discrete path</th></tr></thead><tbody>
 <tr><td>Code</td><td><a href="https://github.com/UOR-Foundation/uor-r4/tree/main/crates/uor-r4-float-train"><code>crates/uor-r4-float-train</code></a></td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/crates/uor-r4-discrete/README.md"><code>crates/uor-r4-discrete</code></a></td></tr>
 <tr><td>What it carries</td><td>The replies: DEV text at every checkpoint (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/research/notebook/float-training.md">float-training notebook</a>, row of 27 Oct "Exploration")</td><td>The M1 bar (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">PLAN</a>, "The path to M1")</td></tr>
@@ -1877,7 +1896,15 @@ not erase the later saved model's result (<a href="https://github.com/UOR-Founda
 <p>The discrete model learns by trying every legal geometric move of a table entry and keeping a move
 only when the integer loss strictly improves. The method is exact and runs on the GPU. <strong>It has now
 produced a saved model that passes M1 on two seeds.</strong> Earlier failures remain useful negative
-evidence, not the current best. A separate FBS path trains offline in float under D37.</p>
+evidence, not the current best.</p>
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+<p><strong>D85 status:</strong> the persistent native state/operator implementation is pending; all float-to-integer measurements on this page are historical/export evidence.</p>
+<p><strong>D85 changes the default route.</strong> The model to train next carries one persistent native
+integer/fixed-point geometric state through weights, activations, SpiralCore carry, routes,
+memory, gradients and optimizer updates. Training and serving must call the same typed
+operators and replay the same route, carry, read and token decisions bit for bit. The FBS path
+below is retained as historical/reference work; an F32 master plus export gap is not the
+default model boundary.</p>
 <p><img src="model/../figures/model/discrete-learning-loop.svg" alt="The discrete learning loop: score every legal move, choose the lowest integer loss, commit only a strict gain, then verify the stored result. A side panel shows BVG-K scoring several coordinates per launch." /></p>
 <p><em>Discrete learning: exact counterfactual moves, strict acceptance and verification on the GPU.</em></p>
 <p>Labels follow <a href="model/../formal_vocabulary.html"><code>docs/formal_vocabulary.md</code></a>: <strong>proof</strong>, <strong>measurement</strong>,
@@ -1916,14 +1943,17 @@ lineage. The exact export then reproduces the saved discrete model on all 14,287
 <p>The saved model reads new prompt phrasings into known reply kinds. It does not show new reply kinds
 or useful conversation; 62.5% of p-f's reference replies are verbatim TRAIN replies
 (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/m1-close-saved-model/README.md">M1 close</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/m1-fresh-panel-transfer/README.md">Fresh V2</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md">bar-f report</a>).</p>
-<h2 id="offline-float-training-under-d37"><a class="header" href="#offline-float-training-under-d37">Offline float training under D37</a></h2>
-<p>The separate FBS trunk uses float forward passes, gradients and an optimizer offline, in its own
+<h2 id="historical-offline-float-training-under-d37"><a class="header" href="#historical-offline-float-training-under-d37">Historical offline float training under D37</a></h2>
+<p>Before D85, the separate FBS trunk used float forward passes, gradients and an optimizer offline, in its own
 scanned module. Softmax, squashing and dense matmul remain banned. Every float candidate must report
 its export gap on the same evaluator, and the shipped artifact must be integer.</p>
 <p>Since claude-179, the FBS backward uses a fixed-order reduction, so two runs give the same model
 byte for byte. The <code>lut-stack/5</code> export is inside the gap bar at DEV scope. Determinism is not a
 quality claim: on new phrasing, the model still starts replies poorly
 (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-217/REPORT.md">claude-217</a>).</p>
+<p>The native-space item <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/roadmap/items/native-space-state-contract.md"><code>native-space-state-contract</code></a>
+now starts from the state and operator inventory. No new default-path training run may treat
+this historical float route as its model architecture.</p>
 <h2 id="pre-registration-and-runs"><a class="header" href="#pre-registration-and-runs">Pre-registration and runs</a></h2>
 <p>Before GPU training or evaluation, and before any run a milestone claim rests on, a one-page sheet
 states the bar, noise, controls, seeds, cost and what each outcome decides. A non-author reviews it
@@ -2040,10 +2070,19 @@ established by one passing artifact or by arithmetic projections.</li>
 floating-point and transcendental arithmetic and excludes dense matmul; D80 and D81 allow the
 hardware integer multiply and divide. <strong>The saved discrete M1 pair and a separate FBS trunk have
 now been exported and served.</strong> That is not useful-chat qualification or an M4/M7 product release.</p>
-<p><img src="model/../figures/model/integer-export.svg" alt="The separate FBS float-training path leading to a 4-bit integer UORLUT01 artifact, with the export gap measured before native or WebAssembly serving. The discrete M1 pair instead uses the table-native 19-table lut-discrete-trunk/1 schema." /></p>
-<p><em>Training may use float offline. The integer artifact and its measured export gap are the serving boundary.</em></p>
+<p><img src="model/../figures/model/integer-export.svg" alt="Historical float-training and export route. The D85 default instead carries one native geometric state through training and serving." /></p>
+<p><em>Historical figure. Under D85, the integer artifact is a lossless serialization of the state training updated.</em></p>
 <p>Labels: <strong>proof</strong>, <strong>measurement</strong>, <strong>hypothesis</strong>. See <a href="model/../formal_vocabulary.html"><code>docs/formal_vocabulary.md</code></a> and the <a href="model/../start/glossary.html">glossary</a>.</p>
-<h2 id="two-halves-with-one-hard-border"><a class="header" href="#two-halves-with-one-hard-border">Two halves with one hard border</a></h2>
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+<p><strong>D85 status:</strong> the persistent native state/operator implementation is pending; all float-to-integer measurements on this page are historical/export evidence.</p>
+<h2 id="d85-one-state-one-operator-path"><a class="header" href="#d85-one-state-one-operator-path">D85: one state, one operator path</a></h2>
+<p>Under D85, the default path is required to train directly in the integer/fixed-point geometric
+representation it serves. That implementation does not exist yet: the first bounded unit is the
+state/operator contract linked below. Until it lands, the measured float-to-integer route remains
+historical evidence rather than a native-space qualification.</p>
+<p>Float training and the FBS export remain preserved below as historical/reference evidence. Their
+measured export gaps show how the old boundary behaved; they do not qualify the D85 path.</p>
+<h2 id="historical-two-halves-with-one-hard-border"><a class="header" href="#historical-two-halves-with-one-hard-border">Historical two halves with one hard border</a></h2>
 <p><strong>Offline training</strong> runs on GPUs. The discrete path is integer end to end. D37 permits float only
 in a separately scanned offline module, with no softmax/squashing or dense matmul and a mandatory
 export-gap measurement.</p>
@@ -2238,7 +2277,7 @@ only by manual dispatch. This documentation unit publishes neither.</p>
 <ul>
 <li><strong>No softmax or squashing, no matrix multiplication.</strong> Softmax, sigmoid, tanh and softplus are banned in every executed model path (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/integration/DECISIONS.md#d23---no-softmax-anywhere-in-the-active-project">D23</a>, D25), and so is matrix multiplication in training and serving (D25, D30). Attention itself is not banned: bounded geometric reads replace it.</li>
 <li><strong>Research compute is GPU-first</strong> (D24). GPU results remain the qualification authority. D84 permits only the owner-authorized, named CPU training program to run CPU training, evaluation and parity as development research. Serving the exported D11 integer artifact on a client device (CPU, WASM, Apple silicon) is the product and is allowed. It uses no floating point. Since D80 and D81 (28 Oct 2026) it may use the hardware integer multiply and divide.</li>
-<li><strong>Floating point is for offline training only</strong> (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/integration/DECISIONS.md#d37--floating-point-is-legal-in-offline-training-only-d32s-learning-path-float-ban-is-revised">D37</a>). Float never re-admits softmax, squashing or matrix multiplication. The active discrete path and the served model stay integer (D11), and every float-trained candidate must report its export gap, the quality lost when converting to the integer artifact.</li>
+<li><strong>One native train/serve state is the default</strong> (D85). The model carries one integer/fixed-point geometric state; training and serving use the same typed operators, and serialization preserves it rather than converting a float master. Float remains historical/reference or diagnostic code outside that path, and never re-admits softmax, squashing or matrix multiplication. The §3.8 zeta exception remains explicit.</li>
 <li><strong>Geometry is a design priority, not a measured advantage.</strong> A failed experiment closes one configuration, never a whole mechanism (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/integration/DECISIONS.md#d22--a-negative-closes-a-configuration-never-a-mechanism-five-closures-reopened">D22</a>). A passing check on a piece of mathematics does not show that the piece helps a language model.</li>
 </ul>
 <p>Labels on this page follow <a href="geometry/../formal_vocabulary.html"><code>docs/formal_vocabulary.md</code></a>: <strong>proof</strong> means derived from definitions or code, <strong>measurement</strong> means a recorded run, and <strong>hypothesis</strong> means an untested idea. Mechanism status is ACTIVE (on the current model path), READY (built and tested, not yet trained in) or PARKED (the tried forms failed or broke a rule, and the mechanism stays open). The <a href="geometry/../mechanisms/index.html">mechanism board</a> holds the full list. It replaces the older labels active, dormant and archived-negative.</p>
@@ -6736,7 +6775,7 @@ M4 remains open.</p>
 <tr><td>3.4</td><td>Presence counts</td><td>Banned code may not sit in any compiled or loaded module. NVRTC (runtime GPU compilation) is banned. The checks <code>uor-harness ratchet d23</code> and <code>d25</code> only ever tighten.</td><td>Code that is present eventually runs.</td></tr>
 <tr><td>3.5</td><td>Research compute is GPU-first</td><td>GPU results qualify training, evaluation and reference runs by default, and GPU is spent only where a run can change a decision. D84 permits only the named owner-authorized CPU training program to run development training, evaluation and parity in its isolated module; those results cannot replace a GPU bar.</td><td>Host runs historically gave wrong timing and evidence, while a bounded CPU port can repair lawful training paths on the owner's workstation without becoming qualification evidence.</td></tr>
 <tr><td>3.6</td><td>Serving is integer, on your device</td><td>The shipped model uses no float or transcendental instruction. Since D80 and D81 (28 Oct 2026) it may use the hardware integer multiply and divide, which give exact products and quotients. Running it on a laptop CPU, in a browser (WebAssembly) or on Apple silicon is allowed, and so is measuring its speed and energy. Panel scoring, qualification and milestone evaluation of an exported artifact remain GPU research compute; only product serving and measuring its tokens/s and energy run on client devices.</td><td>The product is fast local AI on ordinary hardware.</td></tr>
-<tr><td>3.7</td><td>Float only offline, with an export gap</td><td>Float training is legal offline in a separately scanned module. Every float candidate reports how much accuracy it loses when exported to integers; a loss above the two-seed noise band disqualifies it.</td><td>Float trains faster, but only the integer artifact ships.</td></tr>
+<tr><td>3.7</td><td>One persistent native train/serve state</td><td>The default model trains and serves one integer/fixed-point geometric state. Training and serving use the same typed operators; routes, carry, reads, memory addresses and emitted tokens must replay bit for bit. Float is reference or diagnostic code outside that path; the historical float-master/export-gap route is not the default.</td><td>One state removes train/serve drift and the serialization gap.</td></tr>
 <tr><td>3.8</td><td>Zeta exception</td><td>Float is allowed for complex-plane zeta-zero parts and prime log-phases. Everything downstream is discrete.</td><td>Zeta phases are complex numbers by nature.</td></tr>
 <tr><td>3.9</td><td>Efficiency is measured</td><td>Report sparse access, bytes per token, bounded candidates and exact memory together.</td><td>Unmeasured efficiency is not efficiency.</td></tr>
 <tr><td>3.10</td><td>No neural comparisons</td><td>No neural comparators, controls, teachers or graders until the owner says the model works end to end. Panels are graded by deterministic checks. The one exception is a one-time donor pass (D41) with binding conditions.</td><td>A neural comparator would hide a dense model behind the geometry.</td></tr>
@@ -6752,7 +6791,7 @@ M4 remains open.</p>
 <ul>
 <li>Choose their own work from <code>PLAN.md</code>, post a one-line intent note, claim a branch and carry on unless redirected (<code>CHARTER.md</code> §5.3).</li>
 <li>Build, run finite kernel tests and run host checks without any pre-registration (§4.5).</li>
-<li>Train in float offline with a sheet, a non-author FIT and the lab's own whole-project pre-run review under D67, and report the export gap on the same evaluator (§3.7, §4.5, §5.1).</li>
+<li>Use float only for historical/reference or diagnostic work outside the default native state, with its export-gap evidence retained (§3.7, D85, D37); it is not the default training route.</li>
 <li>Run the named D84 CPU training and parity program as development research without treating its output as a GPU qualification result (§3.5).</li>
 <li>Serve the integer model on a user's device and measure it (§3.6).</li>
 <li>Review their own pull request at the exact head, from a fresh context (§5.5), and use a fresh-context subagent as the non-author FIT reviewer (§4.5).</li>
@@ -6862,7 +6901,7 @@ M4 remains open.</p>
 <tr><td>D34</td><td>Revised attention and memory sequence: reranker-first read plus a D19 object-store crate.</td><td>Merged</td><td>5.8 (the approved sequence, kept in <code>NOW.md</code>)</td></tr>
 <tr><td>D35</td><td>A seed-2 packet re-issue is required before any seed-2 go.</td><td>Retired</td><td>Superseded by D39.</td></tr>
 <tr><td>D36</td><td>GitHub Pages keeps the last good deploy until a D11 WebAssembly engine lands.</td><td>Merged</td><td>2 (web client) and 3.6; its "browser serving counts as CPU model compute" clause is replaced, and the legacy crates are repaired (2.4).</td></tr>
-<tr><td>D37</td><td>Float is legal in offline training only, with a reported export gap.</td><td>Kept</td><td>3.7; the owner's reason for the bans is quoted in 1, and archived sheets are handled in 4.5.</td></tr>
+<tr><td>D37</td><td>Float is legal in offline training only, with a reported export gap.</td><td>Kept as historical/reference</td><td>3.7 / 4.5; D85 makes the persistent native route the default, while D37's measured export-gap evidence is retained.</td></tr>
 <tr><td>D38</td><td>D5 split into D5-a (residency) and D5-b (per-token sparsity).</td><td>Kept</td><td>3.9</td></tr>
 <tr><td>D39</td><td>M1 closing bar, reachability gate, post-qualification sequence, lab self-direction.</td><td>Merged</td><td>4.8 (bar (d) replaced), 4.2, 5.8 and 5.3</td></tr>
 <tr><td>D40</td><td>Owner-identity phrases are typed by the owner personally.</td><td>Kept</td><td>5.1 (the K16 ratification is a retired one-off)</td></tr>
@@ -6870,7 +6909,7 @@ M4 remains open.</p>
 <tr><td>D42</td><td>The owner adopts the charter and answers eight checkpoint questions.</td><td>Kept (as the adoption record)</td><td>The charter itself; see the <a href="rules/changes.html">change log</a>.</td></tr>
 </tbody></table>
 </div>
-<p>Decisions after D42 are recorded in <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/integration/DECISIONS.md"><code>DECISIONS.md</code></a>, not expanded into this D0-D42 map. D84 amended D24's compute placement on 1 November 2026; its full row and change-log entry are authoritative.</p>
+<p>Decisions after D42 are recorded in <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/integration/DECISIONS.md"><code>DECISIONS.md</code></a>, not expanded into this D0-D42 map. D84 amended D24's compute placement on 1 November 2026; D85 makes the persistent native train/serve state the default. Their full rows and change-log entries are authoritative.</p>
 <h2 id="tally"><a class="header" href="#tally">Tally</a></h2>
 <p>Counting the rows above (excluding the I1 to I5 row and D42): 14 decisions kept, 15 merged and 14 retired, which is 43 decision entries from D0 to D41 including D0-b. This is a count of the table, derived from the live index in <code>DECISIONS.md</code>; it is not a separate record.</p>
 <h2 id="where-it-stands-15"><a class="header" href="#where-it-stands-15">Where it stands</a></h2>
@@ -6896,6 +6935,52 @@ M4 remains open.</p>
 <p><em>The charter replaced the older rules in one step on 19 October 2026. Later changes are added to this log as dated entries.</em></p>
 <h2 id="how-an-entry-is-written"><a class="header" href="#how-an-entry-is-written">How an entry is written</a></h2>
 <p>An entry gives the date, what changed, which charter clauses it touches, and who decided. The owner's own words are recorded verbatim when they are the reason. Old text is never edited or deleted: it moves unchanged to the <code>archive/</code> folder, and the live decision index keeps one line saying where each decision went (see the <a href="rules/decision-map.html">decision map</a>).</p>
+<h2 id="13-november-2026-one-persistent-native-trainserve-state-d85"><a class="header" href="#13-november-2026-one-persistent-native-trainserve-state-d85">13 November 2026: one persistent native train/serve state (D85)</a></h2>
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+<p><strong>Decided by:</strong> the owner (Casey), 13 November 2026, recorded at <code>2026-11-14T02:57:18Z</code>.
+He wrote:</p>
+<blockquote>
+<p>"see here I thought we were training directly to vector space, carrying the same space,
+and serving the same space with identical attention mechanisms in training and serving"</p>
+</blockquote>
+<p>Then:</p>
+<blockquote>
+<p>"yes please update your corvuswing loopkit and harness too so that you can continue down
+the correct path"</p>
+</blockquote>
+<p><strong>What changed:</strong></p>
+<ol>
+<li>
+<p><strong>§1 and §2.1.</strong> The model's native state is trained, carried and serialized to D11; the
+artifact is no longer described as the result of a different model's export.</p>
+</li>
+<li>
+<p><strong>§3.6.</strong> Serving remains integer and now states explicitly that its artifact packages the
+same state training updated.</p>
+</li>
+<li>
+<p><strong>§3.7.</strong> The default route is one persistent integer/fixed-point geometric state with
+the same typed operators in training and serving. Route choices, carry, reads, memory
+addresses and emitted ids must replay bit for bit. Float is reference/diagnostic code
+outside the default path. An export gap cannot qualify the default path.</p>
+</li>
+<li>
+<p><strong>Historical route preserved.</strong> The prior §3.7 text was:</p>
+<blockquote>
+<p>Float forward, gradients and optimizers are legal offline, in a separately scanned
+module, never in the discrete crate. Every float candidate reports its export gap on
+the same evaluator; a gap above the two-seed noise band disqualifies it. The D32
+discrete path stays active; its qualification uses exact arithmetic.</p>
+</blockquote>
+<p>D37, D73, the float trainer, exporter and all measured evidence remain. They become
+historical/reference or diagnostic work, not the default architecture.</p>
+</li>
+<li>
+<p><strong>Control plane.</strong> AGENTS.md, the project Codex skills and <code>uor-harness</code> now carry the same
+invariant. <code>harness.native_space_contract</code> fails when the owner decision, charter markers,
+milestone rule, plan section, skills or required native-parity contract disagree.</p>
+</li>
+</ol>
 <h2 id="1-november-2026-owner-authorized-cpu-training-program-d84"><a class="header" href="#1-november-2026-owner-authorized-cpu-training-program-d84">1 November 2026: owner-authorized CPU training program (D84)</a></h2>
 <p><strong>Decided by:</strong> the owner (Casey), in the DeepSeek/Codex session on the project workstation, recorded by the lab at <code>2026-11-01T21:51:23Z</code>. He wrote:</p>
 <blockquote>
@@ -7128,11 +7213,12 @@ M4 remains open.</p>
 <p>Old text moves byte-identical to <code>archive/</code>. Bracketed ids are sources.</p>
 <h2 id="1-mission"><a class="header" href="#1-mission">1. Mission</a></h2>
 <p>Build the <strong>UOR-R4 Geometric Language Model</strong>: a fast language model that is not a transformer. It predicts text with geometry (prime addresses, zeta phases, E8/H4/icosian rotations, SpiralCore/FBS routing) and exact memory, on an ordinary laptop or in a browser. Conversation with durable memory first, then coding and reasoning, on one model [AGENTS:mode, D19, AGENTS:both-lines]. Pre-alpha: M1 is complete (30 October 2026); no model holds a useful conversation.</p>
+<p>The default model path carries one persistent native geometric state from training through serving. It does not train a float master and convert a different model for release [D85].</p>
 <p>The owner's rule: <strong>"USE GEOMETRY. THAT IS THE END OF IT. NEVER USE ANYTHING ELSE."</strong> [OWNER:0]</p>
 <p>The owner's goal behind every ban (18 Oct, verbatim): <em>"my goal with all of these bans is to ban expensive operations and to always optimize for what is best for the project goal... fast local ai that can train fast and run fast and reach almost frontier level capability ... we have so many mechanisms, at this point we just need to stitch the right ones together and optimize all of the things that aren't, which will likely be found in the details"</em> [OWNER:26, D37]. When unclear, choose what trains and serves fastest locally on the geometric path, and write it down [D37:why-bans]. <strong>The lead metric is tokens per second</strong> (decode, and context separately); a small quality gap is acceptable [OWNER:5].</p>
 <h2 id="2-products"><a class="header" href="#2-products">2. Products</a></h2>
 <ol>
-<li><strong>Model:</strong> the geometric model, exported as one D11 integer/table artifact; built in <code>crates/uor-r4-discrete</code>, served by <code>crates/uor-r4-integer</code> [AGENTS:ownership].</li>
+<li><strong>Model:</strong> the geometric model, whose native state is serialized as one D11 integer/table artifact; built and trained in the native geometric representation, and served by <code>crates/uor-r4-integer</code> [AGENTS:ownership, D11, D85].</li>
 <li><strong>Web client:</strong> the Studio at <code>/studio</code> on the mdBook site, running the integer model locally in the browser as WASM [renorm decision 7, D36].</li>
 <li><strong>Desktop client:</strong> a Tauri app sharing the web UI, the native integer model with D19 memory, offline, on M1-class laptops; the shell is verified on a synthetic stand-in, with no qualified trained product bundle [renorm decision 8].</li>
 <li><strong>Legacy crates are repaired, not archived:</strong> <code>uor-r4-graph-compiler</code>, <code>uor-r4-graph-certify</code>, <code>uor-r4-api</code>, <code>uor-r4-proof-model</code> and the root crate are repaired to build on the current core; repairing restores the build only, and their mechanisms (r4g1-graph, native-geometric) stay PARKED. [D36, owner 19 Oct]</li>
@@ -7144,8 +7230,13 @@ M4 remains open.</p>
 <li><strong>No matmul.</strong> No dense matrix multiplication or GEMM anywhere: training, evaluation, instruments, serving and tooling, including wrappers and hand loops. A geometric feed-forward block (Hamilton gate and projections) is allowed; a dense MLP is not. <em>Why:</em> matmul is the cost the project exists to remove. [D25:no-matmul-anywhere, D30, OWNER:2, OWNER:14, HR:no-matmul]</li>
 <li><strong>Presence counts.</strong> Banned code may not exist in any compiled or loaded module or vendor path; NVRTC is banned; CUDA is prebuilt by nvcc. Ahead-of-time nvcc kernel builds run on the GPU pod (authorized by D30); the laptop runs CPU-only builds and static checks. The ratchets <code>uor-harness ratchet d23|d25</code> only go down. <em>Why:</em> code that is present eventually runs. [D29, R5, OWNER:no-nvrtc, HR:banned-module]</li>
 <li><strong>Research compute is GPU-first.</strong> Training, qualification, and the model and parity executions that qualify a result default to the GPU; a silent host fallback is a defect to fix with a kernel. Since D84, an owner-authorized CPU training program may run CPU training, evaluation, and parity as development research in a named, separately scanned Rust module. Such a program may not substitute CPU output for a GPU qualification bar unless a later owner decision says so; it must name the CPU hardware, use the same deterministic evaluator and controls as the GPU path, and preserve every historical negative. Spend GPU only where a run can change a decision. <em>Why:</em> the GPU remains the qualification authority, while CPU research can repair and compare lawful training paths on the owner's workstation. [D24, D84, OWNER:4, OWNER:20, HR:gpu-first]</li>
-<li><strong>Serving is integer, on the user's device.</strong> The exported artifact has no float or transcendental instruction (D11 R1–R5). Since D80 it may use the hardware integer multiply, and since D81 the hardware integer divide, so a product or quotient of two integers is exact integer arithmetic in one instruction; the frozen runtime does no steady-state allocation, and a dense model disguised as lookup tables is excluded. Serving it on client devices (CPU, browser WASM, Apple silicon), including measuring tokens/s and energy, is the product and is allowed; D24 does not apply, and D36's browser-as-CPU clause is replaced. Panel scoring, qualification and milestone evaluation of an exported artifact remain GPU research compute (§3.5); only product serving, and measuring its tokens/s and energy, run on client devices. <em>Why:</em> the product is fast local AI on ordinary hardware. [D11, D36, D39:float-horizon, HR:serving-integer, AGENTS:frozen-tla; owner 19 Oct; D80, D81, owner 28 Oct]</li>
-<li><strong>Float only offline, with an export gap.</strong> Float forward, gradients and optimizers are legal offline, in a separately scanned module, never in the discrete crate. Every float candidate reports its export gap on the same evaluator; a gap above the two-seed noise band disqualifies it. The D32 discrete path stays active; its qualification uses exact arithmetic. <em>Why:</em> float trains faster; only the integer artifact ships. [D37, D39:export-gap, R13, HR:float-offline, KIMI:d37]</li>
+<li><strong>Serving is integer, in the same native state.</strong> The served artifact has no float or transcendental instruction (D11 R1–R5). Since D80 it may use the hardware integer multiply, and since D81 the hardware integer divide; the frozen runtime does no steady-state allocation, and a dense model disguised as lookup tables is excluded. The artifact is a representation-preserving package of the state training updated, not a numerically converted second model [D85]. Serving on client devices (CPU, browser WASM, Apple silicon), including measuring tokens/s and energy, is the product; panel scoring and milestone evaluation remain GPU research compute (§3.5). <em>Why:</em> the product is fast local AI on ordinary hardware, and one state removes train/serve drift. [D11, D36, D85, HR:serving-integer; owner 19 Oct; D80, D81, owner 28 Oct]</li>
+</ol>
+<!-- native-space-cycle:start -->
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+<!-- native-space-cycle:end -->
+<ol start="7">
+<li><strong>One persistent native geometric state, with the same typed operators in training and serving.</strong> The default model stores token addresses, vector coordinates, SpiralCore carry, route choices, memory keys, memory reads and learned state in one declared integer or fixed-point representation. Training and serving call the same typed operator definitions and the same state-transition path; device-specific CUDA, CPU, WASM or browser implementations are permitted only behind those definitions and must pass bit-identical differential tests. On the same prompt and starting state, route choices, carry state, read choices, memory addresses and emitted token ids must match bit for bit. Gradients and optimizer updates land in that representation. An artifact may losslessly pack, align, compress or reorder it, but may not quantize a different float master into the served model; an export gap cannot qualify the default path. Floating point remains legal only in separately scanned reference or diagnostic modules outside the default state/operator path. The historical float-training and export-gap systems and evidence are preserved, but are not the default route. <em>Why:</em> the owner requires training directly in vector space, carrying the same space and serving it with the same mechanisms; geometry is the representation, not a preprocessing step. [D85, owner 13 Nov 2026; historical D37/D73]</li>
 <li><strong>Zeta exception.</strong> Float is allowed on the complex plane for zeta-zero parts, prime log-phases and the C4→R4/C8→R8 phase maps; everything downstream is discrete. <em>Why:</em> zeta phases are complex numbers by nature, and the bans target expensive operations, not geometry. [D32:zeta-exception]</li>
 <li><strong>Efficiency is measured.</strong> Report sparse access, bytes/token, bounded candidates, integer kernels and exact memory together, naming D5-a (residency) or D5-b (per-token sparsity, the end state). <em>Why:</em> unmeasured efficiency is not efficiency. [I1-I5, D5, D38]</li>
 <li><strong>No neural comparisons</strong> (comparators, controls, teachers, graders) until the owner says the model works end to end; panels are graded deterministically. Sole exception: D41's one-time <code>distill-d1</code> donor pass, on its binding conditions: the student consumes hard targets only (no logits, probabilities or distributions), the donor never executes in student preparation, training, evaluation, serving, grading or any panel, a generation receipt is bound at generation, and an owner release (§5.1) is required at dispatch. <em>Why:</em> a neural comparator would hide a dense model behind the geometry, against geometry only. [D28, OWNER:memory-no-transformer, D41]</li>

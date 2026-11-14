@@ -187,6 +187,52 @@
 <p><em>The charter replaced the older rules in one step on 19 October 2026. Later changes are added to this log as dated entries.</em></p>
 <h2 id="how-an-entry-is-written"><a class="header" href="#how-an-entry-is-written">How an entry is written</a></h2>
 <p>An entry gives the date, what changed, which charter clauses it touches, and who decided. The owner's own words are recorded verbatim when they are the reason. Old text is never edited or deleted: it moves unchanged to the <code>archive/</code> folder, and the live decision index keeps one line saying where each decision went (see the <a href="decision-map.html">decision map</a>).</p>
+<h2 id="13-november-2026-one-persistent-native-trainserve-state-d85"><a class="header" href="#13-november-2026-one-persistent-native-trainserve-state-d85">13 November 2026: one persistent native train/serve state (D85)</a></h2>
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+<p><strong>Decided by:</strong> the owner (Casey), 13 November 2026, recorded at <code>2026-11-14T02:57:18Z</code>.
+He wrote:</p>
+<blockquote>
+<p>"see here I thought we were training directly to vector space, carrying the same space,
+and serving the same space with identical attention mechanisms in training and serving"</p>
+</blockquote>
+<p>Then:</p>
+<blockquote>
+<p>"yes please update your corvuswing loopkit and harness too so that you can continue down
+the correct path"</p>
+</blockquote>
+<p><strong>What changed:</strong></p>
+<ol>
+<li>
+<p><strong>§1 and §2.1.</strong> The model's native state is trained, carried and serialized to D11; the
+artifact is no longer described as the result of a different model's export.</p>
+</li>
+<li>
+<p><strong>§3.6.</strong> Serving remains integer and now states explicitly that its artifact packages the
+same state training updated.</p>
+</li>
+<li>
+<p><strong>§3.7.</strong> The default route is one persistent integer/fixed-point geometric state with
+the same typed operators in training and serving. Route choices, carry, reads, memory
+addresses and emitted ids must replay bit for bit. Float is reference/diagnostic code
+outside the default path. An export gap cannot qualify the default path.</p>
+</li>
+<li>
+<p><strong>Historical route preserved.</strong> The prior §3.7 text was:</p>
+<blockquote>
+<p>Float forward, gradients and optimizers are legal offline, in a separately scanned
+module, never in the discrete crate. Every float candidate reports its export gap on
+the same evaluator; a gap above the two-seed noise band disqualifies it. The D32
+discrete path stays active; its qualification uses exact arithmetic.</p>
+</blockquote>
+<p>D37, D73, the float trainer, exporter and all measured evidence remain. They become
+historical/reference or diagnostic work, not the default architecture.</p>
+</li>
+<li>
+<p><strong>Control plane.</strong> AGENTS.md, the project Codex skills and <code>uor-harness</code> now carry the same
+invariant. <code>harness.native_space_contract</code> fails when the owner decision, charter markers,
+milestone rule, plan section, skills or required native-parity contract disagree.</p>
+</li>
+</ol>
 <h2 id="1-november-2026-owner-authorized-cpu-training-program-d84"><a class="header" href="#1-november-2026-owner-authorized-cpu-training-program-d84">1 November 2026: owner-authorized CPU training program (D84)</a></h2>
 <p><strong>Decided by:</strong> the owner (Casey), in the DeepSeek/Codex session on the project workstation, recorded by the lab at <code>2026-11-01T21:51:23Z</code>. He wrote:</p>
 <blockquote>

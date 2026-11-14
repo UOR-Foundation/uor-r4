@@ -183,10 +183,19 @@
 floating-point and transcendental arithmetic and excludes dense matmul; D80 and D81 allow the
 hardware integer multiply and divide. <strong>The saved discrete M1 pair and a separate FBS trunk have
 now been exported and served.</strong> That is not useful-chat qualification or an M4/M7 product release.</p>
-<p><img src="../figures/model/integer-export.svg" alt="The separate FBS float-training path leading to a 4-bit integer UORLUT01 artifact, with the export gap measured before native or WebAssembly serving. The discrete M1 pair instead uses the table-native 19-table lut-discrete-trunk/1 schema." /></p>
-<p><em>Training may use float offline. The integer artifact and its measured export gap are the serving boundary.</em></p>
+<p><img src="../figures/model/integer-export.svg" alt="Historical float-training and export route. The D85 default instead carries one native geometric state through training and serving." /></p>
+<p><em>Historical figure. Under D85, the integer artifact is a lossless serialization of the state training updated.</em></p>
 <p>Labels: <strong>proof</strong>, <strong>measurement</strong>, <strong>hypothesis</strong>. See <a href="../formal_vocabulary.html"><code>docs/formal_vocabulary.md</code></a> and the <a href="../start/glossary.html">glossary</a>.</p>
-<h2 id="two-halves-with-one-hard-border"><a class="header" href="#two-halves-with-one-hard-border">Two halves with one hard border</a></h2>
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+<p><strong>D85 status:</strong> the persistent native state/operator implementation is pending; all float-to-integer measurements on this page are historical/export evidence.</p>
+<h2 id="d85-one-state-one-operator-path"><a class="header" href="#d85-one-state-one-operator-path">D85: one state, one operator path</a></h2>
+<p>Under D85, the default path is required to train directly in the integer/fixed-point geometric
+representation it serves. That implementation does not exist yet: the first bounded unit is the
+state/operator contract linked below. Until it lands, the measured float-to-integer route remains
+historical evidence rather than a native-space qualification.</p>
+<p>Float training and the FBS export remain preserved below as historical/reference evidence. Their
+measured export gaps show how the old boundary behaved; they do not qualify the D85 path.</p>
+<h2 id="historical-two-halves-with-one-hard-border"><a class="header" href="#historical-two-halves-with-one-hard-border">Historical two halves with one hard border</a></h2>
 <p><strong>Offline training</strong> runs on GPUs. The discrete path is integer end to end. D37 permits float only
 in a separately scanned offline module, with no softmax/squashing or dense matmul and a mandatory
 export-gap measurement.</p>

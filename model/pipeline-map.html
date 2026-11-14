@@ -197,6 +197,15 @@
 <li>the saved discrete M1 close and claude-211's bar-f result, and claude-217's current new-phrasing opening failure;</li>
 <li>a section on <a href="#the-archived-prime-and-angular-router">the archived prime and angular router</a>.</li>
 </ul>
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+<p><strong>D85 status:</strong> the persistent native state/operator implementation is pending; all float-to-integer measurements on this page are historical/export evidence.</p>
+<p><strong>D85 correction (13 Nov, owner).</strong> Under D85, the default pipeline is required to carry one
+persistent native integer/fixed-point geometric state through the same typed training and serving
+operators, replaying route, carry, read, memory-address and token decisions bit for bit. The
+first implementation item is
+<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/roadmap/items/native-space-state-contract.md"><code>native-space-state-contract</code></a>. Until it lands,
+the float-trunk/export material on this page remains historical measurement and mechanism
+evidence, not a native-space qualification.</p>
 <p>The page ends with:</p>
 <ul>
 <li>the scale arithmetic for the goal;</li>
@@ -237,8 +246,10 @@
 <tr><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-hamming-read/claude-188/REPORT.md">claude-188</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-hamming-read/claude-189/REPORT.md">189</a></td><td><code>lut-stack/6</code> carries the Hamming reads; the copy heads' integer kernel matches an f64 reference. Session hooks next.</td><td>Stage 5; R5</td></tr>
 </tbody></table>
 </div>
-<h2 id="two-model-paths"><a class="header" href="#two-model-paths">Two model paths</a></h2>
+<h2 id="historical-two-model-paths"><a class="header" href="#historical-two-model-paths">Historical two model paths</a></h2>
 <p>The repository trains two different models, and they do not meet:</p>
+<p>This section records the architecture that D85 superseded. A new default-path training item
+must first complete <code>native-space-state-contract</code>.</p>
 <div class="table-wrapper"><table><thead><tr><th></th><th>Float in-space trunk ("FBS trunk")</th><th>Discrete path</th></tr></thead><tbody>
 <tr><td>Code</td><td><a href="https://github.com/UOR-Foundation/uor-r4/tree/main/crates/uor-r4-float-train"><code>crates/uor-r4-float-train</code></a></td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/crates/uor-r4-discrete/README.md"><code>crates/uor-r4-discrete</code></a></td></tr>
 <tr><td>What it carries</td><td>The replies: DEV text at every checkpoint (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/research/notebook/float-training.md">float-training notebook</a>, row of 27 Oct "Exploration")</td><td>The M1 bar (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">PLAN</a>, "The path to M1")</td></tr>
