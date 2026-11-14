@@ -40,7 +40,7 @@ attributed findings to the failing source, accepted the roadmap lifecycle, align
 exception with D85, and added `crates/uor-r4-discrete/**` plus
 `crates/uor-r4-integer/src/discrete_d11.rs` to the next item's scope.
 
-Focused native-space tests pass 7. The clean full harness package run with `TMPDIR` outside the
+Focused native-space tests pass 8. The clean full harness package run with `TMPDIR` outside the
 checkout passed 685 tests with 0 failures and 1 ignored. Formatting and `git diff --check` pass.
 The remaining gate is the fresh exact-head review and queue on the merged-forward head.
 
@@ -95,7 +95,7 @@ moving worktree before this tracked repair commit; it is not evidence for the ne
 ```text
 MANIFEST
 - origin/main: 085ff55d92c31ded738913ae8907251e4dcd8a21  check: git rev-parse origin/main
-- PR 3967 remote head: 74deb0a6bca7989dc316f8d28e7d8f5501da282f  check: gh pr view 3967 --json headRefOid
+- PR 3967 head: current branch HEAD at push  check: test "$(git rev-parse HEAD)" = "$(gh pr view 3967 --json headRefOid -q .headRefOid)"
 - focused native-space tests: 8 passed  check: cd local/worktrees/codex-native-space-cycle && CARGO_TARGET_DIR=local/harness-target cargo test --locked -p uor-r4-harness native_space_contract
 - full harness package: 685 passed / 0 failed / 1 ignored  check: docs/loop/tasks/infra-loop-harness/codex-3/REPORT.md
 - CUDA branch head: 48298622d  check: git -C local/worktrees/codex-cuda-native-train rev-parse HEAD
