@@ -1373,7 +1373,10 @@ mod tests {
                             let mut v = flat.clone();
                             v[e] += delta;
                             var.set(&Tensor::from_vec(f32s(&v), base.shape(), base.device())?)?;
-                            Ok(f64::from(loss(&f)?.to_scalar::<f32>()?))
+                            // The difference is taken on the f64 reference credit, which the
+                            // forward test ties to the device's: an f32 loss differenced at h
+                            // carries rounding of order 1e-6 |L| / h, as large as the margin here.
+                            Ok(reference_of(&f)?.credit)
                         };
                         let fd = (at(h)? - at(-h)?) / (2.0 * h);
                         // A copy, not `base`, which shares the variable's own storage.
