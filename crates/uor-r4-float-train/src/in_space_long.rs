@@ -313,6 +313,10 @@ pub struct LongConfig {
     /// The pair rows' minimum turn count (`--pair-rows`), `None` when off.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pair_rows: Option<u32>,
+    /// Whether each pair row is weighed by one over its count of different replies
+    /// (`--pair-weight replies`, claude-373).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pair_weight: bool,
 }
 
 /// What TRAIN's scored targets are ([`LongConfig::train_targets`], claude-296).
@@ -813,6 +817,15 @@ fn load_reads(directory: &Path, device: &Device) -> Result<()> {
             rows.dict().len(),
             sha256_bytes(&rows.dict().to_bytes())
         );
+        // claude-373: say whether the rows are weighed, in the trainer's census form, so a
+        // weighed checkpoint that lost its weights reads "none" here.
+        match rows.reply_counts_of_weights()? {
+            Some(counts) => println!(
+                "[pair] loaded weight replies: {}",
+                crate::pair_rows::reply_census(&counts)
+            ),
+            None => println!("[pair] loaded weight replies: none"),
+        }
     }
     crate::pair_rows::set_pair_rows(pair);
     Ok(())
@@ -14931,6 +14944,11 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     if config.pair_rows == Some(0) {
         return Err(invalid("--pair-rows wants a minimum of 1 or more"));
     }
+    if config.pair_weight && config.pair_rows.is_none() {
+        return Err(invalid(
+            "--pair-weight replies weighs the pair rows; turn them on with --pair-rows",
+        ));
+    }
     // claude-370: the export has no section for the pair rows, so no artifact holds them.
     if config.pair_rows.is_some() && config.train_as_served {
         return Err(invalid(
@@ -15079,6 +15097,17 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
                 config.width,
                 device,
             )?;
+            // claude-373: each row weighed by one over its count of different TRAIN replies.
+            let rows = if config.pair_weight {
+                let counts = crate::pair_rows::reply_counts(rows.dict(), &tokens, &pair_marks())?;
+                println!(
+                    "[pair] weight replies: {}",
+                    crate::pair_rows::reply_census(&counts)
+                );
+                rows.with_reply_weights(&counts)?
+            } else {
+                rows
+            };
             crate::pair_rows::set_pair_rows(Some(rows.clone()));
             println!(
                 "[pair] min {min}: {} pairs have rows; width {}; dictionary sha256 {}",
@@ -17004,6 +17033,7 @@ mod tests {
             address_memory: None,
             address_band: None,
             pair_rows: None,
+            pair_weight: false,
         }
     }
 
@@ -19726,6 +19756,18 @@ mod tests {
                 .is_some_and(|e| e.contains("--pair-rows wants a minimum of 1 or more")),
             "{refused:?}"
         );
+        // claude-373: the weight alone has no rows to weigh.
+        (config.pair_rows, config.pair_weight) = (None, true);
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("--pair-weight replies weighs the pair rows")),
+            "{refused:?}"
+        );
+        config.pair_weight = false;
         assert!(!missing.exists());
     }
 
