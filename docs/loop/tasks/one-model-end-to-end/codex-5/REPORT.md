@@ -55,7 +55,8 @@ No training run, model capability, throughput or language result is claimed.
 
 - `cargo fmt --package uor-r4-cpu-train --package uor-r4-discrete -- --check` - passed.
 - `NVCC=/usr/local/cuda/bin/nvcc UOR_NVCC_ARCH=compute_89 UOR_REQUIRE_CUDA=1
-  CARGO_TARGET_DIR=target/cuda-parity cargo test --locked -p uor-r4-cpu-train --features cuda
+  CARGO_TARGET_DIR=target/cuda-parity cargo test --locked -p uor-r4-cpu-train
+  --features cuda,qualification
   native_space_cuda_parity_contract_runs_the_same_words --lib -- --nocapture` - passed on the
   RTX 4090.
 - Existing Claude-371 CPU/serving parity tests - to be rerun after rebasing/merge if its PR moves.

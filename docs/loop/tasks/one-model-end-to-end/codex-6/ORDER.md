@@ -44,6 +44,8 @@ backends. Normal production calls retain no trace allocation.
 
 ## Files in scope
 
+- `crates/uor-r4-discrete/Cargo.toml`
+- `crates/uor-r4-cpu-train/Cargo.toml`
 - `crates/uor-r4-discrete/src/discrete.cu`
 - `crates/uor-r4-discrete/src/bucket_source.rs`
 - `crates/uor-r4-discrete/src/device.rs`

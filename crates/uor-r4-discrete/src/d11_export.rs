@@ -362,6 +362,7 @@ pub fn import_d11(bytes: &[u8]) -> Result<Snapshot> {
 /// table spans, root/cell identities and CUDA validation remain mandatory; only
 /// the serialized source snapshot hash is waived for synthetic fixtures.
 #[doc(hidden)]
+#[cfg(feature = "qualification")]
 pub fn import_d11_for_qualification(bytes: &[u8]) -> Result<Snapshot> {
     import_d11_with_snapshot_hash(bytes, false)
 }

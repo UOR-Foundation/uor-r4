@@ -42,6 +42,9 @@ Order: [ORDER.md](ORDER.md). Result: [PARITY-RESULT.md](PARITY-RESULT.md).
   `relation_scores()` compacts each block back to its row's actual node count.
 - CUDA retains Relation row-node counts only for traced forwards; ordinary Relation `forward()`
   keeps both the trace and its metadata absent.
+- The synthetic provenance loaders and exact apply alias exist only behind the non-default
+  `qualification` feature. Ordinary builds cannot reach the private training update hold, and the
+  focused CUDA contract runs with `--features cuda,qualification`.
 - CUDA compiles one `route_vector` with an optional trace sink. The bucket generator's explicit
   checked un-instrumentation strips marked trace blocks from that same body and preserves the
   already-qualified bucket source; a mutation of a decision line reaches generation and fails the
@@ -71,7 +74,8 @@ Fault visibility:
 - Flock gates: direct trace `8 / 8`; output-only K1 remains `3 seen / 5 missed`.
 - Relation level gates: direct trace `12 / 12`.
 - Active trace: 126 kept-node words and 126 transport-action words on each of the Flock and
-  Relation fixtures; every slot has a one-word mutation control.
+  Relation fixtures. Recomputed table-root mutations changed 54 kept / 90 action decisions on
+  Flock and 12 kept / 90 action decisions on Relation.
 - Relation: 258 compact score words and 1,014 padded trace words over the 39 prefixes.
 - One planted carry word and stale proposal reuse remained detected.
 
@@ -80,8 +84,8 @@ No training run, capability, language result, throughput or performance claim is
 ## Checks run at the head
 
 - `cargo test --locked -p uor-r4-cpu-train
-  native_space_cuda_parity_contract_runs_the_same_words --features cuda --lib` - passed on the
-  RTX 4090.
+  native_space_cuda_parity_contract_runs_the_same_words --features cuda,qualification --lib` -
+  passed on the RTX 4090.
 - `cargo test --locked -p uor-r4-cpu-train
   native_space_parity_contract_catches_one_planted_fault_per_category --lib` - passed.
 - `cargo test --locked -p uor-r4-cpu-train

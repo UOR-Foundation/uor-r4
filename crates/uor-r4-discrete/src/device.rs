@@ -1315,6 +1315,7 @@ impl Device {
     /// hash requirement only; the full table/route/gate inventory is still
     /// validated on CUDA before the model can execute.
     #[doc(hidden)]
+    #[cfg(feature = "qualification")]
     pub fn from_snapshot_for_qualification(snapshot: Snapshot, ordinal: usize) -> Result<Self> {
         Self::from_snapshot_with_provenance(snapshot, ordinal, false)
     }
@@ -2312,6 +2313,7 @@ impl Device {
 
     /// Finite contract observation over the same exact apply kernel.
     #[doc(hidden)]
+    #[cfg(feature = "qualification")]
     pub fn apply_for_qualification(&mut self, proposal: &Proposal) -> Result<bool> {
         self.apply(proposal)
     }

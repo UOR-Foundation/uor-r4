@@ -11,6 +11,7 @@ Head: codex-6 implementation. Parent contract:
 - Fixtures: Route, Flock and Relation `UORLUT01` bytes.
 - Rows: all 39 prefixes of lengths 1 through 3 over three tokens.
 - Build: `NVCC=/usr/local/cuda/bin/nvcc UOR_NVCC_ARCH=compute_89 UOR_REQUIRE_CUDA=1`.
+- Feature gate: `qualification` is non-default and exists only for this finite parity contract.
 
 The synthetic fixture provenance bytes are not production artifact hashes. The finite test uses
 the qualification-only loaders recorded by codex-5; production loading remains strict.
@@ -36,7 +37,7 @@ the qualification-only loaders recorded by codex-5; production loading remains s
 | Relation level-gate alternatives: 6 words x other two trits | not separately controlled before this unit | **12 / 12 seen** |
 | Active kept-node slots per Flock/Relation 39-prefix fixture | not exposed before this unit | **126 / 126 words** |
 | Active transport-action slots per Flock/Relation 39-prefix fixture | not exposed before this unit | **126 / 126 words** |
-| Active kept/action mutation controls per fixture | not exposed before this unit | **126 / 126 each detected** |
+| Table-root decision mutations | not exposed before this unit | **Flock 90 faults: 54 kept / 90 action changes; Relation 240: 12 kept / 90 action** |
 | Relation compact / padded score words | not exposed before this unit | **258 / 1,014 exact** |
 | One-word carry fault | caught | still caught |
 

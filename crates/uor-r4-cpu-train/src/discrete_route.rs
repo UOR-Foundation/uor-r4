@@ -4868,24 +4868,32 @@ mod tests {
         samples
     }
 
-    fn trace_relation_fixture() -> Vec<u8> {
+    fn trace_relation_roots() -> [[u8; 2]; 8] {
+        [
+            [0, 1],
+            [2, 3],
+            [4, 5],
+            [6, 7],
+            [8, 9],
+            [10, 11],
+            [12, 13],
+            [14, 15],
+        ]
+    }
+
+    fn trace_relation_artifact(roots: &[[u8; 2]]) -> Vec<u8> {
         serialized_relation_fixture(
             9,
-            &[
-                [0, 1],
-                [2, 3],
-                [4, 5],
-                [6, 7],
-                [8, 9],
-                [10, 11],
-                [12, 13],
-                [14, 15],
-            ],
+            roots,
             &[1, 1, -1, 1, -1, 1],
             &[[1, -1, 1, -1, 1], [-1, 1, -1, 1, -1], [1, 1, -1, -1, 1]],
             2,
             2,
         )
+    }
+
+    fn trace_relation_fixture() -> Vec<u8> {
+        trace_relation_artifact(&trace_relation_roots())
     }
 
     /// K1 carry, K2 memory address, K3 emitted ids; `Err` is K4, the serving loader.
@@ -4986,6 +4994,25 @@ mod tests {
             .count()
     }
 
+    fn active_selection_words(traces: &[Vec<u32>], stages: usize) -> (Vec<u32>, Vec<u32>) {
+        let stride =
+            DISCRETE_ACTIVE_TRACE_HEADER_WORDS + stages * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS;
+        let mut kept = Vec::new();
+        let mut actions = Vec::new();
+        for trace in traces {
+            for block in trace.chunks_exact(stride) {
+                for level in block[DISCRETE_ACTIVE_TRACE_HEADER_WORDS..]
+                    .chunks_exact(DISCRETE_ACTIVE_TRACE_LEVEL_WORDS)
+                {
+                    let found = level[1] as usize;
+                    kept.extend_from_slice(&level[4..4 + found]);
+                    actions.extend_from_slice(&level[12..12 + found]);
+                }
+            }
+        }
+        (kept, actions)
+    }
+
     fn changed_rows(before: &[Vec<u32>], after: &[Vec<u32>]) -> usize {
         before
             .iter()
@@ -5084,7 +5111,8 @@ mod tests {
 
     #[test]
     fn native_space_trace_contract_exposes_active_leaf_kept_slots() {
-        let flock = serialized_discrete(DiscreteFixture::flock());
+        let fixture = DiscreteFixture::flock();
+        let flock = serialized_discrete(fixture.clone());
         let clean_flock = clean_trace_words(&flock);
         let mut active_kept_slots = 0usize;
         let mut active_action_slots = 0usize;
@@ -5112,56 +5140,30 @@ mod tests {
             active_action_slots, 126,
             "transport-action trace slot count"
         );
-        let mut kept_mutations = 0usize;
-        let mut action_mutations = 0usize;
-        for (row, trace) in clean_flock.iter().enumerate() {
-            for (block_index, block) in trace
-                .chunks_exact(
-                    DISCRETE_ACTIVE_TRACE_HEADER_WORDS + 2 * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS,
-                )
-                .enumerate()
-            {
-                for (level_index, level) in block[DISCRETE_ACTIVE_TRACE_HEADER_WORDS..]
-                    .chunks_exact(DISCRETE_ACTIVE_TRACE_LEVEL_WORDS)
-                    .enumerate()
-                {
-                    let found = level[1] as usize;
-                    for (slot, word) in level[4..4 + found].iter().enumerate() {
-                        assert_ne!(*word, u32::MAX);
-                        let mut changed = clean_flock.clone();
-                        let base = block_index
-                            * (DISCRETE_ACTIVE_TRACE_HEADER_WORDS
-                                + 2 * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS)
-                            + DISCRETE_ACTIVE_TRACE_HEADER_WORDS
-                            + level_index * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS
-                            + 4
-                            + slot;
-                        changed[row][base] ^= 1;
-                        assert_eq!(changed_rows(&clean_flock, &changed), 1);
-                        kept_mutations += 1;
-                    }
-                    for (slot, word) in level[12..12 + found].iter().enumerate() {
-                        assert_ne!(*word, u32::MAX);
-                        let mut changed = clean_flock.clone();
-                        let base = block_index
-                            * (DISCRETE_ACTIVE_TRACE_HEADER_WORDS
-                                + 2 * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS)
-                            + DISCRETE_ACTIVE_TRACE_HEADER_WORDS
-                            + level_index * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS
-                            + 12
-                            + slot;
-                        changed[row][base] ^= 1;
-                        assert_eq!(changed_rows(&clean_flock, &changed), 1);
-                        action_mutations += 1;
-                    }
+        let clean_selection = active_selection_words(&clean_flock, 2);
+        let mut root_faults = 0usize;
+        let mut kept_changes = 0usize;
+        let mut action_changes = 0usize;
+        for (token, blocks) in fixture.roots.iter().enumerate() {
+            for block in 0..2 {
+                let original = blocks[block];
+                for root in (0u8..16).filter(|&root| root != original) {
+                    let mut fault = fixture.clone();
+                    fault.roots[token][block] = root;
+                    let traces = clean_trace_words(&serialized_discrete(fault));
+                    let selection = active_selection_words(&traces, 2);
+                    kept_changes += usize::from(selection.0 != clean_selection.0);
+                    action_changes += usize::from(selection.1 != clean_selection.1);
+                    root_faults += 1;
                 }
             }
         }
-        assert_eq!(kept_mutations, 126, "kept-node mutation controls");
-        assert_eq!(action_mutations, 126, "transport-action mutation controls");
+        assert_eq!(root_faults, 90, "Flock table-root mutation controls");
+        assert_eq!(kept_changes, 54, "Flock kept-node decision changes");
+        assert_eq!(action_changes, 90, "Flock action decision changes");
         println!(
-            "native_trace rows={} kept_slots={active_kept_slots} action_slots={active_action_slots} kept_mutations={kept_mutations} action_mutations={action_mutations}",
-            clean_flock.len()
+            "native_trace rows={} kept_slots={active_kept_slots} action_slots={active_action_slots} root_faults={root_faults} kept_changes={kept_changes} action_changes={action_changes}",
+            clean_flock.len(),
         );
     }
 
@@ -5242,52 +5244,37 @@ mod tests {
         }
         assert_eq!(gate_faults, 12, "Relation level-gate mutation controls");
 
-        let stride = DISCRETE_ACTIVE_TRACE_HEADER_WORDS + 3 * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS;
-        let (mut kept_slots, mut action_slots) = (0usize, 0usize);
-        let (mut kept_mutations, mut action_mutations) = (0usize, 0usize);
-        for (row, trace) in clean.0.iter().enumerate() {
-            for (block_index, block) in trace.chunks_exact(stride).enumerate() {
-                for (level_index, level) in block[DISCRETE_ACTIVE_TRACE_HEADER_WORDS..]
-                    .chunks_exact(DISCRETE_ACTIVE_TRACE_LEVEL_WORDS)
-                    .enumerate()
-                {
-                    let found = level[1] as usize;
-                    kept_slots += found;
-                    action_slots += found;
-                    for slot in 0..found {
-                        let mut changed = clean.clone();
-                        let base = block_index * stride
-                            + DISCRETE_ACTIVE_TRACE_HEADER_WORDS
-                            + level_index * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS
-                            + 4
-                            + slot;
-                        changed.0[row][base] ^= 1;
-                        assert_eq!(changed_surface_rows(&clean, &changed), 1);
-                        kept_mutations += 1;
-                    }
-                    for slot in 0..found {
-                        let mut changed = clean.clone();
-                        let base = block_index * stride
-                            + DISCRETE_ACTIVE_TRACE_HEADER_WORDS
-                            + level_index * DISCRETE_ACTIVE_TRACE_LEVEL_WORDS
-                            + 12
-                            + slot;
-                        changed.0[row][base] ^= 1;
-                        assert_eq!(changed_surface_rows(&clean, &changed), 1);
-                        action_mutations += 1;
-                    }
-                }
-            }
-        }
+        let (kept_words, action_words) = active_selection_words(&clean.0, 3);
+        let kept_slots = kept_words.len();
+        let action_slots = action_words.len();
         assert_eq!(kept_slots, 126, "Relation kept-node trace slot count");
         assert_eq!(
             action_slots, 126,
             "Relation transport-action trace slot count"
         );
-        assert_eq!(kept_mutations, kept_slots);
-        assert_eq!(action_mutations, action_slots);
+        let roots = trace_relation_roots();
+        let mut root_faults = 0usize;
+        let mut kept_changes = 0usize;
+        let mut action_changes = 0usize;
+        for (token, blocks) in roots.iter().enumerate() {
+            for block in 0..2 {
+                let original = blocks[block];
+                for root in (0u8..16).filter(|&root| root != original) {
+                    let mut fault = roots;
+                    fault[token][block] = root;
+                    let traces = clean_relation_trace(&trace_relation_artifact(&fault));
+                    let (fault_kept, fault_actions) = active_selection_words(&traces.0, 3);
+                    kept_changes += usize::from(fault_kept != kept_words);
+                    action_changes += usize::from(fault_actions != action_words);
+                    root_faults += 1;
+                }
+            }
+        }
+        assert_eq!(root_faults, 240, "Relation table-root mutation controls");
+        assert_eq!(kept_changes, 12, "Relation kept-node decision changes");
+        assert_eq!(action_changes, 90, "Relation action decision changes");
         println!(
-            "native_relation_controls gate_faults={gate_faults} kept_slots={kept_slots} action_slots={action_slots}"
+            "native_relation_controls gate_faults={gate_faults} kept_slots={kept_slots} action_slots={action_slots} root_faults={root_faults} kept_changes={kept_changes} action_changes={action_changes}"
         );
     }
 
@@ -5437,7 +5424,7 @@ mod tests {
         assert_loader_refuses(contract_reading(&route, &fault), "C-8 K4");
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", feature = "qualification"))]
     #[test]
     fn native_space_cuda_parity_contract_runs_the_same_words() {
         use uor_r4_discrete::d11_export::import_d11_for_qualification;
@@ -8200,6 +8187,7 @@ mod tests {
         out
     }
 
+    #[derive(Clone)]
     struct DiscreteFixture {
         mode: &'static str,
         initialization: &'static str,

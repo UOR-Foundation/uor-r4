@@ -46,7 +46,7 @@ The clean start passes K1 to K6 on both fixtures (`native_space_parity_contract_
 
 ## The CUDA leg (completed by claude-372, codex-5 and codex-6 on `wick`)
 
-- **Build:** `uor-r4-discrete --features cuda` with `UOR_NVCC_ARCH=compute_89` (RTX 4090), on `wick`, in the `uor-r4-claude` container. No rented GPU.
+- **Build:** `uor-r4-discrete --features cuda` with `UOR_NVCC_ARCH=compute_89` (RTX 4090), on `wick`, in the `uor-r4-claude` container. The trace fixture additionally enables the non-default `qualification` feature. No rented GPU.
 - **Start:** the same two fixture artifacts, loaded into device buffers. `table`, `routes` and `gates` are copied word for word from the artifact sections; the spec words `s[]` come from the header; `s[11]`–`s[15]` are 0.
 - **Compare:**
   - `discrete_forward` output words, the Route/active-leaf trace and the padded Relation tail against the CPU and serving reads (K1 and C-4);
