@@ -32,10 +32,20 @@ The operator is a pure function. It returns the picks and the out words, and it 
 
 **2. Its CUDA twin, in `crates/uor-r4-discrete/src/native_vector.cu`.** The new entry is `native_q31_first_pick_read`, built ahead with nvcc (no NVRTC), admitted in `NATIVE_VECTOR_ENTRIES`, and launched by a `NativeVectorEngine` method next to a `*_reference` twin. The kernel uses integer arithmetic only.
 
-**3. A native replay in the probe** (`recall-payload-probe --native-replay`). It reads the float reference read's inputs at each query row: the stream at the read, the token ids, the normalized query and key gates, the weight and the token table. It converts each tensor to Q31 with one declared power-of-two scale per tensor, then runs `q31_first_pick_read` on the same windows. It reports:
-- how often the native pick matches the float first pick;
-- how often the native pick's next token is the asked value (native first-right);
-- the scales used.
+**3. A native replay in the probe** (`recall-payload-probe --native-replay`). At each forward of the float read, it captures exactly the operator's inputs:
+- the stream rows `x` at the read;
+- the window's token ids;
+- the query and key gates, normalized as the float gate does;
+- the weight;
+- the shared token table.
+
+As comparison-only fields it also captures the float first pick (`latest_best`'s rank 0), each row's float scores and the float out row. **No float pick, rank or score is passed to the native operator.** The replay converts the inputs to Q31 and runs `q31_first_pick_read` on the same windows. The comparison fields are read only after the operator returns.
+
+Conversion (one rule, recorded in the JSON):
+- The gates use the fixed Q31 unit scale `2^31` on both sides, rounded to nearest.
+- The stream uses one power-of-two scale `2^e_x`, the largest with `max|x| · 2^e_x ≤ 2^31` over the state's captured rows. The query and key addresses share it, since both read the same stream.
+- The table uses its own scale `2^e_t`, by the same rule.
+- The weight scale is `2^e_w`, with `e_w = 31 + e_x − e_t − g`. The gain shift `g` is the least one in `0..=31` for which the weight fits. That way the operator's `>> (31 − g)` lands the payload on the stream's scale.
 
 This conversion is a diagnostic in reference code (D85). It is not a model export, and nothing it makes is served.
 
@@ -49,22 +59,49 @@ This conversion is a diagnostic in reference code (D85). It is not a model expor
 
 ## Sheet (§4.5: one GPU evaluation, the native replay on claude-386's saved states)
 
-- **Bar.** On the 1,024 held-out query rows of each 16,384-step state (`try-5`, `try-6`), both of these must hold:
-  - the native pick equals the float first pick on at least 99% of rows (at least 1,014 rows);
-  - native first-right is within 1% of the float first-right count, which was 1,000 and 990 in claude-388 (so at least 990 and at least 980).
-- **Noise.** None. Picks are deterministic, so a miss is rounding at near-ties or a bug. The REPORT classifies each mismatching row by its float score gap.
+- **States.** These are claude-386's saved states on wick, under `/workspace/in/c387/`, with their `model.safetensors` / `vector_read.safetensors` sha256:
+  - **Barred**, the 16,384-step states:
+    - `try-5/ext-flockg-b2-1/run/run/models/step-016384` (`e39cb058…`, `944c759d…`);
+    - `try-6/ext-flockg-b2-2/run/run/models/step-016384` (`13cfba37…`, `bccbdb23…`).
+  - **Run and reported, with no bar**, the 4,096-step states:
+    - `try-1/arm-flockg-b2-1/run/run/models/step-004096` (`bffad79f…`, `98a1a7c3…`);
+    - `try-3/arm-flockg-b2-2/run/run/models/step-004096` (`b00f5adc…`, `1fa08f29…`).
+- **Error bound B** (derived for width 256, so 16 fold groups `G`; `LSB = 2^−e_x` in float units):
+  - Each rotated lane errs by at most 4 LSB: 1 from the stream's rounding through a unit gate, 2 from the gate's rounding, 0.5 from the product's rounding.
+  - So an address coordinate errs by at most `4G = 64` LSB, and `|q − k|` by at most 128 LSB.
+  - The L1 sum of 16 coordinates divided by 16, the float read's mean, errs by at most **`B = 8G = 128` LSB**.
+  - Two scores each off by up to `B` can swap order only where their float scores are within **`2B`**.
+- **Bar.** On the 1,024 held-out query rows of each barred state, both of these must hold:
+  1. **Picks.** The native pick equals the float first pick on at least 99% of rows (at least 1,014).
+  2. **Out words.** On the rows where the picks agree, every native out word, divided by `2^e_x`, is within `2 LSB + 2^−22 · |float out|` of the float out row, per lane. The `2 LSB` is the Q31 rounding of `x`, `w` and `e` and of the product. The `2^−22` relative term is f32's own rounding of `x + w·e`. The gain is `g` from the rule above, at the trained scale (×1), and the REPORT names it.
+- **Noise.** None. Picks are deterministic, so a miss is rounding at a near-tie or a bug. The JSON counts, before any classification:
+  - the rows whose float top-1 and top-2 scores are within `2B`, the most mismatches rounding can explain;
+  - for each mismatching row, `|float score(float pick) − float score(native pick)|` in LSB.
 - **Controls:**
-  - the CPU operator against the CUDA twin, bit for bit, on the same converted inputs;
-  - a 1-LSB perturbation of one key gate must change at least one pick or out word in a fixture where it should, which proves the differential can fail;
-  - the read cut (no read) leaves the stream words unchanged.
+  1. **The replay can fail on the real states.** The replay runs a second time with every key gate replaced by the identity `[2^31, 0, 0, 0]`, and its pick agreement must fall below 99% at both seeds. If it does not, the replay is uninformative, and the outcome reads as D whatever the bar says.
+  2. **CPU against CUDA.** On the same converted inputs from one barred state, the operator and its CUDA twin agree bit for bit on picks and out words.
+  3. **A 1-LSB perturbation.** In the fixture built near a tie, changing one key-gate word by 1 LSB changes at least one pick or out word. This shows the differential can fail.
+  4. **Row 0.** Every window's row 0 returns pick 0, with out words equal to its stream words. The JSON counts these rows.
+- **Report lines (no bar).**
+  - Native first-right against the float counts, which were 1,000 and 990 in claude-388.
+  - The 4,096-step states' agreement and first-right.
+  - The out-word check at ×16 (`g + 4`).
 - **Seeds.** 2 (claude-386's B2 seeds 1 and 2).
 - **Cost.** Minutes on wick, $0. No pod and no training.
-- **Reading map** (fixed before any number is read):
-  - **P:** both conditions hold at both seeds. The Q31 operator reproduces the float read's choice, and the next unit attaches it to `IntegerStackSession`.
-  - **N1 (precision):** picks disagree on more than 1% of rows, and the mismatches sit at float score gaps below the stream scale's LSB times 16. The fix is a wider address accumulator or a finer scale. It is not a mechanism negative.
-  - **N2 (definition):** mismatches at large score gaps. The native definition differs from the float one (rotation, fold or tie rule), and the next step is to find the difference.
-  - **D:** anything else, reported as read.
-- **FIT:** a fresh-context non-author review, before the run.
+- **Reading map** (fixed before any number is read; it applies only when control 1 falls below 99%):
+  - **P:** both bar conditions hold at both seeds. The Q31 operator reproduces the float read's choice and its write, and the next unit attaches it to `IntegerStackSession`.
+  - **N1 (precision):** a condition fails, but every pick mismatch has `|float score(float pick) − float score(native pick)| ≤ 2B`, and every out-word miss is within 4× the out bound. The fix is a finer scale or a wider accumulator. It is not a mechanism negative.
+  - **N2 (definition):** at least one pick mismatch above `2B`, or an out-word miss above 4× its bound. The native definition (rotation, fold, tie rule, gain) differs from the float one, and the next step is to find the difference.
+  - **D:** anything else, including control 1 at or above 99%, reported as read.
+- **FIT:** a fresh-context non-author review. The first review returned `TEST FITNESS: UNFIT` on 15 Nov with six findings, all folded in above:
+  - the replay control on the real states;
+  - one gate scale;
+  - B derived, with its units;
+  - the out-word condition in place of the redundant first-right condition;
+  - the states named;
+  - row 0.
+
+  The amended sheet goes to a second fresh review before the run.
 
 ## Cancel probe
 
@@ -87,6 +124,6 @@ Before the work, I checked whether any native read operator exists on `main`. At
 
 1. `q31_first_pick_read` and its tests pass on the laptop: fixtures for the tie rule, the fold, saturation, the gain and each refusal.
 2. The CUDA twin matches the oracle bit for bit on wick (`--features cuda --test native_vector_cuda`), and the 1-LSB control fails as it should.
-3. The native replay has run on the four saved states, and its JSON is fetched with sha256.
+3. The native replay, with control 1, has run on the four named states: the two barred states and the two reported 4,096-step states. Its JSON is fetched with sha256.
 4. The REPORT names the reading map's letter with the numbers, and the notebook row is written.
 5. The PR goes through a fresh exact-head review, the queue and `close --verify`.
