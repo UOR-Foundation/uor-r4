@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-368620ef.js";
+            window.path_to_searchindex_js = "../searchindex-b1879735.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-78e3d836.js"></script>
@@ -179,7 +179,7 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+                        <p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/d5eb4a55656726b04ea79b06968f91905933c925"><code>d5eb4a556</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="what-is-still-open"><a class="header" href="#what-is-still-open">What is still open</a></h1>
 <p>M1 answered a narrow question: can a saved discrete geometric model beat two simple count tables on
@@ -189,11 +189,12 @@ on new phrasing, remember across sessions, and run as one product. That remains 
 <pre class="mermaid">flowchart TD
   A["M1: saved integer model&lt;br/&gt;beats count tables"] --&gt; B{"Can it start the right reply&lt;br/&gt;on new phrasing?"}
   B -- "point key gives a partial gain" --&gt; M["claude-220: float key; claude-222/224/228: integer instruments&lt;br/&gt;claude-231 nearest built; claude-232 parity MISS"]
-  M --&gt; R["Complete correct replies&lt;br/&gt;and durable memory"]
+  M --&gt; V["Since 10 Nov: recall in conversations&lt;br/&gt;V0: facts come from the exact turn memory&lt;br/&gt;D85: one native state; V1, V2(a) in progress"]
+  V --&gt; R["Complete correct replies&lt;br/&gt;and durable memory"]
   R --&gt; S["Full serving, cost,&lt;br/&gt;distribution and release"]
 </pre>
 
-<p><em>M1 is complete. The current blocker is reply opening on new phrasing, not the count-table bar.</em></p>
+<p><em>M1 is complete (1 of 8). Since 10 Nov the work is recall in controlled conversations, and almost every fact the model gets right comes from the turn memory's table. Until then the blocker was reply opening on new phrasing, not the count-table bar.</em></p>
 <p>Terms follow the <a href="../start/glossary.html">glossary</a>. Claims are <strong>proof</strong>, <strong>measurement</strong> or
 <strong>hypothesis</strong>.</p>
 <h2 id="answered-at-m1s-scope"><a class="header" href="#answered-at-m1s-scope">Answered at M1's scope</a></h2>
@@ -233,7 +234,7 @@ search and <code>/8</code> record, with 380 library tests and a full serving aud
 has built the panel decode and grade. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md">Claude-227</a> passed retention GPU parity
 within the 3% bar; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-228/REPORT.md">claude-228</a> built the run's reference/read-back/BOS checks; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-229/REPORT.md">claude-229</a> found an instrument fault: the
 integer session uses the native writer instead of the trained whole-table nearest readout, so all grade
-pairs are (0, 0). <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-231/REPORT.md">Claude-231</a> built the nearest readout and export on native and browser paths; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md">claude-232</a> then missed greedy parity in every cell, so the mismatch must be localized before the p-x rerun. Useful conversation remains unproven.</p>
+pairs are (0, 0). <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-231/REPORT.md">Claude-231</a> built the nearest readout and export on native and browser paths; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md">claude-232</a> then missed greedy parity in every cell. Since 10 Nov the work is recall in controlled conversations: <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-376/REPORT.md">claude-376</a>'s pure-vector baseline found 377, 380 and 441 exact replies of 2,218 as exported, but 171, 173 and 211 with the exact turn memory dropped. The open question is whether a state carried across training windows (V1, PR #3979) or vector-native reads (V2(a), PR #3978) can carry those facts; both are in progress. Useful conversation remains unproven.</p>
 <h2 id="what-remains-open-beyond-that-key"><a class="header" href="#what-remains-open-beyond-that-key">What remains open beyond that key</a></h2>
 <ol>
 <li><strong>Complete correct replies and durable memory (M2/M3).</strong> Can one unified model answer from exact

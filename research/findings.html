@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-368620ef.js";
+            window.path_to_searchindex_js = "../searchindex-b1879735.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-78e3d836.js"></script>
@@ -179,7 +179,7 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+                        <p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/d5eb4a55656726b04ea79b06968f91905933c925"><code>d5eb4a556</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="what-the-project-knows"><a class="header" href="#what-the-project-knows">What the project knows</a></h1>
 <p>The project now has one measured milestone result beside its longer record of measurement lessons:
@@ -299,6 +299,13 @@ context-free successor table. See <a href="open-questions.html">open questions</
 <tr><td>Run reference/read-back/BOS instruments built</td><td>390 integer-library tests with one ignored, four negative gates and a full serving audit; row 0 instrument fault below</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-228/REPORT.md">claude-228</a></td></tr>
 <tr><td>Real run: row 0 instrument fault</td><td>Integer uses native writer, not trained whole-table nearest; every grade pair is (0, 0). No mechanism verdict or tok/s. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-231/REPORT.md">Claude-231</a> built the nearest readout; greedy parity missed every cell in claude-232; the p-x rerun waits on localization</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-229/REPORT.md">claude-229</a></td></tr>
 <tr><td>Nearest readout and export built</td><td>395 integer-library tests with one ignored, seven negative gates and full serving/WASM audits; native and browser paths. Nearest decode 1,365 tok/s and prefill 1,405 tok/s, about 2.85× writer cost; claude-232 missed parity in every cell; p-x rerun waits on localization</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-231/REPORT.md">claude-231</a></td></tr>
+<tr><td>Human text, held-out panel of 1,460,697 rows: 331,698 and 342,250 correct next tokens against T2's 256,660 (6 Nov)</td><td>Batch 64 with twice the training text; ahead of T2 at both seeds. Width 256 adds about 125,000 rows over width 128 (claude-317)</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-301/REPORT.md">claude-301</a></td></tr>
+<tr><td>E8 address memory: exact replies of 1,108, 188 → 218 and 225 → 254 at two seeds</td><td>Half a reply under its bar: not called; not called either when served in integers (claude-366)</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-346/REPORT.md">claude-346</a></td></tr>
+<tr><td>Recall of a told value: 314, 320 and 325 of 578 questions (13 Nov)</td><td>claude-358's three <code>p</code> models, controlled conversations</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-358/REPORT.md">claude-358</a></td></tr>
+<tr><td>Pair experts: good everyday replies of 239, 137/135/134 → 170/171/170 held out</td><td>Counted from TRAIN, not trained; a reply served this way is a stored TRAIN reply</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-367/REPORT.md">claude-367</a></td></tr>
+<tr><td>Pair rows: exact replies of 2,218, 431 → 527 and 413 → 521 at two seeds</td><td>Mostly the turn's own words carried into the reply; two weighings did not add; the export refuses pair rows, so they are not served</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-370/REPORT.md">claude-370</a></td></tr>
+<tr><td>V0, pure-vector baseline: exact replies of 2,218, 171/173/211 without the exact turn memory, 377/380/441 with it (14 Nov)</td><td>Almost every fact the model gets right comes from the turn memory's table; a baseline, no bar</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-376/REPORT.md">claude-376</a></td></tr>
+<tr><td>One Q31 vector state trained on CUDA, CPU and CUDA equal after each of 64 steps</td><td>A finite contract test for D85's native route, not language-model training</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/native-space-state-contract/codex-5/REPORT.md">codex-5</a></td></tr>
 <tr><td>K16-A: 65 and 463 of 14,287 below unigram 1,226 and T2 6,300</td><td>Dated configuration negative, not the current best</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/k16-outcome-call-2026-10-19/README.md">K16 outcome</a></td></tr>
 <tr><td>Older float geometric stack: 0.877 float and 0.933 served BPB against an old 0.90 bar</td><td>The float used 512 windows and the served cell 64, so the pair is not comparable. The separate 19.9M reading of 0.886838 at 512 windows used a different protocol. Used softmax, SiLU and matmul; historical model, not the D11 product</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/labs/d11-serving-2026-10-10/README.md">D11 serving</a></td></tr>
 <tr><td>Older dense table-emulated products cost about 4.3× the energy of float</td><td>One dense model under an older serving rule; not an M5 measurement of the accepted model</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/archive/history/github-archive-2026-10-15/markdown/1449-roadmap-measured-energy-the-oversight-audit-reconciliation-i.md">#1449</a></td></tr>

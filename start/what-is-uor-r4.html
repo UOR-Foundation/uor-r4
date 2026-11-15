@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-368620ef.js";
+            window.path_to_searchindex_js = "../searchindex-b1879735.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-78e3d836.js"></script>
@@ -179,7 +179,7 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+                        <p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/d5eb4a55656726b04ea79b06968f91905933c925"><code>d5eb4a556</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="what-uor-r4-is"><a class="header" href="#what-uor-r4-is">What UOR-R4 is</a></h1>
 <p><strong>In one paragraph.</strong> UOR-R4 is an attempt to build a language model, the kind of program behind chat assistants, that is cheap enough to train and run on an ordinary laptop or inside a web browser. Today's language models are <em>transformers</em>. They spend most of their effort multiplying very large grids of decimal numbers. UOR-R4 bets that a different toolkit can do the same job for far less: rotations of a geometric object, exact whole-number addresses built from primes, small lookup tables, and an exact memory. This page explains that bet in about five minutes. It is a research project and it is <strong>pre-alpha</strong>. <strong>M1 is complete: 1 of 8 milestones</strong>, but no model built under its rules holds a useful conversation yet (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">PLAN</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/STATE.md">STATE</a>).</p>
@@ -243,6 +243,13 @@ M1 model (<a href="../model/pipeline-map.html">pipeline map</a>). On the FBS pat
 <li>The model is <strong>served as integers</strong>. On an M1 laptop a served token runs at 4,217 to 4,504 tok/s under <code>lut-stack/5</code>, with exact rotations and its DEV export gap inside the bar, (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/d11-exporter-float-trunk/claude-182/REPORT.md">claude-182</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/fbs-serving-vector-kernel/claude-186/REPORT.md">claude-186</a>). The served model is inside the export-gap bar on both seeds: net 6 and −8 rows against F_I 24 on DEV (claude-182). The <code>/7</code> engine serves the opening and later-reply memory tables on synthetic fixtures; trained-artifact parity and memory-session restore remain open.</li>
 <li>Text in and out (R7) is not built. The artifacts take token ids only.</li>
 </ul>
+<p><strong>Since 31 Oct.</strong> The FBS line moved to recall in controlled conversations: claude-358's three
+models (13 Nov) state a told value on 314, 320 and 325 of 578 questions. Served without the exact
+turn memory they give 171 to 211 exact replies of 2,218, against 377 to 441 with it, so the
+memory's table, not the learned vectors, supplies almost every fact
+(<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-376/REPORT.md">V0, claude-376</a>). Since 13 Nov (D85)
+the default route is one persistent integer geometric state that training and serving share, with
+float master weights and export gaps kept only as reference (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md#native-space-cycle">PLAN</a>).</p>
 <p>M1 is complete on the discrete model, not this FBS trunk. <a href="where-we-are.html">Where we are</a> has the
 full status and its limits.</p>
 <h2 id="where-it-stands"><a class="header" href="#where-it-stands">Where it stands</a></h2>
@@ -256,7 +263,7 @@ full status and its limits.</p>
 <tr><td>Whole-number serving engine</td><td>Built. Native and WebAssembly audits pass; integer multiply and divide are allowed, floats remain banned</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/wasm-serving-runtime-2026-10-18/README.md">WASM runtime record</a>, <a href="../mechanisms/lut-serving.html">serving dossier</a></td></tr>
 <tr><td>A model trained under today's rules in that engine</td><td>The saved discrete M1 pair and a separate FBS export exist; neither is useful chat or a released product. New work uses the lab's pre-run review, not a blanket owner hold</td><td><a href="where-we-are.html">where we are</a>, <a href="../CHARTER.html">charter</a> section 5</td></tr>
 <tr><td>Saved M1 model</td><td>DEV 7,002 and 7,001 of 14,287, above unigram 1,226 and T2 6,300; Fresh V2 7,215 and 7,228 of 14,479; p-f 7,850 and 7,872 of 15,953</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/m1-close-saved-model/README.md">M1 close</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/m1-fresh-panel-transfer/README.md">Fresh V2</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md">bar-f report</a></td></tr>
-<tr><td>Current FBS research</td><td>The point key serves in one float model; integer decode/grade exists, but nearest-readout parity missed in every cell, so localization precedes p-x</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-220/REPORT.md">claude-220</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-224/REPORT.md">claude-224</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md">claude-232</a></td></tr>
+<tr><td>Current FBS research</td><td>Recall in controlled conversations: 314, 320 and 325 of 578 told values stated at three seeds; the facts come almost entirely from the exact turn memory's table. In progress: one native state shared by training and serving (D85), carried across training windows (V1)</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-358/REPORT.md">claude-358</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-376/REPORT.md">V0, claude-376</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md#native-space-cycle">PLAN</a></td></tr>
 <tr><td>Apple M1 decode for the M1 pair</td><td>Bar-f remeasurement 10,876 and 10,566 tokens per second, with a 192-token prefill and 64-token decode; older close-grade bar (c) 11,026 and 10,573</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md">bar-f report</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/m1-close-saved-model/README.md">close grade</a></td></tr>
 </tbody>
 </table>
