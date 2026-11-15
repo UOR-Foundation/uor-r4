@@ -498,6 +498,15 @@ mod tests {
         // rounded by 2^31), so the replay detects a key-gate fault only from the delta printed.
         let base = drawn_read(51, 32, 4);
         let (steps, trace) = serve(&with_read(&plain, 2, base.clone()));
+        let largest = trace
+            .iter()
+            .flat_map(|s| s.x_in.iter())
+            .map(|w| w.unsigned_abs())
+            .max();
+        eprintln!(
+            "largest |x_in| word at the read: {largest:?} (2^31 = {})",
+            1u64 << 31
+        );
         let mut first_moving = None;
         for k in 0..31 {
             let mut moved = 0usize;
