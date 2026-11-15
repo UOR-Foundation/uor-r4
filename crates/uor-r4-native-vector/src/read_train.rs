@@ -440,6 +440,25 @@ mod tests {
     }
 
     #[test]
+    fn a_margin_widens_a_right_pick_that_sits_too_close() {
+        // Row 2 already picks row 0 (distance S * 3/4 against S * 5/4).
+        let (stream, ids, table) = fixture(S);
+        let read = identity_read();
+        let at_zero = read
+            .train_pick_step(&stream, &ids, &table, 1, 3, &[0, 0, 1], 0, 4)
+            .unwrap();
+        assert_eq!((at_zero.loss_before, at_zero.accepted), (0, false));
+
+        let margin = S as u64;
+        let step = read
+            .train_pick_step(&stream, &ids, &table, 1, 3, &[0, 0, 1], margin, 4)
+            .unwrap();
+        assert_eq!(step.loss_before, margin as u128 - S as u128 / 2);
+        assert!(step.accepted && step.loss_after < step.loss_before);
+        assert_eq!(step.picks_after, vec![0, 1, 1]);
+    }
+
+    #[test]
     fn a_tie_sends_the_rival_to_the_latest_row() {
         let stream = [row(S, 0), row(S, 0), row(0, S), row(3 * S / 4, S / 2)].concat();
         let step = identity_read()
