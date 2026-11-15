@@ -35,6 +35,11 @@ Commits:
 
   Its line is `TEST FITNESS: FIT WITH CHANGES, applied`, and `prep-check` reads it as FIT.
 
+- **`crates/uor-r4-integer/tests/sh_spin_probe.rs`**, one comment in Codex's file from #4013, reworded and its meaning kept. It now reads "no exponent anywhere".
+  - The old comment named the banned token in order to say it is not used. The D23 interlock counted that, and four harness tests failed on every PR merged with main ("1 file above baseline, 0 -> 1").
+  - Main's push CI runs only the docs jobs, so #4013 merged without this showing.
+  - No code changed, and the baseline is not raised.
+
 The host rule, the read, the session and the artifact are unchanged.
 
 ## Measurements
