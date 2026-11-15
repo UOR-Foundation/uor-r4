@@ -37,8 +37,8 @@ carry. The old FBS image accessor refuses a model with an attached Q31 state, so
 cannot silently omit it and still claim parity.
 
 Three Rust source files changed; no dependency or artifact format changed. The focused Q31 test
-module grew from two to five tests. The code/test change is about 430 inserted and 73 removed
-lines before the loop and notebook records, inside the ORDER's 300-to-550-line estimate.
+module grew from two to six tests. The code/test change is 561 inserted and 77 removed lines
+before the loop and notebook records, 16% above the ORDER's 550-line upper estimate.
 
 ## Measurements
 
@@ -54,15 +54,19 @@ lines before the loop and notebook records, inside the ORDER's 300-to-550-line e
   `64 / 64` lane transitions and `256 / 256` raw transport words equal the shared Q31 oracle; all
   `192 / 192` carry-boundary words continue exactly from the preceding step. At least one emitted
   token/readout differs from the same model without the attachment.
-- Exact restore: after a two-token prefix, a fresh session restored from `UR4SESS1` and the
-  uninterrupted session produced identical two-step tokens, Q12 queries and native-Q31 traces.
+- Exact restore: after a two-token prefix, a fresh session on the same attached model restored
+  from `UR4SESS1` and the uninterrupted session produced identical two-step tokens, Q12 queries
+  and native-Q31 traces. A model without the attachment and a model with a different Q31 state
+  both refused the snapshot.
+- Refusal atomicity: an incompatible snap/Q31 trace combination and an out-of-domain restored
+  carry both returned errors without changing the pre-step serialized session.
 - No language, capability, speed or memory result is measured.
 
 ## Checks run at the head
 
 - `cargo test --locked -p uor-r4-native-vector` - 14 passed.
-- `cargo test --locked -p uor-r4-integer --features serving-wasm q31_serving` - 5 passed.
-- `cargo test --locked -p uor-r4-integer --features serving-wasm --lib` - 648 passed, 1 ignored.
+- `cargo test --locked -p uor-r4-integer --features serving-wasm q31_serving` - 6 passed.
+- `cargo test --locked -p uor-r4-integer --features serving-wasm --lib` - 649 passed, 1 ignored.
 - `cargo check --locked -p uor-r4-integer --features serving-wasm` - passed.
 - `cargo check --locked -p uor-r4-integer --features serving-wasm --lib
   --target wasm32-unknown-unknown` - passed.
@@ -95,8 +99,6 @@ lines before the loop and notebook records, inside the ORDER's 300-to-550-line e
 
 - The 48-byte Q31 state is attached at runtime; `UORLUT01` does not yet package it as an artifact
   section.
-- `UR4SESS1` does not yet bind the attached Q31 state hash, so a snapshot must be restored on a
-  model with the same attachment. The current replay proves same-model continuation only.
 - The full-crate missing-fixture tests, wasm32 all-target timing binaries and Linux static
   auditor remain separate instrument/environment work.
 - Exact-head adversarial review, protected merge queue, fresh-main verification and branch/worktree

@@ -52,7 +52,8 @@ use super::kernels::{
 };
 use super::memory::{memory_image, MemoryAnchors, MemoryMove, ServedTurnMemory};
 use super::q31_serving::{
-    q31_saturate, Q31Quaternion, Q31ServingSession, Q31Transport, Q31_MODEL_BYTES,
+    q31_quaternion_admitted, q31_saturate, Q31Quaternion, Q31ServingSession, Q31Transport,
+    Q31_MODEL_BYTES,
 };
 use super::StackError;
 use crate::fbs_snapshot::PlaceState;
@@ -564,6 +565,9 @@ pub struct IntegerStackModel {
     snapped: bool,
     transport_snap: Option<StackTransportSnap>,
     sha256: String,
+    /// The exact serving identity: the artifact SHA alone, or a composite
+    /// artifact-plus-native-Q31 identity when that state is attached.
+    session_model_sha256: String,
     /// Tokenizer identity carried by a bound `/10` artifact.
     tokenizer_sha256: Option<String>,
     embed: PackedMatrix,
@@ -1022,6 +1026,7 @@ impl IntegerStackModel {
             transport_snap: artifact.transport_snap.clone(),
             shape,
             numerics,
+            session_model_sha256: artifact.sha256.clone(),
             sha256: artifact.sha256,
             tokenizer_sha256,
             embed,
@@ -1056,7 +1061,14 @@ impl IntegerStackModel {
                 "native Q31 state needs a model with a recurrence layer",
             ));
         }
-        self.native_q31 = Some(Q31ServingSession::from_slice(bytes)?);
+        let state = Q31ServingSession::from_slice(bytes)?;
+        let mut digest = Sha256::new();
+        digest.update(b"uor-r4.native-q31-serving/1\0");
+        digest.update(self.sha256.as_bytes());
+        digest.update([0]);
+        digest.update(state.to_bytes());
+        self.session_model_sha256 = hex::encode(digest.finalize());
+        self.native_q31 = Some(state);
         Ok(())
     }
 
@@ -1768,7 +1780,8 @@ pub struct SerializedStackSession {
     pub schema: String,
     /// Schema version (must be 1).
     pub version: u32,
-    /// SHA-256 of the model artifact this session was created from.
+    /// SHA-256 of the serving model this session was created from: the
+    /// artifact SHA alone, or the composite artifact-plus-native-Q31 identity.
     pub artifact_sha256: String,
     /// Current sequence position (number of tokens ingested / stepped).
     pub position: u64,
@@ -2630,7 +2643,7 @@ impl IntegerStackSession<'_> {
         SerializedStackSession {
             schema: STACK_SESSION_SCHEMA.to_string(),
             version: 1,
-            artifact_sha256: self.model.sha256.clone(),
+            artifact_sha256: self.model.session_model_sha256.clone(),
             position: self.position as u64,
             cache_at: self.cache_at as u64,
             lift_at: self.lift_at as u64,
@@ -2693,10 +2706,10 @@ impl IntegerStackSession<'_> {
                 saved.version
             )));
         }
-        if saved.artifact_sha256 != self.model.sha256 {
+        if saved.artifact_sha256 != self.model.session_model_sha256 {
             return Err(StackError::Numerics(format!(
-                "session artifact SHA-256 mismatch: session has '{}', model has '{}'",
-                saved.artifact_sha256, self.model.sha256
+                "session serving identity mismatch: session has '{}', model has '{}'",
+                saved.artifact_sha256, self.model.session_model_sha256
             )));
         }
         if saved.content_readout_sha256 != self.model.content_readout_sha256 {
@@ -3224,6 +3237,7 @@ impl IntegerStackSession<'_> {
         if self.position >= s.context {
             return Err(StackError::ContextFull { context: s.context });
         }
+        native_q31_step_preflight(model, &self.states, self.b.snap_trace.is_some())?;
         let b = &mut self.b;
         let native_q31_trace = &mut self.native_q31_trace;
 
@@ -3390,6 +3404,35 @@ fn stack_step_call(call: &mut StepCall<'_, '_>) {
     call.result = stack_step(call.session, call.token, true);
 }
 
+/// Refuse an incompatible native-Q31 step before it changes tokens or carry history.
+fn native_q31_step_preflight(
+    model: &IntegerStackModel,
+    states: &[Box<LayerState>],
+    snap_trace: bool,
+) -> Result<(), StackError> {
+    if model.native_q31.is_none() {
+        return Ok(());
+    }
+    if snap_trace {
+        return Err(StackError::Shape(
+            "a native Q31 recurrence uses its carry trace, not the icosian snap trace",
+        ));
+    }
+    for state in states {
+        if let LayerState::Recurrence { state, .. } = state.as_ref() {
+            for lane in state.chunks_exact(4) {
+                let words = [lane[0], lane[1], lane[2], lane[3]];
+                if !q31_quaternion_admitted(words) {
+                    return Err(StackError::Numerics(
+                        "a native Q31 carry lies outside the closed coordinate domain".to_owned(),
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// [`IntegerStackSession::step`]'s work: with `parallel` (on the model's
 /// pool), the rows of the large weight maps are split across its threads.
 #[inline(never)]
@@ -3410,6 +3453,7 @@ fn stack_step(
     if session.position >= s.context {
         return Err(StackError::ContextFull { context: s.context });
     }
+    native_q31_step_preflight(model, &session.states, session.b.snap_trace.is_some())?;
     let b = &mut session.b;
     let native_q31_trace = &mut session.native_q31_trace;
     stack_dequant_row(&model.embed, token as usize, &mut b.x);
@@ -3857,6 +3901,7 @@ fn stack_step_fbs(
     if session.position >= s.context {
         return Err(StackError::ContextFull { context: s.context });
     }
+    native_q31_step_preflight(model, &session.states, session.b.snap_trace.is_some())?;
     // The Hamming read at this row needs `x_0..=x_t`.
     session.tokens.push(token);
     let opening = session.at_reply_opening();
@@ -4169,6 +4214,7 @@ fn stack_step_fbs_timed(
     if session.position >= s.context {
         return Err(StackError::ContextFull { context: s.context });
     }
+    native_q31_step_preflight(model, &session.states, session.b.snap_trace.is_some())?;
     session.tokens.push(token);
     let opening = session.at_reply_opening();
     // The place read's register moves on this token, before the row's readout (claude-351).
@@ -4470,6 +4516,11 @@ fn stack_recurrence_core(
     let (s, n) = (&model.shape, &model.numerics);
     let d = s.width;
     let lanes = s.lanes();
+    if model.native_q31.is_some() && b.snap_trace.is_some() {
+        return Err(StackError::Shape(
+            "a native Q31 recurrence uses its carry trace, not the icosian snap trace",
+        ));
+    }
     for (g, bias) in b.gate_out.iter_mut().zip(t.gate_bias) {
         *g = g.saturating_add(*bias);
     }
@@ -4539,11 +4590,6 @@ fn stack_recurrence_core(
         )
     };
     if let Some(native_q31) = model.native_q31 {
-        if b.snap_trace.is_some() {
-            return Err(StackError::Shape(
-                "a native Q31 recurrence uses its carry trace, not the icosian snap trace",
-            ));
-        }
         stack_native_q31_lanes(
             model,
             native_q31,
