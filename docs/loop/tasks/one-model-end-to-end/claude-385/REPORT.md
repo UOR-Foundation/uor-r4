@@ -7,7 +7,7 @@ The order came from Casey, 15 Nov 2026, relayed by the starting session: "can we
 **What is now true, at the head `44774d2a9eafc30514d1f26cddab28d414e98cf9` (wick try-4):**
 - **Flags off is the same training.** Base `cb91a1baa` and the head train 20 steps of `p` with identical eval lines (3 of 3) and all 7 checkpoint files byte-identical. On the `--recall` B2 task with no read, 64 steps at `97b575bd9` (try-2), `recall.jsonl` 3 of 3 lines and both model files are identical to the base. Since then the head changed only when the Starling calibration fires, inside the read's own branch, and tests.
 - **Every repair has a device test that fails with its own fix set aside.** 8 of 8 gates on wick, then 23 of 23 `vector_read` cuda tests green again. Two more host gates fail on the laptop.
-- **The Starling reads now open.** On `p`, 40–43% of rows read at steps 128 and 256 (claude-381: none). On the B2 task the calibrated offset settles near 60 (Lorentz) and 64 (L2), against the fixed start 2.5.
+- **The Starling reads now open.** On `p`, Lorentz reads 43% of rows at step 128 and 41% at 256, L2 41% and 40% (claude-381: none). On the B2 task the calibrated offset settles near 60 (Lorentz) and 64 (L2), against the fixed start 2.5.
 - **The credit no longer reaches the trunk, and most of the early cost is gone.** Dev top-1 at step 256 of `p`, of 14,287: off 88; Lorentz 77, L2 79, Flock 64, prime-route 40. In claude-381 the same reads scored 4 to 10. One seed and 256 steps: a smoke.
 - **Each read trains beside off at 1.05 to 1.10 times its step time,** the two started together on the same shared card.
 
@@ -34,7 +34,7 @@ The order came from Casey, 15 Nov 2026, relayed by the starting session: "can we
   - **Repair 8, ties.** Every kind takes the latest earlier position on equal scores. Flock's K are `latest_best`: the latest extreme, removed from the mask, K times. A row with fewer earlier positions than K gets weight 0 at the extra ranks, and those picks point inside the window.
   - **Item 4's hooks:** `without_vector_read` (the read unset for a pass, restored on return and on error) and `recording_picks` (each row's choice, position + 1, 0 for none; Flock's first kept).
 - **`crates/uor-r4-float-train/src/in_space_long.rs`:**
-  - **Repair 3, `--recall` takes a vector read.** The read is built with its own `FlockAdamW`, its credit is added inside the training forward only, its variables are saved with the model, and Starling is calibrated at the first training batch.
+  - **Repair 3, `--recall` takes a vector read.** The read is built with its own `FlockAdamW`, its credit is added inside the training forward only, its variables are saved with the model, and Starling is calibrated at the first training forward (the first micro-batch when `--micro-batch` splits a step).
   - **Repair 4, the cut reading.** Each recall reading adds `vector_read`: rows that read, chose the asked value and chose the other fact's value per bucket (`count_read_choices`, from `recording_picks`), and the held-out hits and two-class counts with the read cut (`cut_hits`, `cut_query`, a second pass under `without_vector_read`). It also records the weight's mean size, the offset, the calibrated offset and the training counts.
   - `run_long` calibrates after the step-0 checkpoint (item 1 above).
 - **`bin/train-in-space.rs` (flags only):** `--vector-read-stream-grad 0|1` (0 by default), refused without a read. `--recall` no longer refuses a read.
