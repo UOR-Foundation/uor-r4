@@ -8,6 +8,8 @@
 //! words; the AOT CUDA module must return the same words.
 
 use std::fmt;
+pub mod read;
+pub use read::*;
 
 #[derive(Debug)]
 pub enum Error {
