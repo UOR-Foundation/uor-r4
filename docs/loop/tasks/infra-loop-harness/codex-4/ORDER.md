@@ -1,6 +1,7 @@
 # ORDER: infra-loop-harness, codex-4
 
 Lab: codex. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md).
+Setup row: 10.
 Reviewed head: `355bd9de24f0e5db095bc3745465817dc7b6215d`.
 
 ## Why this unit exists
