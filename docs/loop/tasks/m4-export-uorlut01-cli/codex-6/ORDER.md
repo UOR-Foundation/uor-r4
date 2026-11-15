@@ -31,7 +31,7 @@ test and records, and does not touch that file.
 ## Fixture and replay
 
 Fixed synthetic trunk seed `20_261_115` (vocabulary 256, width 32, two recurrence layers, context
-8) and the token sequence `[3, 5, 8, 13, 21, 34]`. The test:
+8) and the token sequence `[3, 5, 8, 13, 21, 34, 55, 89]`. The test:
 
 1. exports the initial gate `[1 << 31, 0, 0, 0]` as a `/12` artifact and traces the sequence;
 2. builds the token targets from the trunk's writer rows and trains the gate for 64 steps;
