@@ -1791,7 +1791,33 @@ mod tests {
             for kind in kinds() {
                 let f = fixture(kind, DEFAULT_MARGIN, 385)?;
                 if let Some(o) = &f.read.offset {
-                    o.set(&Tensor::new(&[1.0f32], o.device())?)?;
+                    // Midway between the two middle rows' nearest earlier distances (f64), so
+                    // some rows read and some do not, none of them near the gate.
+                    let (qr, kr, w) = (
+                        host(f.read.query_rotation.as_tensor())?,
+                        host(f.read.key_rotation.as_tensor())?,
+                        host(f.read.weight.as_tensor())?,
+                    );
+                    let r = Reference {
+                        kind,
+                        margin: f64::from(f.read.margin),
+                        offset: 0.0,
+                        query_rotation: &qr,
+                        key_rotation: &kr,
+                        weight: &w,
+                    };
+                    let x = host(&f.x)?;
+                    let mut nearest: Vec<f64> = (1..T)
+                        .map(|t| {
+                            (0..t)
+                                .map(|s| r.distance(&x, W, t, s))
+                                .fold(f64::INFINITY, f64::min)
+                        })
+                        .collect();
+                    nearest.sort_by(f64::total_cmp);
+                    let mid = nearest.len() / 2;
+                    let offset = (nearest[mid - 1] + nearest[mid]) / 2.0;
+                    o.set(&Tensor::new(&[offset as f32], o.device())?)?;
                 }
                 let (_, picks) = recording_picks(|| f.read.apply(&f.x, &IDS, &f.table))?;
                 let want: Vec<u32> = reference_of(&f)?
@@ -1800,6 +1826,9 @@ mod tests {
                     .map(|c| c.first().map_or(0, |&s| s as u32 + 1))
                     .collect();
                 assert!(want.iter().any(|&p| p > 0), "{kind:?}: no row read");
+                if kind.is_starling() {
+                    assert!(want[1..].contains(&0), "{kind:?}: every row read");
+                }
                 assert_eq!(picks, want, "{kind:?}");
             }
             Ok(())
