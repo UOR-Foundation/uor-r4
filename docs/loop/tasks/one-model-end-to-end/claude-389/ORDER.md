@@ -39,13 +39,27 @@ The operator is a pure function. It returns the picks and the out words, and it 
 - the weight;
 - the shared token table.
 
-As comparison-only fields it also captures the float first pick (`latest_best`'s rank 0), each row's float scores and the float out row. **No float pick, rank or score is passed to the native operator.** The replay converts the inputs to Q31 and runs `q31_first_pick_read` on the same windows. The comparison fields are read only after the operator returns.
+As comparison-only fields it also captures the f32 first pick (`latest_best`'s rank 0) and the f32 out row. **No float pick, rank or score is passed to the native operator.** The comparison fields are read only after the operator returns.
+
+The replay also computes the **f64 reference**. This is the float read's own definition, written once more in f64 on the same captured f32 inputs:
+- the gates normalized;
+- the left Hamilton product;
+- the 16-group fold;
+- `mean|q − k|` over earlier rows, with the least one winning and a tie going to the latest row;
+- `x + w·e`.
+
+The bar judges the native operator against this f64 reference. f64 rounding, about 2^−52 relative, is negligible next to the Q31 LSB. The f32 picks, which are what claude-388 read, are compared on report lines.
 
 Conversion (one rule, recorded in the JSON):
 - The gates use the fixed Q31 unit scale `2^31` on both sides, rounded to nearest.
-- The stream uses one power-of-two scale `2^e_x`, the largest with `max|x| · 2^e_x ≤ 2^31` over the state's captured rows. The query and key addresses share it, since both read the same stream.
-- The table uses its own scale `2^e_t`, by the same rule.
-- The weight scale is `2^e_w`, with `e_w = 31 + e_x − e_t − g`. The gain shift `g` is the least one in `0..=31` for which the weight fits. That way the operator's `>> (31 − g)` lands the payload on the stream's scale.
+- The stream uses one power-of-two scale `2^e_x`, shared by the query and key addresses. It is the largest scale at which all three of the following fit within `2^31`, which leaves one bit of headroom for a rotated lane, since a lane can reach the block norm, up to `2·max|x|`:
+  - `2 · max|x|`;
+  - `max|x + w·e|`;
+  - `max|x + 16·w·e|`.
+- The table uses its own scale `2^e_t`, the largest with `max|e| · 2^e_t ≤ 2^31`.
+- The weight scale is `2^e_w`, with `e_w = 31 + e_x − e_t − g`. The gain shift `g` is the least one in `0..=31` with `max|w| · 2^e_w ≤ 2^31`. That way the operator's `>> (31 − g)` lands the payload on the stream's scale. A state where no `g` fits is refused and reported.
+
+The JSON counts every saturated word: inputs, rotated lanes and out words. Rotated-lane clips are counted in the replay, by recomputing each lane's Hamilton product exactly in i128 from the same Q31 words and testing it against `2^31`; the operator stays a pure function. A clip in a barred computation sends the outcome to D.
 
 This conversion is a diagnostic in reference code (D85). It is not a model export, and nothing it makes is served.
 
@@ -66,42 +80,59 @@ This conversion is a diagnostic in reference code (D85). It is not a model expor
   - **Run and reported, with no bar**, the 4,096-step states:
     - `try-1/arm-flockg-b2-1/run/run/models/step-004096` (`bffad79f…`, `98a1a7c3…`);
     - `try-3/arm-flockg-b2-2/run/run/models/step-004096` (`b00f5adc…`, `1fa08f29…`).
-- **Error bound B** (derived for width 256, so 16 fold groups `G`; `LSB = 2^−e_x` in float units):
-  - Each rotated lane errs by at most 4 LSB: 1 from the stream's rounding through a unit gate, 2 from the gate's rounding, 0.5 from the product's rounding.
+  - Full sha256, in the same order:
+    - `e39cb058447f5deefa22ac277f82261338d4923cec75bffda46a871ff8004fc5` / `944c759df1c82f5600eed8176bdb82ff6d6162d51148c71991c181964b2362e8`
+    - `13cfba378fdbfc2eb34849c6eeeaf40ad423d8aa408d1f2b67917e4480032061` / `bccbdb23543e811e426174db6d13e5279af0b0126f73fd8654fc3713fd659314`
+    - `bffad79fcb8a628ad0b8306d3c2113117c1db28334cca49c55f843fac81b9e4a` / `98a1a7c315b692aba16d0f524d1b856f4c0dd5d4aace0f6a4c21d4032628e26d`
+    - `b00f5adc01e484511cbd17d0ead32cdf37da8baf3997d3bd9e643fafd633fd10` / `1fa08f29036df646e0c2ab78bdea75ebb587dd4aff880cccbf4a678e66bb4bc2`
+- **Error bound B**, of the native score against the f64 reference. It is derived for width 256, so 16 fold groups `G`, with `LSB = 2^−e_x` in float units and every stream word at most `2^30` (the headroom rule):
+  - Each rotated lane errs by at most 2.5 LSB: 1 from the stream's rounding through a unit gate (the sum of `|g_i|` is at most 2), 1 from the gate's rounding (4 terms, each `2^−32 · 2^30` relative), and 0.5 from the product's rounding. **4 LSB** is used.
   - So an address coordinate errs by at most `4G = 64` LSB, and `|q − k|` by at most 128 LSB.
   - The L1 sum of 16 coordinates divided by 16, the float read's mean, errs by at most **`B = 8G = 128` LSB**.
-  - Two scores each off by up to `B` can swap order only where their float scores are within **`2B`**.
-- **Bar.** On the 1,024 held-out query rows of each barred state, both of these must hold:
-  1. **Picks.** The native pick equals the float first pick on at least 99% of rows (at least 1,014).
-  2. **Out words.** On the rows where the picks agree, every native out word, divided by `2^e_x`, is within `2 LSB + 2^−22 · |float out|` of the float out row, per lane. The `2 LSB` is the Q31 rounding of `x`, `w` and `e` and of the product. The `2^−22` relative term is f32's own rounding of `x + w·e`. The gain is `g` from the rule above, at the trained scale (×1), and the REPORT names it.
+  - Two native scores can reverse the f64 order only where the f64 scores are within **`2B`**.
+- **Out-word bound** against the f64 `x + w·e`, per lane: **`(2^g + 2)` LSB**.
+  - The weight's and the table's rounding each give `0.5 · 2^g` LSB at the stream's scale.
+  - The product's shift and the stream's rounding give 0.5 LSB each.
+  - The last LSB is slack for the f64 reference.
+- **Bar.** On the 1,024 held-out query rows of each barred state, all three conditions must hold:
+  1. **Picks.** The native pick equals the f64 reference pick on at least 99% of rows (at least 1,014).
+  2. **Out words.** On the rows where the picks agree, every native out word, divided by `2^e_x`, is within the out-word bound of the f64 reference, at the trained scale (×1, gain `g`). The REPORT names `g`.
+  3. **No clip.** No saturated word in either barred computation.
 - **Noise.** None. Picks are deterministic, so a miss is rounding at a near-tie or a bug. The JSON counts, before any classification:
-  - the rows whose float top-1 and top-2 scores are within `2B`, the most mismatches rounding can explain;
-  - for each mismatching row, `|float score(float pick) − float score(native pick)|` in LSB.
+  - the rows whose f64 top-1 and top-2 scores are within `2B`, the most mismatches rounding can explain;
+  - for each mismatching row, `|ref score(ref pick) − ref score(native pick)|` in LSB.
 - **Controls:**
-  1. **The replay can fail on the real states.** The replay runs a second time with every key gate replaced by the identity `[2^31, 0, 0, 0]`, and its pick agreement must fall below 99% at both seeds. If it does not, the replay is uninformative, and the outcome reads as D whatever the bar says.
+  1. **The replay follows the definition, and can fail, on the real states.** Every key gate is replaced by the fixed non-identity rotation `[2^30, 2^30, 2^30, 2^30]` (a unit quaternion: a 120° turn about `(1,1,1)`), in both the native operator and the f64 reference. Two conditions must hold at both seeds:
+     - (a) native-vs-reference agreement stays at least 99% under the substitution;
+     - (b) the native picks under the substitution agree with the unsubstituted native picks on less than 99% of rows.
+
+     If (a) or (b) fails, the outcome reads D.
   2. **CPU against CUDA.** On the same converted inputs from one barred state, the operator and its CUDA twin agree bit for bit on picks and out words.
-  3. **A 1-LSB perturbation.** In the fixture built near a tie, changing one key-gate word by 1 LSB changes at least one pick or out word. This shows the differential can fail.
-  4. **Row 0.** Every window's row 0 returns pick 0, with out words equal to its stream words. The JSON counts these rows.
-- **Report lines (no bar).**
-  - Native first-right against the float counts, which were 1,000 and 990 in claude-388.
-  - The 4,096-step states' agreement and first-right.
-  - The out-word check at ×16 (`g + 4`).
+  3. **A 1-LSB perturbation.** In the fixture built near a tie, changing one key-gate word by 1 LSB changes at least one pick or out word. This shows the bit-for-bit differential can fail.
+- **Structural check (not a control).** Every window's row 0 returns pick 0, with out words equal to its stream words. The JSON counts these rows.
+- **Report lines (no bar):**
+  - native picks against the f32 first picks claude-388 read, with each f32-vs-f64 disagreement counted;
+  - native first-right against the f32 counts, which were 1,000 and 990;
+  - the 4,096-step states' agreement and first-right;
+  - the out-word check at ×16 (gain `g + 4`, bound `2^(g+4) + 2` LSB).
 - **Seeds.** 2 (claude-386's B2 seeds 1 and 2).
 - **Cost.** Minutes on wick, $0. No pod and no training.
-- **Reading map** (fixed before any number is read; it applies only when control 1 falls below 99%):
-  - **P:** both bar conditions hold at both seeds. The Q31 operator reproduces the float read's choice and its write, and the next unit attaches it to `IntegerStackSession`.
-  - **N1 (precision):** a condition fails, but every pick mismatch has `|float score(float pick) − float score(native pick)| ≤ 2B`, and every out-word miss is within 4× the out bound. The fix is a finer scale or a wider accumulator. It is not a mechanism negative.
-  - **N2 (definition):** at least one pick mismatch above `2B`, or an out-word miss above 4× its bound. The native definition (rotation, fold, tie rule, gain) differs from the float one, and the next step is to find the difference.
-  - **D:** anything else, including control 1 at or above 99%, reported as read.
-- **FIT:** a fresh-context non-author review. The first review returned `TEST FITNESS: UNFIT` on 15 Nov with six findings, all folded in above:
-  - the replay control on the real states;
-  - one gate scale;
-  - B derived, with its units;
-  - the out-word condition in place of the redundant first-right condition;
-  - the states named;
-  - row 0.
+- **Reading map** (fixed before any number is read). Each outcome takes exactly one letter, tested in this order:
+  - **D:** control 1(a) or 1(b) fails, control 2 or 3 fails, the structural check fails, or a barred computation clips. The outcome is reported as read, with no fix named.
+  - **P:** otherwise, if all three bar conditions hold at both seeds. The Q31 operator reproduces the float read's definition, both its choice and its write, and the next unit attaches it to `IntegerStackSession`. This holds even if some single mismatch exceeds `2B`; any such row is listed.
+  - **N1 (precision):** otherwise, if a bar condition fails, every pick mismatch is within `2B`, and every out-word miss is within 4× its bound. The fix is a finer scale or a wider accumulator. It is not a mechanism negative.
+  - **N2 (definition):** otherwise, a bar condition fails with a pick mismatch above `2B` or an out-word miss above 4× its bound. The native definition (rotation, fold, tie rule, gain) differs from the float one, and the next step is to find the difference.
+- **FIT:** fresh-context non-author reviews.
+  - The first review, on 15 Nov, returned UNFIT with six findings, folded in at `2e59c2fac`.
+  - The second, also UNFIT, found five, all folded in here:
+    - the f64 reference in place of f32, since f32's own error exceeded B;
+    - one bit of headroom, with clips counted and sent to D;
+    - the out-word bound `(2^g + 2)` LSB;
+    - an ordered reading map, with controls 2 and 3 routed to D;
+    - control 1 as a fixed non-identity rotation in both the native operator and the reference;
+    - row 0 relabelled as a structural check, and full sha256 values.
 
-  The amended sheet goes to a second fresh review before the run.
+  The amended sheet goes to a third fresh review before the run.
 
 ## Cancel probe
 
