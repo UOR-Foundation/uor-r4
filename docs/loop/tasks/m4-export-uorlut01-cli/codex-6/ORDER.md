@@ -35,8 +35,9 @@ Fixed synthetic trunk seed `20_261_115` (vocabulary 256, width 32, two recurrenc
 1. exports the initial gate `[1 << 31, 0, 0, 0]` as a `/12` artifact and traces the sequence;
 2. builds the token targets from the trunk's writer rows and trains the gate for 64 steps;
 3. exports the trained state, requires the artifact to carry exactly it, and traces again; and
-4. reports the alignment dot before and after training and the served token ids, and requires the
-   trained state to change the served tokens.
+4. reports the alignment dot before and after training and the served token ids. A change in the
+   served tokens is reported, not required: the first run may be a negative, and a negative closes
+   this configuration only.
 
 ## Files in scope
 
@@ -54,8 +55,8 @@ About 200 to 300 lines of test and records.
 ## Done when
 
 1. The test builds token targets from the writer rows and trains the gate on the traced carries.
-2. The artifact carries exactly the trained 48 bytes, and the served tokens differ from the
-   initial gate's.
+2. The artifact carries exactly the trained 48 bytes; the served token ids before and after are
+   reported.
 3. The alignment dot is reported; a positive or a negative result is recorded honestly.
 4. The focused Q31 tests still pass, and formatting, touched-file Clippy, `git diff --check`,
    `uor-harness check --only harness.native_space_contract`, the REPORT check and the exact-head
