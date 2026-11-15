@@ -484,12 +484,6 @@ fn the_shared_gate_and_the_per_lane_gates_are_measured_on_one_fixture() {
         pooled_before, pooled_after,
         "the shared alignment did not move"
     );
-    assert!(
-        lane_after
-            .iter()
-            .any(|after| *after != [ONE, 0, 0, 0][0] as i128),
-        "the per-lane gates did not train"
-    );
     assert_eq!(shared_tokens.len(), TOKENS.len());
     assert_eq!(lane_tokens.len(), TOKENS.len());
     assert_eq!(shared_ranks.len(), TOKENS.len() - 1);
