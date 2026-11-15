@@ -135,19 +135,19 @@ The check reads equal serve-1's reads id for id (1,108 of 1,108 each); the other
 
 ## Checks run at the head
 
-Run on the laptop at this PR's head (`local/claude/claude-384/gates-head.sh`, log beside it):
+Run on the laptop at `d3ec2fbc4ebf689577fec6764276156c32c013cd`, the last commit with code (`local/claude/claude-384/gates-head.sh`, log beside it):
 
 | Check | Result |
 |---|---|
-| `cargo test -p uor-r4-integer --features serving-wasm --lib -- address pair_rows` | HEAD_G1 |
-| `cargo test -p uor-r4-integer --lib -- pair_rows address` (the default build) | HEAD_G2 |
-| `cargo test -p uor-r4-integer --features serving-wasm --bin fbs-export` | HEAD_G3 |
-| `cargo test -p uor-r4-float-train --lib -- pair_rows fbs_export` | HEAD_G4 |
-| `cargo check -p uor-r4-float-train --bin fbs-snapshot --bin pair-picks --bin pair-positions` | HEAD_G5 |
-| `cargo check -p uor-r4-training -p uor-r4-cpu-train` (the integer crate's dependents) | HEAD_G6 |
-| `cargo test --release --locked --manifest-path docs/labs/one-model-end-to-end/instrument/Cargo.toml --features integer-reader --bin raw-id-replies` | HEAD_G7 |
-| `rustfmt --edition 2021 --check` on the five new files | HEAD_G8 |
-| `pair-positions` at both seeds, P14 and P23 | HEAD_G9 |
+| `cargo test -p uor-r4-integer --features serving-wasm --lib -- address pair_rows` | 35 passed |
+| `cargo test -p uor-r4-integer --lib -- pair_rows address` (the default build) | 21 passed |
+| `cargo test -p uor-r4-integer --features serving-wasm --bin fbs-export` | 6 passed |
+| `cargo test -p uor-r4-float-train --lib -- pair_rows fbs_export` | 41 passed |
+| `cargo check -p uor-r4-float-train --bin fbs-snapshot --bin pair-picks --bin pair-positions` | builds |
+| `cargo check -p uor-r4-training -p uor-r4-cpu-train` (the integer crate's dependents) | builds |
+| `cargo test --release --locked --manifest-path docs/labs/one-model-end-to-end/instrument/Cargo.toml --features integer-reader --bin raw-id-replies` | 19 passed |
+| `rustfmt --edition 2021 --check` on the five new files | clean |
+| `pair-positions` at both seeds, P14 and P23 | disagree 0, broken beginnings 0, exit 0 at both seeds |
 | Negative gates for the fix: the close taken out of `open_picks` (`Some(rows)`); the overlap refusal taken out of `PairMarks::check`; the refusal narrowed to a header's end | the first fails `every_position_of_plan_reads_what_open_picks_names_of_its_prefix`; the second and third each fail `open_picks_reads_the_float_rule` and `marks_where_one_begins_the_other_are_refused`; restored, all pass |
 | Negative gates, run when the served read was built (`bd66ff21d`): the layer-0 bag call taken out of the session; then the pair tracker's reset taken out of `restore_state` | each fails a `stack/tests/pair_rows.rs` test (the served-step test; the same-length restore in the picks test); restored, all pass |
 | Refusals of a damaged rows file (length, order, magic, digest) | `fbs_pair_rows::tests::damaged_files_are_refused`; in the artifact, a short values table, a changed record hash and one changed value byte (`stack/tests/pair_rows.rs`) |
