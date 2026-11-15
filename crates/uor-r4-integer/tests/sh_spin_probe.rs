@@ -306,7 +306,7 @@ fn group_2i() -> Vec<Unit> {
 }
 
 #[test]
-fn the_120_icosians_are_unit_and_closed() {
+fn the_120_icosians_are_unit_with_a_closed_sample() {
     let group = group_2i();
     assert_eq!(
         group.len(),
@@ -391,10 +391,8 @@ fn the_score_separates_pairs_and_the_rank_weights_use_no_exponent() {
     let same = score(group[0], group[1], ai, aj);
     let other = score(group[0], group[2], ai, aj);
     let zero = Rat::zero();
-    assert!(
-        !same.same(other) || !same.same(zero),
-        "the score is constant"
-    );
+    assert!(!same.same(other), "the score does not separate pairs");
+    assert!(!same.same(zero), "the score is zero on a nontrivial pair");
 
     // The aggregation is the rank rule 1/(i+1), normalised to Q31: no exponent, no softmax.
     let mut scores = [
