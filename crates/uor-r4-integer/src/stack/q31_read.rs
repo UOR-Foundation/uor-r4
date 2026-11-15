@@ -694,6 +694,10 @@ mod tests {
                 Err(other) => panic!("expected the out-word refusal, got {other:?}"),
             }
         };
+        assert!(
+            at > 0,
+            "some steps serve before the refusal, so reset has steps to repeat"
+        );
         for &t in &PROMPT[..3] {
             let message = refusal(session.step_native(t));
             assert!(message.contains("reset the session"), "{message}");

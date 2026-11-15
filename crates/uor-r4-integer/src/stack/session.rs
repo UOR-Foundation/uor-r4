@@ -3455,7 +3455,6 @@ fn stack_step_call(call: &mut StepCall<'_, '_>) {
     call.result = stack_step(call.session, call.token, true);
 }
 
-/// Refuse an incompatible native-Q31 step before it changes tokens or carry history.
 /// A session whose native Q31 read refused a step holds that step's partial rows, so it serves
 /// nothing more until [`IntegerStackSession::reset`].
 fn q31_read_refused_preflight(refused: bool) -> Result<(), StackError> {
@@ -3467,6 +3466,7 @@ fn q31_read_refused_preflight(refused: bool) -> Result<(), StackError> {
     Ok(())
 }
 
+/// Refuse an incompatible native-Q31 step before it changes tokens or carry history.
 fn native_q31_step_preflight(
     model: &IntegerStackModel,
     states: &[Box<LayerState>],

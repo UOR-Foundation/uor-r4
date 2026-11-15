@@ -114,6 +114,7 @@ At `985ba83f6`, over the merge `e3f549902`, unless a line names another commit. 
 - **Fresh reviews of `112bad341`** (two reviewers, the spec and the diff only):
   - session and artifact: one medium finding, that a refused step left the session serving from a half-advanced state. Fixed in `985ba83f6`; the lows are in Still open 9.
   - tests: REQUEST CHANGES, for refusals checked by `is_err()` alone, no parse-path combination test, an unpinned depth placement, a parse depth of 9 on a two-layer stack, a threshold assertion on a measurement, and a restore test accepting any `Shape`. All six fixed in `985ba83f6`, with the five suggested negative gates run above.
+- **Fresh re-review of the fix delta and the merge's `format.rs` resolution** (at `1921a2b1a`): APPROVE. Every FBS step path (`step`, `step_native`, `measure_fbs_step_stages`, `measure_fbs_step_parts`) passes the flag check before its first mutation, and `/13` is refused beside a read on both paths. Three lows: the poison test could pass vacuously if the first step refused (now asserts `at > 0`), a doc line had moved onto the wrong function (moved back), and no `/13` parse test (Still open 10). The q31_read tests pass after both fixes.
 - `uor-harness check-formats`: 8 formats ok.
   - `uor-harness check --only harness.native_space_contract` matches no registered rule (0 rules), so the ORDER's check 7 has no rule to run. The full `uor-harness check` has 0 errors.
 - `uor-harness loop pr-check --local`: see the PR.
@@ -151,6 +152,7 @@ At `985ba83f6`, over the merge `e3f549902`, unless a line names another commit. 
    - each served step re-runs `admit_words` and `table_vocab` over the whole writer table, a speed cost on every token that a load-time check would remove;
    - `StackQ31Read::check` runs twice on parse (in the header block and again in `q31_read_image`);
    - `save_state`'s doc does not say that a session with a read saves a state it cannot restore.
+10. **No parse-path test sets codex's `/13` lane record beside a `/14` read.** The code refuses it in both the parse combination block and `add_q31_read_uorlut01`, but only the address case is pinned. The crate has no `add_` helper for the `/13` record, so the test needs a lane artifact from codex's exporter. (Fresh re-review of the fix delta, low.)
 
 ## Plain summary
 
