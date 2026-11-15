@@ -25,7 +25,7 @@ Casey answered "Start the native Q31 read operator unit here?" with "Yes, start 
 - **Address.** Each row's stream is cut into `width / 4` quaternion blocks. Each block is rotated by its own query gate and its own key gate, using `q31_hamilton_rotate`, the crate's existing operator. The float read's `q ⊗ u` is the same left product. The rotated lanes are folded to 16 address words: coordinate `c` is the exact i64 sum of lanes `g·16 + c` over the `width / 16` groups. This matches `vector_reads.rs:669-678`.
 - **Score.** The score is the L1 distance `Σ_c |q_t[c] − k_s[c]|`, accumulated in u64, over strictly earlier rows `s < t`. The float score's `/16` is monotone, so it is dropped.
 - **Choice.** The least distance wins, and a tie goes to the latest `s`, as in the float read. Row 0 reads nothing. The choice is returned as `s + 1`, with 0 meaning none.
-- **Payload.** The payload is the token table's row for the token after the pick, `table[ids[s + 1]]`. Each lane is weighted by a Q31 weight and a gain shift `g` in `0..=31`. For each lane: `p = sat((w·e + 2^(30−g)) >> (31 − g))`, then `out = sat(x + p)`. With `g = 0` this is the crate's own rounded Q31 product.
+- **Payload.** The payload is the token table's row for the token after the pick, `table[ids[s + 1]]`. Each lane is weighted by a Q31 weight and a gain shift `g` in `0..=31`. For each lane: `p = sat((w·e + r) >> (31 − g))`, then `out = sat(x + p)`. The rounding term is `r = 2^(30−g)` for `g ≤ 30` and `r = 0` at `g = 31`, where the shift is 0. With `g = 0` this is the crate's own rounded Q31 product.
 - **Refusals.** The operator refuses words outside the closed domain `-2^31..=2^31`, a width that is not a multiple of 16, `ids` and rows of different lengths, a token id outside the table, and a gain shift above 31.
 
 The operator is a pure function. It returns the picks and the out words, and it changes no state.
@@ -35,14 +35,16 @@ The operator is a pure function. It returns the picks and the out words, and it 
 **3. A native replay in the probe** (`recall-payload-probe --native-replay`). At each forward of the float read, it captures exactly the operator's inputs:
 - the stream rows `x` at the read;
 - the window's token ids;
-- the query and key gates, normalized as the float gate does;
+- the raw query and key gates, before normalization;
 - the weight;
 - the shared token table.
 
 As comparison-only fields it also captures the f32 first pick (`latest_best`'s rank 0) and the f32 out row. **No float pick, rank or score is passed to the native operator.** The comparison fields are read only after the operator returns.
 
+The replay normalizes the raw gates **once, in f64**. Both sides use these values: the native operator gets them rounded to Q31, and the f64 reference gets them as they are. So the only gate difference between the two is the Q31 rounding, `2^−32`, which is what B assumes.
+
 The replay also computes the **f64 reference**. This is the float read's own definition, written once more in f64 on the same captured f32 inputs:
-- the gates normalized;
+- the f64-normalized gates above;
 - the left Hamilton product;
 - the 16-group fold;
 - `mean|q − k|` over earlier rows, with the least one winning and a tie going to the latest row;
@@ -59,7 +61,7 @@ Conversion (one rule, recorded in the JSON):
 - The table uses its own scale `2^e_t`, the largest with `max|e| · 2^e_t ≤ 2^31`.
 - The weight scale is `2^e_w`, with `e_w = 31 + e_x − e_t − g`. The gain shift `g` is the least one in `0..=31` with `max|w| · 2^e_w ≤ 2^31`. That way the operator's `>> (31 − g)` lands the payload on the stream's scale. A state where no `g` fits is refused and reported.
 
-The JSON counts every saturated word: inputs, rotated lanes and out words. Rotated-lane clips are counted in the replay, by recomputing each lane's Hamilton product exactly in i128 from the same Q31 words and testing it against `2^31`; the operator stays a pure function. A clip in a barred computation sends the outcome to D.
+The JSON counts every saturated word: inputs, rotated lanes and out words. Rotated-lane clips are counted in the replay, by recomputing each lane's Hamilton product exactly in i128 from the same Q31 words. A lane counts as clipped when its rounded value has `|lane| > 2^31` (strictly, because the domain is closed). The operator stays a pure function. A clip in a barred computation sends the outcome to D.
 
 This conversion is a diagnostic in reference code (D85). It is not a model export, and nothing it makes is served.
 
@@ -90,6 +92,11 @@ This conversion is a diagnostic in reference code (D85). It is not a model expor
   - So an address coordinate errs by at most `4G = 64` LSB, and `|q − k|` by at most 128 LSB.
   - The L1 sum of 16 coordinates divided by 16, the float read's mean, errs by at most **`B = 8G = 128` LSB**.
   - Two native scores can reverse the f64 order only where the f64 scores are within **`2B`**.
+- **f32 bound `B_f`**, of the float read that ran against the f64 reference. Unit roundoff is `u = 2^−24`, and `M = max|x|`:
+  - Each rotated lane errs by at most `8u · 2M`. That covers f32 normalization, four products and three sums.
+  - A fold coordinate sums 16 lanes, adding `16u` of summation error per lane. So it errs by at most `(16 · 8u + 16 · 16u) · 2M < 2^10 · u · M`.
+  - So the mean `|q − k|` errs by at most **`B_f = 2^11 · u · M = 2^−13 · M`**, and the f32 out word by at most **`2^−22 · (|x| + |w·e|)`** per lane.
+  - `B_f` is a gross bound, far above `B`. It exists only to catch a capture error, such as swapped gates, a wrong stream tensor or a wrong window. Such an error moves scores by amounts of the order of `M`.
 - **Out-word bound** against the f64 `x + w·e`, per lane: **`(2^g + 2)` LSB**.
   - The weight's and the table's rounding each give `0.5 · 2^g` LSB at the stream's scale.
   - The product's shift and the stream's rounding give 0.5 LSB each.
@@ -102,9 +109,14 @@ This conversion is a diagnostic in reference code (D85). It is not a model expor
   - the rows whose f64 top-1 and top-2 scores are within `2B`, the most mismatches rounding can explain;
   - for each mismatching row, `|ref score(ref pick) − ref score(native pick)|` in LSB.
 - **Controls:**
-  1. **The replay follows the definition, and can fail, on the real states.** Every key gate is replaced by the fixed non-identity rotation `[2^30, 2^30, 2^30, 2^30]` (a unit quaternion: a 120° turn about `(1,1,1)`), in both the native operator and the f64 reference. Two conditions must hold at both seeds:
-     - (a) native-vs-reference agreement stays at least 99% under the substitution;
+  1. **The replay follows the definition, and can fail, on the real states.** Every key gate is replaced by the fixed non-identity gate `[2^30, 2^30, 2^30, 2^30]`, in both the native operator and the f64 reference. This is a unit quaternion, and left multiplication by it is an isoclinic 60° rotation of four-space. Two conditions must hold at both seeds:
+     - (a) under the substitution, no native-vs-reference pick mismatch lies above `2B`. Its near-tie count, the rows within `2B`, is reported.
      - (b) the native picks under the substitution agree with the unsubstituted native picks on less than 99% of rows.
+
+     If (a) or (b) fails, the outcome reads D.
+  4. **The capture matches the read that ran.** This ties the replay to the float forward, because the native operator and the reference share the captured inputs. Two conditions, at every state:
+     - (a) every row where the f32 first pick and the f64 reference pick disagree has `|ref score(ref pick) − ref score(f32 pick)| ≤ 2·B_f`;
+     - (b) on rows where those picks agree, every f32 out word is within the f32 out-word bound of the f64 out word.
 
      If (a) or (b) fails, the outcome reads D.
   2. **CPU against CUDA.** On the same converted inputs from one barred state, the operator and its CUDA twin agree bit for bit on picks and out words.
@@ -118,10 +130,10 @@ This conversion is a diagnostic in reference code (D85). It is not a model expor
 - **Seeds.** 2 (claude-386's B2 seeds 1 and 2).
 - **Cost.** Minutes on wick, $0. No pod and no training.
 - **Reading map** (fixed before any number is read). Each outcome takes exactly one letter, tested in this order:
-  - **D:** control 1(a) or 1(b) fails, control 2 or 3 fails, the structural check fails, or a barred computation clips. The outcome is reported as read, with no fix named.
-  - **P:** otherwise, if all three bar conditions hold at both seeds. The Q31 operator reproduces the float read's definition, both its choice and its write, and the next unit attaches it to `IntegerStackSession`. This holds even if some single mismatch exceeds `2B`; any such row is listed.
-  - **N1 (precision):** otherwise, if a bar condition fails, every pick mismatch is within `2B`, and every out-word miss is within 4× its bound. The fix is a finer scale or a wider accumulator. It is not a mechanism negative.
-  - **N2 (definition):** otherwise, a bar condition fails with a pick mismatch above `2B` or an out-word miss above 4× its bound. The native definition (rotation, fold, tie rule, gain) differs from the float one, and the next step is to find the difference.
+  - **D:** a control fails (1, 2, 3 or 4), the structural check fails, or a barred computation clips. The outcome is reported as read, with no fix named.
+  - **N2 (definition):** otherwise, if any barred row has a pick mismatch above `2B` or an out-word miss above 4× its bound. Rounding cannot explain such a row, so the bar's 99% does not excuse it. The native definition (rotation, fold, tie rule, gain) differs from the float one, and the next step is to find the difference. Every such row is listed.
+  - **P:** otherwise, if all three bar conditions hold at both seeds. The Q31 operator reproduces the float read's definition, both its choice and its write, and the next unit attaches it to `IntegerStackSession`.
+  - **N1 (precision):** otherwise. A bar condition fails, but every pick mismatch is within `2B` and every out-word miss is within 4× its bound. The fix is a finer scale or a wider accumulator. It is not a mechanism negative.
 - **FIT:** fresh-context non-author reviews.
   - The first review, on 15 Nov, returned UNFIT with six findings, folded in at `2e59c2fac`.
   - The second, also UNFIT, found five, all folded in here:
@@ -131,8 +143,15 @@ This conversion is a diagnostic in reference code (D85). It is not a model expor
     - an ordered reading map, with controls 2 and 3 routed to D;
     - control 1 as a fixed non-identity rotation in both the native operator and the reference;
     - row 0 relabelled as a structural check, and full sha256 values.
+  - The third, also UNFIT, found four, folded in here:
+    - N2 is tested before P, and any mismatch above `2B` reads N2;
+    - control 4 ties the capture to the f32 read that ran, within `B_f`;
+    - the gates are normalized once in f64 and shared by both sides;
+    - control 1(a) is judged by no mismatch above `2B`.
 
-  The amended sheet goes to a third fresh review before the run.
+    It also raised three minor points, all folded in: the rounding term at `g = 31`, the label of the control-1 gate, and the strict clip test.
+
+  The amended sheet goes to a fourth fresh review before the run.
 
 ## Cancel probe
 
