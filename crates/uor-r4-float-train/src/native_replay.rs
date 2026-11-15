@@ -15,7 +15,7 @@
 //! the booleans the sheet's reading map needs and does not name the letter.
 
 use serde::Serialize;
-use uor_r4_native_vector::{Q31FirstPickRead, Q31Quaternion};
+use uor_r4_native_vector::{Q31FirstPickRead, Q31Quaternion, Q31ReadDump};
 
 use crate::{FloatTrainError, Result};
 
@@ -226,7 +226,19 @@ pub struct ReplaySummary {
 /// width other than 256, or no gain shift that fits) is an `Ok` summary with
 /// `refusal` set and no run.
 pub fn replay(model: &ReplayModel, windows: &[ReplayWindow]) -> Result<ReplaySummary> {
-    replay_inner(model, windows, false)
+    replay_inner(model, windows, false, None)
+}
+
+/// [`replay`], and also the barred operator with every window's converted words as one batched
+/// [`Q31ReadDump`] (`None` for a refused state), for the sheet's control 2: the CPU operator
+/// against its CUDA twin on a trained state's real inputs. Every window must have one length.
+pub fn replay_with_dump(
+    model: &ReplayModel,
+    windows: &[ReplayWindow],
+) -> Result<(ReplaySummary, Option<Q31ReadDump>)> {
+    let mut dump = None;
+    let summary = replay_inner(model, windows, false, Some(&mut dump))?;
+    Ok((summary, dump))
 }
 
 fn invalid(message: &str) -> FloatTrainError {
@@ -545,6 +557,7 @@ fn replay_inner(
     model: &ReplayModel,
     windows: &[ReplayWindow],
     swap_reference_gates: bool,
+    dump: Option<&mut Option<Q31ReadDump>>,
 ) -> Result<ReplaySummary> {
     validate(model, windows)?;
     let width = model.width;
@@ -641,6 +654,20 @@ fn replay_inner(
             .map_err(|err| invalid(&err.to_string()))
     };
     let read = operator(key_q31.clone(), gain_shift)?;
+    if let Some(slot) = dump {
+        let time = windows.first().map_or(0, |w| w.time);
+        if windows.iter().any(|w| w.time != time) {
+            return Err(invalid("a read dump needs every window at one length"));
+        }
+        *slot = Some(Q31ReadDump {
+            read: read.clone(),
+            batch: windows.len(),
+            time,
+            stream: streams_q31.concat(),
+            ids: windows.iter().flat_map(|w| w.ids.iter().copied()).collect(),
+            table: native.table.clone(),
+        });
+    }
     let control_read = operator(vec![CONTROL_KEY_GATE; width / 4], gain_shift)?;
     let x16_read = match gain_shift + 4 {
         g if g <= MAX_GAIN_SHIFT => Some(operator(key_q31.clone(), g)?),
@@ -1015,7 +1042,7 @@ mod tests {
         assert!(straight.control_4.a_pass && straight.control_4.b_pass);
         assert!(straight.bar_pass);
 
-        let swapped = run(replay_inner(&model, &captured, true).unwrap());
+        let swapped = run(replay_inner(&model, &captured, true, None).unwrap());
         assert!(!swapped.control_4.a_pass, "{:?}", swapped.control_4);
         assert!(swapped.control_4.disagreements_above_2bf > 0);
         assert!(!swapped.bar_pass);
@@ -1057,6 +1084,41 @@ mod tests {
         );
         assert!(run.control_1.a_pass);
         assert!(run.picks_pass && run.bar_pass, "{run:?}");
+    }
+
+    /// Control 2's input: the dump carries the barred operator and every window's converted
+    /// words, survives its bytes, and its one batched apply equals each window's own apply, so a
+    /// CPU-against-CUDA comparison on it covers the replay's real calls.
+    #[test]
+    fn the_dump_is_the_barred_call_batched() {
+        let (model, captured) = random_capture(0x5EED_0006, 4, 32, 50, 0.1);
+        let (summary, dump) = replay_with_dump(&model, &captured).unwrap();
+        assert_eq!(summary, replay(&model, &captured).unwrap());
+        let dump = dump.expect("a dump for a state that is not refused");
+        let back = Q31ReadDump::from_bytes(&dump.to_bytes().unwrap()).unwrap();
+        assert_eq!(back, dump);
+        assert_eq!((dump.batch, dump.time), (4, 32));
+        assert_eq!(dump.read.gain_shift(), run(summary).scales.gain_shift);
+        let all = dump
+            .read
+            .apply(&dump.stream, &dump.ids, &dump.table, dump.batch, dump.time)
+            .unwrap();
+        let (width, time) = (dump.read.width(), dump.time);
+        for b in 0..dump.batch {
+            let rows = b * time..(b + 1) * time;
+            let one = dump
+                .read
+                .apply(
+                    &dump.stream[rows.start * width..rows.end * width],
+                    &dump.ids[rows.clone()],
+                    &dump.table,
+                    1,
+                    time,
+                )
+                .unwrap();
+            assert_eq!(one.picks, all.picks[rows.clone()]);
+            assert_eq!(one.out, all.out[rows.start * width..rows.end * width]);
+        }
     }
 
     #[test]

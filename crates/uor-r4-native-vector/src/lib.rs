@@ -9,7 +9,9 @@
 
 use std::fmt;
 pub mod read;
+pub mod read_dump;
 pub use read::*;
+pub use read_dump::*;
 
 #[derive(Debug)]
 pub enum Error {
