@@ -31,7 +31,7 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
     and commutative;
   - a fold read `checkpoint + Σ live` and a selection read `top-k(stub ∪ live)`.
 
-Size: about 340 lines of test and the ORDER/REPORT.
+Size: 294 lines of test and the ORDER/REPORT.
 
 ## Measurements
 

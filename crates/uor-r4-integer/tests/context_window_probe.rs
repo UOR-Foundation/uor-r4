@@ -208,8 +208,9 @@ fn an_unsettled_push_is_refused_and_a_sum_stub_has_a_witness_pair() {
     assert_eq!((ring.sum(), ring.top(1).ids()), before, "state unchanged");
 
     // The witness pair for a sum-only stub. Two histories drop different spans whose sums are
-    // equal, into the same live span; the sum-only stub is identical, yet a later top-1 read
-    // differs. That is exactly the pair an unsettled drop would make indistinguishable.
+    // equal, into a live span of the same value; the sum-only stub is identical for the declared
+    // value read, yet a later top-1 read differs. That is exactly the pair an unsettled drop would
+    // make indistinguishable.
     let mut left = Ring::new(1, 0); // a sum-only stub keeps no candidates
     let mut right = Ring::new(1, 0);
     for (id, value) in [(10u64, 3i64), (11, -1), (12, 0)] {
@@ -245,7 +246,7 @@ fn an_unsettled_push_is_refused_and_a_sum_stub_has_a_witness_pair() {
     );
 
     eprintln!(
-        "witness: histories {:?} and {:?} share the sum {} and the live span, but their top-1 \
+        "witness: histories {:?} and {:?} share the sum {} and the live value, but their top-1 \
          differ ({} vs {}); a sum-only stub cannot answer, which is why the unsettled overwrite \
          is refused (blocked id {})",
         left_history,
