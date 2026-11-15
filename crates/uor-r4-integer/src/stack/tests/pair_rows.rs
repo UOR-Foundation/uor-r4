@@ -185,3 +185,187 @@ fn pair_rows_are_added_once_and_alone() {
         "another vocabulary"
     );
 }
+
+/// claude-384: pair rows of the same three pairs as [`drawn_pair_rows`], every value `value`.
+fn flat_pair_rows(vocab: usize, width: usize, value: i16) -> stack::PairRowsImage {
+    let drawn = drawn_pair_rows(vocab, width);
+    let (dict, marks) = (drawn.dict(), drawn.marks().clone());
+    let rows = vec![value; dict.len() * width];
+    stack::PairRowsImage::checked(vocab, width, marks, dict.addresses().to_vec(), rows)
+        .expect("pair rows of the stack's size")
+}
+
+/// claude-384: two turns. The first user turn `5 9 2 7 3` holds the pairs (2, 5) and (3, 7), rows
+/// 1 and 2; its reply runs from the header's last token (position 8) to the second user marker.
+/// The second user turn `6 8` holds no dictionary pair.
+const TURNS: [u32; 22] = [
+    1, 2, 5, 9, 2, 7, 3, 3, 4, 6, 6, 9, 8, 1, 2, 6, 8, 3, 4, 7, 7, 7,
+];
+
+fn steps(bytes: &[u8], tokens: &[u32]) -> Vec<stack::NativeStep> {
+    let model = IntegerStackModel::parse(bytes).expect("served");
+    let mut session = model.session();
+    tokens
+        .iter()
+        .map(|&token| session.step_native(token).expect("step"))
+        .collect()
+}
+
+/// claude-384: served with all rows zero, every step is the stack's without rows; with rows set,
+/// the steps before the first reply position are unchanged and the reply's steps change. Dropped
+/// rows serve the stack without them. A stack with pair rows has no trunk image.
+#[test]
+fn the_served_step_adds_the_pair_rows_at_reply_positions_only() {
+    let (_, plain, with_read) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    let shape = stack::inspect_uorlut01(&plain).expect("inspect").shape;
+    let first_reply = 8;
+    for (name, bytes) in [("no reads", &plain), ("reads", &with_read)] {
+        let want = steps(bytes, &TURNS);
+        let zero =
+            stack::add_pair_rows_uorlut01(bytes, &flat_pair_rows(shape.vocab, shape.width, 0))
+                .expect("added");
+        assert_eq!(
+            steps(&zero, &TURNS),
+            want,
+            "{name}: rows of zero change no step"
+        );
+        let set =
+            stack::add_pair_rows_uorlut01(bytes, &flat_pair_rows(shape.vocab, shape.width, 20_000))
+                .expect("added");
+        let got = steps(&set, &TURNS);
+        assert_eq!(
+            got[..first_reply],
+            want[..first_reply],
+            "{name}: no bag before the reply"
+        );
+        assert_ne!(
+            got[first_reply], want[first_reply],
+            "{name}: the reply's first step reads the bag"
+        );
+        let mut model = IntegerStackModel::parse(&set).expect("served");
+        assert!(model.pair_rows().is_some());
+        assert!(model.fbs_trunk_image().is_none(), "{name}: no trunk image");
+        assert!(model.drop_pair_rows(), "{name}: the rows are dropped");
+        assert!(!model.drop_pair_rows(), "{name}: once");
+        let mut session = model.session();
+        let dropped: Vec<_> = TURNS
+            .iter()
+            .map(|&token| session.step_native(token).expect("step"))
+            .collect();
+        assert_eq!(
+            dropped, want,
+            "{name}: dropped rows serve the stack without them"
+        );
+    }
+}
+
+/// claude-384: the session's picks, fed token by token, are the whole stream's open picks at
+/// every position, and stay so across a reset and a restored state. A model without pair rows
+/// reports none.
+#[test]
+fn the_session_picks_are_the_open_picks_of_the_whole_stream() {
+    let (_, plain, _) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    let shape = stack::inspect_uorlut01(&plain).expect("inspect").shape;
+    let image = drawn_pair_rows(shape.vocab, shape.width);
+    let bytes = stack::add_pair_rows_uorlut01(&plain, &image).expect("added");
+    let model = IntegerStackModel::parse(&bytes).expect("served");
+    let open =
+        |upto: usize| crate::fbs_pair_rows::open_picks(image.dict(), image.marks(), &TURNS[..upto]);
+    let mut session = model.session();
+    assert_eq!(session.last_pair_picks(), None, "no picks before a step");
+    let mut saved = None;
+    for (t, &token) in TURNS.iter().enumerate() {
+        session.step_native(token).expect("step");
+        assert_eq!(
+            session.last_pair_picks().map(<[u32]>::to_vec),
+            open(t + 1),
+            "position {t}"
+        );
+        if t == 10 {
+            saved = Some(session.save_state());
+        }
+    }
+    assert_eq!(
+        open(9),
+        Some(vec![1, 2]),
+        "the first reply reads rows 1 and 2"
+    );
+    session.reset();
+    session.step_native(TURNS[0]).expect("step");
+    assert_eq!(
+        session.last_pair_picks().map(<[u32]>::to_vec),
+        open(1),
+        "after a reset"
+    );
+    session
+        .restore_state(&saved.expect("saved"))
+        .expect("restored");
+    for (t, &token) in TURNS.iter().enumerate().skip(11) {
+        session.step_native(token).expect("step");
+        assert_eq!(
+            session.last_pair_picks().map(<[u32]>::to_vec),
+            open(t + 1),
+            "restored, position {t}"
+        );
+    }
+    // A restored stream of the same length as the session's own, but another open turn: the
+    // next step's picks are the restored stream's, not the ones carried from before.
+    let mut other = TURNS[..9].to_vec();
+    other.resize(TURNS.len(), 6);
+    let mut source = model.session();
+    for &token in &other {
+        source.step_native(token).expect("step");
+    }
+    assert_eq!(
+        session.last_pair_picks().map(<[u32]>::to_vec),
+        open(TURNS.len())
+    );
+    session
+        .restore_state(&source.save_state())
+        .expect("restored");
+    session.step_native(7).expect("step");
+    other.push(7);
+    assert_eq!(
+        session.last_pair_picks().map(<[u32]>::to_vec),
+        crate::fbs_pair_rows::open_picks(image.dict(), image.marks(), &other),
+        "a restored stream of the same length"
+    );
+    assert_ne!(
+        open(TURNS.len()),
+        Some(vec![1, 2]),
+        "the two streams' open turns differ"
+    );
+    let plain_model = IntegerStackModel::parse(&plain).expect("served");
+    let mut session = plain_model.session();
+    session.step_native(TURNS[0]).expect("step");
+    assert_eq!(session.last_pair_picks(), None, "a model without pair rows");
+}
+
+/// claude-384: the stage- and part-timed steps serve the pair rows as the plain step does, and
+/// leave the session in the same state.
+#[test]
+fn the_timed_fbs_steps_serve_the_pair_rows() {
+    let (_, _, with_read) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    let shape = stack::inspect_uorlut01(&with_read).expect("inspect").shape;
+    let bytes = stack::add_pair_rows_uorlut01(
+        &with_read,
+        &flat_pair_rows(shape.vocab, shape.width, 20_000),
+    )
+    .expect("added");
+    let model = IntegerStackModel::parse(&bytes).expect("served");
+    let (mut plain, mut stages, mut parts) = (model.session(), model.session(), model.session());
+    let mut ns = Vec::new();
+    for (t, &token) in TURNS.iter().enumerate() {
+        let want = plain.step_native(token).expect("step");
+        let (got, _) = stages
+            .measure_fbs_step_stages(token, &mut ns)
+            .expect("stage-timed step");
+        assert_eq!(got, want, "stages, position {t}");
+        let (got, _) = parts
+            .measure_fbs_step_parts(token, &mut ns)
+            .expect("part-timed step");
+        assert_eq!(got, want, "parts, position {t}");
+    }
+    assert_eq!(plain.save_state(), stages.save_state());
+    assert_eq!(plain.save_state(), parts.save_state());
+}
