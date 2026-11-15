@@ -15,7 +15,7 @@ It is the training data for the first simple conversation.
 
 ## What is missing
 
-Stage 5 trains the student on fixed example answers produced once by a donor model; these are not yet generated. D41 allows it as a one-time owner exception: the student sees only the answers, never the donor's probabilities. *(Superseded by D86 below.)* It runs only after the driver math optimization (scope not detailed in these sources), and its execution gate (release or PM-dispatch wording) is a separate owner/PM item.
+Stage 5 trains the student on fixed example answers produced once by a donor model; these are not yet generated. D41 allows it as a one-time owner exception: the student sees only the answers, never the donor's probabilities. It runs only after the driver math optimization (scope not detailed in these sources), and its execution gate (release or PM-dispatch wording) is a separate owner/PM item. *(This sentence is superseded by D86 below.)*
 
 **D86 (owner, 15 Nov 2026): released.** Casey: "I would say yes release it, but why is it going to cost money? if we are running it locally on wick, wouldn't it be free?"
 - The donor is `openai/gpt-oss-20b` on wick, not gpt-oss-120b on a pod.
