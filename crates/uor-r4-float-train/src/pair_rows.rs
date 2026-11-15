@@ -36,6 +36,16 @@ use crate::flock_read::FlockAdamW;
 use crate::{invalid, Result};
 use uor_r4_integer::fbs_pair_rows::scan;
 pub use uor_r4_integer::fbs_pair_rows::{token_primes, PairDictionary, PairMarks};
+use uor_r4_integer::fbs_pair_rows::{quantize_q12, PairRowsImage};
+
+/// What rounding the rows to 2^-12 did (claude-384): the largest value's magnitude, the largest
+/// rounding error, both in the rows' own units, and how many values rounded to zero.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ServedCensus {
+    pub max_abs: f64,
+    pub max_error: f64,
+    pub zeros: usize,
+}
 
 const FILE: &str = "pair_rows.safetensors";
 const DICT_FILE: &str = "pair_rows.dict";
@@ -284,6 +294,43 @@ impl PairRows {
             (Some(_), false) => "replies",
             (Some(_), true) => "boost",
         }
+    }
+
+    /// The served form of these rows (claude-384): every value rounded to i16 at 2^-12 by the
+    /// shared [`quantize_q12`], with this dictionary and these marks, and the rounding's census.
+    /// Refuses weighed rows (they have no served form) and, by row and column, the first value
+    /// the rounding refuses. The rows are copied to the host once.
+    pub fn served_image(&self) -> Result<(PairRowsImage, ServedCensus)> {
+        if self.weights.is_some() || self.boost {
+            return Err(invalid(format!(
+                "weighed pair rows have no served form: these rows carry the '{}' weight",
+                self.weight_kind()
+            )));
+        }
+        let rows = self.rows.as_tensor().to_dtype(DType::F32)?.to_vec2::<f32>()?;
+        let width = rows.first().map_or(0, Vec::len);
+        let mut values = Vec::with_capacity(rows.len() * width);
+        let mut census = ServedCensus::default();
+        for (r, row) in rows.iter().enumerate() {
+            for (c, &value) in row.iter().enumerate() {
+                let step = quantize_q12(value)
+                    .map_err(|e| invalid(format!("pair row {r}, column {c}: {e}")))?;
+                let error = (f64::from(step) / 4096.0 - f64::from(value)).abs();
+                census.max_abs = census.max_abs.max(f64::from(value.abs()));
+                census.max_error = census.max_error.max(error);
+                census.zeros += usize::from(step == 0);
+                values.push(step);
+            }
+        }
+        let image = PairRowsImage::checked(
+            self.dict.vocab(),
+            width,
+            self.marks.clone(),
+            self.dict.addresses().to_vec(),
+            values,
+        )
+        .map_err(invalid)?;
+        Ok((image, census))
     }
 
     /// The rows weighed by rarity (claude-373): row `r` adds `1 / counts[r]` times itself, a
