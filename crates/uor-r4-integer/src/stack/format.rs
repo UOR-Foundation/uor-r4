@@ -77,6 +77,11 @@ pub const STACK_FBS_BOUND_SCHEMA: &str = "uor-r4.lut-stack/10";
 /// `/6` to `/9` with the `address` record and one `address.l{layer}` table a layer, read after
 /// each layer's Hamilton block. A research schema: no stack contract names it yet.
 pub const STACK_FBS_ADDRESS_SCHEMA: &str = "uor-r4.lut-stack/11";
+/// A SpiralCore/FBS stack that serves pair rows (claude-384): an unbound stack of schema `/6` to
+/// `/9` with the `pair_rows` record and the `pair_rows.addresses` (u32) and `pair_rows.values`
+/// (i16) tables. Not served together with an address table. A research schema: no stack contract
+/// names it yet.
+pub const STACK_FBS_PAIR_ROWS_SCHEMA: &str = "uor-r4.lut-stack/12";
 /// The memory's move weights at `2^MEMORY_WEIGHT_EXP`.
 pub const MEMORY_WEIGHT_EXP: i32 = -24;
 /// The point key's points at `2^POINT_KEY_EXP`: the writer query's Q12.
@@ -962,6 +967,9 @@ struct Header {
     /// The address table, under [`STACK_FBS_ADDRESS_SCHEMA`]; absent on a stack without one.
     #[serde(default)]
     address: Option<super::StackAddress>,
+    /// The pair rows, under [`STACK_FBS_PAIR_ROWS_SCHEMA`]; absent on a stack without them.
+    #[serde(default)]
+    pair_rows: Option<super::StackPairRows>,
 }
 
 /// One 4-bit matrix of a parsed container, borrowed from its bytes.
@@ -993,6 +1001,8 @@ pub(crate) struct Container<'a> {
     pub memory_chain: Option<StackMemoryChain>,
     /// The validated address table record, if the header carries one.
     pub address: Option<super::StackAddress>,
+    /// The validated pair rows record, if the header carries one.
+    pub pair_rows: Option<super::StackPairRows>,
     data: &'a [u8],
     /// Sections by name (unique within each kind).
     matrices: HashMap<String, MatrixEntry>,
@@ -1030,6 +1040,9 @@ pub struct StackArtifactMetadata {
     /// stack without one inspects as it did before the table existed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub address: Option<super::StackAddress>,
+    /// Validated pair rows. Left out of the written metadata when the stack has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pair_rows: Option<super::StackPairRows>,
 }
 
 /// Parse and validate an artifact, then return the metadata an external audit
@@ -1050,6 +1063,7 @@ pub fn inspect_uorlut01(bytes: &[u8]) -> Result<StackArtifactMetadata, StackErro
         point: artifact.point,
         memory_chain: artifact.memory_chain,
         address: artifact.address,
+        pair_rows: artifact.pair_rows,
     })
 }
 
@@ -1124,7 +1138,13 @@ impl<'a> Container<'a> {
         // binding became an admission rule.
         // An address table has its own schema, so a reader from before the table refuses the
         // stack by its schema; it would otherwise pass over the record and serve without the rows.
-        let expected = if header.address.is_some() {
+        // Pair rows likewise, and the two tables are not served together.
+        if header.address.is_some() && header.pair_rows.is_some() {
+            return Err(StackError::Shape("an address table and pair rows are not served together"));
+        }
+        let expected = if header.pair_rows.is_some() {
+            STACK_FBS_PAIR_ROWS_SCHEMA
+        } else if header.address.is_some() {
             STACK_FBS_ADDRESS_SCHEMA
         } else if header.schema == STACK_FBS_BOUND_SCHEMA {
             check_artifact_binding(&header.source)?;
@@ -1177,6 +1197,9 @@ impl<'a> Container<'a> {
         }
         if let Some(address) = &header.address {
             address.check(&header.shape)?;
+        }
+        if let Some(pair_rows) = &header.pair_rows {
+            pair_rows.check(&header.shape)?;
         }
         if let Some(snap) = &header.transport_snap {
             let known = snap.name == "icosian"
@@ -1262,6 +1285,7 @@ impl<'a> Container<'a> {
             point: header.point,
             memory_chain: header.memory_chain,
             address: header.address,
+            pair_rows: header.pair_rows,
             data,
             matrices,
             tables,
@@ -2491,6 +2515,52 @@ pub fn add_address_uorlut01(artifact: &[u8], image: &super::AddressImage) -> Res
     out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
     out.extend_from_slice(&b.data);
     super::address::address_image(&Container::parse(&out)?)?;
+    Ok(out)
+}
+
+/// A SpiralCore/FBS stack with pair rows added (claude-384): every section of `artifact` byte for
+/// byte, then `pair_rows.addresses` (u32, one a pair) and `pair_rows.values` (i16, pair-major
+/// rows of `width` values at 2^-12); the header gains the `pair_rows` record and takes
+/// [`STACK_FBS_PAIR_ROWS_SCHEMA`]. A bound stack is refused, because its contract names no pair
+/// rows; so is a stack with an address table, and one that has pair rows already. The result is
+/// read back before it is returned.
+pub fn add_pair_rows_uorlut01(artifact: &[u8], image: &super::PairRowsImage) -> Result<Vec<u8>, StackError> {
+    let container = Container::parse(artifact)?;
+    if container.pair_rows.is_some() {
+        return Err(StackError::Shape("pair rows are added to a stack without them"));
+    }
+    if container.address.is_some() {
+        return Err(StackError::Shape("an address table and pair rows are not served together"));
+    }
+    if container.schema == STACK_FBS_BOUND_SCHEMA {
+        return Err(StackError::Shape("pair rows are not added to a bound stack"));
+    }
+    let record = super::StackPairRows::of(image);
+    record.check(&container.shape)?;
+    let declared = u64::from_le_bytes(artifact[8..16].try_into().map_err(|_| StackError::MissingData)?);
+    let header_end = 16 + usize::try_from(declared).map_err(|_| StackError::MissingData)?;
+    let data_start = header_end.div_ceil(ALIGN) * ALIGN;
+    let mut header: serde_json::Value =
+        serde_json::from_slice(&artifact[16..header_end]).map_err(StackError::Header)?;
+    let mut b = ExportBuilder::new();
+    b.data = artifact[data_start..].to_vec();
+    b.push_u32(super::pair_rows::PAIR_ROWS_ADDRESSES, image.dict().addresses());
+    let values: Vec<i16> = (0..image.dict().len()).flat_map(|r| image.row(r).iter().copied()).collect();
+    b.push_i16(super::pair_rows::PAIR_ROWS_VALUES, &values);
+    header["tables"]
+        .as_array_mut()
+        .ok_or(StackError::MissingData)?
+        .extend(b.tables);
+    header["pair_rows"] = json!(record);
+    header["schema"] = json!(STACK_FBS_PAIR_ROWS_SCHEMA);
+    let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
+    let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + b.data.len());
+    out.extend_from_slice(MAGIC);
+    out.extend_from_slice(&(header_bytes.len() as u64).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
+    out.extend_from_slice(&b.data);
+    super::pair_rows::pair_rows_image(&Container::parse(&out)?)?;
     Ok(out)
 }
 

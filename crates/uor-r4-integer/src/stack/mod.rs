@@ -52,6 +52,7 @@
 //! instructions.
 
 mod address;
+mod pair_rows;
 mod chat;
 mod content_readout;
 mod dialogue_memory;
@@ -93,6 +94,8 @@ pub use flock::{
     MAX_FLOCK_CONTEXT, RAW_RANK_WEIGHTS_Q16, RECIPROCAL_Q32,
 };
 pub use format::{add_address_uorlut01, STACK_FBS_ADDRESS_SCHEMA};
+pub use format::{add_pair_rows_uorlut01, STACK_FBS_PAIR_ROWS_SCHEMA};
+pub use pair_rows::{read_pair_rows_uorlut01, PairMarks, PairRowsImage, StackPairRows, PAIR_ROW_EXP};
 pub use format::{
     add_hamming_ask_uorlut01, add_hamming_place_uorlut01, add_point_key_uorlut01, drop_hamming_carry_uorlut01,
     set_hamming_copy_latest_uorlut01, set_hamming_copy_longest_uorlut01,
