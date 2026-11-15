@@ -14853,6 +14853,10 @@ pub struct PayloadProbeSettings {
     /// replays them through the native Q31 read ([`crate::native_replay::replay`]); needs
     /// `first_only`.
     pub native_replay: bool,
+    /// claude-389: where the replay writes its barred operator and converted words as one
+    /// [`uor_r4_native_vector::Q31ReadDump`], for control 2 (CPU against CUDA); needs
+    /// `native_replay`.
+    pub native_dump: Option<std::path::PathBuf>,
 }
 
 /// claude-389: the hard-copy forward of every held-out window at payload scale 1, each forward's
@@ -15123,6 +15127,9 @@ pub fn recall_payload_probe(
     if settings.native_replay && !settings.first_only {
         return Err(invalid("the native replay replays the hard copy: it needs first_only"));
     }
+    if settings.native_dump.is_some() && !settings.native_replay {
+        return Err(invalid("the native dump is the replay's input: it needs native_replay"));
+    }
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(settings.retain_rates);
     crate::geometric_stack::set_folded_scores(settings.fold_scores);
@@ -15196,7 +15203,14 @@ pub fn recall_payload_probe(
     // claude-389: the native Q31 replay of the hard-copy read, once over every forward's capture.
     let native_replay = if settings.native_replay {
         let (state, windows) = native_replay_pass(&model, &held, settings.seed)?;
-        serde_json::to_value(crate::native_replay::replay(&state, &windows)?)?
+        let (summary, dump) = crate::native_replay::replay_with_dump(&state, &windows)?;
+        if let Some(path) = &settings.native_dump {
+            let dump = dump.ok_or_else(|| invalid("a refused state has no read to dump"))?;
+            let bytes = dump.to_bytes().map_err(|e| invalid(e.to_string()))?;
+            std::fs::write(path, bytes)
+                .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+        }
+        serde_json::to_value(summary)?
     } else {
         serde_json::Value::Null
     };

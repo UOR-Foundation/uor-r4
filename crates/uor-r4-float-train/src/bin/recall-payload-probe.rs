@@ -27,6 +27,7 @@ struct Args {
     scales: Vec<f32>,
     first_only: bool,
     native_replay: bool,
+    native_dump: Option<PathBuf>,
 }
 
 fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
@@ -34,11 +35,13 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut scales = vec![1.0, 4.0, 16.0, 64.0];
     let mut first_only = false;
     let mut native_replay = false;
+    let mut native_dump = None;
     while let Some(flag) = argv.next() {
         let mut value = || argv.next().ok_or_else(|| format!("{flag} needs a value"));
         match flag.as_str() {
             "--first-only" => first_only = true,
             "--native-replay" => native_replay = true,
+            "--native-dump" => native_dump = Some(PathBuf::from(value()?)),
             "--checkpoint" => checkpoint = Some(PathBuf::from(value()?)),
             "--run" => run = Some(PathBuf::from(value()?)),
             "--out" => out = Some(PathBuf::from(value()?)),
@@ -56,6 +59,9 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
             "--native-replay needs --first-only: the sheet replays the hard copy".to_owned(),
         );
     }
+    if native_dump.is_some() && !native_replay {
+        return Err("--native-dump needs --native-replay: it writes the replay's input".to_owned());
+    }
     Ok(Args {
         checkpoint: checkpoint.ok_or("--checkpoint is required")?,
         run: run.ok_or("--run is required")?,
@@ -63,6 +69,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
         scales,
         first_only,
         native_replay,
+        native_dump,
     })
 }
 
@@ -77,6 +84,7 @@ fn settings(
     scales: Vec<f32>,
     first_only: bool,
     native_replay: bool,
+    native_dump: Option<PathBuf>,
 ) -> Result<PayloadProbeSettings, String> {
     let config = read_json(&run.join("config.json"))?;
     let recall = read_json(&run.join("recall.json"))?;
@@ -102,6 +110,7 @@ fn settings(
         scales,
         first_only,
         native_replay,
+        native_dump,
     })
 }
 
@@ -120,7 +129,19 @@ fn run() -> Result<(), String> {
             args.out.display()
         ));
     }
-    let settings = settings(&args.run, args.scales, args.first_only, args.native_replay)?;
+    if let Some(dump) = args.native_dump.as_ref().filter(|d| d.exists()) {
+        return Err(format!(
+            "{} exists; the probe never writes over one",
+            dump.display()
+        ));
+    }
+    let settings = settings(
+        &args.run,
+        args.scales,
+        args.first_only,
+        args.native_replay,
+        args.native_dump,
+    )?;
     let device = candle_core::Device::new_cuda(0).map_err(|e| e.to_string())?;
     let probe =
         recall_payload_probe(&args.checkpoint, &settings, &device).map_err(|e| e.to_string())?;
@@ -201,5 +222,20 @@ mod tests {
         let a = parse(argv(&both)).unwrap();
         assert!(a.native_replay && a.first_only);
         assert!(!parse(argv(&base)).unwrap().native_replay);
+    }
+
+    #[test]
+    fn the_native_dump_needs_the_replay() {
+        let base = ["--checkpoint", "c", "--run", "r", "--out", "o", "--first-only"];
+        let alone: Vec<&str> = base.iter().copied().chain(["--native-dump", "d"]).collect();
+        assert!(parse(argv(&alone)).err().unwrap().contains("--native-replay"));
+        let both: Vec<&str> = base
+            .iter()
+            .copied()
+            .chain(["--native-replay", "--native-dump", "d"])
+            .collect();
+        let a = parse(argv(&both)).unwrap();
+        assert_eq!(a.native_dump, Some(PathBuf::from("d")));
+        assert!(parse(argv(&base)).unwrap().native_dump.is_none());
     }
 }
