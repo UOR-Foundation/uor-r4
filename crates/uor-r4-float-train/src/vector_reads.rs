@@ -127,10 +127,11 @@ thread_local! {
     static PICKS: RefCell<Option<Vec<u32>>> = const { RefCell::new(None) };
 }
 
-/// claude-385: the next forward of a Starling read sets its offset from the address scale before
-/// it scores: the median over the forward's rows of the nearest earlier position's distance
-/// ([`median_nearest`]), so about half the rows read from the first step. A forward of another
-/// kind leaves it pending; unsetting the read ([`set_vector_read`] with none) clears it.
+/// claude-385: the next training forward (inside [`collecting`]) of a Starling read sets its
+/// offset from the address scale before it scores: the median over the forward's rows of the
+/// nearest earlier position's distance ([`median_nearest`]), so about half the rows read from the
+/// first step. An eval forward, or a forward of another kind, leaves it pending; unsetting the
+/// read ([`set_vector_read`] with none) clears it.
 pub fn calibrate_next_offset() {
     CALIBRATE.with(|cell| cell.set(true));
 }
@@ -746,8 +747,9 @@ impl VectorRead {
                             .offset
                             .as_ref()
                             .ok_or_else(|| invalid("a Starling read has an offset"))?;
-                        // claude-385: the offset from the address scale, before the first score.
-                        if CALIBRATE.with(|cell| cell.replace(false)) {
+                        // claude-385: the offset from the address scale, before the first score,
+                        // at a training forward only: an eval forward leaves it pending.
+                        if COLLECT.with(Cell::get) && CALIBRATE.with(|cell| cell.replace(false)) {
                             let far = Tensor::full(FAR, d.shape(), device)?;
                             let nearest = earlier
                                 .where_cond(&d.detach(), &far)?
@@ -1797,6 +1799,7 @@ mod tests {
                     .iter()
                     .map(|c| c.first().map_or(0, |&s| s as u32 + 1))
                     .collect();
+                assert!(want.iter().any(|&p| p > 0), "{kind:?}: no row read");
                 assert_eq!(picks, want, "{kind:?}");
             }
             Ok(())
@@ -1811,7 +1814,14 @@ mod tests {
                 let f = fixture(kind, DEFAULT_MARGIN, 3851)?;
                 let _ = take_stats();
                 calibrate_next_offset();
+                // An eval forward (no collecting) leaves the calibration pending and the offset.
+                f.read.apply(&f.x, &IDS, &f.table)?;
+                assert!(CALIBRATE.with(Cell::get), "{kind:?}: an eval forward took it");
+                assert_eq!(take_calibrated_offset(), None, "{kind:?}");
+                assert_eq!(f.read.offset_value()?, Some(OFFSET_INIT), "{kind:?}");
+                let _ = take_stats();
                 let out = host(&collecting(|| f.read.apply(&f.x, &IDS, &f.table))?)?;
+                clear_credit();
                 let offset = take_calibrated_offset().expect("a calibration");
                 assert!(!CALIBRATE.with(Cell::get), "{kind:?}: still pending");
                 assert_eq!(f.read.offset_value()?, Some(offset), "{kind:?}");
@@ -1974,7 +1984,10 @@ mod tests {
                 let (_, fixed) = recording_picks(|| read.apply(&x, &IDS, &table))?;
                 assert_eq!(fixed, vec![0; T], "{kind:?}: the fixed start read");
                 calibrate_next_offset();
-                let (_, picks) = recording_picks(|| read.apply(&x, &IDS, &table))?;
+                let (_, picks) =
+                    recording_picks(|| collecting(|| read.apply(&x, &IDS, &table)))?;
+                clear_credit();
+                let _ = take_stats();
                 let offset = take_calibrated_offset().expect("a calibration");
                 assert!((offset - 765.4).abs() < 0.5, "{kind:?}: offset {offset}");
                 assert_eq!(picks, vec![0, 1, 0, 0, 3, 0], "{kind:?}");
@@ -2112,6 +2125,30 @@ mod tests {
                 for (i, (a, b)) in host(&out)?.iter().zip(&want.out).enumerate() {
                     assert!((a - b).abs() < 1e-5, "{kind:?} [{i}]: {a} vs {b}");
                 }
+            }
+            Ok(())
+        }
+
+        /// claude-385, repair 8: every rank Flock keeps, not only the first, is the latest left
+        /// on equal values, and a row with fewer earlier positions than K gets 0 past them.
+        #[test]
+        fn every_kept_rank_takes_the_latest_left_on_a_tie() -> Result<()> {
+            let device = Device::new_cuda(0)?;
+            let time = 5;
+            let earlier: Vec<u8> = (0..time * time)
+                .map(|i| u8::from(i % time < i / time))
+                .collect();
+            let earlier = Tensor::from_vec(earlier, (1, time, time), &device)?;
+            let columns =
+                Tensor::arange(1f32, (time + 1) as f32, &device)?.reshape((1, 1, time))?;
+            let values = Tensor::ones((1, time, time), DType::F32, &device)?;
+            let ranked = latest_best(&values, &earlier, &columns, 3)?;
+            for (rank, plus1) in ranked.iter().enumerate() {
+                let got = plus1.flatten_all()?.to_vec1::<f32>()?;
+                let want: Vec<f32> = (0..time)
+                    .map(|t| if rank < t { (t - rank) as f32 } else { 0.0 })
+                    .collect();
+                assert_eq!(got, want, "rank {rank}");
             }
             Ok(())
         }

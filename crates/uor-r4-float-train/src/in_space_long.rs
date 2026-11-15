@@ -15361,10 +15361,6 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
                 arm.margin,
                 arm.credit
             );
-            // claude-385: the Starling offset starts from the address scale at the first forward.
-            if arm.kind.is_starling() {
-                crate::vector_reads::calibrate_next_offset();
-            }
             let opt = crate::flock_read::FlockAdamW::for_vars(&read.variables())?;
             Some((read, opt))
         }
@@ -15694,6 +15690,11 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     };
 
     checkpoint(&model, 0, None, 0.0)?;
+    // claude-385: a Starling read's offset starts from the first training batch's address scale,
+    // after the step-0 checkpoint's DEV panel.
+    if vread.as_ref().is_some_and(|(read, _)| read.kind().is_starling()) {
+        crate::vector_reads::calibrate_next_offset();
+    }
     let mut order = epoch_order(usable.len(), config.seed, 0);
     let mut cursor = 0usize;
     let mut epoch = 0u64;
