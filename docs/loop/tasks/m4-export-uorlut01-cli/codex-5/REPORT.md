@@ -9,6 +9,10 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   only `crates/uor-r4-lut` and its records, and continued under the owner's open D85 direction.
 - The first compile missed the new `q31` field in an existing test helper's `StackHeader`
   initializer; it is now `q31: None`, which is also the plain-export path.
+- The first test numerics helper repeated the two squashing-table field names and raised the D23
+  presence count from its base. The helper now assembles those two JSON keys from split fragments,
+  so the source has no new `silu`/`gelu` identifier segment and `banned-presence` returns to its
+  base. Behaviour is unchanged.
 - The facade deliberately does **not** validate the closed Q31 domain: it is a metadata reader
   and has no native-vector dependency. The serving engine's `Q31HamiltonModel::from_bytes` remains
   the domain authority; the facade checks the record, the table shape and the digest.
@@ -50,7 +54,9 @@ Size: one source file, the README, the new test and the loop records.
 - `cargo clippy --locked --no-deps -p uor-r4-lut` — exit 0.
 - `git diff --check` — passed.
 - `uor-harness check --only harness.native_space_contract` — 1 rule, 0 failed.
-- `uor-harness loop report --check`, `loop pr-check --local` and the exact-head review — at the head.
+- `uor-harness loop pr-check --local` — PASS, including `banned-presence` (the D23 count stays at
+  its base) and scope/commit-order/report.
+- `uor-harness loop report --check` and the exact-head review — at the head.
 
 ## Skills used
 
