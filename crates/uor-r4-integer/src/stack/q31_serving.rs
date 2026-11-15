@@ -364,7 +364,8 @@ mod tests {
             );
         }
 
-        // A flipped state word fails the digest at parse.
+        // A changed in-domain state word fails the digest at parse: gate 0's second word is zero,
+        // so setting its low bit keeps the closed domain and only the recorded SHA-256 can refuse.
         let header_len =
             u64::from_le_bytes(artifact[8..16].try_into().expect("header length")) as usize;
         let header: serde_json::Value =
@@ -379,7 +380,7 @@ mod tests {
         let data_start = (16 + header_len).div_ceil(64) * 64;
         let offset = data_start + span["offset"].as_u64().expect("offset") as usize;
         let mut tampered = artifact.clone();
-        tampered[offset] ^= 1;
+        tampered[offset + 8] ^= 1;
         assert!(crate::stack::format::Container::parse(&tampered).is_err());
 
         // A state with the wrong K is refused by the exporter.

@@ -16,8 +16,10 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   test covers the no-record case; a `/13` artifact carrying a hamming/memory co-record is not
   fixture-tested because the synthetic trunk has none, so that branch is covered by code and the
   reviewer's read rather than a fixture.
-- Clippy reports one pre-existing `manual is multiple of` warning at `format.rs:332`, not in the
-  added lines; the touched files are formatting-clean.
+- Full-crate `cargo clippy --lib --tests` exits 101 on two pre-existing deny-level lints
+  (`place_asks.rs:1421`, `tests/openai_loopback.rs:1658`) plus many pre-existing warnings, none in
+  this diff; the touched files are clean under Clippy and formatting, which is the unit's
+  touched-file bar.
 
 ## What changed
 
@@ -57,8 +59,9 @@ Size: about 280 lines of format/export/mod/test and the ORDER/REPORT.
   ignored.
 - `cargo fmt --check -p uor-r4-integer` — the touched files are clean (other pre-existing files
   are not part of this diff).
-- `cargo clippy --locked --no-deps -p uor-r4-integer --features serving-wasm --lib --tests` — no
-  warning in the added lines.
+- `cargo clippy --locked --no-deps -p uor-r4-integer --features serving-wasm --lib --tests` —
+  exits 101 on two pre-existing deny-level lints and many pre-existing warnings outside this diff;
+  no warning in the added lines, and the touched files are clean.
 - `git diff --check` — passed.
 - `uor-harness check --only harness.native_space_contract` — 1 rule, 0 failed.
 - `uor-harness loop report --check`, `loop pr-check --local` and the exact-head review — at the head.
