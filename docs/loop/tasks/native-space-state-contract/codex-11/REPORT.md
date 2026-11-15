@@ -24,6 +24,10 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   multiply instructions (D80) as failures. The report does not claim a static-audit pass.
 - Package-wide integer Clippy with `-D warnings` is red on existing unrelated warnings. A
   package Clippy run exits 0 and reports zero diagnostics in the three touched Rust files.
+- GitHub assigned no runner to the first final-head policy/gate jobs. Force-canceling that
+  superseded run allowed its `always()` acknowledgement job to publish a stale failure at that
+  commit. A documentation-only refresh separates the final candidate from that check set; it
+  changes no executable content.
 
 ## What changed
 
