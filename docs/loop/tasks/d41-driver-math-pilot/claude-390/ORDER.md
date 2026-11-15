@@ -35,7 +35,7 @@ D86 (Casey, 15 Nov 2026, recorded in `docs/integration/DECISIONS.md` and the 15 
 
 ## Sheet
 
-`docs/harness/prep/d41-donor-pilot-2026-11-15.md`, checked by `uor-harness prep-check`, with a fresh-context non-author FIT before the run (§4.5).
+`docs/harness/prep/d41-driver-math-pilot-2026-11-15.md`, checked by `uor-harness prep-check`, with a fresh-context non-author FIT before the run (§4.5).
 
 ## Native-space five items (SKILL)
 
@@ -48,7 +48,7 @@ At base, no pilot corpus, no receipt and no measured donor tokens/s exist for gp
 ## Files in scope
 
 - `docs/labs/d41-driver-math-pilot/**` (the instrument and the wick job script)
-- `docs/harness/prep/d41-donor-pilot-2026-11-15.md`
+- `docs/harness/prep/d41-driver-math-pilot-2026-11-15.md`
 - this folder
 - `docs/research/notebook/<line>.md` (one row)
 - `docs/roadmap/items/d41-driver-math-pilot.md` (status `done` when done)

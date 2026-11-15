@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # d41 donor pilot (claude-390), wick steps 2-6 of the sheet
-# (docs/harness/prep/d41-donor-pilot-2026-11-15.md): convert, prompt set, smoke, run, seal, verify.
+# (docs/harness/prep/d41-driver-math-pilot-2026-11-15.md): convert, prompt set, smoke, run, seal, verify.
 # Runs inside Claude's wick container after wick-setup.sh, with the instrument source,
 # data/panels and the laptop's prompts.jsonl put under /workspace/d41/in.
 # The donor runs only in llama-server, outside the repository (CHARTER 3.4).
