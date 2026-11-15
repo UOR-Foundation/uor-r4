@@ -21,6 +21,20 @@ Casey's words, 15 Nov 2026, in this session. Each answers a question that quoted
 
 These are written as D86: a decision row, a change-log entry for §3.10, a PLAN owner-direction row, and a note on `m2-donor-corpus-generation` and `d41-driver-math-pilot`. CHARTER.md's text is not edited. §3.10 keeps "hard targets only". Up to four answer texts per prompt are still hard targets, with no probabilities, scores or ranks. The donor generation itself is a later unit, with its own sheet and FIT.
 
+## Owner approval
+
+Casey, 15 Nov 2026, in claude's chat. These are the answers quoted in Part 1, as the session's transcript recorded them:
+- At 2026-11-15T10:43:04Z: "I would say yes release it, but why is it going to cost money? if we are running it locally on wick, wouldn't it be free?", "Allow up to 4 (Recommended)" and "Defer (b), ban (c)(d) (Recommended)".
+- At 2026-11-15T10:53:02Z: "gpt-oss-20b on wick (Recommended)" and "Drop driver math, keep pilot (Recommended)".
+
+After the review, Casey answered "Yes, start it" to "Start the next unit: record your D41 release, then run the eval-only hard-copy read?".
+
+These answers approve the two owner-path edits that record the decision as D86:
+- the D86 row in `docs/integration/DECISIONS.md`;
+- the 15 Nov entry in `docs/rules/changes.md`.
+
+No other owner path is touched, and CHARTER.md is not edited.
+
 ## Part 2: the hard-copy read, eval only
 
 Add one eval-only setting to the float reference read (`vector_reads.rs`), off and skipped by default: **first-pick payload**. With it set, Flock's payload is `w ⊙` its first real kept pick's next-token point instead of the mean of up to four. Every other kind already reads one pick, so for those it changes nothing. Training and the default forward are unchanged, and a test pins that.
