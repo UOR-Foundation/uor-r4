@@ -1287,14 +1287,19 @@ impl<'a> Container<'a> {
             tables.insert(t.name.clone(), t);
         }
         if let Some(record) = &header.q31 {
-            // The state is one FBS recurrence's learned transition. A stack without a
-            // recurrence cannot carry it, and an engine that drops it would serve another model.
+            // One finite state path: this schema carries the Q31 state and no other optional
+            // mechanism record, so no reader can combine two schemas under one name.
             if record.state != Q31_STATE_TABLE
+                || header.address.is_some()
+                || header.point.is_some()
+                || header.memory.is_some()
+                || header.hamming.is_some()
+                || header.memory_chain.is_some()
                 || !header.shape.projection_fbs()
                 || !header.shape.pattern.bytes().any(|kind| kind == b'r')
             {
                 return Err(StackError::Shape(
-                    "a native Q31 state needs an FBS stack with a recurrence layer",
+                    "a native Q31 state needs an FBS stack with a recurrence layer and no other optional record",
                 ));
             }
             let table = tables
