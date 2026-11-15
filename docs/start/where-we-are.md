@@ -78,7 +78,7 @@ does not yet carry the facts.
 
 | Addition | Result | Served? |
 |---|---|---|
-| E8 address memory, a learned table read by the state's E8 cell | Exact replies of 1,108: 188 → 218 and 225 → 254 at two seeds, half a reply under its bar: not called ([claude-346](../loop/tasks/one-model-end-to-end/claude-346/REPORT.md)); inconclusive when served in integers ([claude-366](../loop/tasks/one-model-end-to-end/claude-366/REPORT.md)) | As a research schema only |
+| E8 address memory, a learned table read by the state's E8 cell | Exact replies of 1,108: 188 → 218 and 225 → 254 at two seeds, half a reply under its bar: not called ([claude-346](../loop/tasks/one-model-end-to-end/claude-346/REPORT.md)); not called either when served in integers ([claude-366](../loop/tasks/one-model-end-to-end/claude-366/REPORT.md)) | As a research schema only |
 | Pair experts, counted from TRAIN (not trained) | Good everyday replies of 239: 137, 135, 134 → 170, 171, 170 held out ([claude-367](../loop/tasks/one-model-end-to-end/claude-367/REPORT.md)) | Opt-in in `uor-chat`; a reply served this way is a stored TRAIN reply, not the model's |
 | Pair rows, trained and addressed by the turn's token pairs | Exact replies of 2,218: 431 → 527 and 413 → 521 at two seeds, mostly the turn's own words carried into the reply ([claude-370](../loop/tasks/one-model-end-to-end/claude-370/REPORT.md)); two weighings did not add (claude-373, claude-374) | No: the export refuses them |
 
@@ -87,7 +87,9 @@ integer geometric state that training and serving share, with the same operators
 replay, instead of float master weights and an export gap. The first Q31 vector state has trained
 on CUDA in a 64-step contract test, CPU and CUDA equal after every step
 ([codex-5](../loop/tasks/native-space-state-contract/codex-5/REPORT.md)); that is a contract test,
-not language-model training. The discrete path's CUDA training, CPU training and integer serving now
+not language-model training. The integer server now restores that trained state with no numerical
+conversion and runs the same shared transition, matching a 64-step fixture as raw words, with no
+token generation yet ([codex-8](../loop/tasks/native-space-state-contract/codex-8/REPORT.md)). The discrete path's CUDA training, CPU training and integer serving now
 agree on the same fixture bytes, on two fixtures ([claude-372](../loop/tasks/one-model-end-to-end/claude-372/REPORT.md)).
 
 **In progress (14 Nov).** Carrying the state across training windows, V1
@@ -133,7 +135,7 @@ multiplication and are historical evidence, not the D11 product.
 | Recall of a told value | 314 / 320 / 325 of 578 questions, three seeds | [claude-358](../loop/tasks/one-model-end-to-end/claude-358/REPORT.md) |
 | Exact replies, with / without the turn memory | 377–441 / 171–211 of 2,218, three seeds | [V0, claude-376](../loop/tasks/one-model-end-to-end/claude-376/REPORT.md) |
 | Next capability milestone | M2: grounded complete replies | [PLAN](../../PLAN.md) |
-| Work in progress | One native integer state for training and serving (D85); carrying it across training windows (V1) and vector-native reads (V2) | [PLAN](../../PLAN.md), [#3979](https://github.com/UOR-Foundation/uor-r4/pull/3979), [#3978](https://github.com/UOR-Foundation/uor-r4/pull/3978) |
+| Work in progress | One native integer state for training and serving (D85); carrying it across training windows (V1) and vector-native reads (V2(a)) | [PLAN](../../PLAN.md), [#3979](https://github.com/UOR-Foundation/uor-r4/pull/3979), [#3978](https://github.com/UOR-Foundation/uor-r4/pull/3978) |
 | Products shipped | None; M1 is not an alpha release | [products](../products/README.md) |
 
 ## Go deeper

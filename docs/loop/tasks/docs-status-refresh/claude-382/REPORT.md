@@ -8,11 +8,13 @@ Every claim below is [claude]'s.
 
 - **`uor-harness loop claim` refused the item**, as it did for claude-375: the item's scope lists the shared file `docs/harness/README.md`. The worktree, ORDER and draft PR were made by hand.
 - **The bench inbox was absent.** `local/bench/INBOX.md` does not exist in the main checkout, so there were no waiting messages to act on.
-- **One page goes stale because this unit edits its source.** `docs/research/lines/m7-distribution.md` lists `ROADMAP.md` as its only source, and this unit edits ROADMAP. Its text was read against the new ROADMAP and is still correct ("Pre-alpha: 1 of 8 milestones is complete"; public M1 top-8 prediction in the Studio). It is outside this unit's scope, so its `checked=` was not moved. The same holds for any page this unit edits and whose sources include another page this unit edits: after the squash, `book-fresh` counts the merge commit as a later change. Any `checked=` on a branch commit dies with the squash, so moving it here cannot help.
+- **Two pages outside this scope are stale.** `docs/model/gpu-and-cuda.md` is stale because #3977 changed its crate sources; its live copy no longer carries "0 of 8". `docs/research/lines/m7-distribution.md` lists `ROADMAP.md` as its only source, and this unit edits ROADMAP. Its text was read against the new ROADMAP and is still correct ("Pre-alpha: 1 of 8 milestones is complete"; public M1 top-8 prediction in the Studio). It is outside this unit's scope, so its `checked=` was not moved. The same holds for any page this unit edits and whose sources include another page this unit edits: after the squash, `book-fresh` counts the merge commit as a later change. Any `checked=` on a branch commit dies with the squash, so moving it here cannot help.
 - **The crate READMEs were left as they are.** They are dated "Status through 31 Oct" and are sources of `docs/README.md`. Editing them would have made the hub stale after the merge. They were removed from the ORDER's scope before any edit.
 - **Not refreshed here:** `docs/model/pipeline-map.md` (its line "order now in force (31 Oct)") and `docs/mechanisms/**` (`lut-serving.md`, `admission.md`) belong to claude-375's refresh and the ORDER excludes them. PLAN.md is not touched; its 30 Oct owner-direction rows read as of that date.
 - **The live Studio is not changed by this PR.** `web/studio/index.html` already reads "Pre-alpha · M1 complete · 1 of 8", and so does the live `/studio/` (the 9 Nov publish, gh-pages `4a435ab8a`). No edit was needed. The Studio republish after the merge carries #3915's task workspace, which so far exists in source only.
 - **A slip was fixed before review.** The facts sheet's first wording of F4 named "claude-358's served speed" as if it held for all three models. It holds for p-s2, retrained. The sheet and every page now say "one of them, p-s2".
+- **The fresh-context review found three low, wording-only slips, now fixed.** First, the web-client page stated the live Studio's status text with no row behind it; FACTS P6 now records a `curl` of the live `/studio/`. Second, the pages called claude-366's integer-served E8 result "inconclusive", where its own verdict is "Not called" (M = +5.3); the sheet and pages now say "not called". Third, two lines said "V2" where the work in progress is V2(a).
+- **One fact landed after the base.** #3977 (codex-8, merged 14 Nov 23:54Z) serves the trained Q31 state in the integer crate. It is added as FACTS N3 and one sentence on `where-we-are.md`, after merging `origin/main` into the branch.
 
 ## What changed
 
@@ -31,7 +33,7 @@ Every claim below is [claude]'s.
   - `docs/research/findings.md`: seven new rows (human text, E8 address memory, recall, pair experts, pair rows, V0, the Q31 contract test).
   - `docs/research/history.md`: "Phase H: replies in conversation and one native state (1 to 14 November)".
   - `docs/research/open-questions.md`: a state paragraph and a mermaid node for V0.
-- **Freshness records:** each edited page with a record has `checked=` set to the base, `d5eb4a556`.
+- **Freshness records:** each edited page with a record has `checked=` set to the commit it was read against: the base `d5eb4a556`, or for the five pages whose sources include `crates/uor-r4-integer` or `crates/uor-r4-discrete` (`docs/README.md`, `language-model.md`, `web-client.md`, `architecture.md`, `serving-and-export.md`), `abfad0604`, after they were re-read against #3977; `serving-and-export.md` gains one codex-8 sentence.
 - **`docs/roadmap/items/docs-status-refresh.md`:** this unit's task folder added to the scope, nothing else.
 
 ## Measurements
@@ -57,7 +59,8 @@ Live read before this PR, at 14 Nov ~23:59Z, after run 43653653317 (`docs-site.y
   - `verify_studio_page.mjs`: failures [];
   - `verify_studio_worker.mjs`: "ALL STUDIO WORKER CHECKS PASSED", status chip "pre-alpha / M1 complete / 1 of 8 milestones";
   - `verify_m7_parity.mjs` and `verify_studio_migration.mjs`: exit 0.
-- Fresh-context review and `uor-harness loop pr-check`: recorded on the PR at the final head.
+- Fresh-context review (a `delegate:reviewer` given only the ORDER, the FACTS sheet and the diff) at `c2ac364e2`: APPROVE on all three gates (numbers, scope, claims), with three low wording findings, fixed above. Each FACTS row F1–F8, N1, S2 and P1 was checked against its source. The review record and `uor-harness loop pr-check` are on the PR at the final head.
+- Studio rehearsal: `build-and-publish.sh --typed --target gh-pages` (dry run) from a clean worktree at `origin/main` `abfad0604`. Every verifier passed, including the Chrome page-load trap. Against the live `studio/`, `models.json`, `pkg/synthetic-stack.lut` and `pkg/tokenizer.json` are byte-identical (same git blobs). The engine bundle is 901,727 bytes against 807,378 live, and `index.html` changes only two hashed asset names. So the 9 Nov options carry the same catalog.
 
 ## Skills used
 
