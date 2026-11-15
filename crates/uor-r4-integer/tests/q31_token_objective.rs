@@ -183,7 +183,6 @@ fn token_writer_targets_train_the_one_q31_gate() {
     );
 }
 
-
 #[test]
 fn normalized_writer_targets_train_the_one_q31_gate() {
     let snap = synthetic_fbs_trunk(SEED);
