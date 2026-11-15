@@ -99,7 +99,8 @@ pub struct PairMarks {
 }
 
 impl PairMarks {
-    /// Refuses an empty mark and two marks one of which begins the other.
+    /// Refuses an empty mark, two marks one of which begins the other, and an assistant header
+    /// that ends with a beginning of the user marker.
     pub fn check(&self) -> Result<(), String> {
         if self.user.is_empty() || self.assistant.is_empty() {
             return Err(
@@ -113,6 +114,18 @@ impl PairMarks {
             return Err(
                 "pair rows want a user marker and an assistant header neither of which \
                         begins the other"
+                    .to_owned(),
+            );
+        }
+        // A served reply holds back while the stream ends with a beginning of the user marker
+        // ([`open_picks`]). A header ending with such a beginning would hold it back inside a
+        // header the scan takes whole, where the trainer's reply runs on (claude-384's review).
+        let overlap = (1..=self.user.len().min(self.assistant.len()))
+            .any(|k| self.assistant.ends_with(&self.user[..k]));
+        if overlap {
+            return Err(
+                "pair rows want an assistant header that does not end with a beginning of the \
+                        user marker"
                     .to_owned(),
             );
         }
@@ -839,15 +852,16 @@ mod tests {
             open_picks(&dict, &two, &[1, 3, 5, 6, 2, 4, 9, 1, 9]),
             Some(rows_of(&dict, &[(5, 6)]))
         );
-        // A beginning that starts at the reply position itself is the header, not a marker under
-        // way.
-        let overlap = marks(&[4, 7], &[2, 4]);
-        overlap.check().unwrap();
-        assert_eq!(
-            open_picks(&dict, &overlap, &[4, 7, 5, 6, 2, 4]),
-            Some(rows_of(&dict, &[(5, 6)]))
-        );
-        assert_eq!(open_picks(&dict, &overlap, &[4, 7, 5, 6, 2, 4, 9, 4]), None);
+        // A header that ends with a beginning of the user marker is refused: the hold would fire
+        // inside a header the scan takes whole, where the trainer's reply runs on.
+        for overlap in [
+            marks(&[4, 7], &[2, 4]),
+            marks(&[1, 2], &[2, 1]),
+            marks(&[3, 5, 6], &[2, 3, 5]),
+        ] {
+            assert!(overlap.check().is_err(), "{overlap:?}");
+            assert_eq!(open_picks(&dict, &overlap, &[4, 7, 5, 6, 2, 4]), None);
+        }
         // Marks that fail the check pick nothing.
         assert_eq!(open_picks(&dict, &marks(&[], &[2]), &[1, 5, 6, 2]), None);
     }
@@ -884,7 +898,8 @@ mod tests {
             marks(&[1], &[2]),
             marks(&[1, 3], &[2, 4]),
             marks(&[1, 1], &[2]),
-            marks(&[1, 2], &[2, 1]),
+            marks(&[1, 2, 1], &[2, 3]),
+            marks(&[1, 4, 5], &[2, 3]),
         ];
         let mut rng = Lcg(0x5eed);
         let mut checked = 0usize;

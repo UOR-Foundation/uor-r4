@@ -692,58 +692,84 @@ mod tests {
             .collect();
         addresses.sort_unstable();
         let dict = PairDictionary::from_addresses(vocab, addresses).unwrap();
-        let marks = marks();
-        let mut seed = 0x384_u64;
-        let mut next = |n: u32| {
-            seed = seed
-                .wrapping_mul(6_364_136_223_846_793_005)
-                .wrapping_add(1_442_695_040_888_963_407);
-            ((seed >> 33) % u64::from(n)) as u32
+        let three = PairMarks {
+            user: vec![1, 4, 5],
+            assistant: vec![2, 3],
         };
-        let (mut read, mut finished_marker, mut broken_beginning) = (0usize, 0usize, 0usize);
-        for _ in 0..300 {
-            let len = 20 + next(60) as usize;
-            let ids: Vec<u32> = (0..len)
-                .map(|_| match next(4) {
-                    0 => [1, 4][next(2) as usize],
-                    1 => [2, 3][next(2) as usize],
-                    _ => next(vocab as u32),
-                })
-                .collect();
-            let plan = plan(&dict, &marks, &ids, 1, len).unwrap();
-            let (_, users) = scan(&ids, &marks);
-            for p in 0..len {
-                let turn = plan.turn_of[p];
-                let want = (turn < plan.turns as u32).then(|| {
-                    let mut rows: Vec<u32> = plan
-                        .hit_turn
-                        .iter()
-                        .zip(&plan.hit_row)
-                        .filter(|&(&t, _)| t == turn)
-                        .map(|(_, &r)| r)
-                        .collect();
-                    rows.sort_unstable();
-                    rows
-                });
-                let got = open_picks(&dict, &marks, &ids[..=p]);
-                // A beginning of the user marker at the prefix's end: `[1]` at `p`.
-                let begins = ids[p] == marks.user[0];
-                let finished = begins && users.contains(&p);
-                if begins && !finished && want.is_some() && got.is_none() {
-                    broken_beginning += 1;
-                    continue;
+        for marks in [marks(), three] {
+            let mut seed = 0x384_u64;
+            let mut next = |n: u32| {
+                seed = seed
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                ((seed >> 33) % u64::from(n)) as u32
+            };
+            let (mut read, mut finished_marker, mut broken_beginning) = (0usize, 0usize, 0usize);
+            for _ in 0..300 {
+                let len = 20 + next(60) as usize;
+                // Mark tokens come often, as whole marks, beginnings of the user marker and
+                // single tokens, so turns open, close, break and restart.
+                let mut ids: Vec<u32> = Vec::new();
+                while ids.len() < len {
+                    match next(6) {
+                        0 => ids.extend_from_slice(&marks.user),
+                        1 => ids.extend_from_slice(&marks.assistant),
+                        2 => ids.extend_from_slice(
+                            &marks.user[..1 + next(marks.user.len() as u32 - 1) as usize],
+                        ),
+                        3 => ids.push(marks.user[next(marks.user.len() as u32) as usize]),
+                        _ => ids.push(next(vocab as u32)),
+                    }
                 }
-                assert_eq!(got, want, "{ids:?} at {p}");
-                read += usize::from(want.is_some());
-                finished_marker += usize::from(finished && open_picks(&dict, &marks, &ids[..p]).is_some());
+                ids.truncate(len);
+                let plan = plan(&dict, &marks, &ids, 1, len).unwrap();
+                let (_, users) = scan(&ids, &marks);
+                for p in 0..len {
+                    let turn = plan.turn_of[p];
+                    let want = (turn < plan.turns as u32).then(|| {
+                        let mut rows: Vec<u32> = plan
+                            .hit_turn
+                            .iter()
+                            .zip(&plan.hit_row)
+                            .filter(|&(&t, _)| t == turn)
+                            .map(|(_, &r)| r)
+                            .collect();
+                        rows.sort_unstable();
+                        rows
+                    });
+                    let got = open_picks(&dict, &marks, &ids[..=p]);
+                    // The proper beginnings of the user marker the prefix ends with, by length, and
+                    // whether the text after any of them finishes the whole marker.
+                    let under_way: Vec<usize> = (1..marks.user.len())
+                        .filter(|&k| ids[..=p].ends_with(&marks.user[..k]))
+                        .collect();
+                    let finishes = under_way
+                        .iter()
+                        .any(|&k| ids[p + 1 - k..].starts_with(&marks.user));
+                    if !under_way.is_empty() && !finishes && want.is_some() && got.is_none() {
+                        broken_beginning += 1;
+                        continue;
+                    }
+                    assert_eq!(got, want, "{marks:?} {ids:?} at {p}");
+                    read += usize::from(want.is_some());
+                    finished_marker += usize::from(
+                        users.contains(&p) && open_picks(&dict, &marks, &ids[..p]).is_some(),
+                    );
+                }
             }
+            assert!(
+                read > 1_000,
+                "{marks:?}: too few positions read rows: {read}"
+            );
+            assert!(
+                finished_marker > 10,
+                "{marks:?}: too few reply positions where a marker begins: {finished_marker} (read {read}, broken {broken_beginning})"
+            );
+            assert!(
+                broken_beginning > 0,
+                "{marks:?}: no broken beginning was drawn"
+            );
         }
-        assert!(read > 1_000, "too few positions read rows: {read}");
-        assert!(
-            finished_marker > 20,
-            "too few reply positions where a marker begins: {finished_marker} (read {read}, broken {broken_beginning})"
-        );
-        assert!(broken_beginning > 0, "no broken beginning was drawn");
     }
 
     // Plain tests cover the address, the dictionary and the plan on the host. The tensor read is
@@ -1098,7 +1124,10 @@ mod tests {
         assert!(check(vec![1, 4], vec![1, 4]).is_err());
         assert!(check(vec![1], vec![1, 4]).is_err());
         assert!(check(vec![2, 3, 9], vec![2, 3]).is_err());
-        assert!(check(vec![1, 4], vec![4, 1]).is_ok());
+        // A header ending with a beginning of the user marker (claude-384).
+        assert!(check(vec![1, 4], vec![4, 1]).is_err());
+        assert!(check(vec![1, 4, 5], vec![2, 1, 4]).is_err());
+        assert!(check(vec![1, 4], vec![4, 2]).is_ok());
     }
 
     #[test]

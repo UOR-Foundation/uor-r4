@@ -14,7 +14,8 @@
 //! positions that agree, `marker_starts` (reply positions where a user marker that the prompt
 //! finishes begins: the trainer adds nothing there, and a reader that waited for the whole marker
 //! would add the turn's rows), `broken_beginnings` (positions where a beginning of the user marker
-//! is not followed by the rest of it: the trainer adds the rows and the served rule does not), and
+//! the prefix ends with is not finished by the text after it: the trainer adds the rows and the
+//! served rule does not), and
 //! `disagree` (any other difference). The exit code is 1 when `disagree` is not 0 anywhere.
 //!
 //! It reads files only: no GPU, no training, no evaluation.
@@ -72,12 +73,19 @@ fn main() -> Result<()> {
                 let got = tracker.push(dict, marks, &ids[..=p]).map(<[u32]>::to_vec);
                 positions += 1;
                 with_rows += usize::from(want.is_some());
-                let begins = ids[p..].starts_with(&marks.user[..1]);
+                // The proper beginnings of the user marker the prefix ends with, by length, and
+                // whether the text after any of them finishes the whole marker.
+                let under_way: Vec<usize> = (1..marks.user.len())
+                    .filter(|&k| ids[..=p].ends_with(&marks.user[..k]))
+                    .collect();
+                let finishes = under_way
+                    .iter()
+                    .any(|&k| ids[p + 1 - k..].starts_with(&marks.user));
                 let finished = users.contains(&p);
                 if got == want {
                     agree += 1;
                     marker_starts += usize::from(finished && before.is_some());
-                } else if begins && !finished && want.is_some() && got.is_none() {
+                } else if !under_way.is_empty() && !finishes && want.is_some() && got.is_none() {
                     broken += 1;
                 } else {
                     disagree += 1;

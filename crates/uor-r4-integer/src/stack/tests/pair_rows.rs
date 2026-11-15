@@ -117,6 +117,29 @@ fn pair_rows_refuse_a_changed_sha256() {
     assert!(stack::read_pair_rows_uorlut01(&hashed).is_err());
 }
 
+/// A values table with one byte changed is refused: the record's hash covers the rows.
+#[test]
+fn pair_rows_refuse_a_changed_value() {
+    let (_, plain, _) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    let shape = stack::inspect_uorlut01(&plain).expect("inspect").shape;
+    let image = drawn_pair_rows(shape.vocab, shape.width);
+    let out = stack::add_pair_rows_uorlut01(&plain, &image).expect("the rows are added");
+    let declared = u64::from_le_bytes(out[8..16].try_into().unwrap()) as usize;
+    let header: serde_json::Value = serde_json::from_slice(&out[16..16 + declared]).unwrap();
+    let values = header["tables"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["name"] == json!("pair_rows.values"))
+        .expect("the values table");
+    let at =
+        (16 + declared).div_ceil(64) * 64 + values["span"]["offset"].as_u64().unwrap() as usize;
+    let mut flipped = out.clone();
+    flipped[at] ^= 1;
+    assert!(stack::read_pair_rows_uorlut01(&flipped).is_err());
+    assert!(IntegerStackModel::parse(&flipped).is_err());
+}
+
 /// The record is read strictly and with its own schema: it is refused under `/11` and under the
 /// `/6` and under the stack's own earlier schema, with an unknown key, or at another exponent.
 #[test]
@@ -169,9 +192,19 @@ fn pair_rows_are_added_once_and_alone() {
         "an address-table stack"
     );
     let record = serde_json::to_value(stack::StackPairRows::of(&image)).unwrap();
-    let both = with_header(&address, |h| h["pair_rows"] = record);
+    let both = with_header(&address, |h| {
+        h["pair_rows"] = record;
+        h["schema"] = json!(stack::STACK_FBS_PAIR_ROWS_SCHEMA);
+    });
+    let refused = stack::inspect_uorlut01(&both).expect_err("both records together");
     assert!(
-        stack::inspect_uorlut01(&both).is_err(),
+        refused
+            .to_string()
+            .contains("an address table and pair rows are not served together"),
+        "{refused}"
+    );
+    assert!(
+        IntegerStackModel::parse(&both).is_err(),
         "both records together"
     );
     let narrow = drawn_pair_rows(shape.vocab, shape.width - 8);
@@ -290,6 +323,12 @@ fn the_session_picks_are_the_open_picks_of_the_whole_stream() {
         Some(vec![1, 2]),
         "the first reply reads rows 1 and 2"
     );
+    assert_eq!(
+        open(13),
+        Some(vec![1, 2]),
+        "the reply reads up to the second user marker"
+    );
+    assert_eq!(open(14), None, "a user marker under way closes the reply");
     session.reset();
     session.step_native(TURNS[0]).expect("step");
     assert_eq!(
@@ -332,7 +371,7 @@ fn the_session_picks_are_the_open_picks_of_the_whole_stream() {
     );
     assert_ne!(
         open(TURNS.len()),
-        Some(vec![1, 2]),
+        crate::fbs_pair_rows::open_picks(image.dict(), image.marks(), &other[..TURNS.len()]),
         "the two streams' open turns differ"
     );
     let plain_model = IntegerStackModel::parse(&plain).expect("served");
