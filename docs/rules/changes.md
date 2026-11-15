@@ -38,12 +38,12 @@ order: "Drop driver math, keep pilot (Recommended)".
    unit still needs its own one-page sheet with a non-author FIT (§4.5). It also needs its
    generation receipt bound at generation (D41 item 2b).
 2. **D41 item 1 and condition (a): the donor and the machine.** The donor is
-   `openai/gpt-oss-20b`, not `openai/gpt-oss-120b`, at a pinned revision with its released MXFP4
-   weights. The 120B model needs about 65 GB and does not fit the owner's 24 GB RTX 4090. It
-   runs once, offline, on **wick**, the owner's own RTX 4090, instead of a declared `uor-pod`
-   lease. Wick's job runs in the lab's own container and binds the GPU's identity into the
-   receipt in place of the pod's. It runs outside every compiled module of the repository
-   (§3.4), through an external inference engine named in the receipt.
+   `openai/gpt-oss-20b`, not `openai/gpt-oss-120b`. The 120B model needs about 65 GB and does
+   not fit the owner's 24 GB RTX 4090. It runs on **wick**, the owner's own RTX 4090, instead
+   of a declared `uor-pod` lease. *The lab's conditions, not owner terms:* a pinned revision
+   with the released MXFP4 weights; one offline run in the lab's own container, outside every
+   compiled module of the repository (§3.4); the receipt names the external inference engine
+   and binds wick's GPU identity in place of a pod's.
 3. **D41 item 4: the consumption contract.** The donor may give up to **four** alternative
    answer texts per prompt. Each is a hard target: donor-chosen tokens stored as integer
    targets, with no logits, probabilities, scores or ranks stored or consumed.
@@ -51,8 +51,8 @@ order: "Drop driver math, keep pilot (Recommended)".
    from the M1 era) no longer gates the donor pass. The measured ~1M-token pilot stays: it runs
    first, on the same donor, before any production corpus is sized.
 5. **Variants the review named.** (b) a one-time donor embedding-table import, used as a native
-   starting point, is **deferred**. It is decided on evidence after the first native end-to-end
-   model and would need a §3.10 change. (c) fitting the geometric operators to a donor's layers
+   starting point, is **deferred** (Casey's words: "Defer (b)"). The review recommended deciding
+   it on evidence after the first native end-to-end model; it would need a §3.10 change. (c) fitting the geometric operators to a donor's layers
    or hidden states, and (d) a donor's logits or distributions as targets, stay **banned**
    (§3.2, §3.3, §3.10).
 

@@ -18,7 +18,7 @@ It gates distill-d1 supplying hard targets to the D32 discrete student.
 
 D41 item 3 puts the driver math optimization and a ~1M-token pilot ahead of distillation. Neither is recorded as done in these documents, and distill-d1 does not exist yet.
 
-**D86 (owner, 15 Nov 2026).** The driver math optimization no longer gates the donor pass ("Drop driver math, keep pilot (Recommended)"). This item's remaining part is the measured ~1M-token pilot. It runs once on `openai/gpt-oss-20b` (pinned revision, released MXFP4 weights) on wick, the owner's RTX 4090, outside every compiled module of the repository. Each prompt gets up to four hard answer texts. The receipt is bound at generation (D41 item 2b), and the unit needs a sheet and a non-author FIT (§4.5). The release is D86; no further owner step is needed.
+**D86 (owner, 15 Nov 2026).** The driver math optimization no longer gates the donor pass ("Drop driver math, keep pilot (Recommended)"). This item's remaining part is the measured ~1M-token pilot. It runs once on `openai/gpt-oss-20b` on wick, the owner's RTX 4090, with up to four hard answer texts per prompt (owner terms). The lab's conditions: a pinned revision with the released MXFP4 weights, outside every compiled module of the repository, the receipt bound at generation (D41 item 2b), and a sheet with a non-author FIT (§4.5). D86 is the §3.10 release that the pilot unit cites at dispatch.
 
 ## Done when
 
