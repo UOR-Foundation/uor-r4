@@ -818,5 +818,12 @@ mod tests {
         assert!(Q31LaneGates::from_bytes(&shift).is_err());
 
         assert!(Q31LaneGates::new(Vec::new(), 8).is_err());
+        assert!(Q31LaneGates::new(vec![[one, 0, 0, 0]], 32).is_err());
+
+        let mut cursor = Q31LaneGates::new(vec![[one, 0, 0, 0]], 8).unwrap();
+        assert!(cursor.set_cursor(0, 32).is_err());
+        assert!(cursor.set_gate(0, [Q31_MAX + 1, 0, 0, 0]).is_err());
+        assert!(cursor.set_gate(1, [one, 0, 0, 0]).is_err());
+        assert!(Q31LaneGates::from_bytes(&[0u8; 49]).is_err());
     }
 }
