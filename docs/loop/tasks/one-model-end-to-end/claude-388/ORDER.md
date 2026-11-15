@@ -37,11 +37,19 @@ The probe (`recall_payload_probe`, `recall-payload-probe`) gains `--first-only`,
   - the read cut (`R^{-v}`).
 - **Seeds:** 2 (claude-386's B2 seeds 1 and 2).
 - **Cost:** minutes of wick time, $0. No pod and no training.
-- **Reading map** (fixed before any number is read):
-  - **P (pass):** the bar is met. The hard copy becomes the read that the native Q31 read operator implements next (the review's step 2, D85). The float reference read is not trained further.
-  - **N1 (the scorer's limit):** `R_ask` < 0.90, but on the first-right rows the decoded token is the first pick's next token on ≥ 0.90 at some scale. The copy works, and the misses are the rows whose first pick is wrong. The next unit is still the native operator, with the scorer's training (hinge) as its open part.
-  - **N2 (the place):** on the first-right rows, the decoded token is the first pick's on < 0.90 at every scale, while `|p|/|x|` ≥ 1. A single token's point added there does not decode to itself through `final_norm` and the nearest-table decode. The fix is the write's place or form (a replacing write, or after `final_norm`), and the native operator is specified with that write.
-  - **D:** anything else, reported as read, with no fix named.
+- **Reading map** (fixed before any number is read; amended before the run by the FIT's findings):
+  - **What the run decides.** The run decides the native read operator's write form. It does not decide whether that operator comes next, which it does under P, N1 and N2 alike. The first pick is already right on 1,000 and 990 of 1,024 rows, and the weight is almost all positive (claude-387). So at a dominant scale, `R_ask` ≈ 0.97 × the **decode-to-self rate**: how often a dominant `w ⊙ e_t` decodes back to `t`. P/N1 against N2 is the decisive split. The REPORT gives that rate (`pick_first` on the first-right rows) beside `R_ask` and does not present P as new evidence that the read learns.
+  - **One scale.** A pass needs one scale shared by both seeds and both far buckets. A result whose lowest bucket lands in 0.875–0.925 is borderline and reads as D.
+  - **P (pass):** the bar is met at one shared scale. The REPORT records that scale and its median `|p|/|x|`. The consequence names the gain the native operator must carry:
+    - a fixed factor, when the passing `|p|/|x|` is below 1;
+    - a replacing write, when the payload swamps the stream;
+    - or a trained size, if a scale near the trained one passes.
+
+    The hard copy becomes the native Q31 read operator's read (the review's step 2, D85). The float reference read is not trained further.
+  - **N1 (the scorer's limit):** the bar is missed, but the decode-to-self rate is ≥ 0.90 at some scale, pooled over the 1,024 rows' first-right subset at each seed. The copy works, and the misses are the rows whose first pick is wrong. The next unit is still the native operator, with the scorer's training (hinge) as its open part.
+  - **N2 (the place):** the decode-to-self rate (pooled per seed, as in N1) is below 0.90 at every scale where `|p|/|x|` ≥ 1. A single token's point added there does not decode to itself through `final_norm` and the nearest-table decode. The fix is the write's place or form (a replacing write, or after `final_norm`), and the native operator is specified with that write.
+  - **D:** anything else, borderline results included, reported as read, with no fix named.
+- **FIT:** a fresh-context non-author review on 15 Nov returned `TEST FITNESS: FIT`. Its findings 1, 2, 4 and 5 are folded in above. On finding 6, the default Flock forward is pinned against the mean reference by the existing `the_forward_matches_the_plain_reference_for_every_kind`.
 
 ## Native-space five items (SKILL)
 
