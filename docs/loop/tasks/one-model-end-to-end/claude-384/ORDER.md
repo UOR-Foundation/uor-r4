@@ -50,11 +50,11 @@ Every artifact is served on the laptop by `raw-id-replies` at this unit's head, 
 
 ## Files in scope
 
-- `crates/uor-r4-integer/src/fbs_pair_rows.rs` (new), `crates/uor-r4-integer/src/lib.rs`
-- `crates/uor-r4-integer/src/stack/pair_rows.rs` (new), `stack/mod.rs`, `stack/format.rs`, `stack/session.rs`, `stack/tests.rs`
+- `crates/uor-r4-integer/src/fbs_pair_rows.rs` (new), declared in both crate roots, `src/native_geometry.rs` and `src/serving_root.rs` (corrected at the REPORT: the order named `lib.rs`, which is not the crate's root)
+- `crates/uor-r4-integer/src/stack/pair_rows.rs` (new), `stack/mod.rs`, `stack/format.rs`, `stack/session.rs`, `stack/tests.rs`, `stack/tests/pair_rows.rs` (new)
 - `crates/uor-r4-integer/src/bin/fbs-export.rs`
-- `crates/uor-r4-float-train/src/pair_rows.rs`, `src/fbs_export.rs`, `src/bin/fbs-snapshot.rs`
-- `docs/labs/one-model-end-to-end/instrument/src/bin/raw-id-replies.rs`
+- `crates/uor-r4-float-train/src/pair_rows.rs`, `src/fbs_export.rs`, `src/bin/fbs-snapshot.rs`, `src/bin/pair-picks.rs` (new: the trainer's plan for the replay check)
+- `docs/labs/one-model-end-to-end/instrument/src/bin/raw-id-replies.rs`, and the instrument's `Cargo.lock` (its build adds `uor-r4-native-vector`, a dependency `main` gave the integer crate without refreshing this lockfile)
 - `docs/loop/tasks/one-model-end-to-end/claude-384/**`, `docs/research/notebook/float-training.md`
 
 ## Done when

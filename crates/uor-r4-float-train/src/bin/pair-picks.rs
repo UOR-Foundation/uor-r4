@@ -37,7 +37,9 @@ fn main() -> Result<()> {
         std::process::exit(2);
     };
     if Path::new(out).exists() {
-        return Err(FloatTrainError::Invalid(format!("{out}: exists; it is not written over")));
+        return Err(FloatTrainError::Invalid(format!(
+            "{out}: exists; it is not written over"
+        )));
     }
     let samples: Vec<Sample> = serde_json::from_slice(&std::fs::read(samples)?)?;
     let device = Device::new_cuda(0)?;
@@ -50,7 +52,10 @@ fn main() -> Result<()> {
     for (index, sample) in samples.iter().enumerate() {
         let picks = last_position_rows(dict, marks, &sample.prompt)?;
         picked += usize::from(!picks.is_empty());
-        let addresses: Vec<u32> = picks.iter().map(|&r| dict.addresses()[r as usize]).collect();
+        let addresses: Vec<u32> = picks
+            .iter()
+            .map(|&r| dict.addresses()[r as usize])
+            .collect();
         let line = serde_json::json!({
             "index": index,
             "position": sample.position,
