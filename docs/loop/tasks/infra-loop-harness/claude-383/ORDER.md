@@ -1,6 +1,6 @@
 # ORDER: infra-loop-harness, claude-383 (archive four branches that have no PR, then delete them)
 
-Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Base: `d5eb4a556` (`d5eb4a55656726b04ea79b06968f91905933c925`, main after #3976).
+Lab: claude. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harness.md) (#2904). Setup row: 8 (record migration: work that lives only on four branches is moved into the repository before the branches go). Base: `d5eb4a556` (`d5eb4a55656726b04ea79b06968f91905933c925`, main after #3976).
 
 ## Goal
 
@@ -15,7 +15,7 @@ Keep the work on four origin branches that have no PR on `main`, byte-identical,
 
 ## How this unit was claimed
 
-By hand, as claude-377 was: this session cut `.worktrees/claude-383` and the branch `claude/branch-archive-1115` off `origin/main` at the base. No open order names this unit's files: the open PRs are #3980, #3979, #3978, #3977, #3941, #3937 and #3889. Deepseek's branches (`deepseek/*`, `try-reply-*-v3`) and kimi's open #3941 are left alone, as the owner asked.
+By hand, as claude-377 was: this session cut `.worktrees/claude-383` and the branch `claude/branch-archive-1115` off `origin/main` at the base. No open order names this unit's files: the open PRs at the claim were #3980, #3979, #3978, #3977, #3941, #3937 and #3889 (#3977 has merged since). Deepseek's branches (`deepseek/*`, `try-reply-*-v3`) and kimi's open #3941 are left alone, as the owner asked.
 
 ## Cancel probe (run first)
 
