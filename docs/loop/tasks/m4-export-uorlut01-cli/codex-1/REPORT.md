@@ -26,7 +26,8 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 - `Container::parse` validates the record name, the table kind and length, the SHA-256 over the
   reconstructed bytes, the closed Q31 domain through the shared `Q31HamiltonModel::from_bytes`,
   and the epoch, step shift and version in the record. A malformed, tampered or wrong-schema
-  record is refused.
+  record is refused. A `/12` artifact also refuses any other optional mechanism record
+  (address, point, memory, hamming or memory chain), so two schemas cannot hide under one name.
 - `IntegerStackModel::parse` reads the section and attaches it through
   `attach_native_q31_state`; serving needs no runtime side-load. A stack without the section keeps
   the existing artifact-derived path.
@@ -39,7 +40,7 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   word refused at parse.
 - The serving/export page and the M4 notebook carry the new contract and one result row.
 
-Size: 240 inserted and 12 removed lines across 6 files (Rust 3 files + 3 records), inside the
+Size: 434 inserted and 12 removed lines across 8 files (4 Rust files + 4 records), inside the
 ORDER's 250–450-line estimate before this REPORT.
 
 ## Measurements
