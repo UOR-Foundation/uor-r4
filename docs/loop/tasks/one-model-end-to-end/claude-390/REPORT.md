@@ -1,6 +1,6 @@
 # REPORT: one-model-end-to-end, claude-390 (serve the native Q31 first-pick read in `IntegerStackSession`)
 
-Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). Order: [ORDER.md](ORDER.md). PR #4006. Base `origin/main` at `8cef91f6b`. Code at `116bf357f` (the incremental step) and `112bad341` (the session read and the `/14` artifact).
+Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407). Order: [ORDER.md](ORDER.md). PR #4006. Base `origin/main` at `8cef91f6b`. Code at `116bf357f` (the incremental step), `112bad341` (the session read and the `/14` artifact), `e3f549902` (merge of `origin/main` with codex-14's `/13` lanes) and `985ba83f6` (the review's fixes: a refused step poisons the session; refusal tests name their rule).
 
 This is a serving and artifact contract unit, with builds and finite tests only, so there is no sheet and no reading map (§4.5). The read is now served. `IntegerStackSession` calls claude-389's `q31_first_pick_read` through its incremental form, `step`, after a chosen layer of an FBS trunk. The read's fields are stored in a `uor-r4.lut-stack/14` artifact as the operator's own bytes.
 
@@ -16,12 +16,12 @@ On the session's own stream, the served transition equals the operator's batch d
 
    claude-389's 1-LSB control passed because its converted states fill the Q31 range.
 
-   What does bite is a **1-LSB weight fault at g = 31**: it changes the out words and the served step. The test now pins that, and it pins the measured key-gate threshold (above 2^0). Every artifact byte is also bound by a SHA-256, so a flipped byte in `q31.read` is refused at parse. (Still open 1.)
+   What does bite is a **1-LSB weight fault at g = 31**: it changes the out words and the served step. The test now pins that. For the key gates it asserts only that some fault from 2^0 to 2^30 moves the served read, and prints the first `k` that does as a measurement. Every artifact byte is also bound by a SHA-256, so a flipped byte in `q31.read` is refused at parse. (Still open 1.)
 2. **This is forward only.** The read has no native gradient or update, so by the native-space SKILL this is a serving and contract unit, not a training run. No trained read exists to serve: no exporter carries a float `vector_read` into the artifact.
 3. **No claude-389 pick parity through an exported trunk.** A float trunk exported to integers gives a different stream at the read layer. The oracle here is the session's own stream against `apply`, as the ORDER bounds it.
 4. **`save_state` does not refuse; only `restore_state` does.** The ORDER said both refuse. The crate's existing rule is that restoring refuses and saving stays infallible: the turn memory, the Hamming type heads and the place read all refuse only on restore. Saving is harmless, and a restore would silently differ, because `uor-r4.stack-session/1` has no field for the read's history. Changing `save_state`'s signature would touch every caller for no gain.
 5. **The decision trace does not record the pick.** A dedicated opt-in trace does (`set_q31_read_trace` / `q31_read_trace`: the pick, the row handed to the read, and the row written back). Adding a field to the decision trace's layer struct would touch every literal that builds it. The replay oracle reads the dedicated trace.
-6. **A refused step is not rolled back.** An out word of `+2^31` is refused, and so is any operator refusal. The step then returns an error after the layer states and the read's history have taken the row. The session must be `reset` before it serves again. The serving path has no other mid-step refusal to copy, so this is stated in `ServedQ31Read::serve`'s doc rather than enforced. (Still open 4.)
+6. **A refused step is not rolled back.** An out word of `+2^31` is refused, and so is any operator refusal. The step then returns an error after the layer states and the read's history have taken the row. The first version only documented that the caller must `reset`; the session review found a later step would serve from that half-advanced state. Now the refusal sets a session flag, and every later step, plain or stage-timed, is refused ("reset the session before it serves again") until `reset` clears it. The state is still not rolled back. (Still open 4.)
 7. **The builder subagents could not build the session half.** The first builder delivered the incremental `step`. The second handed the session wiring back with nothing written, because its injected context started near the scope mark. I wrote the session read and its tests in the main session.
 
 ## What changed
@@ -41,10 +41,11 @@ On the session's own stream, the served transition equals the operator's batch d
   - The FBS model gains `q31_read: Option<ServedQ31Read>`, attached at load.
   - `stack_step_fbs` and the stage-timed copy `stack_step_fbs_timed` call the read after layer `l` when `l + 1 == depth`, after that layer's MLP add.
   - The session keeps a `Q31ReadHistory` and an opt-in trace. `reset` clears both, and `restore_state` refuses.
+  - A refused read sets `q31_read_refused`; both FBS step loops refuse while it is set, and `reset` clears it.
   - `fbs_trunk_image`, and so `fbs_image`, returns `None` for a trunk with a read, so no evaluator serves the trunk without it.
 - **`stack/format.rs`:**
   - `STACK_FBS_Q31_READ_SCHEMA = "uor-r4.lut-stack/14"`, with the `q31_read` header and container field and the metadata field. The metadata leaves the field out when the stack has no read, so an artifact without one inspects as before.
-  - `Container::parse` derives `/14` from the record first, and refuses a read alongside any other optional record (address, Hamming, memory, point, chain, or the `/12` Q31 state). It validates the table through `q31_read_image`.
+  - `Container::parse` derives `/14` from the record first, and refuses a read alongside any other optional record (address, Hamming, memory, point, chain, the `/12` Q31 state, or codex's `/13` lane gates). It validates the table through `q31_read_image`.
   - `add_q31_read_uorlut01` follows `add_address_uorlut01`. It appends a u32 table of the read's exact bytes, with the last word zero-padded, keeps every earlier section's bytes, and reads the result back.
   - `/13` is left to codex's lane gates.
 - **`stack/mod.rs`:** the module and its public items.
@@ -72,8 +73,9 @@ The fixture is `synthetic_fbs_trunk_with(20261115, FBS_SYNTH_SMALL)` with contex
 | Largest residual word at the read | 372,018 (about 2^18.5) |
 | An out word of `+2^31` (weights 2^31, g = 31) | `StackError::Numerics(… +2^31 …)` |
 | `restore_state` with a read; `reset` then re-serve | refused; identical to the first run |
+| After a refused step: three more plain and three stage-timed steps; then `reset` | all six refused with the reset message; after `reset` the steps before the refusal serve identically, and the refused step is refused by its own `+2^31` rule again |
 
-Refusals tested:
+Refusals tested. Each test now matches the refusal's message to the rule that should refuse, not only that something refused:
 - **Adding a read is refused for:** a second read, depth 0, a depth past the layers, and another width.
 - **Parsing refuses:**
   - a flipped byte at four offsets of the table;
@@ -82,24 +84,36 @@ Refusals tested:
   - another table name;
   - a record without its table;
   - a byte length the table does not hold;
-  - depth 0, a depth past the layers, or another width;
+  - depth 0, a depth past the layers (3 on the two-layer fixture), or another width;
   - a wrong digest;
-  - a read beside an address record.
+  - a read beside an address record (on the add path, and on the parse path with a real address record set in a `/14` header).
 
 ## Checks run at the head
 
-At `112bad341`, plus the test-only magnitude print in the REPORT commit. Laptop, `~/.cargo/bin/cargo`, `CARGO_INCREMENTAL=0`.
+At `985ba83f6`, over the merge `e3f549902`, unless a line names another commit. Laptop, `~/.cargo/bin/cargo`, `CARGO_INCREMENTAL=0`.
 
-- `cargo test -p uor-r4-native-vector`: 28 passed.
-- `cargo test -p uor-r4-integer --features serving-wasm --lib`: 658 passed, 0 failed, 1 ignored. That includes the 7 new `q31_read` tests. Every earlier test is unchanged, including the `/1`–`/12` byte pins and `the_stage_timed_fbs_step_is_the_served_step`.
+- `cargo test -p uor-r4-native-vector`: 28 passed (at `112bad341`; the merge and `985ba83f6` do not touch the crate).
+- `cargo test -p uor-r4-integer --features serving-wasm --lib`: 660 passed, 0 failed, 1 ignored. That includes the 8 new `q31_read` tests. Every earlier test is unchanged, including the `/1`–`/12` byte pins and `the_stage_timed_fbs_step_is_the_served_step`.
 - `cargo build -p uor-r4-native-vector --target wasm32-unknown-unknown` and `cargo build -p uor-r4-integer --features serving-wasm --target wasm32-unknown-unknown --lib`: clean.
   - The `uor-r4-stack` bin does not build for wasm32 (`verify_step_objdump_zero_mul_zero_float`, `measure_step_phases`: native-only items). This is not touched here.
-- `cargo clippy -p uor-r4-integer --features serving-wasm --lib --tests`: no finding in the touched files except a warning at `format.rs:332`, which sits in code that was already there. The two clippy errors are in `tests/openai_loopback.rs:1658` and `src/place_asks.rs:1421`, which this unit does not touch.
-- `cargo fmt --check -p uor-r4-integer`: no diff in the four touched files. Existing diffs elsewhere in the crate are not touched.
+- `cargo clippy -p uor-r4-integer --features serving-wasm --lib --tests`: no finding in the touched files except a warning at `format.rs:337`, in a line from 29 Oct. The three clippy errors are in `tests/openai_loopback.rs:1658`, `src/place_asks.rs:1421` and `src/stack/kernels.rs:1806`, which this unit does not touch.
+- `cargo fmt --check -p uor-r4-integer`: no diff in the four touched files (at `112bad341`); `rustfmt --check` on `q31_read.rs` at `985ba83f6` is clean. Existing diffs elsewhere in the crate are not touched.
 - **Negative gates** (each sabotage set aside, run, and restored byte for byte):
   - `step` appending the query address instead of the key: `step_matches_apply_on_seeded_windows` fails.
   - The read's write-back disabled: the replay and the planted-fault tests fail.
   - The served loop's read call removed: the replay, timed-loop, planted-fault and `+2^31` tests fail.
+  - At `985ba83f6`, one sabotage per run, each confirmed applied by `git diff --stat` and restored by `git checkout`:
+    - the poison flag never set: the refused-step test fails;
+    - the read served at layer 0 whatever its depth: the replay test's depth assertion fails;
+    - the `restore_state` refusal disabled: the restore test fails;
+    - `reset` keeping the read history: both reset tests fail;
+    - the `+2^31` out-word guard disabled: the out-word and refused-step tests fail;
+    - the width check in `StackQ31Read::check` disabled: the round-trip test fails;
+    - the address arm of parse's combination refusal disabled: the round-trip test fails on the read-beside-address case.
+    - One sabotage (the width check) first missed its line, and its green run was discarded and redone.
+- **Fresh reviews of `112bad341`** (two reviewers, the spec and the diff only):
+  - session and artifact: one medium finding, that a refused step left the session serving from a half-advanced state. Fixed in `985ba83f6`; the lows are in Still open 9.
+  - tests: REQUEST CHANGES, for refusals checked by `is_err()` alone, no parse-path combination test, an unpinned depth placement, a parse depth of 9 on a two-layer stack, a threshold assertion on a measurement, and a restore test accepting any `Shape`. All six fixed in `985ba83f6`, with the five suggested negative gates run above.
 - `uor-harness check-formats`: 8 formats ok.
   - `uor-harness check --only harness.native_space_contract` matches no registered rule (0 rules), so the ORDER's check 7 has no rule to run. The full `uor-harness check` has 0 errors.
 - `uor-harness loop pr-check --local`: see the PR.
@@ -120,8 +134,8 @@ At `112bad341`, plus the test-only magnitude print in the REPORT commit. Laptop,
    The update-rule unit decides. claude-389's states filled the Q31 range, so its 1-LSB control passed.
 2. **The native update rule.** The read's gates, weights and gain need a native gradient and update on the same Q31 words. The trained gain must reach about ×16 (claude-389 item 2).
 3. **A trained read in the artifact.** Once the read trains natively, `add_q31_read_uorlut01` stores it. The first check then is claude-389's picks, reproduced from a served prompt.
-4. **A refused step leaves the session mid-prompt** (item 6 above). A session-level poison flag, or a rollback, would make that refusal safe without the caller's `reset`.
-5. **Combinations.** A read is refused beside the address table, Hamming reads, memory, point, chain and the `/12` Q31 state. Their order at the same seam is not defined. A read beside codex's `/13` lane gates is the next combination to define.
+4. **A refused step is refused, not rolled back** (item 6 above). The session now refuses every later step until `reset`. A rollback of the layer states and the read's history would let it continue instead.
+5. **Combinations.** A read is refused beside the address table, Hamming reads, memory, point, chain, the `/12` Q31 state and codex's `/13` lane gates. Their order at the same seam is not defined. A read beside the `/13` lane gates is the next combination to define.
 6. **The session schema has no field for the read's history.** `restore_state` refuses until `uor-r4.stack-session/1` gains one.
 7. **The ORDER's check 7 names no registered rule.** `harness.native_space_contract` is not a rule id in `uor-harness check`.
 8. **The claude-389 review's minor findings stay open:**
@@ -133,6 +147,10 @@ At `112bad341`, plus the test-only magnitude print in the REPORT commit. Laptop,
    - `q31_hamilton_rotate`'s u64 wrap.
 
    Note that `step` has the same narrower id rule as `apply`: an out-of-table token is refused only when a read reaches it.
+9. **The session review's low findings:**
+   - each served step re-runs `admit_words` and `table_vocab` over the whole writer table, a speed cost on every token that a load-time check would remove;
+   - `StackQ31Read::check` runs twice on parse (in the header block and again in `q31_read_image`);
+   - `save_state`'s doc does not say that a session with a read saves a state it cannot restore.
 
 ## Plain summary
 
