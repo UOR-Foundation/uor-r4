@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5ea30655.js";
+            window.path_to_searchindex_js = "../searchindex-b1879735.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-78e3d836.js"></script>
@@ -179,7 +179,7 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+                        <p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/abfad060460503bbd468f5b8c74b892b2aaca800"><code>abfad0604</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="serving-and-export"><a class="header" href="#serving-and-export">Serving and export</a></h1>
 <p>A finished model must leave the lab and run as an integer artifact on an ordinary device. D11 bans
@@ -289,7 +289,8 @@ lawful likelihood (<code>PRLL</code>) is built and registered, but GPU held-out 
 <li><strong>Joined FBS serving:</strong> memory, readout and text/chat distribution are not all in one integer session.</li>
 <li><strong>M5:</strong> full-path memory traffic and energy on the accepted model.</li>
 <li><strong>M7:</strong> library/CLI/browser token and session parity on the accepted model, not only the synthetic stand-in.</li>
-<li><strong>Addressed/product-key memory:</strong> the older exporter refuses it. The real point-key export and p-x run happened, but claude-229 was row 0's instrument fault, not a usable bar result. Claude-231 built the nearest readout on native and browser paths; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md">claude-232</a> missed greedy parity in every cell, so the p-x rerun waits on localizing the mismatch.</li>
+<li><strong>Addressed/product-key memory:</strong> the older exporter refuses it. The real point-key export and p-x run happened, but claude-229 was row 0's instrument fault, not a usable bar result. Claude-231 built the nearest readout on native and browser paths; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md">claude-232</a> missed greedy parity in every cell. The newer pair rows, addressed by the turn's token pairs, are refused by the export too, so they are not served (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-370/REPORT.md">claude-370</a>).</li>
+<li><strong>One native train/serve state (D85, 13 Nov):</strong> the default route is one persistent integer geometric state, trained and served by the same typed operators with bit-identical replay, so the artifact carries that state instead of an export gap. Codex trained one Q31 vector state on CUDA as a finite contract test, not language-model training (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/native-space-state-contract/codex-5/REPORT.md">codex-5</a>). Since 14 Nov the integer crate restores that trained 48-byte state with no numerical conversion and runs the same shared transition: after 64 trained steps, the restored state and its transition results match as raw words. No token generation is claimed (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/native-space-state-contract/codex-8/REPORT.md">codex-8</a>).</li>
 </ul>
 <p>The web client is connected to the current integer worker. DeepSeek's #3442/#3444 rebuilt and
 published the Studio; #3445 then wired the publicly released M1 trunk for top-8 next-token

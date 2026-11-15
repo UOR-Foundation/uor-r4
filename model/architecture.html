@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5ea30655.js";
+            window.path_to_searchindex_js = "../searchindex-b1879735.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-78e3d836.js"></script>
@@ -179,7 +179,7 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+                        <p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/abfad060460503bbd468f5b8c74b892b2aaca800"><code>abfad0604</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="the-model-end-to-end"><a class="header" href="#the-model-end-to-end">The model, end to end</a></h1>
 <p>UOR-R4 turns text into whole-number token ids, carries those ids through geometric state and exact
@@ -266,7 +266,7 @@ not new reply kinds or useful conversation
 </tbody>
 </table>
 </div>
-<p><strong>Current failure and latest probe.</strong> Claude-217's cycle and echo steps end every registered loop,
+<p><strong>Reply openings, through claude-232.</strong> Claude-217's cycle and echo steps end every registered loop,
 but content is underpowered and greedy remains the decode. On p-s, teacher-forced reply openings are 17.4%, 13.7%
 and 18.6% at three seeds, against 80.8%, 80.2% and 79.9% on later tokens. Exact-reference replies
 are only 3, 1 and 4 of 256, and exact-key memory finds little on new phrasing
@@ -274,7 +274,8 @@ are only 3, 1 and 4 of 256, and exact-key memory finds little on new phrasing
 trunk-state keys offline; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-219/REPORT.md">claude-219</a>
 then tested them in free generation on fresh p-v. The point-key opening improves templates by
 +13/+8/+12 and exact replies by +9/+8/+12 at three seeds, but only partially. The sign key is
-inconclusive at this panel size. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-220/REPORT.md">Claude-220</a> then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-222/REPORT.md">Claude-222</a> has built the integer point table, search and <code>/8</code> record, with 380 library tests and a full serving audit. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-224/REPORT.md">Claude-224</a> has built the panel decode and grade. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md">Claude-227</a> passed retention GPU parity within the 3% bar; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-228/REPORT.md">Claude-228</a> built the run's reference/read-back/BOS checks; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-229/REPORT.md">Claude-229</a> found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so no bar result or throughput is reported. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-231/REPORT.md">Claude-231</a> built the nearest readout and export on native and browser paths; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md">claude-232</a> then missed greedy parity in every cell, so the mismatch must be localized before the p-x rerun; useful chat remains unproven.</p>
+inconclusive at this panel size. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-220/REPORT.md">Claude-220</a> then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-222/REPORT.md">Claude-222</a> has built the integer point table, search and <code>/8</code> record, with 380 library tests and a full serving audit. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-224/REPORT.md">Claude-224</a> has built the panel decode and grade. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md">Claude-227</a> passed retention GPU parity within the 3% bar; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-228/REPORT.md">Claude-228</a> built the run's reference/read-back/BOS checks; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-229/REPORT.md">Claude-229</a> found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so no bar result or throughput is reported. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-231/REPORT.md">Claude-231</a> built the nearest readout and export on native and browser paths; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md">claude-232</a> then missed greedy parity in every cell.</p>
+<p><strong>State on 14 Nov 2026.</strong> Since 10 Nov the work is recall in controlled conversations. The current recipe reads with four Hamming reads and an exact turn memory, not the Route, Flock or Relation reads, and training carries no state from one window to the next. The pure-vector baseline, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-376/REPORT.md">claude-376</a>, found that almost every fact the model gets right comes from the turn memory's table. On 13 Nov D85 made one persistent integer geometric state, trained and served by the same typed operators with bit-identical replay, the default route. V1, the state carried across training windows (PR #3979), and V2(a), three vector-native reads behind flags (PR #3978), are in progress. Useful chat remains unproven.</p>
 <h2 id="what-remains-unbuilt-or-unqualified"><a class="header" href="#what-remains-unbuilt-or-unqualified">What remains unbuilt or unqualified</a></h2>
 <ul>
 <li><strong>M2 and M3:</strong> complete correct replies and durable memory, not just next-token scores.</li>

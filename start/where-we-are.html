@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5ea30655.js";
+            window.path_to_searchindex_js = "../searchindex-b1879735.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-78e3d836.js"></script>
@@ -179,7 +179,7 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <p class="page-freshness"><small>Not yet checked against its sources.</small></p>
+                        <p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/d5eb4a55656726b04ea79b06968f91905933c925"><code>d5eb4a556</code></a> (2026-11-14); no later commit changes them.</small></p>
 
 <h1 id="where-uor-r4-is-today"><a class="header" href="#where-uor-r4-is-today">Where UOR-R4 is today</a></h1>
 <p><strong>In one paragraph.</strong> UOR-R4 is pre-alpha: <strong>1 of 8 milestones is complete</strong>, and no model holds a
@@ -232,37 +232,66 @@ generated-copy rate, and not new reply kinds or useful conversation.</p>
 </tbody>
 </table>
 </div>
-<h2 id="the-separate-fbs-trunk-and-the-current-failure"><a class="header" href="#the-separate-fbs-trunk-and-the-current-failure">The separate FBS trunk and the current failure</a></h2>
+<h2 id="the-separate-fbs-trunk-replies-in-conversation-since-31-oct"><a class="header" href="#the-separate-fbs-trunk-replies-in-conversation-since-31-oct">The separate FBS trunk: replies in conversation (since 31 Oct)</a></h2>
 <p>The float-trained FBS trunk is a second model path; it has not joined the saved discrete M1 model.
-Its <code>lut-stack/5</code> export keeps the rotations exact and has its DEV export gap inside the bar. The current work is complete replies on new
-phrasings, not another replay of M1.</p>
-<p><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-217/REPORT.md">Claude-217</a> found that cycle and echo
-decode steps end every registered loop, but every content decision is <strong>underpowered</strong>, so greedy
-remains the decode. On held-out p-s:</p>
-<ul>
-<li>Exact-reference replies are only <strong>3, 1 and 4 of 256</strong> at three seeds, against 38–40 on DEV.</li>
-<li>Teacher-forced reply openings are <strong>17.4%, 13.7% and 18.6%</strong>, against <strong>80.8%, 80.2% and 79.9%</strong>
-on later tokens.</li>
-<li>Exact turn memory keys on the turn's exact first token ids. It adds 322–337 of 1,226 openings on
-DEV but only 14–16 of 1,400 on p-s, so a reworded known question can find no stored key.</li>
-</ul>
-<p><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-218/REPORT.md">Claude-218</a> then found trunk-state memory
-keys that improved reply openings offline. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-219/REPORT.md">Claude-219</a> then tested them in free
-generation on fresh p-v. Serving the point key for the first reply token where exact memory misses
-improves template replies by <strong>+13, +8 and +12</strong> and exact replies by <strong>+9, +8 and +12</strong> at three
-seeds. Keyed openings are right on 27–31% of cases, so this is a partial gain, not useful chat. The
-sign key is inconclusive at this panel size. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-220/REPORT.md">Claude-220</a>
-then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at
-three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing.
-<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-222/REPORT.md">Claude-222</a> has built the integer point table,
-search and <code>/8</code> record, with 380 library tests and a full serving audit. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-224/REPORT.md">Claude-224</a> has built the panel decode and grade. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md">Claude-227</a> passed retention GPU parity within the 3% bar; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-228/REPORT.md">Claude-228</a> built the run's reference/read-back/BOS instruments (390 integer-library tests with one ignored and four negative gates), which held in row 0; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-229/REPORT.md">Claude-229</a> found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so no bar result or throughput is reported. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-231/REPORT.md">Claude-231</a> built the nearest readout and export on native and browser paths. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md">Claude-232</a> then missed greedy parity in every cell: DEV first-token agreement is 291, 285 and 284 of 310 at three seeds, and p-w agreement is 911, 777 and 64 of 1,202. The mismatch must be localized before the p-x rerun.</p>
+Since M1 closed, the work on it has been the second open question: can a model answer in a
+conversation? Every number below is a measurement at its named scope.</p>
+<p><strong>Human-written text.</strong> On a held-out panel of 1,460,697 rows of public conversation and
+encyclopedia text, a batch of 64 with twice the training text gets 331,698 and 342,250 next tokens
+right at two seeds, against T2's 256,660: ahead at both seeds
+(<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-301/REPORT.md">claude-301</a>, 6 Nov). Width 256 gets
+about 125,000 more rows right than width 128; width 512 did not fit the GPU's memory (claude-317,
+<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/research/notebook/float-training.md">notebook</a>).</p>
+<p><strong>Recall in controlled conversations.</strong> Since 10 Nov the panels are conversations where a value is
+told and later asked for. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-358/REPORT.md">Claude-358</a>'s
+three models (p-s1 to p-s3, 13 Nov) state the told value on <strong>314, 320 and 325 of 578</strong> recall
+questions. One of them, p-s2, serves on an Apple M1 at 1,567 to 1,636 tok/s decode and 4,309 to 4,499 tok/s
+context prefill.</p>
+<p><strong>What the vectors carry alone.</strong> <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-376/REPORT.md">V0, claude-376</a>
+(14 Nov) served those three models over 2,218 conversation rows twice: as exported, and with their
+exact turn memory dropped. Exact replies are <strong>377, 380 and 441</strong> as exported and <strong>171, 173 and
+211</strong> without the memory. Almost every fact the model gets right comes from the turn memory's
+table, which is keyed on the turn's exact token ids and counted from TRAIN. The vector state alone
+does not yet carry the facts.</p>
+<p><strong>Additions tried since 31 Oct</strong> (<a href="../mechanisms/index.html#results-since-31-oct-with-no-board-row-yet">mechanism board</a>):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Addition</th><th>Result</th><th>Served?</th></tr>
+</thead>
+<tbody>
+<tr><td>E8 address memory, a learned table read by the state's E8 cell</td><td>Exact replies of 1,108: 188 → 218 and 225 → 254 at two seeds, half a reply under its bar: not called (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-346/REPORT.md">claude-346</a>); not called either when served in integers (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-366/REPORT.md">claude-366</a>)</td><td>As a research schema only</td></tr>
+<tr><td>Pair experts, counted from TRAIN (not trained)</td><td>Good everyday replies of 239: 137, 135, 134 → 170, 171, 170 held out (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-367/REPORT.md">claude-367</a>)</td><td>Opt-in in <code>uor-chat</code>; a reply served this way is a stored TRAIN reply, not the model's</td></tr>
+<tr><td>Pair rows, trained and addressed by the turn's token pairs</td><td>Exact replies of 2,218: 431 → 527 and 413 → 521 at two seeds, mostly the turn's own words carried into the reply (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-370/REPORT.md">claude-370</a>); two weighings did not add (claude-373, claude-374)</td><td>No: the export refuses them</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>The native-space route (D85, 13 Nov).</strong> The owner set the default route to one persistent
+integer geometric state that training and serving share, with the same operators and bit-identical
+replay, instead of float master weights and an export gap. The first Q31 vector state has trained
+on CUDA in a 64-step contract test, CPU and CUDA equal after every step
+(<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/native-space-state-contract/codex-5/REPORT.md">codex-5</a>); that is a contract test,
+not language-model training. The integer crate now restores that trained state with no numerical
+conversion and runs the same shared transition: after 64 trained steps, the restored state and its
+transition results match as raw words. No token generation is claimed (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/native-space-state-contract/codex-8/REPORT.md">codex-8</a>). The discrete path's CUDA training, CPU training and integer serving now
+agree on the same fixture bytes, on two fixtures (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-372/REPORT.md">claude-372</a>).</p>
+<p><strong>In progress (14 Nov).</strong> Carrying the state across training windows, V1
+(<a href="https://github.com/UOR-Foundation/uor-r4/pull/3979">#3979</a>); today training carries no state
+from one window to the next. Vector-native reads, V2(a)
+(<a href="https://github.com/UOR-Foundation/uor-r4/pull/3978">#3978</a>). Neither has a result yet.</p>
+<p>The point-key and nearest-readout units of late October (claude-217 to claude-232) are recorded
+in the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/research/notebook/float-training.md">float-training notebook</a> and the
+<a href="../research/open-questions.html">open questions</a>.</p>
 <h2 id="what-does-not-work-yet"><a class="header" href="#what-does-not-work-yet">What does not work yet</a></h2>
 <ul>
 <li><strong>Useful conversation.</strong> M1's next-token bars do not establish coherent, correct complete replies.</li>
+<li><strong>Facts from the vectors alone.</strong> Without the exact turn memory, the current models answer almost
+no fact questions (V0, claude-376); the memory's table supplies them.</li>
 <li><strong>New reply kinds.</strong> p-f has held-out prompt phrasings but 62.5% of its reference replies come
 from TRAIN. The FBS generation results make that limitation visible.</li>
 <li><strong>A joined model.</strong> The discrete M1 path and FBS trunk remain separate. Not every FBS part is
-served in one integer session, and accepted-model text/chat distribution remains open.</li>
+served in one integer session (pair rows are refused by the export), and accepted-model
+text/chat distribution remains open.</li>
 <li><strong>M2–M8.</strong> Grounded replies, durable memory, full accepted-model serving, laptop cost,
 reasoning/coding, distribution and alpha release are not complete.</li>
 </ul>
@@ -283,9 +312,11 @@ multiplication and are historical evidence, not the D11 product.</p>
 <tr><td>Milestones complete</td><td><strong>1 of 8 (M1)</strong></td><td><a href="https://github.com/UOR-Foundation/uor-r4/issues/2029">#2029</a></td></tr>
 <tr><td>Saved model top-1 on DEV</td><td>7,002 / 7,001 of 14,287</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/m1-close-saved-model/README.md">M1 close</a></td></tr>
 <tr><td>Fresh V2 / p-f</td><td>7,215 / 7,228; 7,850 / 7,872</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/m1-fresh-panel-transfer/README.md">Fresh V2</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md">bar-f report</a></td></tr>
-<tr><td>Useful conversation</td><td>Not established</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-220/REPORT.md">latest free-generation evidence</a></td></tr>
+<tr><td>Useful conversation</td><td>Not established</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-376/REPORT.md">V0, claude-376</a></td></tr>
+<tr><td>Recall of a told value</td><td>314 / 320 / 325 of 578 questions, three seeds</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-358/REPORT.md">claude-358</a></td></tr>
+<tr><td>Exact replies, with / without the turn memory</td><td>377–441 / 171–211 of 2,218, three seeds</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-376/REPORT.md">V0, claude-376</a></td></tr>
 <tr><td>Next capability milestone</td><td>M2: grounded complete replies</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">PLAN</a></td></tr>
-<tr><td>Immediate gate</td><td>Localize claude-232's parity MISS layer by layer, then recheck parity before the p-x rerun</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md">claude-232</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/roadmap/items/point-key-integer.md">point-key item</a></td></tr>
+<tr><td>Work in progress</td><td>One native integer state for training and serving (D85); carrying it across training windows (V1) and vector-native reads (V2(a))</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">PLAN</a>, <a href="https://github.com/UOR-Foundation/uor-r4/pull/3979">#3979</a>, <a href="https://github.com/UOR-Foundation/uor-r4/pull/3978">#3978</a></td></tr>
 <tr><td>Products shipped</td><td>None; M1 is not an alpha release</td><td><a href="../products/index.html">products</a></td></tr>
 </tbody>
 </table>
