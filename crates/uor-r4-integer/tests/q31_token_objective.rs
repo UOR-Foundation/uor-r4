@@ -3,8 +3,8 @@
 //! Tokens map to the synthetic trunk's writer rows (Q12, shifted to Q31); at each transition the
 //! traced recurrence lane carries are the values and the next token's matching 4-word block is the
 //! target. The shared oracle `Q31HamiltonModel::step_reference` trains the gate. The test reports
-//! the independent alignment dot before and after, and requires the trained state to change the
-//! served tokens. Host-only; no language or capability claim.
+//! the independent alignment dot before and after, and reports the served token ids before and
+//! after. Host-only; no language or capability claim.
 //!
 //! `cargo test -p uor-r4-integer --features serving-wasm,fbs-synthetic --test q31_token_objective`
 

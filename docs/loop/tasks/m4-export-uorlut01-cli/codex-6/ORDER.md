@@ -19,7 +19,8 @@ test and records, and does not touch that file.
 ## Objective
 
 - Tokens map to the synthetic trunk's writer rows: token `t`'s row is `embed[t*width .. +width]`,
-  quantized to Q12 as the exporter does and shifted to Q31 (`q12 << 19`), eight 4-word blocks.
+  quantized to Q12 as the exporter does and mapped into Q31 (`q12 << 16`, the writer's ±8 range
+  into ±1), eight 4-word blocks.
 - At each transition `i`, the recurrence's lane carries `before` are the values; the next token
   `seq[i+1]`'s block for the same lane is the target.
 - The shared oracle `Q31HamiltonModel::step_reference` trains the gate on those records.
