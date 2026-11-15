@@ -569,7 +569,8 @@ fn cuda_read_update_matches_the_host_on_seeded_batches() -> uor_r4_discrete::Res
                 (0..width).map(|_| rng.small()).collect(),
                 4,
             )?;
-            for margin in [0, 1 << 20] {
+            // `u64::MAX` puts every row's hinge above 2^64, into the high loss word.
+            for margin in [0, 1 << 20, u64::MAX] {
                 for shift in [0, 4, 31] {
                     let mut read = start.clone();
                     for _ in 0..3 {
