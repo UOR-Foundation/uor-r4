@@ -134,9 +134,16 @@ fn pair_rows_refuse_a_changed_value() {
         .expect("the values table");
     let at =
         (16 + declared).div_ceil(64) * 64 + values["span"]["offset"].as_u64().unwrap() as usize;
+    assert!(values["span"]["bytes"].as_u64().unwrap() > 0);
     let mut flipped = out.clone();
     flipped[at] ^= 1;
-    assert!(stack::read_pair_rows_uorlut01(&flipped).is_err());
+    let refused = stack::read_pair_rows_uorlut01(&flipped).expect_err("a changed value");
+    assert!(
+        refused
+            .to_string()
+            .contains("pair rows are the rows file the record hashes"),
+        "{refused}"
+    );
     assert!(IntegerStackModel::parse(&flipped).is_err());
 }
 

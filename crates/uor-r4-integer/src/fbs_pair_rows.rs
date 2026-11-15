@@ -100,7 +100,7 @@ pub struct PairMarks {
 
 impl PairMarks {
     /// Refuses an empty mark, two marks one of which begins the other, and an assistant header
-    /// that ends with a beginning of the user marker.
+    /// that holds the user marker, or a beginning of it running to its end, after its first token.
     pub fn check(&self) -> Result<(), String> {
         if self.user.is_empty() || self.assistant.is_empty() {
             return Err(
@@ -118,14 +118,19 @@ impl PairMarks {
             );
         }
         // A served reply holds back while the stream ends with a beginning of the user marker
-        // ([`open_picks`]). A header ending with such a beginning would hold it back inside a
-        // header the scan takes whole, where the trainer's reply runs on (claude-384's review).
-        let overlap = (1..=self.user.len().min(self.assistant.len()))
-            .any(|k| self.assistant.ends_with(&self.user[..k]));
+        // ([`open_picks`]), and a whole user marker opens a turn. A header holding the user
+        // marker, or a beginning of it that runs to the header's end, after its first token would
+        // do either inside a header the scan takes whole, where the trainer's reply runs on
+        // (claude-384's review).
+        let overlap = (1..self.assistant.len()).any(|i| {
+            let tail = &self.assistant[i..];
+            let n = tail.len().min(self.user.len());
+            tail[..n] == self.user[..n]
+        });
         if overlap {
             return Err(
-                "pair rows want an assistant header that does not end with a beginning of the \
-                        user marker"
+                "pair rows want an assistant header that holds no beginning of the user marker \
+                 after its first token"
                     .to_owned(),
             );
         }
@@ -852,16 +857,19 @@ mod tests {
             open_picks(&dict, &two, &[1, 3, 5, 6, 2, 4, 9, 1, 9]),
             Some(rows_of(&dict, &[(5, 6)]))
         );
-        // A header that ends with a beginning of the user marker is refused: the hold would fire
-        // inside a header the scan takes whole, where the trainer's reply runs on.
+        // A header holding a beginning of the user marker after its first token is refused: the hold
+        // would fire inside a header the scan takes whole, where the trainer's reply runs on.
         for overlap in [
             marks(&[4, 7], &[2, 4]),
             marks(&[1, 2], &[2, 1]),
             marks(&[3, 5, 6], &[2, 3, 5]),
+            marks(&[1, 9], &[2, 1, 9, 3]),
         ] {
             assert!(overlap.check().is_err(), "{overlap:?}");
             assert_eq!(open_picks(&dict, &overlap, &[4, 7, 5, 6, 2, 4]), None);
         }
+        // A beginning inside the header that the header itself breaks is not refused.
+        assert!(marks(&[1, 9], &[2, 1, 3, 4]).check().is_ok());
         // Marks that fail the check pick nothing.
         assert_eq!(open_picks(&dict, &marks(&[], &[2]), &[1, 5, 6, 2]), None);
     }

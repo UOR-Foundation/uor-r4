@@ -1127,7 +1127,9 @@ mod tests {
         // A header ending with a beginning of the user marker (claude-384).
         assert!(check(vec![1, 4], vec![4, 1]).is_err());
         assert!(check(vec![1, 4, 5], vec![2, 1, 4]).is_err());
+        assert!(check(vec![1, 9], vec![2, 1, 9, 3]).is_err());
         assert!(check(vec![1, 4], vec![4, 2]).is_ok());
+        assert!(check(vec![1, 9], vec![2, 1, 3, 4]).is_ok());
     }
 
     #[test]
