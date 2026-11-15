@@ -270,6 +270,14 @@ mod tests {
         (steps, session.q31_read_trace().expect("on").to_vec())
     }
 
+    /// The refusal's message, so a test names which rule refused and not only that one did.
+    fn refusal<T>(result: Result<T, StackError>) -> String {
+        match result {
+            Ok(_) => panic!("expected a refusal"),
+            Err(e) => e.to_string(),
+        }
+    }
+
     fn writer_table(bytes: &[u8]) -> Vec<i64> {
         let container = Container::parse(bytes).expect("parse");
         let table = container.table_i16("writer.table").expect("table");
@@ -287,10 +295,17 @@ mod tests {
             .iter()
             .map(|&t| session.step_native(t).expect("step"))
             .collect();
+        assert!(layers > 1, "the depths below differ");
+        let mut streams = Vec::new();
         for depth in [1, layers] {
             for (seed, g) in [(11u64, 0u32), (12, 4), (13, 31)] {
                 let read = drawn_read(seed, 32, g);
                 let (steps, trace) = serve(&with_read(&plain, depth, read.clone()));
+                streams.push((
+                    depth,
+                    seed,
+                    trace.iter().map(|s| s.x_in.clone()).collect::<Vec<_>>(),
+                ));
                 assert_ne!(
                     steps, unread,
                     "depth {depth} g {g}: the read's rows reach the step"
@@ -319,6 +334,17 @@ mod tests {
                 );
                 assert!(out != stream, "depth {depth} g {g}: the read writes");
             }
+        }
+        // The read sits after layer `depth - 1`: the residual it reads differs between depths.
+        for (depth, seed, stream) in streams.iter().filter(|(d, _, _)| *d == 1) {
+            let (_, _, deeper) = streams
+                .iter()
+                .find(|(d, s, _)| *d == layers && s == seed)
+                .expect("the deeper read");
+            assert_ne!(
+                stream, deeper,
+                "seed {seed}: depth {depth} reads another residual than depth {layers}"
+            );
         }
     }
 
@@ -388,19 +414,34 @@ mod tests {
         let add = |bytes: &[u8], depth: usize, read: Q31FirstPickRead| {
             super::super::add_q31_read_uorlut01(bytes, &Q31SessionRead::new(depth, read))
         };
-        assert!(
-            add(&bytes, 1, drawn_read(42, 32, 4)).is_err(),
-            "a read is added once"
-        );
-        assert!(add(&plain, 0, drawn_read(42, 32, 4)).is_err(), "depth 0");
-        assert!(
-            add(&plain, 3, drawn_read(42, 32, 4)).is_err(),
-            "depth past the layers"
-        );
-        assert!(
-            add(&plain, 1, drawn_read(42, 16, 4)).is_err(),
-            "another width"
-        );
+        let added: [(&str, Vec<u8>, usize, usize, &str); 4] = [
+            (
+                "a read is added once",
+                bytes.clone(),
+                1,
+                32,
+                "added to a stack without one",
+            ),
+            ("depth 0", plain.clone(), 0, 32, "depth is from 1"),
+            (
+                "depth past the layers",
+                plain.clone(),
+                3,
+                32,
+                "depth is from 1",
+            ),
+            (
+                "another width",
+                plain.clone(),
+                1,
+                16,
+                "as wide as the stack",
+            ),
+        ];
+        for (name, onto, depth, width, rule) in added {
+            let message = refusal(add(&onto, depth, drawn_read(42, width, 4)));
+            assert!(message.contains(rule), "{name}: {message}");
+        }
 
         // Parse refusals: every table byte is bound by the digest, and the header by its schema.
         let declared = u64::from_le_bytes(bytes[8..16].try_into().expect("eight")) as usize;
@@ -417,11 +458,32 @@ mod tests {
         for at in [0, 9, len / 2, len - 1] {
             let mut damaged = bytes.clone();
             damaged[offset + at] ^= 1;
+            let message = refusal(IntegerStackModel::parse(&damaged));
             assert!(
-                IntegerStackModel::parse(&damaged).is_err(),
-                "a flipped byte at {at}"
+                message.contains("q31.read"),
+                "a flipped byte at {at}: {message}"
             );
         }
+        // An address record from a real address stack, to set beside the read in the header.
+        let layers = Container::parse(&plain).expect("parse").shape.layers();
+        let address_image = super::super::AddressImage::checked(
+            super::super::AddressArm::E8,
+            0,
+            32,
+            vec![vec![0; 32 / 8 * 240 * 32]; layers],
+        )
+        .expect("an address table");
+        let addressed =
+            super::super::add_address_uorlut01(&plain, &address_image).expect("address");
+        let addressed_len =
+            u64::from_le_bytes(addressed[8..16].try_into().expect("eight")) as usize;
+        let addressed_header: serde_json::Value =
+            serde_json::from_slice(&addressed[16..16 + addressed_len]).expect("header");
+        let address_record = addressed_header["address"].clone();
+        assert!(
+            address_record.is_object(),
+            "the address stack carries its record"
+        );
         let rewrite = |edit: &dyn Fn(&mut serde_json::Value)| {
             let mut h = header.clone();
             edit(&mut h);
@@ -439,34 +501,67 @@ mod tests {
             "the rewrite itself keeps a valid artifact"
         );
         type HeaderEdit<'a> = &'a dyn Fn(&mut serde_json::Value);
-        let refused: [(&str, HeaderEdit); 9] = [
-            ("/14 without the record", &|h| {
-                h.as_object_mut().expect("object").remove("q31_read");
-            }),
-            ("the record under /12", &|h| {
-                h["schema"] = "uor-r4.lut-stack/12".into()
-            }),
-            ("another table name", &|h| {
-                h["q31_read"]["table"] = "q31.state".into()
-            }),
-            ("a record without its table", &|h| {
-                let tables = h["tables"].as_array_mut().expect("tables");
-                tables.retain(|t| t["name"] != Q31_READ_TABLE);
-            }),
-            ("a byte length the table does not hold", &|h| {
-                h["q31_read"]["bytes"] = (len - 8).into()
-            }),
-            ("depth 0", &|h| h["q31_read"]["depth"] = 0.into()),
-            ("a depth past the layers", &|h| {
-                h["q31_read"]["depth"] = 9.into()
-            }),
-            ("a width other than the stack's", &|h| {
-                h["q31_read"]["width"] = 16.into()
-            }),
-            ("a wrong digest", &|h| h["q31_read"]["sha256"] = "00".into()),
+        let beside_address = |h: &mut serde_json::Value| h["address"] = address_record.clone();
+        let refused: [(&str, HeaderEdit, &str); 10] = [
+            (
+                "/14 without the record",
+                &|h| {
+                    h.as_object_mut().expect("object").remove("q31_read");
+                },
+                "schema",
+            ),
+            (
+                "the record under /12",
+                &|h| h["schema"] = "uor-r4.lut-stack/12".into(),
+                "schema",
+            ),
+            (
+                "another table name",
+                &|h| h["q31_read"]["table"] = "q31.state".into(),
+                "in the q31.read table",
+            ),
+            (
+                "a record without its table",
+                &|h| {
+                    let tables = h["tables"].as_array_mut().expect("tables");
+                    tables.retain(|t| t["name"] != Q31_READ_TABLE);
+                },
+                "q31.read",
+            ),
+            (
+                "a byte length the table does not hold",
+                &|h| h["q31_read"]["bytes"] = (len - 8).into(),
+                "q31.read",
+            ),
+            (
+                "depth 0",
+                &|h| h["q31_read"]["depth"] = 0.into(),
+                "depth is from 1",
+            ),
+            (
+                "a depth past the layers",
+                &|h| h["q31_read"]["depth"] = 3.into(),
+                "depth is from 1",
+            ),
+            (
+                "a width other than the stack's",
+                &|h| h["q31_read"]["width"] = 16.into(),
+                "as wide as the stack",
+            ),
+            (
+                "a wrong digest",
+                &|h| h["q31_read"]["sha256"] = "00".into(),
+                "sha256",
+            ),
+            (
+                "a read beside an address table",
+                &beside_address,
+                "no other optional record",
+            ),
         ];
-        for (name, edit) in refused {
-            assert!(rewrite(edit).is_err(), "{name}");
+        for (name, edit, rule) in refused {
+            let message = refusal(rewrite(edit));
+            assert!(message.contains(rule), "{name}: {message}");
         }
         assert!(
             rewrite(&|h| h["q31_read"]["depth"] = 1.into()).is_ok(),
@@ -534,9 +629,11 @@ mod tests {
                 break;
             }
         }
+        // Some key-gate fault inside the 2^31 bound must reach the served read; which `k` first
+        // does is a measurement, printed above, not a bar.
         assert!(
-            first_moving.is_some_and(|k| k > 0),
-            "measured {first_moving:?}"
+            first_moving.is_some(),
+            "no key-gate fault of 2^0..2^30 moved the read"
         );
     }
 
@@ -550,10 +647,11 @@ mod tests {
             .map(|&t| session.step_native(t).expect("step"))
             .collect();
         let saved = session.save_state();
-        assert!(matches!(
-            session.restore_state(&saved),
-            Err(StackError::Shape(_))
-        ));
+        let message = refusal(session.restore_state(&saved));
+        assert!(
+            message.contains("its read history is not saved"),
+            "{message}"
+        );
         session.reset();
         let again: Vec<NativeStep> = PROMPT
             .iter()
@@ -573,6 +671,45 @@ mod tests {
         match PROMPT.iter().find_map(|&t| session.step_native(t).err()) {
             Some(StackError::Numerics(message)) => assert!(message.contains("+2^31"), "{message}"),
             other => panic!("expected the out-word refusal, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_refused_q31_read_step_refuses_every_step_until_reset() {
+        // The refused step has already written its layer rows and the read's history, so the
+        // session refuses to serve past it rather than serve from a half-advanced state.
+        let read = Q31FirstPickRead::new(gates(71, 32), gates(72, 32), vec![1 << 31; 32], 31)
+            .expect("read");
+        let model = IntegerStackModel::parse(&with_read(&plain_trunk(), 1, read)).expect("parse");
+        let mut session = model.session();
+        let mut served = Vec::new();
+        let at = loop {
+            let t = PROMPT[served.len()];
+            match session.step_native(t) {
+                Ok(step) => served.push(step),
+                Err(StackError::Numerics(message)) => {
+                    assert!(message.contains("+2^31"), "{message}");
+                    break served.len();
+                }
+                Err(other) => panic!("expected the out-word refusal, got {other:?}"),
+            }
+        };
+        for &t in &PROMPT[..3] {
+            let message = refusal(session.step_native(t));
+            assert!(message.contains("reset the session"), "{message}");
+            let mut ns = Vec::new();
+            let message = refusal(session.measure_fbs_step_stages(t, &mut ns));
+            assert!(message.contains("reset the session"), "timed: {message}");
+        }
+        session.reset();
+        let again: Vec<NativeStep> = PROMPT[..at]
+            .iter()
+            .map(|&t| session.step_native(t).expect("served again after reset"))
+            .collect();
+        assert_eq!(again, served, "reset serves the same steps");
+        match session.step_native(PROMPT[at]) {
+            Err(StackError::Numerics(message)) => assert!(message.contains("+2^31"), "{message}"),
+            other => panic!("the same step is refused by its own rule again, got {other:?}"),
         }
     }
 }

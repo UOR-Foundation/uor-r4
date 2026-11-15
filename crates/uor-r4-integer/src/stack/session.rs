@@ -1660,6 +1660,7 @@ impl IntegerStackModel {
             native_q31_trace: None,
             q31_history: Q31ReadHistory::new(),
             q31_read_trace: None,
+            q31_read_refused: false,
             decision: None,
             pointer_keys: vec![0; pointer_dim * context],
             pointer_lifts: if pointer_lorentz {
@@ -2138,6 +2139,9 @@ pub struct IntegerStackSession<'m> {
     q31_history: Q31ReadHistory,
     /// While `Some`, the native Q31 read's pick and rows at every step.
     q31_read_trace: Option<Vec<Q31ReadStep>>,
+    /// Set when the native Q31 read refused a step: that step's layer states and read history
+    /// already hold its row, so every later step is refused until [`Self::reset`].
+    q31_read_refused: bool,
     /// While `Some`, Q5's decision trace and its forced set (claude-249).
     decision: Option<Box<DecisionState>>,
     /// The pointer head's keys `[position][dim]` (exponent -16) and Lorentz
@@ -2550,6 +2554,7 @@ impl IntegerStackSession<'_> {
             trace.clear();
         }
         self.q31_history.clear();
+        self.q31_read_refused = false;
         if let Some(trace) = &mut self.q31_read_trace {
             trace.clear();
         }
@@ -3451,6 +3456,17 @@ fn stack_step_call(call: &mut StepCall<'_, '_>) {
 }
 
 /// Refuse an incompatible native-Q31 step before it changes tokens or carry history.
+/// A session whose native Q31 read refused a step holds that step's partial rows, so it serves
+/// nothing more until [`IntegerStackSession::reset`].
+fn q31_read_refused_preflight(refused: bool) -> Result<(), StackError> {
+    if refused {
+        return Err(StackError::Shape(
+            "a native Q31 read refused a step: reset the session before it serves again",
+        ));
+    }
+    Ok(())
+}
+
 fn native_q31_step_preflight(
     model: &IntegerStackModel,
     states: &[Box<LayerState>],
@@ -3948,6 +3964,7 @@ fn stack_step_fbs(
         return Err(StackError::ContextFull { context: s.context });
     }
     native_q31_step_preflight(model, &session.states, session.b.snap_trace.is_some())?;
+    q31_read_refused_preflight(session.q31_read_refused)?;
     // The Hamming read at this row needs `x_0..=x_t`.
     session.tokens.push(token);
     let opening = session.at_reply_opening();
@@ -4029,8 +4046,14 @@ fn stack_step_fbs(
         }
         // The native Q31 read (claude-390): after layer `depth - 1`'s MLP add, where the float
         // trunk's vector read sits. A stack with a read has no address table or Hamming read.
+        // A refused read leaves this step's layer rows behind, so the session refuses until reset.
         if let Some(read) = fbs.q31_read.as_ref().filter(|r| l + 1 == r.depth) {
-            read.serve(&mut session.q31_history, session.q31_read_trace.as_mut(), token, &mut b.x)?;
+            let served =
+                read.serve(&mut session.q31_history, session.q31_read_trace.as_mut(), token, &mut b.x);
+            if let Err(e) = served {
+                session.q31_read_refused = true;
+                return Err(e);
+            }
         }
         if let Some(hamming) = &fbs.hamming {
             let (trace, force) = match session.decision.as_deref_mut() {
@@ -4266,6 +4289,7 @@ fn stack_step_fbs_timed(
         return Err(StackError::ContextFull { context: s.context });
     }
     native_q31_step_preflight(model, &session.states, session.b.snap_trace.is_some())?;
+    q31_read_refused_preflight(session.q31_read_refused)?;
     session.tokens.push(token);
     let opening = session.at_reply_opening();
     // The place read's register moves on this token, before the row's readout (claude-351).
@@ -4342,7 +4366,12 @@ fn stack_step_fbs_timed(
         }
         // The native Q31 read, as in `stack_step_fbs`; timed inside the block it follows.
         if let Some(read) = fbs.q31_read.as_ref().filter(|r| l + 1 == r.depth) {
-            read.serve(&mut session.q31_history, session.q31_read_trace.as_mut(), token, &mut b.x)?;
+            let served =
+                read.serve(&mut session.q31_history, session.q31_read_trace.as_mut(), token, &mut b.x);
+            if let Err(e) = served {
+                session.q31_read_refused = true;
+                return Err(e);
+            }
         }
         // A Hamming read is timed inside the block it follows, so the stage list is unchanged.
         if let Some(hamming) = &fbs.hamming {
