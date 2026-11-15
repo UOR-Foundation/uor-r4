@@ -54,12 +54,17 @@ The bar judges the native operator against this f64 reference. f64 rounding, abo
 
 Conversion (one rule, recorded in the JSON):
 - The gates use the fixed Q31 unit scale `2^31` on both sides, rounded to nearest.
-- The stream uses one power-of-two scale `2^e_x`, shared by the query and key addresses. It is the largest scale at which all three of the following fit within `2^31`, which leaves one bit of headroom for a rotated lane, since a lane can reach the block norm, up to `2·max|x|`:
+- The stream uses one power-of-two scale `2^e_x`, shared by the query and key addresses. It is the largest scale at which all three of the following fit within `2^31`. That leaves one bit of headroom, for two things:
+- a rotated lane, which can reach the block norm, up to `2·max|x|`;
+- an out word's rounding, at most `2^g + 2` LSB, which is far below `2^30`.
+
+The three:
   - `2 · max|x|`;
-  - `max|x + w·e|`;
-  - `max|x + 16·w·e|`.
+  - `2 · max|x + w·e|`;
+  - `2 · max|x + 16·w·e|`.
 - The table uses its own scale `2^e_t`, the largest with `max|e| · 2^e_t ≤ 2^31`.
-- The weight scale is `2^e_w`, with `e_w = 31 + e_x − e_t − g`. The gain shift `g` is the least one in `0..=31` with `max|w| · 2^e_w ≤ 2^31`. That way the operator's `>> (31 − g)` lands the payload on the stream's scale. A state where no `g` fits is refused and reported.
+- The weight scale is `2^e_w`, with `e_w = 31 + e_x − e_t − g`. The gain shift `g` is the least one in `0..=31` with `max|w| · 2^e_w ≤ 2^31`. That way the operator's `>> (31 − g)` lands the payload on the stream's scale. A state where no `g` fits is refused and reported, and the outcome reads D. The same applies to a state whose width is not 256: B below is derived for `G = 16`. The JSON records the width.
+- The f64 normalization keeps the float gate's `+1e-12` inside the square root (`kernel_controls.rs:93`).
 
 The JSON counts every saturated word: inputs, rotated lanes and out words. Rotated-lane clips are counted in the replay, by recomputing each lane's Hamilton product exactly in i128 from the same Q31 words. A lane counts as clipped when its rounded value has `|lane| > 2^31` (strictly, because the domain is closed). The operator stays a pure function. A clip in a barred computation sends the outcome to D.
 
@@ -95,7 +100,7 @@ This conversion is a diagnostic in reference code (D85). It is not a model expor
 - **f32 bound `B_f`**, of the float read that ran against the f64 reference. Unit roundoff is `u = 2^−24`, and `M = max|x|`:
   - Each rotated lane errs by at most `8u · 2M`. That covers f32 normalization, four products and three sums.
   - A fold coordinate sums 16 lanes, adding `16u` of summation error per lane. So it errs by at most `(16 · 8u + 16 · 16u) · 2M < 2^10 · u · M`.
-  - So the mean `|q − k|` errs by at most **`B_f = 2^11 · u · M = 2^−13 · M`**, and the f32 out word by at most **`2^−22 · (|x| + |w·e|)`** per lane.
+  - So `|q − k|` errs by at most `2^11 · u · M`. The f32 abs-diff and the sequential 16-term mean add up to about `2^10 · u · M` more. The bound used is **`B_f = 2^12 · u · M = 2^−12 · M`**, and the f32 out word by at most **`2^−22 · (|x| + |w·e|)`** per lane.
   - `B_f` is a gross bound, far above `B`. It exists only to catch a capture error, such as swapped gates, a wrong stream tensor or a wrong window. Such an error moves scores by amounts of the order of `M`.
 - **Out-word bound** against the f64 `x + w·e`, per lane: **`(2^g + 2)` LSB**.
   - The weight's and the table's rounding each give `0.5 · 2^g` LSB at the stream's scale.
@@ -114,7 +119,7 @@ This conversion is a diagnostic in reference code (D85). It is not a model expor
      - (b) the native picks under the substitution agree with the unsubstituted native picks on less than 99% of rows.
 
      If (a) or (b) fails, the outcome reads D.
-  4. **The capture matches the read that ran.** This ties the replay to the float forward, because the native operator and the reference share the captured inputs. Two conditions, at every state:
+  4. **The capture matches the read that ran.** This ties the replay to the float forward, because the native operator and the reference share the captured inputs. Two conditions, on the 1,024 held-out query rows of every state:
      - (a) every row where the f32 first pick and the f64 reference pick disagree has `|ref score(ref pick) − ref score(f32 pick)| ≤ 2·B_f`;
      - (b) on rows where those picks agree, every f32 out word is within the f32 out-word bound of the f64 out word.
 
@@ -131,7 +136,7 @@ This conversion is a diagnostic in reference code (D85). It is not a model expor
 - **Cost.** Minutes on wick, $0. No pod and no training.
 - **Reading map** (fixed before any number is read). Each outcome takes exactly one letter, tested in this order:
   - **D:** a control fails (1, 2, 3 or 4), the structural check fails, or a barred computation clips. The outcome is reported as read, with no fix named.
-  - **N2 (definition):** otherwise, if any barred row has a pick mismatch above `2B` or an out-word miss above 4× its bound. Rounding cannot explain such a row, so the bar's 99% does not excuse it. The native definition (rotation, fold, tie rule, gain) differs from the float one, and the next step is to find the difference. Every such row is listed.
+  - **N2 (definition):** otherwise, if any of a barred state's 1,024 held-out query rows has a pick mismatch above `2B` or an out-word miss above 4× its bound. Rounding cannot explain such a row, so the bar's 99% does not excuse it. The native definition (rotation, fold, tie rule, gain) differs from the float one, and the next step is to find the difference. Every such row is listed.
   - **P:** otherwise, if all three bar conditions hold at both seeds. The Q31 operator reproduces the float read's definition, both its choice and its write, and the next unit attaches it to `IntegerStackSession`.
   - **N1 (precision):** otherwise. A bar condition fails, but every pick mismatch is within `2B` and every out-word miss is within 4× its bound. The fix is a finer scale or a wider accumulator. It is not a mechanism negative.
 - **FIT:** fresh-context non-author reviews.
@@ -151,7 +156,12 @@ This conversion is a diagnostic in reference code (D85). It is not a model expor
 
     It also raised three minor points, all folded in: the rounding term at `g = 31`, the label of the control-1 gate, and the strict clip test.
 
-  The amended sheet goes to a fourth fresh review before the run.
+  - The fourth, at `9d9b960ce`, returned **TEST FITNESS: FIT**. It raised six minor points, all folded in here, and each only tightens the sheet:
+    - `B_f` doubled to cover the mean's own rounding;
+    - one bit of headroom for out words;
+    - "no `g` fits" and a width other than 256 both read D;
+    - the rows for N2 and control 4 named;
+    - the `+1e-12` epsilon stated.
 
 ## Cancel probe
 
