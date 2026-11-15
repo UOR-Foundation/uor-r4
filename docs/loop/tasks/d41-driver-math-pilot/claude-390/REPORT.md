@@ -10,7 +10,7 @@ The sheet's reading map says **P**: B1–B4 all hold. The pilot corpus is sealed
 - **Most generated tokens are discarded.** Only 43.8% of generated tokens are kept answer text (440,146 of 1,004,450). The rest is the analysis channel, which gpt-oss emits even at `reasoning_effort: low`, plus channel tokens.
 - **The GPU was not saturated.** Utilization averaged 47% (0–74%) over 67 samples, with 16.3 of 24.6 GB in use. Prefill was not the cause: the prefix cache meant only 160,502 of 2,746,816 prompt tokens were actually prefilled (5.8%). With 32 requests in flight and a p50 of 2.92 s per ~49-token request, the rate matches llama.cpp's batched MoE decode at 32 slots as the limit. This is an inference from the timings; nothing in this unit isolated it.
 - **The first setup job ended rc=1 from its last diagnostic line**, not from a real failure. The gpt-oss converter code moved to `conversion/gpt_oss.py` at `b12000`, so the closing `grep` matched nothing, and `pipefail` failed the job. The rerun (`d41-setup-2`) passed with rc 0, including the four LFS checks.
-- **The prompt templates are narrow.** The kept mix is 59% grounded, 41% open and 0.6% small talk, against the 45/45/10 draw, because duplicates were skipped. The 6,000-prompt set skipped 3,297 duplicate candidates. Small talk has only 30 texts, and single-noun open frames allow only 600 combinations.
+- **The prompt templates are narrow.** By prompts kept, the mix is 68.7% grounded, 30.7% open and 0.6% small talk (3,511 / 1,571 / 30 of 5,112), against the 45/45/10 draw, because duplicates were skipped. The 6,000-prompt set skipped 3,297 duplicate candidates. Small talk has only 30 texts, and single-noun open frames allow only 600 combinations.
 - **The corpus cannot be regenerated bit for bit.** Batched decoding makes sampled outputs depend on batch composition. The corpus is fixed by its hashes and Merkle root instead, which is what D41 (b) asks.
 
 ## What changed
@@ -103,7 +103,8 @@ The stored size counts whole records, prompt and system message included. Each r
 2. **No count in the project's tokenizer.** All token counts here use the donor's tokenizer (o200k-harmony). The student trains in the 4,096-token tokenizer (`d36d3e87…`), so its token count for this corpus is not measured.
 3. **Single-turn prompts from a narrow template bank.** Production needs a larger prompt bank, and two-turn exchanges if they are wanted, designed in its own sheet.
 4. **Answer quality is not graded.** That is by design (D41 (c), (e)). The "not told" phrase match is a description, not a bar.
-5. **Disk on wick.** Claude's container still holds the donor files (13.8 GB), the GGUF (13.8 GB), the venv and the llama.cpp build for the production pass. Wick has about 190 GB free. Remove them with `wick.sh sh` (`rm -rf /workspace/d41/donor-hf /workspace/d41/gpt-oss-20b.gguf`) once the production corpus is sealed.
+5. **The receipt does not name the instrument commit.** The sealed corpus came from `74e415803`, and its `run.json` and `metrics.json` carry that commit's field names. The head client writes integer fields under other names, and its request (integer sampling values) has never been sent to `llama-server`. The production unit should add the instrument commit to the receipt and run the head `generate` on a smoke before the corpus pass.
+6. **Disk on wick.** Claude's container still holds the donor files (13.8 GB), the GGUF (13.8 GB), the venv and the llama.cpp build for the production pass. Wick has about 190 GB free. Remove them with `wick.sh sh` (`rm -rf /workspace/d41/donor-hf /workspace/d41/gpt-oss-20b.gguf`) once the production corpus is sealed.
 
 ## Plain summary
 
