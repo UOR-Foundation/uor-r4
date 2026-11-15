@@ -8,7 +8,7 @@
 //!
 //! `generate` asks the external engine (llama.cpp `llama-server`, OpenAI-style chat API)
 //! for four answers per prompt: one greedy and three sampled at the donor's recommended
-//! temperature 1.0 and top-p 1.0, each with its own seed. It keeps only the final answer
+//! temperature 1 and top-p 1, each with its own seed. It keeps only the final answer
 //! texts (no reasoning text, no logits, probabilities, scores or ranks are requested or
 //! stored), and stops dispatching new prompts once `--budget` generated tokens are counted.
 
