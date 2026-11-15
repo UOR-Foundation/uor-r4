@@ -34,7 +34,7 @@ The order asked whether training with the recurrence state carried from one wind
 
    Inside the first window (under 192 tokens), where the carry changes nothing, both arms state 0 to 2 of 43–45. So the readout cannot tell the arms apart at any distance. Classified: the instrument is sound (smoke 4 and every I-check passed, the reader refused nothing); the reading is at the model's floor, which is the sheet's Floor outcome, not a mechanism negative.
 
-3. **With the turn memory on, q-tt leans against the carry. No bar reads this.** Far q-tt queries stated, memory on: `off` 8 and 10, `k4` 5 and 1 (b − c: −3 and −10). On p-long the memory changes nothing for either arm (the same counts with it on and off). The memory copies a value from anywhere in the conversation (L-010). One reading is that the carry's training leaves the model leaning less on that copy, but this unit did not test it. It is a lead for the next unit, not a result.
+3. **With the turn memory on, q-tt leans against the carry. No bar reads this.** Far q-tt queries stated, memory on: `off` 9 and 11, `k4` 6 and 1 (b − c: −3 and −10). On p-long the memory changes nothing for either arm (the same counts with it on and off). The memory copies a value from anywhere in the conversation (L-010). One reading is that the carry's training leaves the model leaning less on that copy, but this unit did not test it. It is a lead for the next unit, not a result.
 
 4. **V0's exact-reply panel is lower for `k4`, at both seeds.** P14 + P23 with the turn memory dropped, exact of 2,218: `off` 106 and 114, `k4` 63 and 91. The `k4` models were trained on four-window streams of 1,700–2,048-token conversations; the panels are 256-token windows from claude-374's everyday TRAIN, which neither arm trained on. So this measures transfer to another corpus, not the carry. V0's own models (claude-358's `p`, trained on that corpus) got 171, 173 and 211; they are quoted beside, never as a control.
 
@@ -87,7 +87,7 @@ DEV is 428 short windows from a zero state, so its loss says nothing about the c
 | 2 | off | 0.5703 | 0.6454 | 65,293 |
 | 2 | k4 | 0.5671 | 0.6332 | 64,532 |
 
-`k4`'s later-window loss is lower by 0.028 and 0.012. Its first-window loss is lower too, by 0.027 and 0.003. So most of the gap is there before the carry has anything to carry. Its nearest hits past the first window are slightly fewer. No bar reads these numbers.
+`k4`'s later-window loss is lower by 0.028 and 0.012. Its first-window loss is lower too, by 0.027 and 0.003. At seed 1 almost all of the gap is there before the carry has anything to carry (0.027 of 0.028); at seed 2 only about a quarter is (0.003 of 0.012), leaving about 0.009 the first window does not explain. Its nearest hits past the first window are slightly fewer. No bar reads these numbers.
 
 **V0's panel** (P14 + P23, 2,218 rows, `raw-id-replies --turn-memory 0`, greedy, 48 tokens, reply marked, one process at a time, load average 2.4 to 3.2; scored by `rows-380.sh` and `subst-380.sh`, claude-376's scripts with only names and paths changed):
 
@@ -134,6 +134,8 @@ Binaries: `fbs-export` `6289f49885b31a3b2efdeb407711fe2ca8454f6be7d4f74e3fe2332a
 - **Raise far recall in both arms first** (the sheet's Floor outcome), then test the carry again. Two ways the sheet names are more steps or a denser far-value TRAIN. The first-window bin (0 to 2 of 43) says even near values are not stated with the turn memory out, so the first target is the model's own recall at any distance.
 - **The memory-on q-tt lean** (finding 3): whether carried training makes the model lean less on the turn memory's copy. It needs its own bar.
 - **The carry's cost.** 1.5× to 2.0× a step side by side. It was not profiled.
+- **A test of the trainer's carried step** (this unit's own exact-head review). The GPU tests call the recurrence's carry frame directly. The CPU tests cover the cut, the schedule and the flags. So nothing would fail if `carry_step_gradient` stopped detaching the state it hands to the next step: the graph and card memory would grow with every test green. The code as written detaches it (`in_space_long.rs`, the last line of `carry_step_gradient`), and both `k4` runs finished 16,384 steps beside an `off` run on one 24 GB card. Card memory was read only once (finding 8), so this is not a measurement of flat memory. A GPU test asserting that the returned carry tracks no op, and that a lane opening a conversation is zeroed, is owed before the carry is used again.
+- **Not audited with the carry:** `--fbs-arm`, `--writer-anchor` and `--served-forward`, which no carried run used. Under bf16 the carry's zero state is F32 and is refused on the first step, loudly.
 - **An integer-served carried session** (V2 under "Carries") stays unbuilt until a carry is shown.
 
 ## Plain summary
