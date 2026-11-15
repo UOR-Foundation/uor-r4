@@ -306,7 +306,8 @@ fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
                             t.prompt_tokens += a.prompt_tokens;
                             t.millis.push(a.millis);
                             let kind = p["kind"].as_str().unwrap_or("?").to_string();
-                            t.by_kind.entry(kind).or_default().1 += a.completion_tokens;
+                            let row = t.by_kind.entry(kind).or_default();
+                            row.1 += a.completion_tokens;
                             drop(t);
                             if let Some(x) = a.text {
                                 texts.push(x);
@@ -337,7 +338,8 @@ fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
                 t.tokenize_errors += tokenize_failed;
                 t.kept_bytes += answers.iter().map(|a| a.len() as u64).sum::<u64>();
                 let kind = p["kind"].as_str().unwrap_or("?").to_string();
-                t.by_kind.entry(kind).or_default().0 += 1;
+                let row = t.by_kind.entry(kind).or_default();
+                row.0 += 1;
                 if answers.is_empty() {
                     t.empty_prompts += 1;
                     continue;
