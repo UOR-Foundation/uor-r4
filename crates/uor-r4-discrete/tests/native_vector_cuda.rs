@@ -447,10 +447,12 @@ fn cuda_read_update_matches_the_host_on_claude_391_fixtures() -> uor_r4_discrete
             .picks,
         vec![0, 1, 2]
     );
-    assert_eq!(train_chain(&engine, &fixture(S), &[0, 0, 2], 8)?.1, 49);
+    let (_, steps) = train_chain(&engine, &fixture(S), &[0, 0, 2], 8)?;
+    assert_eq!(steps, 49);
     // The step count does not depend on the stream's scale.
     for scale in [1 << 10, 1 << 28] {
-        assert_eq!(train_chain(&engine, &fixture(scale), &[0, 0, 2], 4)?.1, 4);
+        let (_, steps) = train_chain(&engine, &fixture(scale), &[0, 0, 2], 4)?;
+        assert_eq!(steps, 4, "scale {scale}");
     }
     // A margin-0 tie with a later rival is a loss of 1, and trains away.
     let tie = [row(S, 0), row(0, S), row(S / 2, S / 2)].concat();
