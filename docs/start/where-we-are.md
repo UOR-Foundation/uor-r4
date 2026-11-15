@@ -87,9 +87,9 @@ integer geometric state that training and serving share, with the same operators
 replay, instead of float master weights and an export gap. The first Q31 vector state has trained
 on CUDA in a 64-step contract test, CPU and CUDA equal after every step
 ([codex-5](../loop/tasks/native-space-state-contract/codex-5/REPORT.md)); that is a contract test,
-not language-model training. The integer server now restores that trained state with no numerical
-conversion and runs the same shared transition, matching a 64-step fixture as raw words, with no
-token generation yet ([codex-8](../loop/tasks/native-space-state-contract/codex-8/REPORT.md)). The discrete path's CUDA training, CPU training and integer serving now
+not language-model training. The integer crate now restores that trained state with no numerical
+conversion and runs the same shared transition: after 64 trained steps, the restored state and its
+transition results match as raw words. No token generation is claimed ([codex-8](../loop/tasks/native-space-state-contract/codex-8/REPORT.md)). The discrete path's CUDA training, CPU training and integer serving now
 agree on the same fixture bytes, on two fixtures ([claude-372](../loop/tasks/one-model-end-to-end/claude-372/REPORT.md)).
 
 **In progress (14 Nov).** Carrying the state across training windows, V1
