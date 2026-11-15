@@ -2151,7 +2151,7 @@ mod tests {
     /// serves the artifact without them; an artifact without pair rows is refused with 0.
     #[test]
     fn pair_rows_are_served_and_named_and_dropped_with_zero() {
-        use uor_r4_integer::fbs_pair_rows::{token_primes, PairMarks};
+        use uor_r4_integer::fbs_pair_rows::{open_picks, token_primes, PairMarks};
         use uor_r4_integer::stack::{add_pair_rows_uorlut01, PairRowsImage};
         let nonce = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -2216,7 +2216,25 @@ mod tests {
         assert_ne!(default[0]["ids"], bare_lines[0]["ids"], "the rows move the first reply");
         assert_eq!(default[1]["ids"], bare_lines[1]["ids"]);
         assert_eq!(default[2]["ids"], bare_lines[2]["ids"]);
+        // The reply steps whose picks moved, counted again by the shared rule over the prompt and
+        // the reply so far: the step that chooses reply id k (k >= 1) has seen ids 0..k.
+        let moved: usize = prompts
+            .iter()
+            .zip(&default)
+            .map(|(prompt, line)| {
+                let ids: Vec<u32> = serde_json::from_value(line["ids"].clone()).expect("ids");
+                let first = open_picks(image.dict(), image.marks(), prompt);
+                (1..ids.len())
+                    .filter(|&k| {
+                        let seen: Vec<u32> = prompt.iter().chain(&ids[..k]).copied().collect();
+                        open_picks(image.dict(), image.marks(), &seen) != first
+                    })
+                    .count()
+            })
+            .sum();
+        assert_eq!(default_receipt["pair_rows"]["picks_moved"], json!(moved));
         // Dropped, the replies are the bare artifact's and no line names picks.
+        assert_eq!((dropped.len(), bare_lines.len()), (prompts.len(), prompts.len()));
         for (got, want) in dropped.iter().zip(&bare_lines) {
             assert_eq!(got["ids"], want["ids"]);
             assert!(got.get("pair_rows").is_none());

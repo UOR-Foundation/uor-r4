@@ -317,19 +317,21 @@ impl PairDictionary {
     }
 }
 
-/// The rows of the user turn whose reply holds the last position of `tokens`, or none.
-///
-/// This is the float trainer's `plan` rule for one window of `time = tokens.len()` tokens, read
-/// at the window's last position: a turn counts only when its user marker and its assistant
-/// header both lie inside `tokens`; its reply runs from the header's last token through the
-/// position before the first user marker that starts after that token, or through the last
-/// position when no marker follows. The picks are the turn's [`PairDictionary::turn_rows`]. None
-/// when no turn's reply reaches the last position, when that turn has no rows, and when the marks
-/// fail [`PairMarks::check`].
+/// The turn whose reply reaches the last position of `tokens` by the marks seen so far, as its
+/// reply position and its rows (non-empty), or none: the float trainer's `plan` rule for one
+/// window of `tokens.len()` tokens, read at the window's last position. A turn counts only when
+/// its user marker and its assistant header both lie inside `tokens`; its reply runs from the
+/// header's last token through the position before the first user marker that starts after that
+/// token, or through the last position when no marker follows. None when no turn's reply reaches
+/// the last position, when that turn has no rows, and when the marks fail [`PairMarks::check`].
 ///
 /// Only the last turn of the scan can be open: any later turn starts with a user marker after an
 /// earlier turn's reply, which closes it.
-pub fn open_picks(dict: &PairDictionary, marks: &PairMarks, tokens: &[u32]) -> Option<Vec<u32>> {
+fn open_turn(
+    dict: &PairDictionary,
+    marks: &PairMarks,
+    tokens: &[u32],
+) -> Option<(usize, Vec<u32>)> {
     marks.check().ok()?;
     let (turns, users) = scan(tokens, marks);
     let turn = turns.last()?;
@@ -337,29 +339,61 @@ pub fn open_picks(dict: &PairDictionary, marks: &PairMarks, tokens: &[u32]) -> O
         return None;
     }
     let rows = dict.turn_rows(&tokens[turn.start..turn.header]);
-    (!rows.is_empty()).then_some(rows)
+    (!rows.is_empty()).then_some((turn.reply, rows))
+}
+
+/// Whether `tokens` ends with a non-empty proper beginning of the user marker that starts after
+/// the reply position `reply`: a user marker that may be under way.
+fn user_marker_under_way(marks: &PairMarks, tokens: &[u32], reply: usize) -> bool {
+    (1..marks.user.len()).any(|k| {
+        k <= tokens.len() && tokens.len() - k > reply && tokens.ends_with(&marks.user[..k])
+    })
+}
+
+/// The rows the reply at the last position of `tokens` reads, or none.
+///
+/// The float trainer's `plan` ends a reply at the first position of the next user marker, a rule
+/// that reads ahead: inside a window the marker's first tokens add nothing because the tokens
+/// after them finish the marker. A reader fed token by token sees a marker only once it is
+/// finished. So the reply also adds nothing while the stream ends with a non-empty proper
+/// beginning of the user marker that starts after the reply (claude-384's review). This equals
+/// the trainer's rule, read at the same position of a longer window, at every position where a
+/// user marker that has begun is finished in that window: every position of a prompt whose user
+/// markers are whole. It differs only where a marker's beginning is not followed by the rest of
+/// the marker; there the trainer adds the rows and this rule does not.
+///
+/// The picks are the open turn's [`PairDictionary::turn_rows`]: every pair of different tokens of
+/// the turn that the dictionary holds, sorted and unique. None when no turn's reply reaches the
+/// last position, when that turn has no rows, when a user marker may be under way, and when the
+/// marks fail [`PairMarks::check`].
+pub fn open_picks(dict: &PairDictionary, marks: &PairMarks, tokens: &[u32]) -> Option<Vec<u32>> {
+    let (reply, rows) = open_turn(dict, marks, tokens)?;
+    (!user_marker_under_way(marks, tokens, reply)).then_some(rows)
 }
 
 /// The picks of a served session, kept as tokens arrive.
 ///
-/// [`Self::push`] gives [`open_picks`] of the stream so far, recomputing it only when the stream
-/// ends with the user marker or the assistant header (or did not grow by exactly one token since
-/// the last push), and otherwise keeping the cached picks.
+/// [`Self::push`] gives [`open_picks`] of the stream so far. It keeps the open turn
+/// ([`open_turn`]) and recomputes it only when the stream ends with the user marker or the
+/// assistant header (or did not grow by exactly one token since the last push); the user marker
+/// under way is tested at every push.
 ///
-/// Why only a mark completed at the end can change the answer: let `P` be the stream before the
-/// push and `P t` after. A mark that matches at a position `i` of `P` also matches there in `P t`.
-/// A mark that matches at `i` in `P t` but not in `P` must run into the new last token, so `P t`
-/// ends with it. So when `P t` ends with neither mark, the match test is the same at every
+/// Why only a mark completed at the end can change the open turn: let `P` be the stream before
+/// the push and `P t` after. A mark that matches at a position `i` of `P` also matches there in
+/// `P t`. A mark that matches at `i` in `P t` but not in `P` must run into the new last token, so
+/// `P t` ends with it. So when `P t` ends with neither mark, the match test is the same at every
 /// position of both streams (and no match starts at the new position), and the greedy scan finds
 /// the same turns and the same user markers in both. The last turn is then the same, with the
-/// same tokens and rows; it is open in `P t` exactly when no user marker follows its reply, as in
-/// `P`, and an open reply now reaches the new last position. The picks are unchanged.
+/// same reply position, tokens and rows; it is open in `P t` exactly when no user marker follows
+/// its reply, as in `P`, and an open reply now reaches the new last position.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PairTracker {
     /// Tokens seen at the last push.
     len: usize,
-    /// The picks at the last push.
-    picks: Option<Vec<u32>>,
+    /// The open turn at the last push: its reply position and rows.
+    open: Option<(usize, Vec<u32>)>,
+    /// Whether a user marker was under way at the last push.
+    held: bool,
 }
 
 impl PairTracker {
@@ -377,15 +411,22 @@ impl PairTracker {
     ) -> Option<&[u32]> {
         let grew = tokens.len() == self.len + 1;
         if !grew || tokens.ends_with(&marks.user) || tokens.ends_with(&marks.assistant) {
-            self.picks = open_picks(dict, marks, tokens);
+            self.open = open_turn(dict, marks, tokens);
         }
+        self.held = self
+            .open
+            .as_ref()
+            .is_some_and(|(reply, _)| user_marker_under_way(marks, tokens, *reply));
         self.len = tokens.len();
-        self.picks.as_deref()
+        self.picks()
     }
 
     /// The picks at the last push.
     pub fn picks(&self) -> Option<&[u32]> {
-        self.picks.as_deref()
+        match &self.open {
+            Some((_, rows)) if !self.held => Some(rows),
+            _ => None,
+        }
     }
 }
 
@@ -784,6 +825,29 @@ mod tests {
             assert_eq!(&open_picks(&dict, &two, tokens), want, "{tokens:?}");
             assert_eq!(&float_rule(&dict, &two, tokens), want, "{tokens:?}");
         }
+        // A user marker under way closes the reply: in the trainer's window the rest of the marker
+        // follows, so the trainer adds nothing at its first token either.
+        let under_way: &[u32] = &[1, 3, 5, 6, 2, 4, 9, 1];
+        assert_eq!(open_picks(&dict, &two, under_way), None);
+        assert_eq!(
+            float_rule(&dict, &two, &[1, 3, 5, 6, 2, 4, 9, 1, 3]),
+            None,
+            "the trainer's window with the marker finished"
+        );
+        // A beginning the next token breaks: the reply reads again (the trainer read it all along).
+        assert_eq!(
+            open_picks(&dict, &two, &[1, 3, 5, 6, 2, 4, 9, 1, 9]),
+            Some(rows_of(&dict, &[(5, 6)]))
+        );
+        // A beginning that starts at the reply position itself is the header, not a marker under
+        // way.
+        let overlap = marks(&[4, 7], &[2, 4]);
+        overlap.check().unwrap();
+        assert_eq!(
+            open_picks(&dict, &overlap, &[4, 7, 5, 6, 2, 4]),
+            Some(rows_of(&dict, &[(5, 6)]))
+        );
+        assert_eq!(open_picks(&dict, &overlap, &[4, 7, 5, 6, 2, 4, 9, 4]), None);
         // Marks that fail the check pick nothing.
         assert_eq!(open_picks(&dict, &marks(&[], &[2]), &[1, 5, 6, 2]), None);
     }

@@ -673,6 +673,79 @@ mod tests {
         assert!(opened >= 3, "only {opened} streams name rows");
     }
 
+    /// claude-384's review: at every position `p` of a window, the rows the float `plan` adds are
+    /// the shared serving rule `open_picks` of the window's first `p + 1` tokens, the stream a
+    /// served session has seen there. On random streams with a two-token user marker, the only
+    /// positions allowed to differ are those where the prefix ends with a beginning of the user
+    /// marker that the window does not finish (the trainer adds the rows there; a reader fed token
+    /// by token cannot know the marker will not come). The test also counts the positions where a
+    /// marker under way is finished later in the window: there the trainer adds nothing, and a
+    /// served rule that waited for the whole marker would add the turn's rows.
+    #[test]
+    fn every_position_of_plan_reads_what_open_picks_names_of_its_prefix() {
+        let vocab = 10usize;
+        let primes = first_primes(vocab);
+        let mut addresses: Vec<u32> = (0..vocab)
+            .flat_map(|a| (a + 1..vocab).map(move |b| (a, b)))
+            .filter(|&(a, b)| (a + 2 * b) % 3 != 0)
+            .map(|(a, b)| primes[a] * primes[b])
+            .collect();
+        addresses.sort_unstable();
+        let dict = PairDictionary::from_addresses(vocab, addresses).unwrap();
+        let marks = marks();
+        let mut seed = 0x384_u64;
+        let mut next = |n: u32| {
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            ((seed >> 33) % u64::from(n)) as u32
+        };
+        let (mut read, mut finished_marker, mut broken_beginning) = (0usize, 0usize, 0usize);
+        for _ in 0..300 {
+            let len = 20 + next(60) as usize;
+            let ids: Vec<u32> = (0..len)
+                .map(|_| match next(4) {
+                    0 => [1, 4][next(2) as usize],
+                    1 => [2, 3][next(2) as usize],
+                    _ => next(vocab as u32),
+                })
+                .collect();
+            let plan = plan(&dict, &marks, &ids, 1, len).unwrap();
+            let (_, users) = scan(&ids, &marks);
+            for p in 0..len {
+                let turn = plan.turn_of[p];
+                let want = (turn < plan.turns as u32).then(|| {
+                    let mut rows: Vec<u32> = plan
+                        .hit_turn
+                        .iter()
+                        .zip(&plan.hit_row)
+                        .filter(|&(&t, _)| t == turn)
+                        .map(|(_, &r)| r)
+                        .collect();
+                    rows.sort_unstable();
+                    rows
+                });
+                let got = open_picks(&dict, &marks, &ids[..=p]);
+                // A beginning of the user marker at the prefix's end: `[1]` at `p`.
+                let begins = ids[p] == marks.user[0];
+                let finished = begins && users.contains(&p);
+                if begins && !finished && want.is_some() && got.is_none() {
+                    broken_beginning += 1;
+                    continue;
+                }
+                assert_eq!(got, want, "{ids:?} at {p}");
+                read += usize::from(want.is_some());
+                finished_marker += usize::from(finished && open_picks(&dict, &marks, &ids[..p]).is_some());
+            }
+        }
+        assert!(read > 1_000, "too few positions read rows: {read}");
+        assert!(
+            finished_marker > 20,
+            "too few reply positions where a marker begins: {finished_marker} (read {read}, broken {broken_beginning})"
+        );
+        assert!(broken_beginning > 0, "no broken beginning was drawn");
+    }
+
     // Plain tests cover the address, the dictionary and the plan on the host. The tensor read is
     // tested on the GPU (`cuda`).
 
