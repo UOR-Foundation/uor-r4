@@ -69,7 +69,7 @@ Statuses are the board's; this ADR changes none. "Action" is the integration ste
 | Routed read | attention | ACTIVE | `Read` | `ReadOut` adapter; tree descent returns positions |
 | Flock read | attention | ACTIVE | `Read` | `ReadOut` adapter; the only fully softmax-free selector |
 | Relation read | attention scoring | ACTIVE | `Read` | Adapter with a relation-typed support |
-| Hamming read (ternary/XOR form) | attention | READY in board, ACTIVE in recipe | `Read` | Reference for copy/type/ask heads; the read-index unit targets it |
+| Hamming read (ternary/XOR form) | attention | READY | `Read` | Reference for the copy, ask and place heads; the read-index unit targets the copy/ask forms. The **place head** is a write/placement operation, not a position-and-weight read, so `ReadOut` does not yet carry it — it joins the relation read on the I1 risk list |
 | Hopf kept-fibre map | attention scoring | READY | `Read` (scoring) | Telemetry-only; do not gate a read on it |
 | Spin-native weights | matmul replacement | READY | `SequenceMixer` | Arm; its 1.5148 BPB came through a banned dense multiply, so it needs a compliant form first |
 | Ternary/XOR | matmul replacement | READY | `Read`/`SequenceMixer` | Arm for sign-code reads; dense ternary is still dense (D25) |
@@ -89,6 +89,8 @@ Statuses are the board's; this ADR changes none. "Action" is the integration ste
 | Pair experts / pair rows (since 31 Oct) | reply memory | no status | `Read`/`Head` | Keep opt-in; they are outside the vector state and must not masquerade as one |
 | Zeta modules (`zeta_zeros`, `zeta_projection`) | address phase | no status | `Codebook`/`Position` | Address/phase only; no semantic claim (ADR-0003's retained scope) |
 
+The map is a superset of the board's 28 rows: it splits the Hamming form out of ternary/XOR and adds the whole-table nearest readout, which is a form of the admission head.
+
 ### 4. The four attachments
 
 **e-means → `Codebook` trainer.** e-means (arXiv 2611.09501) is a mini-batch k-means with EMA centroid counts/sums, a cosine-annealed step, dead-cluster revival and a last-epoch-mean finalization. It changes the *solver*, not the centroid or the serving arithmetic. It attaches behind `Codebook::fit`, at the four k-means sites already in the tree: `crates/uor-r4-training/src/addressing_arms.rs` (Lloyd), `crates/uor-r4-graph-compiler/src/induction.rs` (spherical mini-batch), `crates/uor-r4-core/src/transformerless/compiler.rs` (sampled RVQ), `crates/uor-r4-training/src/joint_admission.rs` (PQ-ADC). Gate: the exported integer table is bit-identical across two runs, and the final MSE is no worse than Lloyd at no more than one third of its iterations. The paper's scaling laws are not adopted: they were fitted at `n ≥ 10⁵`, `k ≥ 256`, and say they are not optimal for small or low-dimensional data.
@@ -99,11 +101,11 @@ Statuses are the board's; this ADR changes none. "Action" is the integration ste
 
 **JEPA → `Loss` arm.** The JEPA trainer (`crates/uor-r4-core/src/native_geometric/learner/jepa_trainer.rs`) is a latent-prediction objective (`L_CE + λ·d_FS + λ_fiber·d_U(1)`) with a VSA context engine. It is training-side only: it attaches as an additional loss term behind `Loss`, is judged on served quality and parity, and its latent loss is not evidence of a serving win.
 
-**Graph compiler → `Codebook` builder.** The graph compiler is historical; the active model is `crates/uor-r4-core/src/native_geometric`. Its preserved induction (content-addressed seeding, spherical mini-batch k-means, bit-identical convergence) is a usable `Codebook` builder and an e-means fit site. The compiler pipeline is not revived as the model.
+**Graph compiler → `Codebook` builder.** The graph compiler is historical. The reusable JEPA trainer and induction code live in `crates/uor-r4-core/src/native_geometric`, although the board's whole-model row *Native geometric engine* remains PARKED. Its preserved induction (content-addressed seeding, spherical mini-batch k-means, bit-identical convergence) is a usable `Codebook` builder and an e-means fit site. The compiler pipeline is not revived as the model.
 
 ### 5. Unit sequence
 
-Each unit is one PR, one stage, one gate.
+Each unit is one PR, one stage, one gate; I6 is the exception, composing the stages rather than replacing one.
 
 | Unit | Stage | Deliverable and gate |
 |---|---|---|
