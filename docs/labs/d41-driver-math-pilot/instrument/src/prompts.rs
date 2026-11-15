@@ -388,26 +388,55 @@ impl PanelGuard {
             strings: HashSet::new(),
         }
     }
+    fn insert(&mut self, s: &str) {
+        let n = normalize(s);
+        if !n.is_empty() {
+            self.strings.insert(n);
+        }
+    }
     /// Adds every string value of a JSON document (recursively).
     pub fn add_json(&mut self, v: &serde_json::Value) {
         match v {
-            serde_json::Value::String(s) => {
-                self.strings.insert(s.trim().to_string());
-            }
+            serde_json::Value::String(s) => self.insert(s),
             serde_json::Value::Array(xs) => xs.iter().for_each(|x| self.add_json(x)),
             serde_json::Value::Object(m) => m.values().for_each(|x| self.add_json(x)),
             _ => {}
         }
     }
-    /// Adds every tab-separated field of a TSV file.
+    /// Adds every line and every tab-separated field of a text file (TSV, TXT), skipping
+    /// `#` comment lines.
     pub fn add_tsv(&mut self, text: &str) {
         for line in text.lines() {
+            if line.trim_start().starts_with('#') {
+                continue;
+            }
+            self.insert(line);
             for field in line.split('\t') {
-                if !field.trim().is_empty() {
-                    self.strings.insert(field.trim().to_string());
-                }
+                self.insert(field);
             }
         }
+    }
+    /// Adds a panel file by its extension: `.json` as one document, `.jsonl` line by line
+    /// (each line as JSON, and as text when it does not parse), `.tsv` and `.txt` as text.
+    /// Returns false for an extension it does not read.
+    pub fn add_file(&mut self, ext: &str, text: &str) -> bool {
+        match ext {
+            "json" => match serde_json::from_str::<serde_json::Value>(text) {
+                Ok(v) => self.add_json(&v),
+                Err(_) => self.add_tsv(text),
+            },
+            "jsonl" => {
+                for line in text.lines() {
+                    match serde_json::from_str::<serde_json::Value>(line) {
+                        Ok(v) => self.add_json(&v),
+                        Err(_) => self.add_tsv(line),
+                    }
+                }
+            }
+            "tsv" | "txt" | "md" => self.add_tsv(text),
+            _ => return false,
+        }
+        true
     }
     pub fn len(&self) -> usize {
         self.strings.len()
@@ -415,12 +444,28 @@ impl PanelGuard {
     pub fn is_empty(&self) -> bool {
         self.strings.is_empty()
     }
-    /// True when the joined text or any part equals a panel string.
+    /// True when the joined text or any part equals a panel string, after [`normalize`].
     pub fn hits(&self, parts: &[String]) -> bool {
         let joined = parts.join(" ");
-        self.strings.contains(joined.trim())
-            || parts.iter().any(|p| self.strings.contains(p.trim()))
+        self.strings.contains(&normalize(&joined))
+            || parts.iter().any(|p| self.strings.contains(&normalize(p)))
     }
+}
+
+/// The form both sides are compared in: lower case, letters and digits only, words split
+/// by single spaces. So case, spacing and punctuation never let a panel text through.
+pub fn normalize(s: &str) -> String {
+    let mapped: String = s
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                ' '
+            }
+        })
+        .collect();
+    mapped.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 impl Default for PanelGuard {
@@ -548,5 +593,36 @@ mod tests {
                 .split_inclusive(['.', '?', '!'])
                 .any(|x| x.trim() == s)));
         }
+    }
+}
+
+#[cfg(test)]
+mod guard_tests {
+    use super::*;
+
+    #[test]
+    fn a_txt_panel_line_in_another_case_and_spacing_is_still_dropped() {
+        let (a, _) = build(7, 2000, &PanelGuard::new());
+        let target = a.iter().find(|p| p.kind == "open").map(|p| p.user.clone());
+        let target = target.unwrap_or_default();
+        assert!(!target.is_empty());
+        // The panel holds it only in a .txt file, shouted, with odd spacing and punctuation.
+        let shouted = format!(
+            "# comment line\n  {}!!  \n",
+            target.to_uppercase().replace(' ', "   ")
+        );
+        let mut g = PanelGuard::new();
+        assert!(g.add_file("txt", &shouted));
+        assert!(!g.add_file("bin", "x"));
+        let (b, stats) = build(7, 2000, &g);
+        assert!(stats.panel_hits_dropped >= 1);
+        assert!(b.iter().all(|p| normalize(&p.user) != normalize(&target)));
+    }
+
+    #[test]
+    fn normalize_ignores_case_spacing_and_punctuation() {
+        assert_eq!(normalize("  What is   a CAT? "), "what is a cat");
+        assert_eq!(normalize("My dog's name."), "my dog s name");
+        assert_eq!(normalize("?!"), "");
     }
 }

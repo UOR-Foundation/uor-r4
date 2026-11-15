@@ -97,22 +97,29 @@ fn cmd_prompts(m: &BTreeMap<String, String>) -> Res<()> {
     let panels = PathBuf::from(need(m, "panels")?);
     let mut guard = prompts::PanelGuard::new();
     let mut panel_files = 0usize;
+    let mut skipped: Vec<String> = Vec::new();
     let mut entries: Vec<PathBuf> = fs::read_dir(&panels)
         .map_err(|e| format!("read_dir {}: {e}", panels.display()))?
         .filter_map(|e| e.ok().map(|e| e.path()))
         .collect();
     entries.sort();
     for p in entries {
-        match p.extension().and_then(|x| x.to_str()) {
-            Some("json") => {
-                guard.add_json(&read_json(&p)?);
-                panel_files += 1;
-            }
-            Some("tsv") => {
-                guard.add_tsv(&String::from_utf8_lossy(&read(&p)?));
-                panel_files += 1;
-            }
-            _ => {}
+        let ext = p.extension().and_then(|x| x.to_str()).unwrap_or("");
+        let name = p
+            .file_name()
+            .and_then(|x| x.to_str())
+            .unwrap_or("")
+            .to_string();
+        if p.is_dir() {
+            return Err(format!(
+                "{} is a folder: the guard reads files only",
+                p.display()
+            ));
+        }
+        if guard.add_file(ext, &String::from_utf8_lossy(&read(&p)?)) {
+            panel_files += 1;
+        } else {
+            skipped.push(name);
         }
     }
     if guard.is_empty() {
@@ -138,7 +145,7 @@ fn cmd_prompts(m: &BTreeMap<String, String>) -> Res<()> {
     println!(
         "{}",
         json!({"prompts": set.len(), "seed": seed, "sha256": sha256_hex(text.as_bytes()), "kinds": kinds,
-               "panel_files": panel_files, "panel_strings": guard.len(),
+               "panel_files": panel_files, "panel_files_not_read": skipped, "panel_hits_in_set": set.iter().filter(|p| guard.hits(std::slice::from_ref(&p.user))).count(), "panel_strings": guard.len(),
                "duplicates_skipped": stats.duplicates_skipped, "panel_hits_dropped": stats.panel_hits_dropped})
     );
     Ok(())
@@ -223,6 +230,7 @@ struct Tally {
     requests: u64,
     truncated: u64,
     markup: u64,
+    tokenize_errors: u64,
     empty_prompts: u64,
     kept_tokens: u64,
     kept_bytes: u64,
@@ -315,15 +323,17 @@ fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
                 }
                 let answers = canonical_answers(&texts);
                 let mut kept_tokens = 0u64;
+                let mut tokenize_failed = 0u64;
                 for a in &answers {
                     match count_tokens(&agent, &server, a) {
                         Ok(n) => kept_tokens += n,
-                        Err(e) => errors.lock().unwrap_or_else(|e| e.into_inner()).push(format!("{idx}: {e}")),
+                        Err(_) => tokenize_failed += 1,
                     }
                 }
                 let mut t = tally.lock().unwrap_or_else(|e| e.into_inner());
                 t.distinct[answers.len()] += 1;
                 t.kept_tokens += kept_tokens;
+                t.tokenize_errors += tokenize_failed;
                 t.kept_bytes += answers.iter().map(|a| a.len() as u64).sum::<u64>();
                 let kind = p["kind"].as_str().unwrap_or("?").to_string();
                 t.by_kind.entry(kind).or_default().0 += 1;
@@ -374,7 +384,7 @@ fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
         "generated_tokens_per_second": gen as f64 / wall,
         "kept_answer_tokens": t.kept_tokens, "kept_answer_bytes": t.kept_bytes,
         "kept_answer_tokens_per_second": t.kept_tokens as f64 / wall,
-        "truncated_answers": t.truncated, "markup_answers": t.markup, "prompts_with_no_answer": t.empty_prompts,
+        "truncated_answers": t.truncated, "markup_answers": t.markup, "tokenize_errors": t.tokenize_errors, "prompts_with_no_answer": t.empty_prompts,
         "prompts_by_distinct_answers": {"0": t.distinct[0], "1": t.distinct[1], "2": t.distinct[2], "3": t.distinct[3], "4": t.distinct[4]},
         "request_seconds": {"p50": q(0.5), "p95": q(0.95), "max": t.seconds.last()},
         "by_kind": t.by_kind.iter().map(|(k, (n, g))| (k.clone(), json!({"prompts": n, "generated_tokens": g}))).collect::<BTreeMap<_, _>>(),
@@ -434,6 +444,9 @@ fn shard_paths(dir: &Path) -> Res<Vec<PathBuf>> {
 fn cmd_seal(m: &BTreeMap<String, String>) -> Res<()> {
     let dir = PathBuf::from(need(m, "dir")?);
     let run = read_json(&dir.join("run.json"))?;
+    let metrics_bytes = read(&dir.join("metrics.json"))?;
+    let metrics: Value =
+        serde_json::from_slice(&metrics_bytes).map_err(|e| format!("parse metrics.json: {e}"))?;
     let prompts_name = run["prompts_file"]
         .as_str()
         .ok_or("run.json: no prompts_file")?;
@@ -460,6 +473,8 @@ fn cmd_seal(m: &BTreeMap<String, String>) -> Res<()> {
         "machine": read_json(Path::new(need(m, "machine")?))?,
         "run": run,
         "prompt_set": {"file": prompts_name, "sha256": sha256_hex(&prompt_bytes)},
+        "metrics": {"file": "metrics.json", "sha256": sha256_hex(&metrics_bytes), "content": metrics},
+        "consumption_terms": "D41 item 4 as amended by D86: each answer is a hard target (its tokens are integer targets). No logit, probability, score or rank is stored. Answers are in byte order, so position means nothing; no consumer may weight a prompt or an answer by its position or by how many distinct answers the prompt has.",
         "shards": shards, "records": records,
         "merkle": {"root": merkle_root(&leaves)?,
                    "rule": "leaves are the shard files' sha256 in file order; parent = sha256(left || right) over raw bytes; an unpaired last node moves up unchanged"},
@@ -487,6 +502,11 @@ fn cmd_verify(m: &BTreeMap<String, String>) -> Res<()> {
     let pbytes = read(&dir.join(pfile))?;
     if sha256_hex(&pbytes) != r["prompt_set"]["sha256"].as_str().unwrap_or("") {
         return Err("prompt set sha256 differs from the receipt".into());
+    }
+    if sha256_hex(&read(&dir.join("metrics.json"))?)
+        != r["metrics"]["sha256"].as_str().unwrap_or("")
+    {
+        return Err("metrics.json sha256 differs from the receipt".into());
     }
     let mut prompt_msgs: BTreeMap<String, Value> = BTreeMap::new();
     for l in String::from_utf8_lossy(&pbytes).lines() {

@@ -33,7 +33,8 @@ cmp "$W/prompts.jsonl" "$IN/prompts.jsonl"
 
 echo "== convert (MXFP4 experts repacked as MXFP4, the rest bf16 as released)"
 [ -s "$W/gpt-oss-20b.gguf" ] || "$W/venv/bin/python" "$W/engine/llama.cpp/convert_hf_to_gguf.py" "$W/donor-hf" \
-  --outtype bf16 --outfile "$W/gpt-oss-20b.gguf" 2>&1 | grep -E "MXFP4|not in MXFP4|Model successfully|error" | sort | uniq -c | tail -8
+  --outtype bf16 --outfile "$W/gpt-oss-20b.gguf" 2>&1 | grep -E "MXFP4|not in MXFP4|Model successfully|error" | sort | uniq -c | tail -8 || true
+test -s "$W/gpt-oss-20b.gguf"
 GGUF_SHA=$(sha256sum "$W/gpt-oss-20b.gguf" | cut -d' ' -f1)
 GGUF_BYTES=$(stat -c %s "$W/gpt-oss-20b.gguf")
 LS=$W/engine/llama.cpp/build/bin/llama-server
@@ -81,7 +82,7 @@ cat "$OUT/metrics.json"
 echo "== seal and verify"
 cp "$W/prompts.jsonl" "$OUT/prompts.jsonl"
 "$P" seal --dir "$OUT" --model "$META/model.json" --engine "$META/engine.json" --machine "$META/machine.json"
-"$P" verify --dir "$OUT"
+"$P" verify --dir "$OUT" | tee "$META/verify-wick.json"
 cp "$W/gpu.log" "$W/server.log" "$META/" 2>/dev/null || true
 sha256sum "$OUT"/* | tee "$META/out.sha256"
 echo run-done

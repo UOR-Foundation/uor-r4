@@ -28,13 +28,20 @@ cd "$W/donor-hf"
 for f in LICENSE USAGE_POLICY config.json generation_config.json model.safetensors.index.json \
          model-00000-of-00002.safetensors model-00001-of-00002.safetensors model-00002-of-00002.safetensors \
          tokenizer.json tokenizer_config.json special_tokens_map.json chat_template.jinja; do
-  [ -s "$f" ] || curl -sfL -o "$f" "https://huggingface.co/$DONOR/resolve/$REV/$f"
+  [ -s "$f" ] || { curl -sfL -o "$f.part" "https://huggingface.co/$DONOR/resolve/$REV/$f" && mv "$f.part" "$f"; }
 done
 sha256sum ./* > "$W/donor-hf.sha256"
+# The LFS files against the sha256 Hugging Face publishes for them at $REV (tree API, 15 Nov 2026).
+sha256sum -c - <<SUMS
+16d0f997dcfc4462089d536bffe51b4bcea2f872f5c430be09ef8ed392312427  model-00000-of-00002.safetensors
+4fbe328ab445455d6f58dc73852b85873bd626986310abd91cd4d2ce3245eaea  model-00001-of-00002.safetensors
+a18106b209e9ab35c3406db4f6f12a927364a058b21e9d1373d682e20674b303  model-00002-of-00002.safetensors
+0614fe83cadab421296e664e1f48f4261fa8fef6e03e63bb75c20f38e37d07d3  tokenizer.json
+SUMS
 cat "$W/donor-hf.sha256"
 
 # The converter's environment (llama.cpp's own requirements, outside the repository).
 [ -x "$W/venv/bin/python" ] || python3 -m venv "$W/venv"
 "$W/venv/bin/pip" install -q -r "$W/engine/llama.cpp/requirements/requirements-convert_hf_to_gguf.txt"
-grep -n "class GptOss\|MXFP4\|mxfp4" "$W/engine/llama.cpp/convert_hf_to_gguf.py" | head -40
+grep -n "repack_mxfp4\|MXFP4" "$W/engine/llama.cpp/conversion/gpt_oss.py" | head -20 || true
 echo setup-done
