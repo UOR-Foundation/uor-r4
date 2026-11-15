@@ -15207,7 +15207,12 @@ pub fn recall_payload_probe(
         if let Some(path) = &settings.native_dump {
             let dump = dump.ok_or_else(|| invalid("a refused state has no read to dump"))?;
             let bytes = dump.to_bytes().map_err(|e| invalid(e.to_string()))?;
-            std::fs::write(path, bytes)
+            // `create_new`: the dump never writes over a file, even one made during the run.
+            std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)
+                .and_then(|mut file| std::io::Write::write_all(&mut file, &bytes))
                 .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
         }
         serde_json::to_value(summary)?

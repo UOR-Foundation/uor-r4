@@ -22,6 +22,10 @@ pub struct Q31ReadDump {
     pub table: Vec<i64>,
 }
 
+fn overflow() -> Error {
+    Error::Invalid("a read dump count overflows".into())
+}
+
 fn field(value: usize) -> Result<[u8; 4]> {
     u32::try_from(value)
         .map(u32::to_le_bytes)
@@ -63,8 +67,8 @@ impl Q31ReadDump {
     /// Magic, batch, time, width, vocab, the read's own bytes, then stream, ids and table.
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         let width = self.read.width();
-        let rows = self.batch * self.time;
-        if self.stream.len() != rows * width
+        let rows = self.batch.checked_mul(self.time).ok_or_else(overflow)?;
+        if Some(self.stream.len()) != rows.checked_mul(width)
             || self.ids.len() != rows
             || width == 0
             || !self.table.len().is_multiple_of(width)
@@ -119,16 +123,14 @@ impl Q31ReadDump {
                 "a read dump's width is not its read's".into(),
             ));
         }
-        let rows = batch
-            .checked_mul(time)
-            .ok_or_else(|| Error::Invalid("a read dump count overflows".into()))?;
-        let stream = cursor.words(rows * width)?;
+        let rows = batch.checked_mul(time).ok_or_else(overflow)?;
+        let stream = cursor.words(rows.checked_mul(width).ok_or_else(overflow)?)?;
         let ids = cursor
-            .take(rows * 4)?
+            .take(rows.checked_mul(4).ok_or_else(overflow)?)?
             .chunks_exact(4)
             .map(|c| u32::from_le_bytes(c.try_into().expect("four bytes")))
             .collect();
-        let table = cursor.words(vocab * width)?;
+        let table = cursor.words(vocab.checked_mul(width).ok_or_else(overflow)?)?;
         if !cursor.bytes.is_empty() {
             return Err(Error::Invalid("a read dump has trailing bytes".into()));
         }
@@ -187,8 +189,15 @@ mod tests {
         magic[0] ^= 1;
         assert!(Q31ReadDump::from_bytes(&magic).is_err());
         assert!(Q31ReadDump::from_bytes(&bytes[..bytes.len() - 1]).is_err());
-        let mut long = bytes;
+        let mut long = bytes.clone();
         long.push(0);
         assert!(Q31ReadDump::from_bytes(&long).is_err());
+        // A header whose shape overflows `usize` is an error, not a panic or a wrapped size.
+        let mut huge = bytes;
+        let big = u32::MAX.to_le_bytes();
+        huge[MAGIC.len()..MAGIC.len() + 4].copy_from_slice(&big);
+        huge[MAGIC.len() + 4..MAGIC.len() + 8].copy_from_slice(&big);
+        let refused = Q31ReadDump::from_bytes(&huge).err().expect("refused");
+        assert!(refused.to_string().contains("overflows"), "{refused}");
     }
 }

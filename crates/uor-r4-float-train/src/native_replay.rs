@@ -1072,6 +1072,30 @@ mod tests {
         assert_eq!(run.picks_agree, 4);
     }
 
+    /// The f64 reference's own tie rule, asserted directly: `capture` fills the f32 fields from
+    /// the same reference, so a reference with the wrong tie rule would agree with itself.
+    #[test]
+    fn the_reference_sends_an_exact_tie_to_the_latest_row() {
+        let width = REPLAY_WIDTH;
+        let identity = vec![[1.0f32, 0.0, 0.0, 0.0]; width / 4];
+        let model = ReplayModel {
+            width,
+            query_gates_raw: identity.clone(),
+            key_gates_raw: identity,
+            weights: vec![0.0; width],
+            table: vec![0.25; 2 * width],
+        };
+        // Rows 1, 2 and 3 are equal, so row 3's scores against rows 1 and 2 tie exactly at 0.
+        let mut stream = vec![0.0f32; 4 * width];
+        for row in 1..4 {
+            stream[row * width] = 0.5;
+        }
+        let captured = capture(&model, vec![stream], vec![vec![0, 1, 0, 1]]);
+        assert_eq!(captured[0].f32_first_pick, vec![0, 1, 2, 3]);
+        let run = run(replay(&model, &captured).unwrap());
+        assert_eq!(run.picks_agree, 4, "{:?}", run.pick_mismatches);
+    }
+
     #[test]
     fn t4_control_1_moves_the_picks_on_a_random_capture() {
         let (model, captured) = random_capture(0x5EED_0004, 8, 64, 50, 0.1);

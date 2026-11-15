@@ -62,10 +62,14 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
     if native_dump.is_some() && !native_replay {
         return Err("--native-dump needs --native-replay: it writes the replay's input".to_owned());
     }
+    let out: PathBuf = out.ok_or("--out is required")?;
+    if native_dump.as_ref() == Some(&out) {
+        return Err("--native-dump and --out name the same file".to_owned());
+    }
     Ok(Args {
         checkpoint: checkpoint.ok_or("--checkpoint is required")?,
         run: run.ok_or("--run is required")?,
-        out: out.ok_or("--out is required")?,
+        out,
         scales,
         first_only,
         native_replay,
@@ -237,5 +241,11 @@ mod tests {
         let a = parse(argv(&both)).unwrap();
         assert_eq!(a.native_dump, Some(PathBuf::from("d")));
         assert!(parse(argv(&base)).unwrap().native_dump.is_none());
+        let same: Vec<&str> = base
+            .iter()
+            .copied()
+            .chain(["--native-replay", "--native-dump", "o"])
+            .collect();
+        assert!(parse(argv(&same)).err().unwrap().contains("same file"));
     }
 }

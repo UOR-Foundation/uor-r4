@@ -127,6 +127,12 @@ The four states' `model.safetensors` and `vector_read.safetensors` sha256 equal 
   - `… --lib native_replay`: 7 passed. `… --bin recall-payload-probe`: 3 passed.
   - Binary sha256s: `recall-payload-probe` `57abc48c0ba1cdf117e7bcc0b1c794c5853049015eb3c7d496dfc0098169c6f7`, and `first_pick_read_parity` `c77ac616e16c412dc8e9771318875391a027375e1b5c95fcad9d02fbe8e085af`.
 - **The sheet's FIT:** four fresh-context non-author reviews. The fourth returned `TEST FITNESS: FIT` at `9d9b960ce`, and its minor points were folded in at `f86ca898f`, before the job.
+- **The code review, at `481911260`:** four fresh-context reviews, one per area: the operator, the CUDA twin, the replay's bar logic, and the capture with the flags. Each returned APPROVE with minor findings only. The follow-up commit after `481911260` folds in three of them:
+  - A negative gate showed that the replay tests passed with the f64 reference's tie flipped to the earliest row. The cause: the test helper fills the f32 fields from the same reference. The new test, `the_reference_sends_an_exact_tie_to_the_latest_row`, asserts the reference's picks directly. It fails with the tie flipped (7 passed, 1 failed) and passes as written.
+  - `--native-dump` and `--out` naming the same file is now refused. The dump is opened with `create_new`, so it never writes over a file, including one that appears during the run.
+  - `Q31ReadDump`'s size products use `checked_mul`. A header of `u32::MAX × u32::MAX` rows now returns an overflow error. Without the check, the extended `a_damaged_dump_is_refused` panics.
+
+  None of the three changes the operator, the kernels or the replay's arithmetic on valid input, so wick's results at `d1ea1039b` stand. Laptop, after the commit: native-vector 23 passed, native_replay 8 passed, the bin's 3 passed, the wasm32 build is clean, clippy has 0 findings, and rustfmt on the new files is clean.
 
 ## Skills used
 
@@ -143,6 +149,13 @@ The four states' `model.safetensors` and `vector_read.safetensors` sha256 equal 
 4. **No test catches a fold that permutes query and key alike.** Such a permutation leaves every L1 distance unchanged. During the build, a sabotage gate that changed the fold to `(c+1) % 16` on both sides still passed; only a collapse to `c % 4` failed. A test that pins the fold's order would compare the address words themselves against a fixture.
 5. **The stub nvcc cannot type-check candle's cuda code** (`affine_*` against the D29 admission). So a float-train cuda change compiles first on wick.
 6. **The D41 pilot** (`d41-driver-math-pilot`) runs in its own session on wick.
+7. **The review's minor findings, not folded in.** Each would change a CUDA-only file, or the operator, after the wick run, so they belong with the session unit's next device run:
+   - **The id refusal is narrower than the ORDER says.** The operator refuses an out-of-table id only where a pick reads it. For example, `ids = [0, 1, 99]` passes when row 2 picks row 0. CPU and CUDA agree on this rule, and a test asserts it. The session unit either checks ids `1..time` of every window up front or states the narrower rule.
+   - `first_pick_read_parity` reports `bit_identical: true` on a dump with no row past row 0. It should refuse `rows == 0` or `time < 2`. This run's dump had 49,152 rows.
+   - The device tests use gain shifts 0 and 4 only, so the `g = 31` path (round 0, shift 0) does not run on the GPU.
+   - No test pins the window offset on the keys (`keys[first + s]`) with a window-1 row whose correct pick differs from window 0's.
+   - The probe writes the dump before the cut pass. An error after the dump leaves the dump on disk without its JSON.
+   - Pre-existing in `q31_hamilton_rotate` (`lib.rs:349-373`): the sum wraps in u64 before the clamp. Admitted non-unit gates such as `[2^31, 2^31, 2^31, 2^31]` can therefore wrap instead of saturating. The read inherits this; the replay's unit gates and headroom rule stay clear of it.
 
 ## Plain summary
 
