@@ -29,7 +29,8 @@ fails. `post_note` and the test both use it.
 ## Files in scope
 
 - `crates/uor-r4-harness/src/loopdrive.rs`
-- `docs/loop/tasks/infra-loop-harness/codex-1/**`
+- `crates/uor-r4-harness/tests/loop_drive.rs`
+- `docs/loop/tasks/infra-loop-harness/codex-4/**`
 
 Out of scope: any other harness rule, any gate definition, any shared registration file.
 
