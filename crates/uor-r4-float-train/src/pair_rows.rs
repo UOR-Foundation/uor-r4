@@ -151,6 +151,28 @@ pub fn plan(
     })
 }
 
+/// The rows the trainer's own [`plan`] of `ids` as one window adds at its last position: the
+/// `hit_row`s of the turn still open there (`open[0]`), sorted. Empty when no turn is open.
+pub fn last_position_rows(
+    dict: &PairDictionary,
+    marks: &PairMarks,
+    ids: &[u32],
+) -> Result<Vec<u32>> {
+    let plan = plan(dict, marks, ids, 1, ids.len())?;
+    let Some(turn) = plan.open[0] else {
+        return Ok(Vec::new());
+    };
+    let mut rows: Vec<u32> = plan
+        .hit_turn
+        .iter()
+        .zip(&plan.hit_row)
+        .filter(|&(&t, _)| t == turn)
+        .map(|(_, &r)| r)
+        .collect();
+    rows.sort_unstable();
+    Ok(rows)
+}
+
 /// The plan's hit vectors and the turn each output position adds, as tensors on `device`:
 /// `hit_row`, `hit_turn`, `turn_of`. They are built from host vectors and carry no gradient
 /// history.
@@ -571,6 +593,37 @@ mod tests {
             }
             assert_eq!(rows, picks, "stream {ids:?}");
         }
+    }
+
+    /// `last_position_rows` is the shared serving rule `open_picks`, empty for none, on single-
+    /// and multi-turn streams: an open second turn, a closed one, a turn with no rows after one
+    /// with rows, and a stream with no turn at all.
+    #[test]
+    fn last_position_rows_are_the_open_picks() {
+        let (dict, marks) = (dict(), marks());
+        let streams: [&[u32]; 9] = [
+            &[1, 4, 5, 6, 2, 3, 7],
+            &[1, 4, 5, 2, 3, 7, 8],
+            &[1, 4, 5, 2, 3, 7, 1, 6],
+            &[9, 1, 4, 6, 5, 2, 3],
+            &[1, 9, 2, 3, 7],
+            &WINDOW_A,
+            &[1, 4, 5, 6, 2, 3, 10, 1, 4, 5, 6, 7, 2, 3, 11],
+            &[1, 4, 5, 6, 2, 3, 10, 1, 4, 9, 2, 3, 11],
+            &[9, 10, 11],
+        ];
+        let mut opened = 0;
+        for ids in streams {
+            let mut picks = open_picks(&dict, &marks, ids).unwrap_or_default();
+            picks.sort_unstable();
+            opened += usize::from(!picks.is_empty());
+            assert_eq!(
+                last_position_rows(&dict, &marks, ids).unwrap(),
+                picks,
+                "stream {ids:?}"
+            );
+        }
+        assert!(opened >= 3, "only {opened} streams name rows");
     }
 
     // Plain tests cover the address, the dictionary and the plan on the host. The tensor read is
