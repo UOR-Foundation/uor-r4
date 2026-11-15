@@ -14988,6 +14988,10 @@ fn payload_probe_summary(
         "r_oth": rate(oth),
         "margin": f(&|r| f64::from(r.margin)),
         "margin_positive": picked.iter().filter(|(_, r)| r.margin > 0.0).count(),
+        // Added after the first probe read, outside the fixed reading map: whether the decoded
+        // token is one of the read's kept picks' next tokens, and the first kept pick's.
+        "pick_kept": picked.iter().filter(|(_, r)| r.next_ids.contains(&r.pick)).count(),
+        "pick_first": picked.iter().filter(|(_, r)| r.next_ids.first() == Some(&r.pick)).count(),
         "stream_norm": f(&|r| f64::from(r.stream_norm)),
         "payload_norm": f(&|r| f64::from(r.payload_norm)),
         "ratio": f(&|r| if r.stream_norm > 0.0 {
@@ -15049,7 +15053,7 @@ pub fn recall_payload_probe(
             kept_oth[o][1] += 1;
         }
     }
-    let mut passes = Vec::new();
+    let (mut passes, mut scaled_picks) = (Vec::new(), Vec::new());
     for &scale in &settings.scales {
         let rows = if scale == 1.0 {
             base.clone()
@@ -15065,7 +15069,18 @@ pub fn recall_payload_probe(
             "first_right": payload_probe_summary(&rows, |i, _| first_right[i]),
             "first_not_right": payload_probe_summary(&rows, |i, _| !first_right[i]),
         }));
+        scaled_picks.push(rows.iter().map(|r| r.pick).collect::<Vec<u32>>());
     }
+    // Added after the first probe read: the payload weight's sign census.
+    let w = read.weight_values()?;
+    let weight = serde_json::json!({
+        "width": w.len(),
+        "negative": w.iter().filter(|&&v| v < 0.0).count(),
+        "zero": w.iter().filter(|&&v| v == 0.0).count(),
+        "min": w.iter().copied().fold(f32::INFINITY, f32::min),
+        "max": w.iter().copied().fold(f32::NEG_INFINITY, f32::max),
+        "abs": probe_spread(w.iter().map(|&v| f64::from(v.abs())).collect()),
+    });
     let cut = payload_probe_pass(&model, &held, settings.seed, None)?;
     if cut.len() != base.len() {
         return Err(invalid("the cut pass read other rows than the base pass"));
@@ -15073,11 +15088,13 @@ pub fn recall_payload_probe(
     let rows: Vec<serde_json::Value> = base
         .iter()
         .zip(&cut)
-        .map(|(r, c)| {
+        .enumerate()
+        .map(|(i, (r, c))| {
+            let picks: Vec<u32> = scaled_picks.iter().map(|p| p[i]).collect();
             serde_json::json!({
                 "window": r.window, "bucket": r.bucket, "slot": r.slot,
                 "ask_value": r.ask_value, "other_value": r.other_value,
-                "pick": r.pick, "margin": r.margin,
+                "pick": r.pick, "margin": r.margin, "picks_by_scale": picks,
                 "cut_pick": c.pick, "cut_margin": c.margin,
                 "stream_norm": r.stream_norm, "payload_norm": r.payload_norm, "dot": r.dot,
                 "next_ids": r.next_ids,
@@ -15090,6 +15107,7 @@ pub fn recall_payload_probe(
         "kind": read.kind().name(),
         "depth": read.depth(),
         "weight_mean_abs": read.weight_mean_abs()?,
+        "weight": weight,
         "query_rows": base.len(),
         "first_right": first_right.iter().filter(|&&r| r).count(),
         "kept_picks_on_ask": kept_ask,

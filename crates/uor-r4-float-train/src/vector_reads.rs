@@ -510,6 +510,11 @@ impl VectorRead {
         Ok(sum / w.elem_count().max(1) as f64)
     }
 
+    /// claude-387: the payload weight's coordinates, for the probe's census.
+    pub fn weight_values(&self) -> Result<Vec<f32>> {
+        Ok(self.weight.as_tensor().flatten_all()?.to_vec1::<f32>()?)
+    }
+
     /// The Starling offset's value; none for the other kinds.
     pub fn offset_value(&self) -> Result<Option<f32>> {
         match &self.offset {
