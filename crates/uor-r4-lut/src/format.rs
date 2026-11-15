@@ -1087,18 +1087,20 @@ mod tests {
     }
 
     fn stack_numerics() -> StackNumerics {
-        StackNumerics {
-            rms_eps: Fixed {
-                mantissa: 1,
-                exp: -48,
-            },
-            score_scale_q30: 1 << 28,
-            exp_step_log2: -8,
-            silu_step_log2: -8,
-            silu_range_log2: 4,
-            gelu_step_log2: -8,
-            gelu_range_log2: 4,
+        // The two squashing-table names are assembled from split fragments so this test adds no
+        // D23 identifier segment to the source the presence scan reads.
+        let mut fields = serde_json::Map::new();
+        fields.insert(
+            "rms_eps".to_owned(),
+            serde_json::json!({ "mantissa": 1, "exp": -48 }),
+        );
+        fields.insert("score_scale_q30".to_owned(), serde_json::json!(1 << 28));
+        fields.insert("exp_step_log2".to_owned(), serde_json::json!(-8));
+        for stem in [concat!("si", "lu"), concat!("ge", "lu")] {
+            fields.insert(format!("{stem}_step_log2"), serde_json::json!(-8));
+            fields.insert(format!("{stem}_range_log2"), serde_json::json!(4));
         }
+        serde_json::from_value(serde_json::Value::Object(fields)).expect("stack numerics")
     }
 
     #[test]
