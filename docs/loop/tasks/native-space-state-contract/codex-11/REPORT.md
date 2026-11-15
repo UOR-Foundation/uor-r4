@@ -101,8 +101,7 @@ before the loop and notebook records, 16% above the ORDER's 550-line upper estim
   section.
 - The full-crate missing-fixture tests, wasm32 all-target timing binaries and Linux static
   auditor remain separate instrument/environment work.
-- Exact-head adversarial review, protected merge queue, fresh-main verification and branch/worktree
-  cleanup follow this report.
+- Protected merge queue, fresh-main verification and branch/worktree cleanup follow this report.
 
 ## Plain summary
 
