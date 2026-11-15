@@ -328,6 +328,11 @@ pub struct LongConfig {
     /// `config.json` when 0, so a run without it writes the same file as before.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub carry_windows: usize,
+    /// A state-keyed look-back read after one layer (claude-381, [`crate::vector_reads`]), with
+    /// its margin credit in the loss. Left out of `config.json` when absent, so a run without it
+    /// writes the same file as before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vector_read: Option<crate::vector_reads::VectorReadArm>,
 }
 
 /// What TRAIN's scored targets are ([`LongConfig::train_targets`], claude-296).
@@ -727,6 +732,9 @@ impl Drop for ArmGuard {
         crate::flock_read_memory::set_memory_rows(None);
         crate::flock_read_memory::set_reply_rows(None);
         crate::e8_address::set_address_memory(None);
+        crate::vector_reads::set_vector_read(None);
+        crate::vector_reads::clear_credit();
+        let _ = crate::vector_reads::take_stats();
         crate::pair_rows::set_pair_rows(None);
         set_trained_cut(None);
         crate::flock_read_hamming::set_row_cut(None);
@@ -820,6 +828,7 @@ fn load_reads(directory: &Path, device: &Device) -> Result<()> {
     crate::e8_address::set_address_memory(crate::e8_address::AddressMemory::load(
         directory, device,
     )?);
+    crate::vector_reads::set_vector_read(crate::vector_reads::VectorRead::load(directory, device)?);
     let pair = crate::pair_rows::PairRows::load(directory, device)?;
     if let Some(rows) = &pair {
         let (nonzero, rms) = rows.census()?;
@@ -861,8 +870,9 @@ pub(crate) fn pair_marks() -> crate::pair_rows::PairMarks {
 
 const INIT_RECORD_SCHEMA: &str = "uor-r4.train-in-space-init/1";
 const HAMMING_SIDECAR: &str = "hamming_read.safetensors";
-const UNSUPPORTED_INIT_SIDECARS: [&str; 8] = [
+const UNSUPPORTED_INIT_SIDECARS: [&str; 9] = [
     "address_memory.safetensors",
+    crate::vector_reads::FILE,
     "pair_rows.safetensors",
     "flock_read.safetensors",
     "content_read.safetensors",
@@ -963,6 +973,12 @@ fn validate_checkpoint_selection(config: &LongConfig) -> Result<()> {
     if config.pair_rows.is_some() {
         return Err(invalid(
             "--init-from does not start the pair rows; --pair-rows trains from a fresh start",
+        ));
+    }
+    // claude-381: so does a vector read's zero weight.
+    if config.vector_read.is_some() {
+        return Err(invalid(
+            "--init-from does not start a vector read; the vector reads train from a fresh start",
         ));
     }
     if !checkpoint.is_dir() {
@@ -2333,7 +2349,11 @@ fn step_gradient(
             (!rows.is_empty()).then(|| (reads, table, rows, rows.len() as f64 / *all as f64))
         });
         let (loss, share, forward_grads) = with_training_forward(served, seed, step, || {
-            let loss = batch_loss(model, objective, &ids, &scored, &targets, hi - lo, served)?;
+            // claude-381: only this forward's credit, collected here and nowhere else.
+            crate::vector_reads::clear_credit();
+            let loss = crate::vector_reads::collecting(|| {
+                batch_loss(model, objective, &ids, &scored, &targets, hi - lo, served)
+            })?;
             let detached = loss.detach();
             let loss = match share {
                 Some(share) => loss.affine(share, 0.0)?,
@@ -2364,6 +2384,17 @@ fn step_gradient(
                         }
                         _ => loss,
                     }
+                }
+                None => loss,
+            };
+            // claude-381: a vector read's margin credit, at this forward's share of the windows
+            // (an average per window, where the cross-entropy's `share` is per scored row; a
+            // micro-batch skipped above for having no scored row adds no credit). With one
+            // forward a step, the weight is 1.
+            let loss = match crate::vector_reads::take_credit() {
+                Some(credit) => {
+                    let weight = (hi - lo) as f64 / windows.len() as f64;
+                    loss.add(&credit.affine(weight, 0.0)?)?
                 }
                 None => loss,
             };
@@ -2576,6 +2607,10 @@ fn check_carry_flags(config: &LongConfig) -> Result<()> {
         (config.address_memory.is_some(), "--address-memory"),
         (config.profile > 0, "--profile"),
         (config.opening_weight != 1, "--opening-weight"),
+        (
+            config.vector_read.is_some(),
+            "--starling-read, --prime-route-read and --state-flock-read",
+        ),
     ]
     .into_iter()
     .filter_map(|(on, name)| on.then_some(name))
@@ -3726,6 +3761,9 @@ fn unserved_reads() -> Vec<&'static str> {
     }
     if crate::e8_address::address_memory().is_some() {
         set.push("the address memory");
+    }
+    if crate::vector_reads::vector_read().is_some() {
+        set.push("the vector read");
     }
     if crate::pair_rows::pair_rows().is_some() {
         set.push("the pair rows");
@@ -13484,6 +13522,9 @@ pub struct RecallReading {
     /// heads on.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hamming_type_weight_mean_abs: Option<Vec<f64>>,
+    /// claude-385: the vector read's choices and its cut reading, when the run has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vector_read: Option<VectorReadReading>,
 }
 
 /// The mean, least and greatest of a group of gains.
@@ -14362,25 +14403,72 @@ pub fn run_recall(
     let mut opening = start_opening(config, device)?;
     // The prompt register (claude-155), when on: its own optimizer, applied inside the trunk.
     let mut register = start_register(config, device)?;
+    // claude-385: a vector read (claude-381), when on, as `run_long` starts it: identity
+    // rotations and a zero weight, its own optimizer, its margin credit in the loss.
+    let mut vread = match config.vector_read {
+        Some(arm) => {
+            let layers = model.config.layers();
+            let depth = arm.depth.unwrap_or(layers);
+            if depth > layers {
+                return Err(invalid(format!(
+                    "--vector-read-depth {depth} is past the model's {layers} layers"
+                )));
+            }
+            let read = crate::vector_reads::VectorRead::new(
+                arm.kind,
+                depth,
+                config.width,
+                arm.margin,
+                arm.credit,
+                device,
+            )?
+            .with_stream_grad(arm.stream_grad);
+            crate::vector_reads::set_vector_read(Some(read.clone()));
+            println!(
+                "[vread] {} read after layer {depth} of {layers}, margin {}, credit x {}, stream \
+                 gradient {}",
+                arm.kind.name(),
+                arm.margin,
+                arm.credit,
+                if arm.stream_grad { "on" } else { "off" }
+            );
+            let opt = crate::flock_read::FlockAdamW::for_vars(&read.variables())?;
+            Some((read, opt))
+        }
+        None => None,
+    };
     let mut opt_main = StackAdamW::new(&model, hs::SHEET_WEIGHT_DECAY, hs::SHEET_CLIP)?;
     let mut opt_decay = StackAdamW::new(&model, 0.0, hs::SHEET_CLIP)?;
     let log = out.join("recall.jsonl");
     let (mut train_seconds, mut loss_sum, mut loss_steps) = (0.0f64, 0.0f64, 0usize);
     let (mut attract_sum, mut attract_steps) = (0.0f64, 0usize);
     let reading = |step: usize, loss: Option<f64>, seconds: f64, attract: Option<f64>| -> Result<()> {
-        let (rows, hits, query, picks) = if form.query {
-            let refs: Vec<&CausalWindow> = held_queries.iter().map(|(w, _)| w).collect();
-            let picks = recall_picks(&model, &refs, config.seed)?;
-            let counts = count_queries(&held_queries, &picks)?;
-            let (mut rows, mut hits) = ([0usize; 4], [0usize; 4]);
-            for b in 0..2 {
-                rows[2 + b] = counts.rows[b].iter().sum();
-                hits[2 + b] = counts.ask[b].iter().sum();
+        let score = || -> Result<RecallScore> {
+            Ok(if form.query {
+                let refs: Vec<&CausalWindow> = held_queries.iter().map(|(w, _)| w).collect();
+                let picks = recall_picks(&model, &refs, config.seed)?;
+                let counts = count_queries(&held_queries, &picks)?;
+                let (mut rows, mut hits) = ([0usize; 4], [0usize; 4]);
+                for b in 0..2 {
+                    rows[2 + b] = counts.rows[b].iter().sum();
+                    hits[2 + b] = counts.ask[b].iter().sum();
+                }
+                (rows, hits, Some(counts), picks)
+            } else {
+                let (rows, hits) = recall_hits(&model, &held_out, config.seed)?;
+                (rows, hits, None, Vec::new())
+            })
+        };
+        // claude-385: with a vector read, its choice at each scored row, and the same held-out
+        // pass again with the read cut (eval only, `R^{-v}`).
+        let ((rows, hits, query, picks), vector_read) = match crate::vector_reads::vector_read() {
+            Some(read) => {
+                let (scored, chosen) = crate::vector_reads::recording_picks(&score)?;
+                let cut = crate::vector_reads::without_vector_read(&score)?;
+                let line = vector_read_reading(&read, &held_out, &held_queries, &chosen, cut)?;
+                (scored, Some(line))
             }
-            (rows, hits, Some(counts), picks)
-        } else {
-            let (rows, hits) = recall_hits(&model, &held_out, config.seed)?;
-            (rows, hits, None, Vec::new())
+            None => (score()?, None),
         };
         let readings = if form.readings {
             Some(recall_readings(&model, &held_out, &held_queries, &picks, config.seed)?)
@@ -14463,14 +14551,25 @@ pub fn run_recall(
                 ),
                 _ => None,
             },
+            vector_read,
         };
         println!(
             "[recall] step {step} hits {:?} of {:?} train {seconds:.0}s",
             line.hits, line.rows
         );
+        if let Some(v) = &line.vector_read {
+            println!(
+                "[vread] step {step}: read {:?} chose target {:?} other {:?}, cut hits {:?}, offset {:?}",
+                v.read, v.chose_target, v.chose_other, v.cut_hits, v.offset
+            );
+        }
         append_line(&log, &serde_json::to_string(&line)?)
     };
     reading(0, None, 0.0, None)?;
+    // claude-385: a Starling read's offset starts from the first training batch's address scale.
+    if vread.as_ref().is_some_and(|(read, _)| read.kind().is_starling()) {
+        crate::vector_reads::calibrate_next_offset();
+    }
     for step in 0..config.steps {
         let windows: Vec<CausalWindow> = (0..config.batch)
             .map(|b| {
@@ -14498,19 +14597,28 @@ pub fn run_recall(
             step + 1,
             false,
             || {
-                let loss = batch_loss(
-                    &model,
-                    config.objective,
-                    &ids,
-                    &scored,
-                    &targets,
-                    config.batch,
-                    false,
-                )?;
+                // claude-385: a vector read's credit, collected in this forward only.
+                crate::vector_reads::clear_credit();
+                let loss = crate::vector_reads::collecting(|| {
+                    batch_loss(
+                        &model,
+                        config.objective,
+                        &ids,
+                        &scored,
+                        &targets,
+                        config.batch,
+                        false,
+                    )
+                })?;
                 let value = f64::from(loss.to_scalar::<f32>()?);
                 if !value.is_finite() {
                     return Err(invalid(format!("non-finite recall loss at step {step}")));
                 }
+                // The logged loss is the task's alone; the credit joins the gradient.
+                let loss = match crate::vector_reads::take_credit() {
+                    Some(credit) => loss.add(&credit)?,
+                    None => loss,
+                };
                 // The task loss alone is the logged loss; the pull adds λ times its mean distance.
                 let pull = match (&hamming, pulls.is_empty()) {
                     (Some((reads, _)), false) => {
@@ -14556,6 +14664,9 @@ pub fn run_recall(
         if let Some((reg, opt)) = register.as_mut() {
             opt.step_vars(&reg.variables(), &grads, lr)?;
         }
+        if let Some((read, opt)) = vread.as_mut() {
+            opt.step_vars(&read.variables(), &grads, lr)?;
+        }
         opt_decay.update_filtered(&model, &grads, lr * config.decay_mult, |name| {
             name.ends_with("rec.decay")
         })?;
@@ -14592,7 +14703,134 @@ pub fn run_recall(
     if let Some(reg) = crate::flock_read_register::prompt_register() {
         reg.save(&directory)?;
     }
+    if let Some(read) = crate::vector_reads::vector_read() {
+        read.save(&directory)?;
+    }
     Ok(())
+}
+
+/// One held-out pass of the recall task: rows and hits per bucket, the two-class counts, and the
+/// picks the readings use.
+type RecallScore = ([usize; 4], [usize; 4], Option<QueryCounts>, Vec<u32>);
+
+/// claude-385: a vector read at one recall reading, on the held-out windows.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct VectorReadReading {
+    pub kind: String,
+    /// Scored rows per bucket (the `rows` layout: the two-class task at places 2 and 3) whose read
+    /// chose an earlier position at all; whose chosen position is followed by the scored target
+    /// (the asked value: the read picked the asked fact); and, two-class only, by the other
+    /// fact's value.
+    pub read: [usize; 4],
+    pub chose_target: [usize; 4],
+    pub chose_other: [usize; 4],
+    /// The held-out hits with the read cut (`R^{-v}`, the read unset for the pass), and the
+    /// two-class counts under the cut.
+    pub cut_hits: [usize; 4],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cut_query: Option<QueryCounts>,
+    pub weight_mean_abs: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<f64>,
+    /// The Starling offset the first training forward set from the address scale, at the
+    /// reading after it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub calibrated_offset: Option<f64>,
+    /// Over the training forwards since the last reading: rows with an earlier position, rows
+    /// that read, rows with a positive, rows that chose a positive, credit terms.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub train: Option<[f64; 5]>,
+}
+
+/// Count `chosen`, the read's choice (position + 1, 0 for none) at every row of the held-out
+/// windows in order, at each scored row: whether it read, and whether the chosen position is
+/// followed by the target (or, two-class, the other fact's value).
+pub fn count_read_choices(
+    held_out: &[(CausalWindow, Vec<usize>)],
+    held_queries: &[(CausalWindow, Vec<RecallQuery>)],
+    chosen: &[u32],
+) -> Result<([usize; 4], [usize; 4], [usize; 4])> {
+    // (window index, scored offset, target, other value, place): the pass scores one task's
+    // windows, the two-class task's when it has any.
+    let mut rows: Vec<(usize, usize, u32, Option<u32>, usize)> = Vec::new();
+    let windows: Vec<&CausalWindow> = if held_queries.is_empty() {
+        for (w, (window, buckets)) in held_out.iter().enumerate() {
+            let scored = window.scored_offsets.iter().zip(&window.scored_targets).zip(buckets);
+            for ((&t, &v), &b) in scored {
+                rows.push((w, t, v, None, b));
+            }
+        }
+        held_out.iter().map(|(w, _)| w).collect()
+    } else {
+        for (w, (_, queries)) in held_queries.iter().enumerate() {
+            for q in queries {
+                rows.push((w, q.scored_offset, q.ask_value, Some(q.other_value), 2 + q.bucket));
+            }
+        }
+        held_queries.iter().map(|(w, _)| w).collect()
+    };
+    if chosen.len() != windows.len() * SHEET_CONTEXT {
+        return Err(invalid(format!(
+            "{} recorded choices for {} held-out windows of {SHEET_CONTEXT}",
+            chosen.len(),
+            windows.len()
+        )));
+    }
+    let (mut read, mut target, mut other) = ([0usize; 4], [0usize; 4], [0usize; 4]);
+    for (w, t, v, o, place) in rows {
+        let window = windows[w];
+        let s1 = chosen[w * SHEET_CONTEXT + t] as usize;
+        if s1 == 0 {
+            continue;
+        }
+        if s1 > t {
+            return Err(invalid(format!("a read at row {t} chose a later position {}", s1 - 1)));
+        }
+        read[place] += 1;
+        let next = window.input_ids[s1];
+        if next == v {
+            target[place] += 1;
+        } else if Some(next) == o {
+            other[place] += 1;
+        }
+    }
+    Ok((read, target, other))
+}
+
+/// claude-385: [`VectorReadReading`] of `read` from its recorded choices and the cut pass.
+fn vector_read_reading(
+    read: &crate::vector_reads::VectorRead,
+    held_out: &[(CausalWindow, Vec<usize>)],
+    held_queries: &[(CausalWindow, Vec<RecallQuery>)],
+    chosen: &[u32],
+    cut: RecallScore,
+) -> Result<VectorReadReading> {
+    let (reads, chose_target, chose_other) = count_read_choices(held_out, held_queries, chosen)?;
+    let train = match crate::vector_reads::take_stats() {
+        Some(s) => {
+            let get = |t: &Tensor| -> Result<f64> { Ok(f64::from(t.to_scalar::<f32>()?)) };
+            Some([
+                get(&s.rows)?,
+                get(&s.read_rows)?,
+                get(&s.positive_rows)?,
+                get(&s.chose_positive)?,
+                get(&s.hinge_pairs)?,
+            ])
+        }
+        None => None,
+    };
+    Ok(VectorReadReading {
+        kind: read.kind().name(),
+        read: reads,
+        chose_target,
+        chose_other,
+        cut_hits: cut.1,
+        cut_query: cut.2,
+        weight_mean_abs: read.weight_mean_abs()?,
+        offset: read.offset_value()?.map(f64::from),
+        calibrated_offset: crate::vector_reads::take_calibrated_offset().map(f64::from),
+        train,
+    })
 }
 
 /// The pinned tokenizer.
@@ -15212,6 +15450,12 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             "--address-band sets the address memory's band; turn the memory on with --address-memory",
         ));
     }
+    // claude-381: a float reference read; the export refuses it, so it cannot train as served.
+    if config.vector_read.is_some() && config.train_as_served {
+        return Err(invalid(
+            "a vector read is a float reference read the export refuses; it does not train as served",
+        ));
+    }
     if config.pair_rows == Some(0) {
         return Err(invalid("--pair-rows wants a minimum of 1 or more"));
     }
@@ -15386,6 +15630,40 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             );
             let opt = crate::flock_read::FlockAdamW::for_vars(&memory.variables())?;
             Some((memory, opt))
+        }
+        None => None,
+    };
+    // A vector read (claude-381), when on: identity rotations and a zero weight, its own
+    // optimizer, applied inside the trunk after its layer; its margin credit joins the loss.
+    let mut vread = match config.vector_read {
+        Some(arm) => {
+            let layers = model.config.layers();
+            let depth = arm.depth.unwrap_or(layers);
+            if depth > layers {
+                return Err(invalid(format!(
+                    "--vector-read-depth {depth} is past the model's {layers} layers"
+                )));
+            }
+            let read = crate::vector_reads::VectorRead::new(
+                arm.kind,
+                depth,
+                config.width,
+                arm.margin,
+                arm.credit,
+                device,
+            )?
+            .with_stream_grad(arm.stream_grad);
+            crate::vector_reads::set_vector_read(Some(read.clone()));
+            println!(
+                "[vread] {} read after layer {} of {}, margin {}, credit x {}",
+                arm.kind.name(),
+                depth,
+                layers,
+                arm.margin,
+                arm.credit
+            );
+            let opt = crate::flock_read::FlockAdamW::for_vars(&read.variables())?;
+            Some((read, opt))
         }
         None => None,
     };
@@ -15681,6 +15959,21 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             append_line(&out.join("address.jsonl"), &serde_json::to_string(&line)?)?;
             address.save(&directory)?;
         }
+        // The vector read (claude-381): its counts over the training forwards since the last
+        // checkpoint, then the read.
+        if let Some(read) = crate::vector_reads::vector_read() {
+            if let Some(stats) = crate::vector_reads::take_stats() {
+                let get = |t: &Tensor| -> Result<f64> { Ok(f64::from(t.to_scalar::<f32>()?)) };
+                let (rows, read_rows) = (get(&stats.rows)?, get(&stats.read_rows)?);
+                let (positive, chose) = (get(&stats.positive_rows)?, get(&stats.chose_positive)?);
+                println!(
+                    "[vread] step {step}: {} read {read_rows:.0} of {rows:.0} rows, positive rows {positive:.0}, chose a positive {chose:.0}, credit terms {:.0}",
+                    read.kind().name(),
+                    get(&stats.hinge_pairs)?
+                );
+            }
+            read.save(&directory)?;
+        }
         // The pair rows (claude-370), at the values this checkpoint holds.
         if let Some(rows) = crate::pair_rows::pair_rows() {
             rows.save(&directory)?;
@@ -15698,6 +15991,11 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     };
 
     checkpoint(&model, 0, None, 0.0)?;
+    // claude-385: a Starling read's offset starts from the first training batch's address scale,
+    // after the step-0 checkpoint's DEV panel.
+    if vread.as_ref().is_some_and(|(read, _)| read.kind().is_starling()) {
+        crate::vector_reads::calibrate_next_offset();
+    }
     let mut order = epoch_order(usable.len(), config.seed, 0);
     let mut cursor = 0usize;
     let mut epoch = 0u64;
@@ -15861,6 +16159,10 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         // same gradient, so each steps at the rate over the block count.
         if let Some((address, opt)) = address.as_mut() {
             opt.step_vars(&address.variables(), &grads, lr * address.rate())?;
+        }
+        // The vector read (claude-381), at the trainer's rate.
+        if let Some((read, opt)) = vread.as_mut() {
+            opt.step_vars(&read.variables(), &grads, lr)?;
         }
         // The pair rows (claude-370), at the trainer's rate, only on a step that read a bag.
         if let Some((rows, opt)) = pair.as_mut() {
@@ -16651,6 +16953,45 @@ mod tests {
         assert_eq!(got, expected);
     }
 
+    /// claude-385: a read's choice counts at the scored rows. Two-class: a pick of the asked
+    /// fact's value position is the target, of the other fact's the other, of a filler a read
+    /// only, none nothing. Key-again: a pick of the value's first position is the target. A short
+    /// recording and a later position are refused.
+    #[test]
+    fn read_choices_count_the_asked_fact_at_the_scored_rows() {
+        let held_queries = vec![recall_query_window(7, 0, SHEET_CONTEXT, 4).unwrap()];
+        let qs = &held_queries[0].1;
+        let mut chosen = vec![0u32; SHEET_CONTEXT];
+        chosen[qs[0].scored_offset] = qs[0].ask_value_pos as u32;
+        chosen[qs[1].scored_offset] = qs[1].other_value_pos as u32;
+        chosen[qs[2].scored_offset] = 1;
+        let (read, target, other) = count_read_choices(&[], &held_queries, &chosen).unwrap();
+        let (mut want_read, mut want_target, mut want_other) = ([0usize; 4], [0usize; 4], [0usize; 4]);
+        want_read[2 + qs[0].bucket] += 1;
+        want_read[2 + qs[1].bucket] += 1;
+        want_read[2 + qs[2].bucket] += 1;
+        want_target[2 + qs[0].bucket] += 1;
+        want_other[2 + qs[1].bucket] += 1;
+        assert_eq!((read, target, other), (want_read, want_target, want_other));
+
+        let held_out = vec![recall_window(7, 0, SHEET_CONTEXT, 4).unwrap()];
+        let (window, buckets) = &held_out[0];
+        let (t, v) = (window.scored_offsets[0], window.scored_targets[0]);
+        let first = window.input_ids.iter().position(|&id| id == v).unwrap();
+        assert!(first < t);
+        let mut chosen = vec![0u32; SHEET_CONTEXT];
+        chosen[t] = first as u32;
+        let (read, target, other) = count_read_choices(&held_out, &[], &chosen).unwrap();
+        let mut want = [0usize; 4];
+        want[buckets[0]] = 1;
+        assert_eq!((read, target, other), (want, want, [0; 4]));
+
+        assert!(count_read_choices(&held_out, &[], &chosen[1..]).is_err());
+        chosen[t] = t as u32 + 1;
+        let later = count_read_choices(&held_out, &[], &chosen).unwrap_err().to_string();
+        assert!(later.contains("later position"), "{later}");
+    }
+
     /// claude-328's I-2 and I-3 on every structural rule, for both forms: the query token, the
     /// bijection, one write per relation, the target, 4 targets, the ranges, the distances and
     /// the tails.
@@ -17390,6 +17731,7 @@ mod tests {
             pair_rows: None,
             pair_weight: false,
             pair_weight_boost: false,
+            vector_read: None,
         }
     }
 
@@ -24881,6 +25223,16 @@ mod tests {
         served.train_as_served = true;
         let refused = check_carry_flags(&served).unwrap_err().to_string();
         assert!(refused.contains("--train-as-served"), "{refused}");
+        let mut read = on.clone();
+        read.vector_read = Some(crate::vector_reads::VectorReadArm {
+            kind: crate::vector_reads::VectorReadKind::PrimeRoute,
+            depth: None,
+            margin: 0.0,
+            credit: 0.0,
+            stream_grad: false,
+        });
+        let refused = check_carry_flags(&read).unwrap_err().to_string();
+        assert!(refused.contains("--prime-route-read"), "{refused}");
     }
 }
 
