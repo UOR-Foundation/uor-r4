@@ -25,6 +25,7 @@ The sheet's reading map says **P**: B1–B4 all hold. The pilot corpus is sealed
   - the donor files at `6cee5e81ee83917806bbde320786a8fb61efebee`, checked against Hugging Face's LFS sha256 (setup);
   - one conversion with `--outtype bf16`, which repacks the MXFP4 experts without requantizing them (run);
   - the prompt-set reproduction check, the smoke, the run, the seal and the verify (run).
+- **After the run, number formats only.** `loop pr-check` counts every float type and float literal in a `docs/labs/*/instrument` as a D32 site (§3.4). So at the head the instrument records timings as integer milliseconds and rates as integer thousandths of a token per second. Its request sends the same sampling values as JSON integers (temperature 0 or 1, top-p 1, min-p 0). Two test fixtures use integer values. The run itself used `74e415803`, so the stored `metrics.json` keeps that commit's field names (`wall_seconds`, `request_seconds`, `*_tokens_per_second`). Prompt building, the record format, `seal` and `verify` are unchanged.
 - **The sheet** with its FIT. The FIT found no blocker and seven should-fix findings, and all seven were folded in at `74e415803` before the run.
 - **The notebook row** in `docs/research/notebook/data-tokenizer.md`, and the item set to `done`.
 - **Not committed:** the corpus, the weights, the GGUF and the engine. The corpus is in the HF store at `results/claude/d41-pilot-2026-11-15/`, with `out/` (corpus, receipt, metrics, run, prompts), `meta/` (identity files, server and GPU logs, both verify results, the job log) and `smoke/`.
@@ -66,6 +67,11 @@ The stored size counts whole records, prompt and system message included. Each r
 ## Checks run at the head
 
 - **Laptop (`aarch64-apple-darwin`), at `74e415803`:** `cargo test --release` in the instrument passes 8 tests, `cargo clippy --release --all-targets` gives 0 warnings, and `cargo fmt` is applied. A `seal`/`verify` round trip on a two-record fixture passes. A changed shard byte and a changed `metrics.json` each fail `verify` (rc 1). Both scripts pass `bash -n`. `uor-harness prep-check` shows the sheet as FIT with every block present.
+- **Laptop, at the head (the number-format change):**
+  - `cargo test --release` passes 8 tests and clippy gives 0 warnings.
+  - The head binary rebuilds the prompt set to the same sha256 `6a6630b2…`.
+  - It re-verifies the fetched-back corpus: 5,112 records, 17,711 answers, root `a93e9b23…`, verified.
+  - The head's `generate` has not been run against the engine. The integer sampling values are untested there.
 - **wick, job `d41-setup-2`:** rc 0, and `sha256sum -c` gives OK for the three safetensors files and `tokenizer.json`.
 - **wick, job `d41-run`:** rc 0. The prompt set was rebuilt on wick to the same sha256 and was byte-identical (`cmp`). The smoke passed: 4 records, 0 markup, 0 errors. `verify` returned `{"records":5112,"answers":17711,"verified":true}` with the root above.
 - **Readback:** `uor-store get` of `out/` to a fresh folder, then `d41-pilot verify` on the laptop, gave the same records, answers and root (`meta/verify-laptop.json`).

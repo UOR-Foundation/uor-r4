@@ -158,7 +158,7 @@ struct Answer {
     markup: bool,
     completion_tokens: u64,
     prompt_tokens: u64,
-    seconds: f64,
+    millis: u64,
 }
 
 fn post(agent: &ureq::Agent, url: &str, body: &Value) -> Res<Value> {
@@ -186,13 +186,14 @@ fn ask(
     seed: u32,
     max_tokens: u64,
 ) -> Res<Answer> {
-    let temperature = if alt == 0 { 0.0 } else { 1.0 };
+    // JSON integers: the engine reads them as the same sampling values (0 greedy, 1 as released).
+    let temperature: u64 = if alt == 0 { 0 } else { 1 };
     let body = json!({"model": "donor", "messages": messages, "max_tokens": max_tokens,
-        "temperature": temperature, "top_p": 1.0, "top_k": 0, "min_p": 0.0, "seed": seed,
+        "temperature": temperature, "top_p": 1, "top_k": 0, "min_p": 0, "seed": seed,
         "chat_template_kwargs": {"reasoning_effort": "low"}, "stream": false});
     let t = Instant::now();
     let v = post(agent, &format!("{server}/v1/chat/completions"), &body)?;
-    let seconds = t.elapsed().as_secs_f64();
+    let millis = t.elapsed().as_millis() as u64;
     let choice = &v["choices"][0];
     let content = choice["message"]["content"]
         .as_str()
@@ -209,7 +210,7 @@ fn ask(
         markup,
         completion_tokens,
         prompt_tokens,
-        seconds,
+        millis,
     })
 }
 
@@ -236,7 +237,7 @@ struct Tally {
     kept_bytes: u64,
     prompt_tokens: u64,
     distinct: [u64; 5],
-    seconds: Vec<f64>,
+    millis: Vec<u64>,
     by_kind: BTreeMap<String, (u64, u64)>,
 }
 
@@ -250,7 +251,7 @@ fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
     let max_tokens: u64 = num(m, "max-tokens", 1024)?;
     let shard_records: usize = num(m, "shard-records", 512)?;
     // The sheet's hard stop: no new prompt is dispatched after this many seconds.
-    let max_seconds: f64 = num(m, "max-seconds", 10_800.0)?;
+    let max_seconds: u64 = num(m, "max-seconds", 10_800)?;
     if budget == 0 || parallel == 0 || shard_records == 0 {
         return Err("--budget, --parallel and --shard-records must be positive".into());
     }
@@ -283,7 +284,7 @@ fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
             let agent: ureq::Agent =
                 ureq::Agent::config_builder().timeout_global(Some(Duration::from_secs(900))).build().into();
             loop {
-                if generated.load(Ordering::SeqCst) >= budget || t0.elapsed().as_secs_f64() >= max_seconds {
+                if generated.load(Ordering::SeqCst) >= budget || t0.elapsed().as_secs() >= max_seconds {
                     break;
                 }
                 let idx = next.fetch_add(1, Ordering::SeqCst);
@@ -303,7 +304,7 @@ fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
                             t.truncated += a.truncated as u64;
                             t.markup += a.markup as u64;
                             t.prompt_tokens += a.prompt_tokens;
-                            t.seconds.push(a.seconds);
+                            t.millis.push(a.millis);
                             let kind = p["kind"].as_str().unwrap_or("?").to_string();
                             t.by_kind.entry(kind).or_default().1 += a.completion_tokens;
                             drop(t);
@@ -351,7 +352,7 @@ fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
         h.join()
             .map_err(|_| "a worker thread panicked".to_string())?;
     }
-    let wall = t0.elapsed().as_secs_f64();
+    let wall_ms = (t0.elapsed().as_millis() as u64).max(1);
     let end_utc = utc_now();
     let dispatched = next.load(Ordering::SeqCst).min(set.len());
     let results = results.lock().unwrap_or_else(|e| e.into_inner());
@@ -370,23 +371,25 @@ fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
         write(&out.join(format!("shard-{i:04}.jsonl")), text.as_bytes())?;
         shard_count += 1;
     }
-    t.seconds
-        .sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let q = |f: f64| {
-        t.seconds
-            .get(((t.seconds.len() as f64 - 1.0) * f).round().max(0.0) as usize)
+    t.millis.sort_unstable();
+    // Nearest-rank quantile at `pct` percent, in integer milliseconds.
+    let q = |pct: usize| {
+        let n = t.millis.len();
+        t.millis
+            .get((n.saturating_sub(1) * pct + 50) / 100)
             .copied()
     };
     let gen = generated.load(Ordering::SeqCst);
+    // Rates in thousandths of a token per second, so every recorded number is an integer.
     let metrics = json!({
-        "wall_seconds": wall, "prompts_dispatched": dispatched, "records_kept": recs.len(),
+        "wall_ms": wall_ms, "prompts_dispatched": dispatched, "records_kept": recs.len(),
         "requests": t.requests, "generated_tokens": gen, "prompt_tokens": t.prompt_tokens,
-        "generated_tokens_per_second": gen as f64 / wall,
+        "generated_millitokens_per_second": gen * 1_000_000 / wall_ms,
         "kept_answer_tokens": t.kept_tokens, "kept_answer_bytes": t.kept_bytes,
-        "kept_answer_tokens_per_second": t.kept_tokens as f64 / wall,
+        "kept_answer_millitokens_per_second": t.kept_tokens * 1_000_000 / wall_ms,
         "truncated_answers": t.truncated, "markup_answers": t.markup, "tokenize_errors": t.tokenize_errors, "prompts_with_no_answer": t.empty_prompts,
         "prompts_by_distinct_answers": {"0": t.distinct[0], "1": t.distinct[1], "2": t.distinct[2], "3": t.distinct[3], "4": t.distinct[4]},
-        "request_seconds": {"p50": q(0.5), "p95": q(0.95), "max": t.seconds.last()},
+        "request_ms": {"p50": q(50), "p95": q(95), "max": t.millis.last()},
         "by_kind": t.by_kind.iter().map(|(k, (n, g))| (k.clone(), json!({"prompts": n, "generated_tokens": g}))).collect::<BTreeMap<_, _>>(),
         "errors": errors.len(), "error_sample": errors.iter().take(5).collect::<Vec<_>>(),
         "shards": shard_count,
@@ -395,12 +398,12 @@ fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
         "utc_start": start_utc, "utc_end": end_utc,
         "prompts_file": prompts_path.file_name().and_then(|s| s.to_str()), "prompts_sha256": sha256_hex(&prompt_bytes),
         "prompts_in_set": set.len(), "prompts_dispatched": dispatched,
-        "stop_rule": format!("stop dispatching once generated tokens >= {budget} or {max_seconds} s have passed; finish prompts in flight"), "stopped_by_time": wall >= max_seconds,
+        "stop_rule": format!("stop dispatching once generated tokens >= {budget} or {max_seconds} s have passed; finish prompts in flight"), "stopped_by_time": wall_ms >= max_seconds * 1000,
         "parallel_requests": parallel, "shard_records": shard_records,
         "sampling": {
             "answers_per_prompt": 4,
-            "alt_0": {"temperature": 0.0, "note": "greedy"},
-            "alt_1_to_3": {"temperature": 1.0, "top_p": 1.0, "top_k": 0, "min_p": 0.0},
+            "alt_0": {"temperature": 0, "note": "greedy"},
+            "alt_1_to_3": {"temperature": 1, "top_p": 1, "top_k": 0, "min_p": 0},
             "max_tokens": max_tokens, "reasoning_effort": "low",
             "seed_rule": format!("seed(alt a of prompt index i) = ({seed} + 4*i + a) mod 2^32"),
             "base_seed": seed,

@@ -166,11 +166,11 @@ mod tests {
         assert!(check_record(&good).is_ok());
         for extra in ["logprobs", "probs", "score", "rank", "top_logprobs"] {
             let mut bad = good.clone();
-            bad[extra] = json!([0.5]);
+            bad[extra] = json!([5]);
             assert!(check_record(&bad).is_err(), "{extra} passed");
         }
         let mut bad = good.clone();
-        bad["messages"][0]["logprob"] = json!(-0.1);
+        bad["messages"][0]["logprob"] = json!(-1);
         assert!(check_record(&bad).is_err());
         let mut bad = good.clone();
         bad["answers"] = json!(["b", "a"]);
