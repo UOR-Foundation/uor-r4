@@ -26,7 +26,8 @@ records, and does not touch `crates/uor-r4-integer/src/discrete_d11.rs`.
 ## Native state schema
 
 The 48 bytes: four little-endian Q31 gate words, `epoch: u64`, `step_shift: u32`, version `1`,
-three zero bytes. Training updates the gate, epoch and step shift in place; serialization is a
+three zero bytes. Training updates the gate and epoch in place; the step shift is a fixed
+hyperparameter carried unchanged. Serialization is a
 byte copy. No float master and no parallel state.
 
 ## Shared operators and implementations
