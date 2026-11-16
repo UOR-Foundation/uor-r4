@@ -108,7 +108,7 @@ __device__ bool route_vector(const int* input,const U* ids,const U* routes,const
     return true;
 }
 // ---- Flock & Relation read (Claude; Antigravity ReadSpec::Relation extension) ----
-// Device spec words appended after s[0..7]: s[8] read mode (0 Route, 1 Flock, 2 Relation, 3 Pick),
+// Device spec words appended after s[0..7]: s[8] read mode (0 Route, 1 Flock, 2 Relation),
 // s[9] kept K, s[10] sweeps S, s[12] snap scale (0 snap_n, 1 unit snap_1 control, 2 raw C_raw control:
 // the output block is the unsnapped Z^8 residual u, traced output root ABSENT; 1 and 2 Flock/Relation only),
 // s[13] route bypass (0 normal Route, 1 R-Off query-block bypass; Route only, refuses kind 0 proposals).
@@ -350,7 +350,11 @@ __device__ bool flock_vector(const int* input,const U* ids,const int* gates,cons
     }
     return true;
 }
+// PICK-BEGIN
 // ---- Pick read (Claude, claude-408) ----
+// s[8] = 3. The lines between PICK-BEGIN and PICK-END are left out of the
+// generated bucket writer (bucket_source.rs), whose text stays the one its GPU
+// receipts qualified; the host refuses a Pick model there.
 // One row, t = length-1. code(x): bit 2d if x[d]>0, bit 2d+1 if x[d]<0, so for
 // orbit roots L1(a-b) = 2*popc(code(a)^code(b)). T[p][b] is block b of tok(p)
 // carried to t by s[14] (3 identity, 1 causal prefix holonomy). For 1<=p<=t-1,
@@ -432,10 +436,13 @@ __device__ bool pick_vector(const int* input,const U* ids,const int* gates,const
     }
     return true;
 }
-// Mode dispatch: Route (default), Flock, Relation or Pick. A Route proposal in
-// Flock/Relation/Pick mode and a Gate proposal in Route mode are refused (status 9).
+// PICK-END
+// Mode dispatch: Route (default), Flock, or Relation. A Route proposal in
+// Flock/Relation mode and a Gate proposal in Route mode are refused (status 9).
 __device__ bool read_vector(const int* input,const U* ids,const U* routes,const int* gates,const U* plan,const U* g,const U* s,const U* position_steps,U row,U kind,U index,U candidate,int* output,U* trace) {
+// PICK-BEGIN Pick dispatches first; a Route proposal in Pick mode is refused too (status 9).
     if(s[8]==MODE_PICK)return pick_vector(input,ids,gates,plan,g,s,position_steps,row,kind,index,candidate,output,trace);
+// PICK-END
     if(s[8]==MODE_FLOCK || s[8]==MODE_RELATION)return flock_vector(input,ids,gates,plan,g,s,position_steps,row,kind,index,candidate,output,trace);
     return route_vector(input,ids,routes,plan,g,s,row,kind,index,candidate,output,trace);
 }

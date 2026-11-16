@@ -22,6 +22,8 @@ pub mod coverage_census;
 #[cfg(all(test, feature = "cuda"))]
 mod cpu_oracle_parity;
 #[cfg(all(test, feature = "cuda"))]
+mod pick_read_cuda;
+#[cfg(all(test, feature = "cuda"))]
 mod student_throughput;
 pub mod d11_export;
 pub mod decomposition;
