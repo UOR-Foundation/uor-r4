@@ -1039,8 +1039,8 @@ fn audit_with(plan: &Plan, coder: &Coder, threads: usize, bloom_log2: u32, opts:
                 return Ok(());
             }
             cnt.add(&t);
+            prefix(&t.tokens, &mut buf);
             if let Some(s) = finder {
-                prefix(&t.tokens, &mut buf);
                 if s.holds(&dev_test, &t.tokens, &buf) {
                     found.push(t.id.clone());
                 }
@@ -1052,7 +1052,6 @@ fn audit_with(plan: &Plan, coder: &Coder, threads: usize, bloom_log2: u32, opts:
                     sets[1].mark(&g);
                 }
             });
-            prefix(&t.tokens, &mut buf);
             for s in &spans {
                 s.mark(&dev_test, &t.tokens, &buf);
             }

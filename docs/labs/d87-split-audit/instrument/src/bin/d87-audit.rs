@@ -78,6 +78,9 @@ fn run() -> Result<(), String> {
         applied_sha = Some(hex(&Sha256::digest(&list)));
         let text = String::from_utf8(list).map_err(|e| format!("{}: {e}", file.display()))?;
         opts.drop = text.lines().map(str::to_string).collect::<HashSet<_>>();
+        if opts.drop.is_empty() {
+            return Err(format!("{}: the drop list is empty", file.display()));
+        }
         if opts.drop.len() != text.lines().count() || opts.drop.contains("") {
             return Err(format!("{}: a drop id is empty or listed twice", file.display()));
         }
