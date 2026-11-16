@@ -15144,6 +15144,11 @@ pub struct PayloadProbeSettings {
     /// `recall_query_window(seed, i, ..)` at the run's own seed, instead of the held-out ones;
     /// needs `native_dump`. The payload-probe passes stay on the held-out windows.
     pub native_train_windows: Option<u64>,
+    /// claude-398: pin the dump's stream scale `e_x` to the TRAIN dump's, so a
+    /// held dump and a TRAIN dump of the same state carry the same Q31 read;
+    /// needs `native_dump`. The held windows are a subset of the state's stream,
+    /// so the TRAIN scale leaves them headroom.
+    pub native_e_x: Option<i32>,
     /// claude-395: when set, a file of little-endian `u32` picks, one per held-out row in row
     /// order (window × context + offset, a window-local position + 1, 0 for none), that every
     /// pass with the read uses as the hard copy's first pick
@@ -15629,7 +15634,8 @@ pub fn recall_payload_probe(
         };
         let replayed = train.as_deref().unwrap_or(&held[..]);
         let (state, windows) = native_replay_pass(&model, replayed, settings.seed)?;
-        let (summary, dump) = crate::native_replay::replay_with_dump(&state, &windows)?;
+        let (summary, dump) =
+            crate::native_replay::replay_with_dump_at(&state, &windows, settings.native_e_x)?;
         if let Some(path) = &settings.native_dump {
             let dump = dump.ok_or_else(|| invalid("a refused state has no read to dump"))?;
             if dump.batch != replayed.len() || dump.time != SHEET_CONTEXT {

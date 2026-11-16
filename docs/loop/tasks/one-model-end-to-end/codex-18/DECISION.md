@@ -51,9 +51,12 @@ Keep bar 4b and record its `chose_target` half as an instrument fault in the 397
 | TRAIN | 2 | **6144/6144** | no picks saved |
 
 The current other-fact rule remains exact on `K=1` in the same runs. The target is determined by the
-stream, and the salience read does not follow it (0.004), so the control separates the two. Sheet:
-`docs/harness/prep/one-model-end-to-end-c2-prime-control-2026-11-16.md`. The GPU arm stays NOT RUN
-pending a sheet addendum and a non-author FIT.
+stream, and the salience read does not follow it (0.004). The **GPU arm** trained the native gate
+read on this target (ext-s1 shift 8, ext-s2 shift 4, 512 steps): it reaches **0.142 / 0.139** on the
+768 rows with a previous fact, against the rule's **1.000**. The gate fails the control; the rule
+passes. Sheet:
+`docs/harness/prep/one-model-end-to-end-c2-prime-control-2026-11-16.md`. The non-author FIT reviewed
+the run (FIT WITH CHANGES; the bar-denominator, dump-scale and wording fixes are applied).
 
 ## Recommendation
 

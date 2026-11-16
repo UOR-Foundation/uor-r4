@@ -1,7 +1,8 @@
 # C2′ control: the fact asked in the previous slot (2026-11-16)
 
-Status: **host count PASS; GPU arm NOT RUN.** Owner approved the control replacement on
-2026-11-16 (`docs/loop/tasks/one-model-end-to-end/codex-18/DECISION.md`).
+Status: **host count PASS; GPU arm RUN (one state per seed).** Owner approved the control
+replacement on 2026-11-16 (`docs/loop/tasks/one-model-end-to-end/codex-18/DECISION.md`). The gate read
+fails the determined control (0.142 / 0.139); the rule read passes the host count (1.000).
 
 ## Question
 
@@ -30,19 +31,38 @@ The current other-fact rule stays exact on every identifiable row in the same ru
 
 ## Bars
 
-- **Determined control.** A read trained on the previous slot's asked fact must pick it at the
-  A-ext bar (0.90 per bucket); the salience read is 0.004, so the two are separated.
-- **`chose_other` unchanged.** The C2′ other-fact half keeps its +0.10 over C0; the rule read is
-  exact on `K=1` (35/35, 12/12, 42/42, 8/8).
+- **Determined control.** A read trained on the previous slot's asked fact must pick it at >= 0.90
+  of the **768 rows that have a previous fact** (slots 1-3, 3 per window; >= 692/768 held). Per
+  bucket, the bar is 0.90 of the **nonzero-target rows** (seed 1: 341/378 and 351/390): slot 0 has
+  no previous fact and stays in the trainer's `n`, so 0.90 of `n` is unreachable. The salience read
+  is 0.004.
+- **`chose_other` in this arm is the asked fact.** The trainer's `chose_other` column reads
+  `--eval-other .ask`, so it is the salience drift, not the C2′ other-fact half. The other-fact
+  half is measured separately by the rule read (exact on `K=1`: 35/35, 12/12, 42/42, 8/8).
 - **No bar moves before the GPU arm.** The host count only shows the target is determined and the
   salience read does not follow it.
 
-## GPU arm (pending, claude-398)
+## GPU arm (run 2026-11-16)
 
-Train the native read on the previous-slot target, both ext states, seeds 1 and 2, at that state's
-A-ext shift; the A-ext asked read is the salience baseline. Needs a sheet addendum and a non-author
-FIT (CHARTER §4.5); no compute until then. Stop rule: if the host count's separation (1.000 against
-0.004) does not survive the trainer's fit, report it and do not run the panel.
+Trained the native read on the previous-slot target: ext-s1 at shift 8, ext-s2 at shift 4, identity
+start, 512 steps, batch 64; the held dumps were regenerated at the TRAIN `e_x` (24) so the trainer's
+state check accepts the pair. Held results, step 512:
+
+| State | `chose_target` (previous) | per valid bucket | `chose_other` (asked, salience) |
+|---|---|---|---|
+| ext-s1 | 109/768 (0.142) | 43/378, 66/390 | 66/512, 65/512 |
+| ext-s2 | 107/768 (0.139) | 52/387, 55/381 | 55/512, 60/512 |
+
+The bar is 0.90 of the 768 rows with a previous fact (per bucket: 378/390 seed 1, 387/381 seed 2); the gate read is 0.142/0.139. The rule read
+finds the previous fact **768/768**, and the A-ext asked read 3/768. So the determined control
+separates the rule from the gate, and the gate fails it: another gate fit is not the mechanism.
+
+## Verdict
+
+The approved control **passes for the rule read** (host, 1.000) and **fails for the learned gate**
+(0.142/0.139). The C2′ `chose_target` half is now a determined target that the rule follows and the
+gate does not. The `chose_other` column here is the asked (salience) count, not the C2′ other-fact
+half; that half is measured separately by the rule (exact on `K=1`).
 
 ## Sources
 

@@ -28,13 +28,14 @@ struct Args {
     windows: usize,
     held: bool,
     picks: Option<PathBuf>,
+    prev_out: Option<PathBuf>,
     out: PathBuf,
 }
 
 fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
     let (mut seed, mut header, mut windows) = (None, None, None);
     let (mut held, mut train) = (false, false);
-    let (mut picks, mut out) = (None, None);
+    let (mut picks, mut prev_out, mut out) = (None, None, None);
     while let Some(flag) = argv.next() {
         let mut value = || argv.next().ok_or_else(|| format!("{flag} needs a value"));
         let number = |v: String| v.parse::<u64>().map_err(|e| format!("{flag} {v}: {e}"));
@@ -45,6 +46,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
             "--held" => held = true,
             "--train" => train = true,
             "--picks" => picks = Some(PathBuf::from(value()?)),
+            "--prev-out" => prev_out = Some(PathBuf::from(value()?)),
             "--out" => out = Some(PathBuf::from(value()?)),
             other => return Err(format!("unknown flag {other}")),
         }
@@ -58,6 +60,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
         windows: windows.ok_or("--windows is required")?,
         held,
         picks,
+        prev_out,
         out: out.ok_or("--out is required")?,
     })
 }
@@ -122,6 +125,7 @@ fn run() -> Result<(), String> {
     };
     let mut buckets = vec![Bucket::default(); RECALL_QUERY_BUCKETS.len()];
     let mut previous = Previous::default();
+    let mut prev_targets = vec![0u32; rows];
     for w in 0..args.windows {
         let (window, queries) = recall_query_window(seed, w as u64, CONTEXT, args.header)
             .map_err(|e| format!("window {w}: {e}"))?;
@@ -180,6 +184,7 @@ fn run() -> Result<(), String> {
                 });
                 previous.rows += 1;
                 previous.scan_found += u64::from(prev_fact == Some(prev.ask_value_pos));
+                prev_targets[w * CONTEXT + q.scored_offset] = prev.ask_value_pos as u32;
                 if let Some(picks) = &picks {
                     let pick = picks[w * CONTEXT + q.scored_offset] as usize;
                     if pick != 0 {
@@ -206,6 +211,13 @@ fn run() -> Result<(), String> {
                 b.k1_other += u64::from(hit);
             }
         }
+    }
+    if let Some(path) = &args.prev_out {
+        let mut bytes = Vec::with_capacity(prev_targets.len() * 4);
+        for value in &prev_targets {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
     }
     let report = serde_json::json!({
         "seed": args.seed,

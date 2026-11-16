@@ -29,6 +29,7 @@ struct Args {
     native_replay: bool,
     native_dump: Option<PathBuf>,
     native_train: Option<u64>,
+    native_e_x: Option<i32>,
     native_picks: Option<PathBuf>,
 }
 
@@ -39,6 +40,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut native_replay = false;
     let mut native_dump = None;
     let mut native_train = None;
+    let mut native_e_x = None;
     let mut native_picks = None;
     while let Some(flag) = argv.next() {
         let mut value = || argv.next().ok_or_else(|| format!("{flag} needs a value"));
@@ -52,6 +54,10 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
                     .parse::<u64>()
                     .map_err(|e| format!("--native-train {v}: {e}"))?;
                 native_train = Some(n);
+            }
+            "--native-e-x" => {
+                let v = value()?;
+                native_e_x = Some(v.parse::<i32>().map_err(|e| format!("--native-e-x {v}: {e}"))?);
             }
             "--native-picks" => native_picks = Some(PathBuf::from(value()?)),
             "--checkpoint" => checkpoint = Some(PathBuf::from(value()?)),
@@ -80,6 +86,9 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
     if native_train == Some(0) {
         return Err("--native-train reads at least one window".to_owned());
     }
+    if native_e_x.is_some() && native_dump.is_none() {
+        return Err("--native-e-x needs --native-dump: it pins the dump's scale".to_owned());
+    }
     if native_picks.is_some() && !first_only {
         return Err("--native-picks needs --first-only: they are the hard copy's pick".to_owned());
     }
@@ -96,6 +105,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
         native_replay,
         native_dump,
         native_train,
+        native_e_x,
         native_picks,
     })
 }
@@ -113,6 +123,7 @@ fn settings(
     native_replay: bool,
     native_dump: Option<PathBuf>,
     native_train: Option<u64>,
+    native_e_x: Option<i32>,
     native_picks: Option<PathBuf>,
 ) -> Result<PayloadProbeSettings, String> {
     let config = read_json(&run.join("config.json"))?;
@@ -141,6 +152,7 @@ fn settings(
         native_replay,
         native_dump,
         native_train_windows: native_train,
+        native_e_x,
         native_picks,
     })
 }
@@ -173,6 +185,7 @@ fn run() -> Result<(), String> {
         args.native_replay,
         args.native_dump,
         args.native_train,
+        args.native_e_x,
         args.native_picks,
     )?;
     let device = candle_core::Device::new_cuda(0).map_err(|e| e.to_string())?;

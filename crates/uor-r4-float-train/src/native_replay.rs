@@ -226,7 +226,7 @@ pub struct ReplaySummary {
 /// width other than 256, or no gain shift that fits) is an `Ok` summary with
 /// `refusal` set and no run.
 pub fn replay(model: &ReplayModel, windows: &[ReplayWindow]) -> Result<ReplaySummary> {
-    replay_inner(model, windows, false, None)
+    replay_inner(model, windows, false, None, None)
 }
 
 /// [`replay`], and also the barred operator with every window's converted words as one batched
@@ -236,8 +236,20 @@ pub fn replay_with_dump(
     model: &ReplayModel,
     windows: &[ReplayWindow],
 ) -> Result<(ReplaySummary, Option<Q31ReadDump>)> {
+    replay_with_dump_at(model, windows, None)
+}
+
+/// [`replay_with_dump`] with the stream scale pinned to a caller's `e_x`, so a
+/// held dump and a TRAIN dump of the same state carry the same Q31 read. The
+/// held windows of a state are a subset of its stream, so the TRAIN `e_x`
+/// leaves them headroom; a higher pinned `e_x` is refused by the weight check.
+pub fn replay_with_dump_at(
+    model: &ReplayModel,
+    windows: &[ReplayWindow],
+    e_x: Option<i32>,
+) -> Result<(ReplaySummary, Option<Q31ReadDump>)> {
     let mut dump = None;
-    let summary = replay_inner(model, windows, false, Some(&mut dump))?;
+    let summary = replay_inner(model, windows, false, Some(&mut dump), e_x)?;
     Ok((summary, dump))
 }
 
@@ -558,6 +570,7 @@ fn replay_inner(
     windows: &[ReplayWindow],
     swap_reference_gates: bool,
     dump: Option<&mut Option<Q31ReadDump>>,
+    e_x_override: Option<i32>,
 ) -> Result<ReplaySummary> {
     validate(model, windows)?;
     let width = model.width;
@@ -593,7 +606,9 @@ fn replay_inner(
     let max_table = table_f64.iter().fold(0f64, |m, e| m.max(e.abs()));
     let max_weight = weights_f64.iter().fold(0f64, |m, w| m.max(w.abs()));
 
-    let e_x = largest_exponent(max_x.max(max_we).max(max_16we), HEADROOM);
+    let e_x = e_x_override.unwrap_or_else(|| {
+        largest_exponent(max_x.max(max_we).max(max_16we), HEADROOM)
+    });
     let e_t = largest_exponent(max_table, Q31_UNIT);
     let Some(gain_shift) =
         (0..=MAX_GAIN_SHIFT).find(|&g| max_weight * pow2(31 + e_x - e_t - g as i32) <= Q31_UNIT)
@@ -1042,7 +1057,7 @@ mod tests {
         assert!(straight.control_4.a_pass && straight.control_4.b_pass);
         assert!(straight.bar_pass);
 
-        let swapped = run(replay_inner(&model, &captured, true, None).unwrap());
+        let swapped = run(replay_inner(&model, &captured, true, None, None).unwrap());
         assert!(!swapped.control_4.a_pass, "{:?}", swapped.control_4);
         assert!(swapped.control_4.disagreements_above_2bf > 0);
         assert!(!swapped.bar_pass);
