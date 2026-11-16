@@ -1041,6 +1041,209 @@ impl CpuDiscreteRelation {
     }
 }
 
+#[derive(Clone)]
+pub enum CpuDiscretePickTransport {
+    Identity,
+    /// `frames[b * 16 + root]` is a Cl(0,6) state index below 64.
+    PrefixHolonomy {
+        frames: Vec<u8>,
+    },
+}
+
+#[derive(Clone)]
+pub struct CpuDiscretePick {
+    token_blocks: Vec<Vec<[i32; 8]>>,
+    gates0: Vec<i32>,
+    transport: CpuDiscretePickTransport,
+    composition: Cl06FiniteCompositionTable,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CpuDiscretePickTrace {
+    pub blocks: Vec<[i32; 8]>,
+    pub pick: Option<usize>,
+    pub distance: Option<u32>,
+    pub ties: u32,
+    pub output_roots: Vec<usize>,
+}
+
+fn pick_code(block: &[i32; 8]) -> u16 {
+    let mut code = 0u16;
+    for (index, &value) in block.iter().enumerate() {
+        if value > 0 {
+            code |= 1 << (2 * index);
+        } else if value < 0 {
+            code |= 1 << (2 * index + 1);
+        }
+    }
+    code
+}
+
+impl CpuDiscretePick {
+    pub fn from_parts(
+        token_blocks: Vec<Vec<[i32; 8]>>,
+        gates0: Vec<i32>,
+        transport: CpuDiscretePickTransport,
+        composition: Cl06FiniteCompositionTable,
+    ) -> Result<Self> {
+        let blocks = token_blocks
+            .first()
+            .map(Vec::len)
+            .ok_or_else(|| invalid("Pick token table is empty"))?;
+        if blocks == 0 || token_blocks.iter().any(|row| row.len() != blocks) {
+            return Err(invalid("Pick token blocks are ragged"));
+        }
+        if gates0.len() != blocks {
+            return Err(invalid("Pick gate count differs from block count"));
+        }
+        if gates0.iter().any(|gate| !(-1..=1).contains(gate)) {
+            return Err(invalid("Pick gate outside -1..=1"));
+        }
+        if token_blocks
+            .iter()
+            .flatten()
+            .any(|block| root_id(block).is_none())
+        {
+            return Err(invalid("Pick block outside SpiralCore orbit"));
+        }
+        if let CpuDiscretePickTransport::PrefixHolonomy { frames } = &transport {
+            if frames.len() != 16 * blocks {
+                return Err(invalid("Pick frame count differs from 16 per block"));
+            }
+            if frames.iter().any(|&frame| frame >= 64) {
+                return Err(invalid("Pick frame outside the 64-state group"));
+            }
+        }
+        Ok(Self {
+            token_blocks,
+            gates0,
+            transport,
+            composition,
+        })
+    }
+
+    pub fn read(&self, prefix: &[u32]) -> Result<Vec<[i32; 8]>> {
+        self.read_traced(prefix).map(|trace| trace.blocks)
+    }
+
+    fn compose(&self, left: u8, right: u8) -> Result<u8> {
+        self.composition
+            .compose_index(left, right)
+            .ok_or_else(|| invalid("Pick frame composition absent"))
+    }
+
+    fn act(&self, action: u8, input: &[i32; 8]) -> Result<[i32; 8]> {
+        let root: [i8; 8] = std::array::from_fn(|index| (input[index] / 2) as i8);
+        let out = self
+            .composition
+            .state(action)
+            .ok_or_else(|| invalid("Pick frame state absent"))?
+            .apply_root_key(root)
+            .map_err(|error| invalid(error.to_string()))?;
+        Ok(out.map(|value| i32::from(value) * 2))
+    }
+
+    fn transported(&self, prefix: &[u32]) -> Result<Vec<Vec<[i32; 8]>>> {
+        let t = prefix.len() - 1;
+        let blocks = self.gates0.len();
+        let mut transported = vec![vec![[0i32; 8]; blocks]; t + 1];
+        for b in 0..blocks {
+            match &self.transport {
+                CpuDiscretePickTransport::Identity => {
+                    for (p, slot) in transported.iter_mut().enumerate() {
+                        slot[b] = self.token_blocks[prefix[p] as usize][b];
+                    }
+                }
+                CpuDiscretePickTransport::PrefixHolonomy { frames } => {
+                    let mut prefix_frames = Vec::with_capacity(t + 1);
+                    let mut acc = 0u8;
+                    for &token in prefix {
+                        let root = root_id(&self.token_blocks[token as usize][b])
+                            .ok_or_else(|| invalid("Pick block outside SpiralCore orbit"))?;
+                        acc = self.compose(frames[b * 16 + root], acc)?;
+                        prefix_frames.push(acc);
+                    }
+                    for (p, slot) in transported.iter_mut().enumerate() {
+                        let inverse = self
+                            .composition
+                            .inverse_index(prefix_frames[p])
+                            .ok_or_else(|| invalid("Pick frame inverse absent"))?;
+                        let holonomy = self.compose(prefix_frames[t], inverse)?;
+                        slot[b] = self.act(holonomy, &self.token_blocks[prefix[p] as usize][b])?;
+                    }
+                }
+            }
+        }
+        Ok(transported)
+    }
+
+    pub fn read_traced(&self, prefix: &[u32]) -> Result<CpuDiscretePickTrace> {
+        if prefix.is_empty() {
+            return Err(invalid("Pick read needs a non-empty prefix"));
+        }
+        if prefix
+            .iter()
+            .any(|&token| token as usize >= self.token_blocks.len())
+        {
+            return Err(invalid("Pick prefix token outside the table"));
+        }
+        let t = prefix.len() - 1;
+        let query = &self.token_blocks[prefix[t] as usize];
+        if t < 2 {
+            return Ok(CpuDiscretePickTrace {
+                blocks: query.clone(),
+                pick: None,
+                distance: None,
+                ties: 0,
+                output_roots: query
+                    .iter()
+                    .map(|block| root_id(block).expect("from_parts checked orbit roots"))
+                    .collect(),
+            });
+        }
+        let transported = self.transported(prefix)?;
+        let codes: Vec<Vec<u16>> = transported
+            .iter()
+            .map(|row| row.iter().map(pick_code).collect())
+            .collect();
+        let distances: Vec<u32> = (1..t)
+            .map(|p| {
+                (0..self.gates0.len())
+                    .map(|b| {
+                        (codes[p - 1][b] ^ codes[t - 1][b]).count_ones()
+                            + (codes[p][b] ^ codes[t][b]).count_ones()
+                    })
+                    .sum()
+            })
+            .collect();
+        let best = *distances.iter().min().expect("t >= 2 gives one candidate");
+        let pick = 1 + distances
+            .iter()
+            .rposition(|&distance| distance == best)
+            .expect("the minimum is present");
+        let ties = distances
+            .iter()
+            .filter(|&&distance| distance == best)
+            .count() as u32;
+        let mut blocks = Vec::with_capacity(query.len());
+        let mut output_roots = Vec::with_capacity(query.len());
+        for (b, (&gate, query_block)) in self.gates0.iter().zip(query).enumerate() {
+            let payload = &transported[pick + 1][b];
+            let u: [i32; 8] = std::array::from_fn(|d| query_block[d] + gate * payload[d]);
+            let root = snap_root(&u, 1 + gate.unsigned_abs() as usize)?;
+            blocks.push(orbit_root_coords(root as u8).map_err(|error| invalid(error.to_string()))?);
+            output_roots.push(root);
+        }
+        Ok(CpuDiscretePickTrace {
+            blocks,
+            pick: Some(pick),
+            distance: Some(best),
+            ties,
+            output_roots,
+        })
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CpuDiscreteProposalMode {
@@ -8445,5 +8648,137 @@ mod tests {
             .iter()
             .flat_map(|value| value.to_le_bytes())
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod pick_tests {
+    use super::*;
+
+    fn root(index: usize) -> [i32; 8] {
+        orbit_root_coords(index as u8).unwrap()
+    }
+
+    fn table() -> Vec<Vec<[i32; 8]>> {
+        (0..16)
+            .map(|i| vec![root(i), root((i * 3 + 1) % 16)])
+            .collect()
+    }
+
+    fn pick(gates0: Vec<i32>, transport: CpuDiscretePickTransport) -> Result<CpuDiscretePick> {
+        CpuDiscretePick::from_parts(
+            table(),
+            gates0,
+            transport,
+            cl06_finite_composition_table().unwrap(),
+        )
+    }
+
+    const PLANTED: [u32; 8] = [0, 1, 2, 3, 4, 5, 1, 2];
+
+    #[test]
+    fn root_l1_is_twice_code_hamming() {
+        for a in 0..16 {
+            for b in 0..16 {
+                let l1: u32 = root(a)
+                    .iter()
+                    .zip(root(b))
+                    .map(|(x, y)| x.abs_diff(y))
+                    .sum();
+                assert_eq!(
+                    l1,
+                    2 * (pick_code(&root(a)) ^ pick_code(&root(b))).count_ones()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn planted_copy_picks_the_match_and_gate_zero_keeps_the_query() {
+        let reader = pick(vec![1, 1], CpuDiscretePickTransport::Identity).unwrap();
+        let trace = reader.read_traced(&PLANTED).unwrap();
+        assert_eq!(trace.pick, Some(2));
+        assert_eq!(trace.distance, Some(0));
+        assert_eq!(trace.ties, 1);
+        let blocks = table();
+        for b in 0..2 {
+            let u: [i32; 8] = std::array::from_fn(|d| blocks[2][b][d] + blocks[3][b][d]);
+            let expected = snap_root(&u, 2).unwrap();
+            assert_eq!(trace.output_roots[b], expected);
+            assert_eq!(trace.blocks[b], root(expected));
+        }
+        let still = pick(vec![0, 0], CpuDiscretePickTransport::Identity).unwrap();
+        assert_eq!(still.read(&PLANTED).unwrap(), blocks[2]);
+    }
+
+    #[test]
+    fn tie_goes_to_the_latest_match() {
+        let reader = pick(vec![1, 1], CpuDiscretePickTransport::Identity).unwrap();
+        let trace = reader.read_traced(&[0, 1, 2, 3, 1, 2, 4, 1, 2]).unwrap();
+        assert_eq!(trace.pick, Some(5));
+        assert_eq!(trace.distance, Some(0));
+        assert_eq!(trace.ties, 2);
+    }
+
+    #[test]
+    fn prefix_holonomy_identity_frames_match_identity_and_nonzero_frames_move() {
+        let identity = pick(vec![1, 1], CpuDiscretePickTransport::Identity).unwrap();
+        let zero = pick(
+            vec![1, 1],
+            CpuDiscretePickTransport::PrefixHolonomy {
+                frames: vec![0; 32],
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            zero.read_traced(&PLANTED).unwrap(),
+            identity.read_traced(&PLANTED).unwrap()
+        );
+        let frames: Vec<u8> = (0..32).map(|i| (i % 63 + 1) as u8).collect();
+        let moved = pick(
+            vec![1, 1],
+            CpuDiscretePickTransport::PrefixHolonomy { frames },
+        )
+        .unwrap();
+        moved.read_traced(&PLANTED).unwrap();
+        let carried = moved.transported(&PLANTED).unwrap();
+        let plain = identity.transported(&PLANTED).unwrap();
+        assert_eq!(carried[PLANTED.len() - 1], plain[PLANTED.len() - 1]);
+        assert!(carried
+            .iter()
+            .flatten()
+            .zip(plain.iter().flatten())
+            .any(|(left, right)| pick_code(left) != pick_code(right)));
+    }
+
+    #[test]
+    fn from_parts_and_read_refusals() {
+        assert!(pick(vec![2, 1], CpuDiscretePickTransport::Identity).is_err());
+        let mut outside = table();
+        outside[3][1] = [1, 0, 0, 0, 0, 0, 0, 0];
+        assert!(CpuDiscretePick::from_parts(
+            outside,
+            vec![1, 1],
+            CpuDiscretePickTransport::Identity,
+            cl06_finite_composition_table().unwrap(),
+        )
+        .is_err());
+        assert!(pick(
+            vec![1, 1],
+            CpuDiscretePickTransport::PrefixHolonomy {
+                frames: vec![0; 31]
+            }
+        )
+        .is_err());
+        let mut frames = vec![0u8; 32];
+        frames[5] = 64;
+        assert!(pick(
+            vec![1, 1],
+            CpuDiscretePickTransport::PrefixHolonomy { frames }
+        )
+        .is_err());
+        let reader = pick(vec![1, 1], CpuDiscretePickTransport::Identity).unwrap();
+        assert!(reader.read(&[]).is_err());
+        assert!(reader.read(&[0, 16]).is_err());
     }
 }
