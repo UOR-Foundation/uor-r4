@@ -244,6 +244,67 @@ mod tests {
         assert_eq!(plain.last_relation_pick(), None);
     }
 
+    #[cfg(feature = "fbs-synthetic")]
+    #[test]
+    fn the_artifact_carries_the_relation_read() {
+        use crate::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth, FBS_SYNTH_SMALL};
+        use crate::stack::{
+            add_relation_uorlut01, export_fbs_trunk_uorlut01, IntegerStackModel, StackRelation,
+        };
+
+        let shape = FbsSynth {
+            vocab: 2_048,
+            context: 192,
+            ..FBS_SYNTH_SMALL
+        };
+        let snap = synthetic_fbs_trunk_with(20_261_720, shape);
+        let plain = export_fbs_trunk_uorlut01(&snap).expect("export a trunk");
+        let relation = StackRelation {
+            relations: [16, 32],
+            values: [528, 1_040],
+            query_shift: 16,
+            buckets: [(33, 96), (97, 180)],
+            header: 4,
+            header_last: 51,
+            scale: 16,
+        };
+        let bytes = add_relation_uorlut01(&plain, &relation).expect("add the relation");
+        assert!(
+            add_relation_uorlut01(&bytes, &relation).is_err(),
+            "a second relation is refused"
+        );
+        let bad = StackRelation {
+            scale: 0,
+            ..relation.clone()
+        };
+        assert!(
+            add_relation_uorlut01(&plain, &bad).is_err(),
+            "a zero scale is refused"
+        );
+
+        let mut tokens = window(false);
+        tokens[101..=104].copy_from_slice(&[48, 49, 50, 51]);
+        tokens[105] = 528;
+
+        let model = IntegerStackModel::parse(&bytes).expect("parse the relation artifact");
+        let mut session = model.session();
+        for &id in &tokens[..=104] {
+            session.step_native(id).expect("step the header");
+        }
+        assert_eq!(
+            session.last_relation_pick(),
+            Some(50),
+            "the artifact configures the read"
+        );
+
+        let plain_model = IntegerStackModel::parse(&plain).expect("parse the plain artifact");
+        let mut plain_session = plain_model.session();
+        for &id in &tokens[..=104] {
+            plain_session.step_native(id).expect("step the header");
+        }
+        assert_eq!(plain_session.last_relation_pick(), None);
+    }
+
     #[test]
     fn an_ambiguous_row_takes_the_first_consistent_candidate() {
         let out = RelationRead::PROBE

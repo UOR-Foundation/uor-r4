@@ -358,6 +358,8 @@ struct FbsModel {
     /// The native Q31 first-pick read (`lut-stack/14`, claude-390), read after layer `depth - 1`'s
     /// MLP add.
     q31_read: Option<ServedQ31Read>,
+    /// The config-only relation read (`lut-stack/15`), applied at the header's last row.
+    relation: Option<super::StackRelation>,
 }
 
 /// A read-only, zero-copy view of a parsed SpiralCore/FBS model's integers,
@@ -717,6 +719,7 @@ fn fbs_model(artifact: &Container, shape: &StackShape) -> Result<FbsModel, Stack
         hamming,
         address: address_image(artifact)?,
         q31_read,
+        relation: artifact.relation.clone(),
         layers,
         final_gain: codes("final_norm_gain", d)?,
         writer_table,
@@ -1740,7 +1743,18 @@ impl IntegerStackModel {
             place: PlaceState::default(),
             spoken: None,
             open_reply_start: false,
-            relation: None,
+            relation: self
+                .fbs
+                .as_ref()
+                .and_then(|fbs| fbs.relation.as_ref())
+                .map(|relation| ServedRelation {
+                    read: relation.read(),
+                    header: relation.header,
+                    header_last: relation.header_last,
+                    scale: relation.scale,
+                    earlier: Vec::new(),
+                    last_pick: None,
+                }),
             hamming_trace: None,
             native_q31_trace: None,
             q31_history: Q31ReadHistory::new(),
@@ -6364,6 +6378,7 @@ mod fbs_stage_tests {
             hamming: None,
             address: None,
             q31_read: None,
+            relation: None,
         };
         // Rows 0 and 2 both lie 2 from the origin; rows 0 and 1 both lie 2 from (2, 2).
         assert_eq!(stack_whole_table_nearest(&fbs, 3, &[0, 0]), 0);

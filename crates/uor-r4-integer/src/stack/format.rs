@@ -18,6 +18,8 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+
+use super::relation_read::RelationRead;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
@@ -86,6 +88,10 @@ pub const STACK_FBS_Q31_SCHEMA: &str = "uor-r4.lut-stack/12";
 /// is left to the per-lane gate state (codex-13). A research schema: no stack contract names it
 /// yet.
 pub const STACK_FBS_Q31_READ_SCHEMA: &str = "uor-r4.lut-stack/14";
+/// The config-only relation read (`DiscreteReadBindingHingeV1`'s read side): the fact encoding,
+/// the query shift, the two distance buckets, the header length and the hard copy's scale. It
+/// carries no table; a reader that does not know `/15` refuses the stack by its schema.
+pub const STACK_FBS_RELATION_SCHEMA: &str = "uor-r4.lut-stack/15";
 /// The table holding the native Q31 state: twelve little-endian `u32` words, the exact 48 bytes.
 pub const Q31_STATE_TABLE: &str = "q31.state";
 /// The exact native Q31 model state length.
@@ -988,7 +994,61 @@ pub struct StackQ31Lanes {
     pub version: u8,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+/// The relation read's config record (`/15`): the two-class fact encoding and the hard copy.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StackRelation {
+    /// `[low, high)` fact relation tokens.
+    pub relations: [u32; 2],
+    /// `[low, high)` fact value tokens.
+    pub values: [u32; 2],
+    /// A query token is `relation + query_shift`.
+    pub query_shift: u32,
+    /// The two distance buckets, `[low, high]` each.
+    pub buckets: [(usize, usize); 2],
+    /// Tokens from the query to the scored row.
+    pub header: usize,
+    /// The header's last token: the read applies at that row.
+    pub header_last: u32,
+    /// The hard copy's multiplier on the value's row.
+    pub scale: i64,
+}
+
+impl StackRelation {
+    /// Refuse a record the served read cannot use.
+    pub fn check(&self, shape: &StackShape) -> Result<(), StackError> {
+        if self.relations[0] >= self.relations[1] {
+            return Err(StackError::Shape("a relation range is empty or reversed"));
+        }
+        if self.values[0] >= self.values[1] {
+            return Err(StackError::Shape("a value range is empty or reversed"));
+        }
+        if u64::from(self.values[1]) > shape.vocab as u64 {
+            return Err(StackError::Shape("a relation value is past the vocabulary"));
+        }
+        if self.header == 0 || self.header >= shape.context {
+            return Err(StackError::Shape("a relation header is outside the context"));
+        }
+        if self.buckets.iter().any(|b| b.0 > b.1) {
+            return Err(StackError::Shape("a relation bucket is reversed"));
+        }
+        if self.scale == 0 {
+            return Err(StackError::Shape("a relation scale is zero"));
+        }
+        Ok(())
+    }
+
+    /// The read this record configures.
+    pub fn read(&self) -> RelationRead {
+        RelationRead {
+            relations: self.relations[0]..self.relations[1],
+            values: self.values[0]..self.values[1],
+            query_shift: self.query_shift,
+            buckets: self.buckets,
+        }
+    }
+}
+
+#[derive(Deserialize)]
 struct Header {
     schema: String,
     shape: StackShape,
@@ -1028,6 +1088,9 @@ struct Header {
     /// without one.
     #[serde(default)]
     q31_read: Option<super::StackQ31Read>,
+    /// The config-only relation read, under [`STACK_FBS_RELATION_SCHEMA`]; absent otherwise.
+    #[serde(default)]
+    relation: Option<StackRelation>,
 }
 
 /// One 4-bit matrix of a parsed container, borrowed from its bytes.
@@ -1065,6 +1128,8 @@ pub(crate) struct Container<'a> {
     pub q31_lanes: Option<StackQ31Lanes>,
     /// The validated native Q31 read record, if the header carries one.
     pub q31_read: Option<super::StackQ31Read>,
+    /// The validated relation read record, if the header carries one.
+    pub relation: Option<StackRelation>,
     data: &'a [u8],
     /// Sections by name (unique within each kind).
     matrices: HashMap<String, MatrixEntry>,
@@ -1216,6 +1281,8 @@ impl<'a> Container<'a> {
             STACK_FBS_Q31_SCHEMA
         } else if header.address.is_some() {
             STACK_FBS_ADDRESS_SCHEMA
+        } else if header.relation.is_some() {
+            STACK_FBS_RELATION_SCHEMA
         } else if header.schema == STACK_FBS_BOUND_SCHEMA {
             check_artifact_binding(&header.source)?;
             STACK_FBS_BOUND_SCHEMA
@@ -1456,6 +1523,9 @@ impl<'a> Container<'a> {
             }
             record.check(&header.shape)?;
         }
+        if let Some(relation) = &header.relation {
+            relation.check(&header.shape)?;
+        }
         sections.sort();
         let container = Self {
             schema: header.schema,
@@ -1473,6 +1543,7 @@ impl<'a> Container<'a> {
             q31: header.q31,
             q31_lanes: header.q31_lanes,
             q31_read: header.q31_read,
+            relation: header.relation,
             data,
             matrices,
             tables,
@@ -2888,6 +2959,68 @@ pub fn add_q31_read_uorlut01(artifact: &[u8], image: &super::Q31SessionRead) -> 
         return Err(StackError::Numerics("q31.read does not read back as written".to_owned()));
     }
     Ok(out)
+}
+
+/// Add the config-only relation read (`/15`) to an FBS stack that carries no other optional
+/// record; the tables are unchanged and the header names the record.
+pub fn add_relation_uorlut01(
+    artifact: &[u8],
+    relation: &StackRelation,
+) -> Result<Vec<u8>, StackError> {
+    let container = Container::parse(artifact)?;
+    if container.relation.is_some() {
+        return Err(StackError::Shape(
+            "a relation read is added to a stack without one",
+        ));
+    }
+    if container.schema == STACK_FBS_BOUND_SCHEMA {
+        return Err(StackError::Shape(
+            "a relation read is not added to a bound stack",
+        ));
+    }
+    if container.address.is_some()
+        || container.point.is_some()
+        || container.memory.is_some()
+        || container.hamming.is_some()
+        || container.memory_chain.is_some()
+        || container.q31.is_some()
+        || container.q31_lanes.is_some()
+        || container.q31_read.is_some()
+    {
+        return Err(StackError::Shape(
+            "a relation read is added to an FBS stack with no other optional record",
+        ));
+    }
+    relation.check(&container.shape)?;
+    let declared = u64::from_le_bytes(
+        artifact[8..16]
+            .try_into()
+            .map_err(|_| StackError::MissingData)?,
+    );
+    let header_end = 16 + usize::try_from(declared).map_err(|_| StackError::MissingData)?;
+    let data_start = header_end.div_ceil(ALIGN) * ALIGN;
+    let mut header: serde_json::Value =
+        serde_json::from_slice(&artifact[16..header_end]).map_err(StackError::Header)?;
+    header["relation"] = serde_json::json!(relation);
+    header["schema"] = serde_json::json!(STACK_FBS_RELATION_SCHEMA);
+    let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
+    let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + artifact.len() - data_start);
+    out.extend_from_slice(MAGIC);
+    out.extend_from_slice(&(header_bytes.len() as u64).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
+    out.extend_from_slice(&artifact[data_start..]);
+    if Container::parse(&out)?.relation.as_ref() != Some(relation) {
+        return Err(StackError::Numerics(
+            "relation does not read back as written".to_owned(),
+        ));
+    }
+    Ok(out)
+}
+
+/// The relation read of the `UORLUT01` artifact `bytes`, or none when it serves none.
+pub fn read_relation_uorlut01(bytes: &[u8]) -> Result<Option<StackRelation>, StackError> {
+    Ok(Container::parse(bytes)?.relation)
 }
 
 /// The same artifact with its Hamming record's copy rule set to the latest exact match
