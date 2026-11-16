@@ -1,13 +1,14 @@
-//! Two-stage rule read: the native asked pick, then the stream's other-fact rule.
+//! Two-stage rule read, derived from the stream.
 //!
-//! Stage 1 is a saved native first pick (the asked fact, ~0.98). Stage 2 asks the
-//! 397 rule: among the window's fact positions at the query's distance bucket,
-//! excluding the asked position and the earlier slots' picks, take the consistent
-//! candidate. On a `K = 1` row that candidate is the other fact by construction;
-//! on `K >= 2` the stream does not determine which, so the tool takes the first.
+//! Stage 1 is not a saved label: the stream writes each fact as `K v` before the
+//! tails, and the query token is `Q(k) = k + RECALL_QUERY_SHIFT`. The scan finds
+//! the asked fact by matching the query's relation against the fact relations.
+//! Stage 2 is the 397 rule: among the facts at the query's distance bucket,
+//! excluding the asked fact and the earlier slots' asked facts, take the
+//! consistent candidate. On a `K = 1` row that candidate is the other fact.
 //!
 //! `usage: recall-rule-read --seed S --header H --windows N (--held | --train)
-//!  --picks FILE --out FILE`
+//!  [--picks FILE] --out FILE`
 //!
 //! A host count: no model and no device.
 
@@ -15,7 +16,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use uor_r4_float_train::in_space_long::{
-    recall_query_window, RecallQuery, RECALL_QUERY_BUCKETS,
+    recall_query_window, RecallQuery, RECALL_QUERY_BUCKETS, RECALL_QUERY_SHIFT, RECALL_RELATIONS,
+    RECALL_VALUES,
 };
 
 const CONTEXT: usize = 192;
@@ -25,7 +27,7 @@ struct Args {
     header: usize,
     windows: usize,
     held: bool,
-    picks: PathBuf,
+    picks: Option<PathBuf>,
     out: PathBuf,
 }
 
@@ -55,7 +57,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
         header: header.ok_or("--header is required")?,
         windows: windows.ok_or("--windows is required")?,
         held,
-        picks: picks.ok_or("--picks is required")?,
+        picks,
         out: out.ok_or("--out is required")?,
     })
 }
@@ -77,7 +79,9 @@ struct Bucket {
     k1_rows: u64,
     k1_other: u64,
     all_other: u64,
-    asked_stage1_right: u64,
+    asked_scan_right: u64,
+    scan_matches_pick: u64,
+    picks_seen: u64,
 }
 
 fn main() {
@@ -94,34 +98,55 @@ fn run() -> Result<(), String> {
     }
     let seed = if args.held { args.seed ^ 0x5EED_F00D } else { args.seed };
     let rows = args.windows * CONTEXT;
-    let picks = u32s(&args.picks)?;
-    if picks.len() != rows {
-        return Err(format!(
-            "{}: {} picks, the windows have {rows} rows",
-            args.picks.display(),
-            picks.len()
-        ));
-    }
+    let picks = match &args.picks {
+        Some(path) => {
+            let picks = u32s(path)?;
+            if picks.len() != rows {
+                return Err(format!(
+                    "{}: {} picks, the windows have {rows} rows",
+                    path.display(),
+                    picks.len()
+                ));
+            }
+            Some(picks)
+        }
+        None => None,
+    };
     let mut buckets = vec![Bucket::default(); RECALL_QUERY_BUCKETS.len()];
     for w in 0..args.windows {
-        let (_, queries) = recall_query_window(seed, w as u64, CONTEXT, args.header)
+        let (window, queries) = recall_query_window(seed, w as u64, CONTEXT, args.header)
             .map_err(|e| format!("window {w}: {e}"))?;
-        let row = |q: &RecallQuery| w * CONTEXT + q.scored_offset;
-        let mut facts: Vec<usize> = queries
-            .iter()
-            .flat_map(|q| [q.ask_value_pos, q.other_value_pos])
+        let ids = &window.input_ids;
+        // Every fact is `relation value` before the tails: relation i at p-1, value at p.
+        let facts: Vec<usize> = (1..ids.len())
+            .filter(|&p| {
+                RECALL_RELATIONS.contains(&ids[p - 1]) && RECALL_VALUES.contains(&ids[p])
+            })
             .collect();
-        facts.sort_unstable();
-        for q in &queries {
-            let asked = picks[row(q)] as usize;
-            let (low, high) = RECALL_QUERY_BUCKETS[q.bucket];
-            if asked == 0 || asked >= q.query_pos {
-                continue;
+        let asked_of = |q: &RecallQuery| -> Option<(usize, usize)> {
+            let relation = ids[q.query_pos].checked_sub(RECALL_QUERY_SHIFT)?;
+            if !RECALL_RELATIONS.contains(&relation) {
+                return None;
             }
+            let position = *facts
+                .iter()
+                .find(|&&p| ids[p - 1] == relation && p < q.query_pos)?;
+            let distance = q.query_pos - position;
+            let bucket = RECALL_QUERY_BUCKETS
+                .iter()
+                .position(|&(low, high)| (low..=high).contains(&distance))?;
+            Some((position, bucket))
+        };
+        for q in &queries {
+            let Some((asked, bucket)) = asked_of(q) else {
+                continue;
+            };
+            let (low, high) = RECALL_QUERY_BUCKETS[bucket];
             let earlier: Vec<usize> = queries
                 .iter()
                 .filter(|e| e.slot < q.slot)
-                .map(|e| picks[row(e)] as usize)
+                .filter_map(asked_of)
+                .map(|(position, _)| position)
                 .collect();
             let candidates: Vec<usize> = facts
                 .iter()
@@ -136,9 +161,16 @@ fn run() -> Result<(), String> {
             if candidates.is_empty() {
                 continue;
             }
-            let b = &mut buckets[q.bucket];
+            let b = &mut buckets[bucket];
             b.rows += 1;
-            b.asked_stage1_right += u64::from(asked == q.ask_value_pos);
+            b.asked_scan_right += u64::from(asked == q.ask_value_pos);
+            if let Some(picks) = &picks {
+                let pick = picks[w * CONTEXT + q.scored_offset] as usize;
+                if pick != 0 {
+                    b.picks_seen += 1;
+                    b.scan_matches_pick += u64::from(pick == asked);
+                }
+            }
             let pick = candidates[0];
             let hit = pick == q.other_value_pos;
             b.all_other += u64::from(hit);
@@ -158,7 +190,9 @@ fn run() -> Result<(), String> {
             "k1_rows": b.k1_rows,
             "k1_other": b.k1_other,
             "all_other": b.all_other,
-            "stage1_asked_right": b.asked_stage1_right,
+            "asked_scan_right": b.asked_scan_right,
+            "scan_matches_pick": b.scan_matches_pick,
+            "picks_seen": b.picks_seen,
         })).collect::<Vec<_>>(),
     });
     let bytes = serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?;

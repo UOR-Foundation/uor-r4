@@ -33,21 +33,25 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 - **Same-row fit, other-fact target.** 512 steps: 64/512, 78/512. 2,048 steps: identical, 435
   accepted steps, loss unchanged.
 
-## The rule read, with the real asked pick
+## The rule read, derived from the stream
 
-`crates/uor-r4-float-train/src/bin/recall-rule-read.rs` takes the **saved A-ext asked pick** (the
-native read's stage 1) and applies the 397 candidate rule at stage 2: among the window's facts in the
-query's distance bucket, excluding the picked asked position and the earlier slots' picks, take the
-consistent candidate. On held ext-s1, 256 windows, 1,024 rows:
+The window writes each fact as `K v` before the tails and the query as
+`Q(k) = k + RECALL_QUERY_SHIFT`. `recall-rule-read` scans those pairs, matches the query's relation
+to the asked fact, derives the distance bucket, and applies the 397 candidate rule. Held ext-s1,
+256 windows, 1,024 rows:
 
-| Bucket | `K=1` rows | rule hits | all rows | stage-1 asked right |
-|---|---|---|---|---|
-| 0 | 36 | **33 (0.917)** | 206/512 (0.402) | 500/512 |
-| 1 | 11 | **10 (0.909)** | 221/512 (0.432) | 498/512 |
+| Bucket | asked scan | native pick agrees | `K=1` rows | rule hits | all rows |
+|---|---|---|---|---|---|
+| 0 | 512/512 | 500/512 | 35 | **35/35 (1.000)** | 208/512 (0.406) |
+| 1 | 512/512 | 498/512 | 12 | **12/12 (1.000)** | 223/512 (0.436) |
 
-The `K=1` counts differ by one from claude-397's 35/12 because the rule uses the **native pick** as
-the asked, not the true label; the all-rows rate is at the uniform ceiling, as expected on the
-ambiguous rows.
+The `K=1` rows match claude-397's 35/12 **exactly**, and the rule is exact on them. The native asked
+pick agrees with the stream scan on 500/498 of 512, so the two stage-1 routes corroborate each other.
+The all-rows rate is the uniform ceiling, as expected on the ambiguous rows.
+
+For comparison, taking the **saved native pick** as stage 1 instead of the scan gives 33/36 and
+10/11 (0.92): the one-row differences are the 12/14 rows where the native pick and the stream scan
+disagree.
 
 ## What it means
 
@@ -55,11 +59,12 @@ claude-397's open question is answered **negatively under the shipped update**: 
 L1-nearest gates does not express the other-fact choice on these queries (0.125/0.152 even on the
 rows it trains on). The C2′ failure is the read family, not the data and not regularization.
 
-The **two-stage rule read** is the mechanism that does express it: the asked read (already 0.98)
-plus a deterministic stage-2 rule reaches **~0.92 on the identifiable `K=1` rows** and the ceiling on
-the ambiguous ones. That is the `chose_other` half of C2′ by a wide margin over the +0.10 bar, and it
-does not need another gate fit. The next unit integrates stage 2 into the model read and checks the
-`chose_target` half on the panel.
+The **two-stage rule read** is the mechanism that does express it: the stream scan finds the asked
+fact on **512/512** rows, and the candidate rule is **exact** on the identifiable `K=1` rows (35/35,
+12/12). That is the `chose_other` half of C2′ by a wide margin over the +0.10 bar, and it does not
+need another gate fit. The stage-1 and stage-2 information is in the stream; the remaining work is to
+make the served read scan it (a fact/relation read) and to check the `chose_target` half on the
+panel.
 
 ## Still open
 
