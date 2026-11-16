@@ -34,6 +34,7 @@ setup)
   if grep -h -v ': OK$' "$W"/lfs-part.*.out; then echo "donor LFS sha256 check FAILED (lines above)"; exit 1; fi
   echo "donor LFS sha256: all $(cat "$W"/lfs-part.*.out | grep -c ': OK$') of $(wc -l < "$W/donor-lfs.sha256") OK"
   nvidia-smi --query-gpu=index,name,uuid,driver_version,memory.total --format=csv,noheader > "$W/gpus.csv"
+  nvidia-smi topo -m > "$W/gpu-topo.txt" 2>&1 || true   # NV# between all four GPUs = the NVLink bridge TP4 needs
   free -g | head -2 > "$W/host-mem.txt"; df -h /workspace | tail -1 >> "$W/host-mem.txt"
   vllm --version > "$W/vllm-version.txt" 2>&1
   echo "setup done"

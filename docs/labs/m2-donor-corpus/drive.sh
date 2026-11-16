@@ -6,6 +6,8 @@
 #   put POD                    copy the instrument, pod.sh, bank and receipt inputs to the pod, and restore
 #                              every finished file of $LOCAL/out (a re-leased pod resumes from them); it
 #                              refuses a pod whose out/ is not empty, and checks each restored file by sha256
+#   offer POD                  right after up: check the rented Vast instance (4 GPUs, >= 1000 GB RAM, NVLink
+#                              >= 400 GB/s, datacenter) and save it to offer.json; exit 1 on a mismatch
 #   machine POD                write machine.json from the lease and the pod's gpus.csv, and push it
 #   sync POD [final]           copy finished shards/counts off the pod, checked by sha256 (a finished shard
 #                              already on the laptop is never overwritten); "final" checks the logs too
@@ -229,6 +231,18 @@ put)
     ssh_pod "rm -f $W/out/.restoring"
     trap - EXIT
     log "restored ${#files[@]} files to $W/out, sha256 OK"
+  fi
+  ;;
+offer)
+  # The sheet's lease filters that `uor-pod up` does not apply itself: RAM for one Engram host copy
+  # and an NVLink bridge across all four GPUs for TP4. Vast reports cpu_ram in MB.
+  mkdir -p "$LOCAL"
+  "${VASTAI:-vastai}" show instance "${POD#vast-}" --raw > "$LOCAL/offer.json"
+  jq -c '{id, machine_id, host_id, gpu_name, num_gpus, cpu_ram, bw_nvlink, gpu_mem_bw, hosting_type, dph_total, geolocation, driver_version}' "$LOCAL/offer.json"
+  if jq -e '.num_gpus == 4 and (.gpu_name | test("H200")) and .cpu_ram >= 1000000 and (.bw_nvlink // 0) >= 400' "$LOCAL/offer.json" > /dev/null; then
+    log "offer matches the sheet"
+  else
+    alert "rented instance does not match the sheet's filters: down it now"; exit 1
   fi
   ;;
 machine)
