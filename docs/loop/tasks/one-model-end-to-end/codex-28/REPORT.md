@@ -112,3 +112,36 @@ that needs no training**: raise h2's margin to 30 bits and the same keeps would 
 The first H = 8 launch died silently at step 6,144 with no error and no OOM record; the restart
 reproduced steps 2,048 and 4,096 exactly (1,378; 604) and passed 6,144, so the death was
 environmental. Two restarts at the same step would have been a defect; one was not.
+
+## The bare-value episode: the ask head keeps the assert, the mixture still loses
+
+The encoder is built (`crates/uor-r4-integer/src/bin/encode-dialogue.rs`, `--turn role=text`,
+`encode_assistant_prefix`, prints the prompt ids and the reply's starts), so the episode is exact and
+reusable. The bare episode (45 ids, first reply row 44) states the fact once
+(`The new puppy at our house is named Pickle.`), acknowledges it neutrally (`Got it.` — so the value
+appears **only** at position 12), and asks the question. No memory line, no format preamble in the
+prompt.
+
+**First reply token, by ask margin** (the reference is `971`, ` Pickle`):
+
+| d6 h2/h3 margin | first pick |
+|---|---|
+| 20.2 / 19.8 bits (as trained) | 1399 |
+| 30 / 30 | 617 |
+| 35 / 35 | 617 |
+| 60 / 60 | 1856 |
+
+The margin **does** change the argmax (1399 → 617 → 1856), so the ask weight reaches the logits, but
+**no margin produces the value**. The trace says why the lever is not enough:
+
+- **the ask head keeps the assert**: d2 h2 at 28 bits, d2 h3 at 27, **d6 h3 at 29** (d6 h2 misses it
+  at 38);
+- **the copy heads keep exact matches at 0 bits** (positions 4, 22, 31 — the role and punctuation
+  markers), two heads of the four, each at a 16-bit margin;
+- at a 60-bit margin the assert's weight is `(60 − 29)/60 = 0.52` on **one head of four**, so its
+  move is about an eighth of the readout's total against two exact copy moves.
+
+**So the next lever is the readout's aggregation, not the reach and not the margin.** ADR-0007
+already names this as the gap: five selection rules and four aggregation rules for one operation.
+The unit is a learned per-head weight (or copy precedence at the reply's first row), measured on this
+exact bare episode and on held-out values — with the value-swap and the oracle-key falsifiers.

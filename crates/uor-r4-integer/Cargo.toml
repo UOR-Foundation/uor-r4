@@ -114,3 +114,8 @@ required-features = ["serving-wasm"]
 name = "read-ledger"
 path = "src/bin/read-ledger.rs"
 required-features = ["serving-wasm"]
+
+[[bin]]
+name = "encode-dialogue"
+path = "src/bin/encode-dialogue.rs"
+required-features = ["serving-wasm"]
