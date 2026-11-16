@@ -1,4 +1,4 @@
-# ORDER: written-state-count-model, claude-413a (three counter fixes before the full-corpus count)
+# ORDER: written-state-count-model, claude-415 (three counter fixes before the full-corpus count)
 
 Lab: claude. Item: [m4-lawful-likelihood-bpb](../../../../roadmap/items/m4-lawful-likelihood-bpb.md) (R\* is its sealed denominator; the track has no item of its own yet). Track: the written-state geometric count model. Base: `origin/main` at `948b6000d`.
 
@@ -16,7 +16,7 @@ The exact CUDA n-gram counter of claude-412 is about to count the full corpus. T
 
 - `crates/uor-r4-discrete/src/ngram_count.rs` and its tests (items 1 and 2);
 - the counter kernels and oracle (item 3, round 2);
-- `docs/loop/tasks/written-state-count-model/claude-413a/**`.
+- `docs/loop/tasks/written-state-count-model/claude-415/**`.
 
 ## Done when
 
