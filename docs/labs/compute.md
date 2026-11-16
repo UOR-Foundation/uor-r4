@@ -230,7 +230,7 @@ bf16/tensor-core rewrite is in progress). Owner decision, 5 October 2026.
 | `5090` | RTX 5090 | 32 GB | 120 | 0.99 | **default** | The only automatic choice. 96M fine-tune step ≈ 0.09–0.10 s/GPU (2 × 5090: 2,000 steps, batch 16, ctx 384 in ≈ 3.5 min); parity 22/22. ≈ 1.7–2 × a 4090 and ≈ 25 % cheaper per job. |
 | `4090` | RTX 4090 | 24 GB | 89 | 0.74 | explicit | Only with `--gpu 4090` (≈ 0.17–0.20 s/step). |
 | `l40s`, `6000ada` | L40S / RTX 6000 Ada | 48 GB | 89 | 1.09 / 0.84 | explicit | Only when a job needs more than 32 GB. |
-| `a100`, `h100`, `h200`, `h200nvl`, `b200`, … | A100/H100/H200 (SXM, NVL)/B200 | 80+ GB | 80/90/100 | 1.59+ | **forbidden** | Measured A100 = 0.6–0.75 × a 4090 for this trainer. Never automatic; refused without `--owner-approved`. Revisit after the bf16 Phase 2 parity gate. |
+| `a100`, `h100`, `h200`, `b200`, … | A100/H100/H200/B200 | 80+ GB | 80/90/100 | 1.59+ | **forbidden** | Measured A100 = 0.6–0.75 × a 4090 for this trainer. Never automatic; refused without `--owner-approved`. Revisit after the bf16 Phase 2 parity gate. |
 
 Default shape: **2 GPUs per pod** (`data_parallel=2`, or two seeds in
 parallel); 1 GPU for evaluation-only or grading jobs (`--count 1`).

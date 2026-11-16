@@ -1415,7 +1415,19 @@ mod tests {
                 "{\"id\":\"c\",\"reason\":\"http\"}\n",
                 "{\"id\":\"d\",\"reason\":\"http\"}\n",
                 "{\"id\":\"d\",\"reason\":\"empty\"}\n",
+                "{\"id\":\"e\",\"reason\":\"http\"}\n",
             ),
+        )
+        .unwrap();
+        // `e` was refused once and then kept on retry: a shard holds it.
+        std::fs::write(
+            dir.join(shard_name(0)),
+            "{\"id\":\"e\",\"kind\":\"single\",\"source\":\"s\"}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join(counts_name(0)),
+            "{\"id\":\"e\",\"kept_tokens\":5,\"generated_tokens\":6}\n",
         )
         .unwrap();
         let (done, t, _) = resume(&dir).unwrap();
@@ -1430,7 +1442,8 @@ mod tests {
             done.contains("d"),
             "an http drop retried into a content drop is done"
         );
-        // Each id counts once, under its first reason.
+        assert!(done.contains("e") && t.records == 1 && t.kept == 5);
+        // Each id counts once, under its first reason, and a kept id not at all.
         assert_eq!(t.dropped.get("http"), Some(&3));
         assert_eq!(t.dropped.get("length"), Some(&1));
         assert_eq!(t.dropped.get("empty"), None);

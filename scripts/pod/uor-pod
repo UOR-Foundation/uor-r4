@@ -138,7 +138,6 @@ a100sxm|NVIDIA A100-SXM4-80GB|80|forbidden|A100 SXM4
 h100|NVIDIA H100 80GB HBM3|90|forbidden|H100 SXM
 h100pcie|NVIDIA H100 PCIe|90|forbidden|H100 PCIE
 h200|NVIDIA H200|90|forbidden|H200
-h200nvl|NVIDIA H200 NVL|90|forbidden|H200 NVL
 b200|NVIDIA B200|100|forbidden|B200'
 
 # `up` without --gpu walks this ladder (owner decision 2026-10-07: 5090, then
