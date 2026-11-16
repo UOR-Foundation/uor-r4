@@ -301,6 +301,87 @@ fn cuda_pick_holonomy_with_identity_steps_is_identity_transport() {
     );
 }
 
+/// G7: the identity under the read. For all 16 x 16 root pairs (a, b), the
+/// prefix `a a b` has one eligible p, so its traced distance is
+/// popc(code(a) ^ code(b)); twice that is the L1 distance of the two roots.
+#[test]
+#[ignore = "requires a CUDA GPU"]
+fn cuda_pick_distance_is_half_the_root_l1_for_all_256_pairs() {
+    let config = PositionConfig::new(PositionMode::IdentityControlV1, patterned_steps(2));
+    let (device, _) = pick_device(SPEC, config, &[1, 1], Some(&|v, b| if b == 0 { v as u8 } else { 0 }));
+    let prefixes: Vec<Vec<u32>> = (0..16u32)
+        .flat_map(|a| (0..16u32).map(move |b| vec![a, a, b]))
+        .collect();
+    let windows: Vec<Vec<Identity>> = prefixes.iter().map(|p| identities(p)).collect();
+    let batch = device.carry_windows(&windows).expect("carry");
+    let targets: Vec<u32> = prefixes.iter().map(|p| p[2]).collect();
+    let forward = device.forward_traced(&batch, &targets).expect("forward");
+    let trace = forward.flock_trace().expect("trace").expect("present");
+    let stride = trace.len() / (prefixes.len() * 2);
+    for (row, prefix) in prefixes.iter().enumerate() {
+        let (a, b) = (prefix[0] as u8, prefix[2] as u8);
+        let (ca, cb) = (orbit_root_coords(a).unwrap(), orbit_root_coords(b).unwrap());
+        let l1: u32 = ca.iter().zip(cb).map(|(x, y)| (x - y).unsigned_abs()).sum();
+        let rec = &trace[row * 2 * stride..][..3];
+        assert_eq!(rec[0], 1, "pair {a} {b}: pick");
+        assert_eq!(2 * rec[1], l1, "pair {a} {b}: 2 d = L1");
+    }
+}
+
+/// G8: a Route proposal in Pick mode is refused on CUDA.
+#[test]
+#[ignore = "requires a CUDA GPU"]
+fn cuda_pick_refuses_a_route_proposal() {
+    let config = PositionConfig::new(PositionMode::IdentityControlV1, patterned_steps(2));
+    let (device, _) = pick_device(SPEC, config, &[1, 1], Some(&distinct_roots));
+    let prefix = vec![5u32, 9, 2, 3, 5, 9];
+    let batch = device.carry_windows(&[identities(&prefix)]).expect("carry");
+    assert!(device
+        .propose(&batch, &[9], crate::Parameter::Route(0))
+        .is_err());
+    assert!(device
+        .propose(&batch, &[9], crate::Parameter::Gate(0))
+        .is_ok());
+}
+
+/// G9: the D11 export of a Pick model, loaded by the integer serving reader,
+/// gives the CUDA read vector and the CUDA greedy token on every prefix, at
+/// both transports.
+#[test]
+#[ignore = "requires a CUDA GPU"]
+fn cuda_pick_matches_the_served_d11_artifact() {
+    use uor_r4_integer::discrete_d11::IntegerDiscreteModel;
+    let prefixes = every_prefix();
+    let windows: Vec<Vec<Identity>> = prefixes.iter().map(|p| identities(p)).collect();
+    let targets: Vec<u32> = prefixes.iter().map(|p| p[p.len() - 1]).collect();
+    let mut compared = 0;
+    for mode in [PositionMode::IdentityControlV1, PositionMode::PrefixHolonomyV1] {
+        let config = PositionConfig::new(mode, patterned_steps(SPEC.blocks));
+        let (device, _) = pick_device(SPEC, config, &[1, -1], Some(&distinct_roots));
+        let bytes = crate::d11_export::export_d11(&device.snapshot().expect("snapshot"))
+            .expect("export");
+        let served = IntegerDiscreteModel::from_bytes(&bytes).expect("served Pick artifact");
+        let batch = device.carry_windows(&windows).expect("carry");
+        let forward = device.forward(&batch, &targets).expect("forward");
+        let vectors = forward.vectors().expect("vectors");
+        let width = vectors.len() / prefixes.len();
+        for (row, prefix) in prefixes.iter().enumerate() {
+            let eval = served.evaluate_prefix(prefix).expect("serve");
+            assert_eq!(
+                eval.read_vector.as_slice(),
+                &vectors[row * width..(row + 1) * width],
+                "{mode:?} prefix {prefix:?}: read"
+            );
+            assert_eq!(
+                eval.prediction, forward.predictions[row],
+                "{mode:?} prefix {prefix:?}: greedy token"
+            );
+            compared += 1;
+        }
+    }
+    assert_eq!(compared, 2 * 33);
+}
+
 /// G6: the bucket writer carries no Pick read, so it refuses a Pick model.
 #[test]
 #[ignore = "requires a CUDA GPU"]

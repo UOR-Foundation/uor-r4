@@ -115,3 +115,6 @@ uor-r4-cpu-train = { path = "../uor-r4-cpu-train" }
 # Test-only: the CPU Pick oracle in src/pick_read_cuda.rs takes the SpiralCore
 # composition table (claude-408).
 uor-r4-core = { path = "../uor-r4-core", default-features = false }
+# Test-only: src/pick_read_cuda.rs checks the CUDA Pick read against the served
+# D11 artifact (claude-408).
+uor-r4-integer = { path = "../uor-r4-integer" }
