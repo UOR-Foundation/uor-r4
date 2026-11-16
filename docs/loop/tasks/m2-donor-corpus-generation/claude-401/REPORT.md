@@ -7,14 +7,17 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 - **No corpus is measured here.** This unit records a decision only. The 9.5k kept tokens/s figure behind it comes from
   tuning segment A (the last 5 minutes of an 8-minute run), not from the measured hour. The production unit (claude-400)
   reports the measured rate.
-- **Two leases failed before the run.** Pod 1 (4×H200 NVL) had no NVLink and was downed at once, for about $0.52.
-  Pod 2 (vast-60885691, 4×B200) never reached SSH in 900 s and was deleted by `uor-pod`, for at most about $11.
-  Pod 3 (vast-60886842) is the measured pod.
-- **"$43.41/h" is a per-pod price.** At 06:50Z only one more Vast datacenter 4×B200 was listed at that price or less
-  (machine 137780). An 8×B200 at $85.01/h has the same per-GPU price but is outside Casey's words, so it needs the
+- **Two leases failed before the run.** Pod 1 (vast-60875524, a 4×H200 NVL at $22.05/h, leased at 03:46Z under D87's
+  own $35/h cap, before any of these approvals) had no NVLink and was downed at once, for about $0.52. Pod 2
+  (vast-60885691, 4×B200) never reached SSH in 900 s and was deleted by `uor-pod`, for at most about $11. Pod 3
+  (vast-60886842) is the measured pod.
+- **The lab reads "$43.41/h" as per pod.** At 06:50Z only one more Vast datacenter 4×B200 was listed at that price or
+  less (machine 137780). An 8×B200 at $85.01/h has the same per-GPU price but is outside Casey's words, so it needs the
   owner's word.
-- **"This run only" has no tool enforcement.** The pod tool reads `UOR_POD_MAX_RATE` per command, and D88's text is the
-  only limit.
+- **The run-only limit has no tool enforcement.** The pod tool reads `UOR_POD_MAX_RATE` per command, and D88's text is
+  the only limit.
+- **No total cap.** The cost estimate (about $1,270) rests on a 5-minute tuning reading; a slower measured rate costs
+  more, and only the sheet's guard caps bound it.
 
 ## What changed
 
@@ -28,7 +31,8 @@ None. This is a record.
 
 ## Checks run at the head
 
-- `loop pr-check --local`: see the PR.
+- `loop pr-check --local`: PASS at this head (two standing advisories: the AGENTS.md size and FILEMAP rows).
+- The fresh-context review of 09293e932 returned CHANGES with nine wording findings; all are fixed at this head.
 - `git diff --check` is clean.
 
 ## Skills used

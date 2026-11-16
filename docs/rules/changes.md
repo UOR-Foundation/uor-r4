@@ -14,12 +14,13 @@ flowchart LR
 
 An entry gives the date, what changed, which charter clauses it touches, and who decided. The owner's own words are recorded verbatim when they are the reason. Old text is never edited or deleted: it moves unchanged to the `archive/` folder, and the live decision index keeps one line saying where each decision went (see the [decision map](decision-map.md)).
 
-## 16 November 2026: D87's corpus run may use 4 pods at $43.41/h each (D88)
+## 16 November 2026: D87's corpus run may use 4 pods at $43.41/h (D88)
 
 **Decided by:** the owner (Casey), 16 November 2026, in claude's chat (claude-401). Under D87's $35/h no
-qualifying host was listed, so the one-hour measured run was approved piece by piece, and the full corpus
-after tuning segment A read about 9.5k kept tokens/s on vast-60886842 (4×B200, $43.41/h). Casey's words,
-verbatim:
+qualifying Vast host was listed, so the one-hour measured run was approved piece by piece. The full corpus
+was approved after the lab reported that tuning segment A read about 9.5k kept tokens/s on vast-60886842
+(4×B200, $43.41/h): about 29 h and $1,270 for 1B on one pod, or about 7.3 h on 4 pods at about the same
+cost. Casey's words, verbatim:
 
 - "approve the $56.85/h host for the one-hour measurement"
 - Asked "Is the disk charge covered by your approval?": "Yes, that's fine"
@@ -31,12 +32,14 @@ verbatim:
 
 **What changed:**
 
-- **§5.4's compute caps, for this corpus run only:** up to 4 pods at $43.41/h each, $173.64/h in all
-  across all labs, in place of D87's $35/h. After the run the caps return to 4 pods and $8/h. While four
-  pods are leased, no other lab can lease one.
-- **The lab's conditions, not owner terms:** Vast verified datacenter hosts that pass the sheet's offer and
-  NVLink checks; the guard with the amendment's caps; disjoint prompt ranges per pod; the cost per kept
-  token worked down before the fan-out; any host above $43.41/h needs the owner's word.
+- **§5.4's compute caps (the owner's term):** "4 pods at $43.41/h" for the full 1B corpus, in place of
+  D87's $35/h, with the direction to run it "as quickly as possible for as cheap as possible".
+- **The lab's reading, not owner terms:** $43.41/h is per pod (the measured 4×B200 pod's price), so
+  $173.64/h in all across all labs. The raise is for this corpus run only, as D87's was, and the caps then
+  return to 4 pods and $8/h. While four pods are leased, no other lab can lease one.
+- **The lab's conditions and means, not owner terms:** Vast verified datacenter hosts that pass the sheet's
+  offer and NVLink checks; the guard with the amendment's caps; disjoint prompt ranges per pod; the cost per
+  kept token worked down before the fan-out; any host above $43.41/h needs the owner's word.
 
 ## 16 November 2026: D41's production donor is DeepSeek V4.1 Flash, reasoning kept, 1B first (D87)
 
