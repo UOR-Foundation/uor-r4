@@ -459,6 +459,17 @@ pub fn read_uort_tokens(bytes: &[u8]) -> Result<Vec<u16>> {
         .collect())
 }
 
+/// The document-start token. Streams frame each document with BOS = 0 at its
+/// start and EOS = 1 at its end.
+pub const NGRAM_BOS: u16 = 0;
+
+/// Whether order `k` counts target `j` (k <= j): the target is not a BOS, and
+/// no BOS lies inside the context except in its oldest slot `tokens[j - k]`,
+/// so no gram reaches back across a document start.
+pub fn ngram_admitted(tokens: &[u16], j: usize, k: usize) -> bool {
+    tokens[j] != NGRAM_BOS && (1..k).all(|s| tokens[j - s] != NGRAM_BOS)
+}
+
 /// Refuse any id outside the 12-bit vocabulary before it reaches a kernel.
 pub fn check_tokens(tokens: &[u16]) -> Result<()> {
     match tokens.iter().position(|&t| u32::from(t) >= NGRAM_VOCABULARY) {
@@ -518,8 +529,9 @@ mod tests {
             PrimeRouteKey::from_context(&[x, the]).unwrap()
         );
         // Counted: the stream "a b c | c b a" has order-3 context a b c once
-        // and c b a once, as two distinct contexts.
-        let stream = [a, b, c, 0, c, b, a, 0];
+        // and c b a once, as two distinct contexts (EOS = 1 separates them:
+        // a BOS target would not be counted).
+        let stream = [a, b, c, 1, c, b, a, 1];
         let (digest, _, contexts) = oracle_count(&stream, 3).unwrap();
         assert!(contexts.iter().any(|h| h.key == abc.word()));
         assert!(contexts.iter().any(|h| h.key == cba.word()));
@@ -578,6 +590,29 @@ mod tests {
     }
 
     #[test]
+    fn ngram_count_oracle_respects_document_boundaries() {
+        let stream = [0u16, 5, 6, 7, 1, 0, 5, 6, 1];
+        let (_, triples, _) = oracle_count(&stream, 2).unwrap();
+        let key = |a: u16, b: u16| PrimeRouteKey::from_context(&[a, b]).unwrap().word();
+        let count = |a: u16, b: u16, next: u16| {
+            triples
+                .iter()
+                .find(|t| t.key == key(a, b) && t.next == next)
+                .map(|t| t.count)
+        };
+        assert_eq!(count(0, 5, 6), Some(2));
+        assert_eq!(count(7, 1, 0), None);
+        assert_eq!(count(1, 0, 5), None);
+        assert!(triples.iter().all(|t| t.next != NGRAM_BOS));
+        let total: u32 = triples.iter().map(|t| t.count).sum();
+        assert_eq!((triples.len(), total), (4, 5));
+        // Order 0 drops only the BOS targets.
+        let (_, unigrams, _) = oracle_count(&stream, 0).unwrap();
+        let total: u32 = unigrams.iter().map(|t| t.count).sum();
+        assert_eq!(total, 7);
+    }
+
+    #[test]
     fn ngram_count_partitions_assemble_to_the_whole() {
         let mut state = 0x412u64;
         let stream: Vec<u16> = (0..20_000)
@@ -590,12 +625,17 @@ mod tests {
                 (if r % 4 == 0 { r % 4096 } else { r % 13 }) as u16
             })
             .collect();
+        // r % 13 plants BOS = 0 at about one position in eighteen, so the
+        // partitions and the assembler see document boundaries.
+        assert!(stream.iter().filter(|&&t| t == NGRAM_BOS).count() > 500);
         for order in [0u32, 1, 2, 5] {
             let (whole, triples, contexts) = oracle_count(&stream, order).unwrap();
             let offset = partition_offset(order);
             let mut histogram = vec![0u64; 4096];
             for j in order as usize..stream.len() {
-                histogram[stream[j - offset] as usize] += 1;
+                if ngram_admitted(&stream, j, order as usize) {
+                    histogram[stream[j - offset] as usize] += 1;
+                }
             }
             for budget in [u64::MAX, 3_000, 500] {
                 let plan = plan_partitions(&histogram, budget).unwrap();
