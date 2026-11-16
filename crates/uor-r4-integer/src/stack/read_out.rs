@@ -37,6 +37,15 @@ impl ReadOut {
         }
     }
 
+    /// A read that chose nothing this row.
+    pub fn none() -> Self {
+        ReadOut {
+            support: Vec::new(),
+            weights_q31: Vec::new(),
+            payload: None,
+        }
+    }
+
     /// Chosen positions with their Q31 weights, in the read's order (a selection read).
     pub fn selection(chosen: &[(usize, u32)], weights_q31: Vec<i128>) -> Self {
         assert_eq!(

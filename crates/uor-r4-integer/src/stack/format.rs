@@ -88,10 +88,14 @@ pub const STACK_FBS_Q31_SCHEMA: &str = "uor-r4.lut-stack/12";
 /// is left to the per-lane gate state (codex-13). A research schema: no stack contract names it
 /// yet.
 pub const STACK_FBS_Q31_READ_SCHEMA: &str = "uor-r4.lut-stack/14";
+/// A bound `/10` stack that also carries the native Q31 read: the product artifact form for the
+/// `Read` stage (ADR-0007). Both the contract binding and the read record are required, so an
+/// engine that cannot serve the read refuses the stack by its schema.
+pub const STACK_FBS_BOUND_READ_SCHEMA: &str = "uor-r4.lut-stack/17";
 /// The config-only relation read (`DiscreteReadBindingHingeV1`'s read side): the fact encoding,
 /// the query shift, the two distance buckets, the header length and the hard copy's scale. It
-/// carries no table; a reader that does not know `/15` refuses the stack by its schema.
-pub const STACK_FBS_RELATION_SCHEMA: &str = "uor-r4.lut-stack/15";
+/// carries no table; a reader that does not know `/16` refuses the stack by its schema.
+pub const STACK_FBS_RELATION_SCHEMA: &str = "uor-r4.lut-stack/16";
 /// The table holding the native Q31 state: twelve little-endian `u32` words, the exact 48 bytes.
 pub const Q31_STATE_TABLE: &str = "q31.state";
 /// The exact native Q31 model state length.
@@ -1273,8 +1277,18 @@ impl<'a> Container<'a> {
         // binding became an admission rule.
         // An address table has its own schema, so a reader from before the table refuses the
         // stack by its schema; it would otherwise pass over the record and serve without the rows.
+        let bound = header
+            .source
+            .get("stack_contract")
+            .and_then(serde_json::Value::as_object)
+            .is_some();
         let expected = if header.q31_read.is_some() {
-            STACK_FBS_Q31_READ_SCHEMA
+            if bound {
+                check_artifact_binding(&header.source)?;
+                STACK_FBS_BOUND_READ_SCHEMA
+            } else {
+                STACK_FBS_Q31_READ_SCHEMA
+            }
         } else if header.q31_lanes.is_some() {
             STACK_FBS_Q31_LANES_SCHEMA
         } else if header.q31.is_some() {
@@ -2917,9 +2931,9 @@ pub fn add_q31_read_uorlut01(artifact: &[u8], image: &super::Q31SessionRead) -> 
     if container.q31_read.is_some() {
         return Err(StackError::Shape("a native Q31 read is added to a stack without one"));
     }
-    if container.schema == STACK_FBS_BOUND_SCHEMA {
-        return Err(StackError::Shape("a native Q31 read is not added to a bound stack"));
-    }
+    // A bound stack gains the read as `/17`: the binding stays, and the schema says the artifact
+    // now needs an engine that serves the read too (ADR-0007 §1 rule 4).
+    let bound = container.schema == STACK_FBS_BOUND_SCHEMA;
     if container.address.is_some()
         || container.point.is_some()
         || container.memory.is_some()
@@ -2947,7 +2961,11 @@ pub fn add_q31_read_uorlut01(artifact: &[u8], image: &super::Q31SessionRead) -> 
         .ok_or(StackError::MissingData)?
         .extend(b.tables);
     header["q31_read"] = json!(record);
-    header["schema"] = json!(STACK_FBS_Q31_READ_SCHEMA);
+    header["schema"] = json!(if bound {
+        STACK_FBS_BOUND_READ_SCHEMA
+    } else {
+        STACK_FBS_Q31_READ_SCHEMA
+    });
     let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
     let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + b.data.len());
     out.extend_from_slice(MAGIC);
@@ -2976,6 +2994,11 @@ pub fn add_relation_uorlut01(
     if container.schema == STACK_FBS_BOUND_SCHEMA {
         return Err(StackError::Shape(
             "a relation read is not added to a bound stack",
+        ));
+    }
+    if container.schema == STACK_FBS_BOUND_READ_SCHEMA {
+        return Err(StackError::Shape(
+            "a relation read is not added to a stack that carries the native read",
         ));
     }
     if container.address.is_some()

@@ -152,6 +152,28 @@ impl RelationRead {
     }
 }
 
+impl super::read_stage::Read for RelationRead {
+    fn mechanism(&self) -> super::read_stage::ReadMechanism {
+        super::read_stage::ReadMechanism::Relation
+    }
+
+    fn select(
+        &self,
+        query: &super::read_stage::Query,
+        view: &mut super::read_stage::ContextView<'_>,
+    ) -> Result<ReadOut, crate::stack::StackError> {
+        Ok(self
+            .select_with_table(
+                view.tokens,
+                usize::from(query.row),
+                view.earlier_asked,
+                view.table,
+                view.width,
+            )
+            .unwrap_or_else(ReadOut::none))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,6 +193,62 @@ mod tests {
         tokens[100] = 32; // Q(16)
         tokens[101] = 528; // the asked value
         tokens
+    }
+
+    #[test]
+    fn the_stage_adapter_matches_the_table_read() {
+        // The second consumer of the `Read` seam: same pick, same written row, same empty result
+        // when the rule finds nothing.
+        let table: Vec<i16> = (0..1_200).map(|i| i as i16).collect();
+        let tokens = window(false);
+        let mut scan = uor_r4_native_vector::Q31ReadHistory::new();
+        let mut view = super::super::ContextView {
+            tokens: &tokens,
+            x: &[],
+            table: &table,
+            width: 2,
+            earlier_asked: &[],
+            scan: &mut scan,
+        };
+        let out = super::super::Read::select(
+            &RelationRead::PROBE,
+            &super::super::Query {
+                token: 32,
+                row: 100,
+            },
+            &mut view,
+        )
+        .expect("select");
+        let direct = RelationRead::PROBE
+            .select_with_table(&tokens, 100, &[], &table, 2)
+            .expect("the rule");
+        assert_eq!(out, direct);
+        assert_eq!(out.pick(), 50);
+        let row: Vec<i128> = (1_058..1_060).map(i128::from).collect();
+        assert_eq!(out.payload.as_deref(), Some(&row[..]));
+        assert_eq!(out.check(), Ok(()));
+
+        // A query with no consistent candidate is an empty result, not an error.
+        let mut quiet = window(false);
+        quiet[9] = 0;
+        let mut view = super::super::ContextView {
+            tokens: &quiet,
+            x: &[],
+            table: &table,
+            width: 2,
+            earlier_asked: &[],
+            scan: &mut scan,
+        };
+        let out = super::super::Read::select(
+            &RelationRead::PROBE,
+            &super::super::Query {
+                token: 32,
+                row: 100,
+            },
+            &mut view,
+        )
+        .expect("select");
+        assert_eq!(out, ReadOut::none());
     }
 
     #[test]

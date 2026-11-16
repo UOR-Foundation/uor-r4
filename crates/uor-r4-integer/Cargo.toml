@@ -109,3 +109,8 @@ required-features = ["serving-wasm"]
 name = "fbs-read-dump"
 path = "src/bin/fbs-read-dump.rs"
 required-features = ["serving-wasm"]
+
+[[bin]]
+name = "read-ledger"
+path = "src/bin/read-ledger.rs"
+required-features = ["serving-wasm"]

@@ -198,6 +198,16 @@ impl ServedQ31Read {
         ))
     }
 
+    /// The `Read` stage adapter: exactly [`Self::read_out`], the call the session made before the
+    /// seam existed, so the interface lands bit-identically (ADR-0007 §1 rule 2).
+    fn select_stage(
+        &self,
+        query: &super::read_stage::Query,
+        view: &mut super::read_stage::ContextView<'_>,
+    ) -> Result<ReadOut, StackError> {
+        self.read_out(view.scan, query.token, view.x)
+    }
+
     /// Read into `x` at this row: `x` widened, stepped, and written back. Refuses an out word that
     /// does not fit i32 (`+2^31`); the history then holds this row, so the session is reset before
     /// it serves again.
@@ -226,6 +236,20 @@ impl ServedQ31Read {
             });
         }
         Ok(())
+    }
+}
+
+impl super::read_stage::Read for ServedQ31Read {
+    fn mechanism(&self) -> super::read_stage::ReadMechanism {
+        super::read_stage::ReadMechanism::Q31FirstPick
+    }
+
+    fn select(
+        &self,
+        query: &super::read_stage::Query,
+        view: &mut super::read_stage::ContextView<'_>,
+    ) -> Result<ReadOut, StackError> {
+        self.select_stage(query, view)
     }
 }
 
@@ -785,12 +809,60 @@ mod tests {
     }
 
     #[test]
+    fn the_stage_adapter_matches_the_served_read() {
+        // ADR-0007 rule 2: the interface lands with a bit-identical adapter. The session serves
+        // PROMPT with its own read; the adapter replays the same rows and must return the same
+        // pick and the same written row at every position.
+        let read = drawn_read(31, 32, 3);
+        let bytes = with_read(&plain_trunk(), 1, read.clone());
+        let model = IntegerStackModel::parse(&bytes).expect("parse");
+        let mut session = model.session();
+        session.set_q31_read_trace(true).expect("trace");
+        for &token in &PROMPT {
+            session.step_native(token).expect("step");
+        }
+        let trace = session.q31_read_trace().expect("on").to_vec();
+        let container = Container::parse(&bytes).expect("parse");
+        let image = super::q31_read_image(&container)
+            .expect("image")
+            .expect("read");
+        let width = image.read().width();
+        let table = model.fbs_writer_table().expect("table").to_vec();
+        let served = ServedQ31Read::new(image, &table);
+        let mut scan = Q31ReadHistory::new();
+        for (row, (&token, step)) in PROMPT.iter().zip(&trace).enumerate() {
+            let x: Vec<i32> = step.x_in.iter().map(|&word| word as i32).collect();
+            let mut view = super::super::ContextView {
+                tokens: &PROMPT[..=row],
+                x: &x,
+                table: &table,
+                width,
+                earlier_asked: &[],
+                scan: &mut scan,
+            };
+            let out = super::super::Read::select(
+                &served,
+                &super::super::Query {
+                    token,
+                    row: row as u16,
+                },
+                &mut view,
+            )
+            .expect("select");
+            assert_eq!(out.pick(), step.pick, "row {row}");
+            let payload: Vec<i128> = step.out.iter().map(|&word| i128::from(word)).collect();
+            assert_eq!(out.payload.as_deref(), Some(&payload[..]), "row {row}");
+            assert_eq!(out.check(), Ok(()));
+        }
+    }
+
+    #[test]
     fn read_rows_are_the_steps_x_in() {
         // The rows a `/14` read is trained on are the ones the session scores, window for
         // window: the dump builder must not invent an input.
         let read = drawn_read(31, 32, 3);
-        let model = IntegerStackModel::parse(&with_read(&plain_trunk(), 1, read.clone()))
-            .expect("parse");
+        let model =
+            IntegerStackModel::parse(&with_read(&plain_trunk(), 1, read.clone())).expect("parse");
         let (_, trace) = serve(&with_read(&plain_trunk(), 1, read));
         let rows = model
             .q31_read_rows(&PROMPT, PROMPT.len())

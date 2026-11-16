@@ -358,7 +358,7 @@ struct FbsModel {
     /// The native Q31 first-pick read (`lut-stack/14`, claude-390), read after layer `depth - 1`'s
     /// MLP add.
     q31_read: Option<ServedQ31Read>,
-    /// The config-only relation read (`lut-stack/15`), applied at the header's last row.
+    /// The config-only relation read (`lut-stack/16`), applied at the header's last row.
     relation: Option<super::StackRelation>,
 }
 
@@ -1025,7 +1025,9 @@ impl IntegerStackModel {
                 }
             }
         }
-        let tokenizer_sha256 = if artifact.schema == super::STACK_FBS_BOUND_SCHEMA {
+        let tokenizer_sha256 = if artifact.schema == super::STACK_FBS_BOUND_SCHEMA
+            || artifact.schema == super::STACK_FBS_BOUND_READ_SCHEMA
+        {
             artifact
                 .source
                 .get("tokenizer_sha256")

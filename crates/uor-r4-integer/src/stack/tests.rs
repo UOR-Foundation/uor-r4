@@ -4510,6 +4510,63 @@ fn artifact_metadata_reports_validated_identity_and_sections() {
 }
 
 #[test]
+fn a_bound_stack_carries_the_native_read_as_the_product_form() {
+    // ADR-0007 §1 rule 4: the read is a stage field, so a bound artifact gains it as `/17`
+    // instead of losing the contract binding. Both identities survive, and the session serves
+    // the read and holds the bound tokenizer.
+    let snap = synthetic_fbs_trunk(346);
+    let provenance = super::FbsExportProvenance {
+        stack_contract: super::StackContractProvenance {
+            source: "conformance/stack/fbs-arm-r.toml".to_owned(),
+            sha256: "a".repeat(64),
+            semantic_blake3: "c".repeat(64),
+        },
+        tokenizer_sha256: "b".repeat(64),
+    };
+    let bound = super::export_fbs_trunk_uorlut01_with_provenance(
+        &snap,
+        super::FbsExportSnaps::SNAPPED,
+        None,
+        0,
+        Some(&provenance),
+    )
+    .expect("bound export");
+    assert_eq!(
+        super::inspect_uorlut01(&bound).expect("metadata").schema,
+        super::STACK_FBS_BOUND_SCHEMA
+    );
+    let width = snap.width;
+    let gates = vec![[1i64 << 31, 0, 0, 0]; width / 4];
+    let read = uor_r4_native_vector::Q31FirstPickRead::new(gates.clone(), gates, vec![0; width], 4)
+        .expect("read");
+    let image = super::Q31SessionRead::new(1, read);
+    let bytes = super::add_q31_read_uorlut01(&bound, &image).expect("the read is added");
+    let metadata = super::inspect_uorlut01(&bytes).expect("metadata");
+    assert_eq!(metadata.schema, super::STACK_FBS_BOUND_READ_SCHEMA);
+    assert_eq!(metadata.source["tokenizer_sha256"], "b".repeat(64));
+    assert_eq!(
+        metadata.source["stack_contract"]["source"],
+        "conformance/stack/fbs-arm-r.toml"
+    );
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+    assert_eq!(model.tokenizer_sha256(), Some("b".repeat(64).as_str()));
+    // The read is served, not merely stored: a stepped session records its trace.
+    let mut session = model.session();
+    session.set_q31_read_trace(true).expect("trace");
+    session.step_native(3).expect("a served row");
+    assert!(session.q31_read_trace().is_some_and(|trace| !trace.is_empty()));
+
+    // The same read on an unbound stack stays `/14`; the artifact does not silently bind.
+    let plain = super::export_fbs_trunk_uorlut01_with(&snap, super::FbsExportSnaps::SNAPPED)
+        .expect("base export");
+    let plain = super::add_q31_read_uorlut01(&plain, &image).expect("the read is added");
+    assert_eq!(
+        super::inspect_uorlut01(&plain).expect("metadata").schema,
+        super::STACK_FBS_Q31_READ_SCHEMA
+    );
+}
+
+#[test]
 fn contract_provenance_binds_identity_and_preserves_feature_bytes() {
     let snap = synthetic_fbs_trunk(345);
     let base = super::export_fbs_trunk_uorlut01_with(&snap, super::FbsExportSnaps::SNAPPED)
