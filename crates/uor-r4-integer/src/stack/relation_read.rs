@@ -173,6 +173,39 @@ mod tests {
             .is_none());
     }
 
+    #[cfg(feature = "fbs-synthetic")]
+    #[test]
+    fn the_read_names_the_value_row_in_a_served_session() {
+        use crate::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth, FBS_SYNTH_SMALL};
+        use crate::stack::{export_fbs_trunk_uorlut01, IntegerStackModel};
+
+        let shape = FbsSynth {
+            vocab: 2_048,
+            context: 192,
+            ..FBS_SYNTH_SMALL
+        };
+        let snap = synthetic_fbs_trunk_with(20_261_700, shape);
+        let bytes = export_fbs_trunk_uorlut01(&snap).expect("export a trunk");
+        let model = IntegerStackModel::parse(&bytes).expect("parse");
+        let mut session = model.session();
+        for &id in &window(false) {
+            session.step_native(id).expect("step the window");
+        }
+        let image = model.fbs_trunk_image().expect("the trunk image");
+        let width = model.shape().width;
+        let out = RelationRead::PROBE
+            .select_with_table(session.tokens(), 100, &[], image.writer_table, width)
+            .expect("the other fact's row in a served session");
+        assert_eq!(out.pick(), 50);
+        let value = session.tokens()[50] as usize;
+        let row: Vec<i128> = image.writer_table[value * width..(value + 1) * width]
+            .iter()
+            .map(|&word| i128::from(word))
+            .collect();
+        assert_eq!(out.payload.as_deref(), Some(&row[..]));
+        assert_eq!(out.check(), Ok(()));
+    }
+
     #[test]
     fn an_ambiguous_row_takes_the_first_consistent_candidate() {
         let out = RelationRead::PROBE

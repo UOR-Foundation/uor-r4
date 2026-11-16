@@ -75,8 +75,8 @@ distance bucket, excludes the asked fact and the earlier slots' asked facts, and
 value's **table row** (the width-wide row the hard copy writes); `select` keeps the one-element token
 for tests. Four finite tests: a `K=1` row picks the only other fact (support 49, payload 529), an
 ambiguous row takes the first candidate and excludes an earlier slot, a missing relation or bucket
-selects nothing, and the table payload is the value's row (a short table is refused). Integer
-library: **681 passed**, 1 ignored.
+selects nothing, and the table payload is the value's row (a short table is refused). A fifth test steps the task window through a real `IntegerStackModel` session and reads the other
+fact's value row from the model's writer table. Integer library: **682 passed**, 1 ignored.
 
 The ranges are the probe's encoding; the `ReadOut` shape is the served contract. The next step is to
 select this read in the session's read path and run the C2′ panel.
