@@ -9,7 +9,7 @@
 //! `NVCC=/usr/local/cuda/bin/nvcc UOR_NVCC_ARCH=compute_89 cargo run --release -p
 //! uor-r4-discrete --features cuda --example native_read_train -- --train-dump F
 //! --train-targets F --train-buckets F --eval-dump F --eval-targets F --eval-other F
-//! --eval-buckets F --start identity|FILE --margin 0 --step-shift 4 --steps 512 --batch 64
+//! --eval-buckets F --start identity|dump|FILE --margin 0 --step-shift 4 --steps 512 --batch 64
 //! --eval-at 0,64,128,256,384,512 --out-jsonl F --save-read F --save-picks F
 //! [--check-host-steps 2] [--train-other F] [--host]`
 
@@ -264,9 +264,12 @@ fn backend(host: bool) -> Result<Backend> {
     ))
 }
 
-/// Identity gates over the dump read's own weights and gain shift, or a saved read.
+/// Identity gates over the dump read's own weights and gain shift, the dump's own converted
+/// read (`dump`: claude-389's converted float gates, for C1 and C3), or a saved read.
 fn start_read(start: &str, dump: &Q31ReadDump) -> Result<Q31FirstPickRead> {
-    let read = if start == "identity" {
+    let read = if start == "dump" {
+        dump.read.clone()
+    } else if start == "identity" {
         let gates = dump.read.width() / 4;
         Q31FirstPickRead::new(
             vec![IDENTITY_GATE; gates],
@@ -345,7 +348,7 @@ fn run(args: &Args) -> Result<()> {
     }
     let backend = backend(args.host)?;
     let mut read = start_read(&args.start, &train.dump)?;
-    let mut out = std::fs::File::create(&args.out_jsonl)
+    let mut out = std::fs::File::create_new(&args.out_jsonl)
         .map_err(|e| invalid(format!("creating {}: {e}", args.out_jsonl)))?;
     let batches = windows / args.batch;
     let (mut accepted, mut last_loss) = (0usize, None::<u128>);
@@ -567,6 +570,22 @@ mod tests {
         resumed.start = first.save_read.clone();
         run(&resumed).unwrap();
         assert_eq!(read, std::fs::read(&resumed.save_read).unwrap());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// C1 and C3: `--start dump` begins from the train dump's own converted read, so zero steps
+    /// save that read unchanged; and a readings file is never written over.
+    #[test]
+    fn the_dump_start_keeps_the_dump_read() {
+        let dir = scratch("dump-start");
+        let mut args = host_args(&dir, 4, "d");
+        args.start = "dump".into();
+        args.steps = 0;
+        args.eval_at = vec![0];
+        run(&args).unwrap();
+        let saved = std::fs::read(&args.save_read).unwrap();
+        assert_eq!(saved, dump(4).read.to_bytes());
+        assert!(run(&args).is_err(), "an existing readings file is refused");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
