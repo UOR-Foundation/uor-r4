@@ -104,7 +104,7 @@ Route at K = 1: 731, 3,075, 12,228 and 32,435 targets/s at 64, 256, 1,024 and 4,
    - checkpoint and resume;
    - DEV on the new stream.
 
-   This is claude-408, the next unit (owner direction, 16 Nov).
+   It comes after the native read and the conjunction memory, in the order Casey chose on 16 Nov (PLAN.md, owner directions).
 2. **Ingest the whole D87 corpus** into TRAIN and DEV streams with `student-ingest`, DEV from held-out shards.
 3. **The 1B training run on wick**, with a sheet and a non-author FIT under §4.5. It measures learning per target against rows and K.
 4. **Measure what the ~82 ms per call is made of**, as claude-406 Still open items 2 and 3 describe: per-row serial walk or per-call host cost.
