@@ -16,6 +16,7 @@ D87 (Casey, 16 Nov 2026, recorded `2026-11-16T02:37:46Z`): "gpt-oss-120b on B200
 - **Donor:** `deepseek-ai/DeepSeek-V4.1-Flash-1017`. The model card says MIT, and the repo's `LICENSE` is the MIT text. It is about 511 GB on disk in 48 safetensors shards: MXFP4 experts, FP8 dense weights and 183 GiB of FP8 Engram tables. It has 552B backbone parameters plus 196.6B of Engram rows. The exact commit is pinned in the sheet and the receipt.
 - **Engine:** vLLM 0.31.0 or later (the release image, named by digest in the receipt). It serves `DeepseekV41ForCausalLM` with `--reasoning-parser deepseek_v41`, so a reply's reasoning and final answer arrive as separate text fields. On H200 the vLLM recipe runs TP4 per replica with the Engram tables offloaded to host RAM, so one 8×H200 pod runs two replicas.
 - **Pod:** Vast's cheapest verified 8×H200 offer was $34.25/h on 15 Nov (about 2 TB of RAM, 6 TB of disk and 8 Gb/s, in Iceland). That is the only shape found under D87's $35/h cap. Two 8×H200 pods would cost about $68/h, so the cap allows **one pod, not four**. 8×B200 was $86/h and 4×B200 was $43.5/h.
+  - **Amended 16 Nov:** that offer was gone at lease time, and the cheapest 8×H200 was $46.16/h, over the cap. The run uses one 4×H200 (SXM) instead, which is the recipe's one-replica shape (TP4, Engram tables in host RAM). It was $23.08/h for offer 45686955 (reliability 0.995). The cap buys about one replica, so this unit does not fan out. If the measured hour misses a bound, the REPORT gives the fleet the cap would need.
 
 ## The work
 

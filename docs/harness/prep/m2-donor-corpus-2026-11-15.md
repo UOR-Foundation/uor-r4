@@ -6,7 +6,7 @@ TEST FITNESS: PENDING - a fresh-context non-author round runs on this sheet befo
 
 ## The question
 
-At what measured rate and cost does DeepSeek V4.1 Flash on one rented 8×H200 pod produce hard reasoning-plus-answer texts? If the rate fits D87's bounds, the unit produces and seals 1B kept tokens from it. If it does not, the unit stops the pod and reports the measured numbers with a fallback recommendation; it does not switch donors itself, because Casey chose DeepSeek V4.1 Flash and chose no fallback.
+At what measured rate and cost does DeepSeek V4.1 Flash on one rented 4×H200 pod (one tensor-parallel-4 replica) produce hard reasoning-plus-answer texts? If the rate fits D87's bounds, the unit produces and seals 1B kept tokens from it. If it does not, the unit stops the pod and reports the measured numbers with a fallback recommendation; it does not switch donors itself, because Casey chose DeepSeek V4.1 Flash and chose no fallback.
 
 ## Steps
 
@@ -20,7 +20,7 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 8×H200 po
      - gsm8k 1,079.
    - **Dropped by the panel guard:** 20,169 in all (wildchat 11,004, numina 7,895, openthoughts 1,259, oasst2 10, gsm8k 1). The guard matches sentence by sentence, so it errs toward dropping.
    - **Dropped as duplicates:** 6,393 of gsm8k's 7,473 duplicate NuminaMath-1.5's GSM8K problems. Dedup runs across sources.
-2. **Lease** after D87 is on `main`: one Vast 8×H200 verified datacenter offer at ≤ $35/h, with all labs' running pods counted. The lease uses `UOR_POD_MAX_RATE=35 UOR_POD_VAST_DISK_GB=1200 UOR_POD_VAST_MIN_INET_MBPS=1000 UOR_POD_IMAGE=vllm/vllm-openai:v0.33.0-x86_64 scripts/pod/uor-pod up --gpu h200 --count 8 --no-bootstrap --owner-approved` (the owner approval is D87). The pod has ≥ 1 TB of RAM for two Engram host-table copies. As soon as `up` returns, `drive.sh note POD RATE_CENTS OFFER` records the lease time and rate. The guard `drive.sh watch POD` is then started at once (L-004). The guard outlives segments and enforces the hard stops itself:
+2. **Lease** after D87 is on `main`: one Vast 4×H200 (SXM) offer at ≤ $35/h, with all labs' running pods counted: the cheapest with reliability ≥ 0.985, ≥ 1 TB of RAM, ≥ 1.2 TB of disk and ≥ 1 Gb/s. On 16 Nov the 15 Nov 8×H200 at $34.25/h was gone, and the cheapest 8×H200 was $46.16/h, over the cap. A 4×H200 is the recipe's per-replica shape, about 315 GB of backbone weights on 561 GB of GPU memory with the Engram tables in host RAM; 45686955 (Japan, $23.08/h, reliability 0.995) qualified that day. If an 8×H200 at ≤ $35/h appears at lease time, it is taken instead (two replicas). The lease uses `UOR_POD_MAX_RATE=35 UOR_POD_VAST_DISK_GB=1200 UOR_POD_VAST_MIN_INET_MBPS=1000 UOR_POD_IMAGE=vllm/vllm-openai:v0.33.0-x86_64 scripts/pod/uor-pod up --gpu h200 --count 4 --no-bootstrap --owner-approved` (the owner approval is D87). The pod's RAM holds one Engram host-table copy per replica (about 197 GB each). As soon as `up` returns, `drive.sh note POD RATE_CENTS OFFER` records the lease time and rate. The guard `drive.sh watch POD` is then started at once (L-004). The guard outlives segments and enforces the hard stops itself:
    - Every 10 min it syncs. It retries an SSH probe three times before believing a state.
    - At $1,100 spent or 60 h since the lease, it writes `STOP`, waits for the run, and downs the pod after a verified final sync.
    - Once no run has been alive for 30 min (3 h before the first segment, which covers setup), it downs the pod after a verified final sync.
@@ -28,7 +28,7 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 8×H200 po
 
    It exits only after `down`, or on a final-sync mismatch, which keeps the pod so nothing unique is lost and signals the driver. Each segment is followed by `drive.sh wait-segment`, which tells the driver when it ends. This path was exercised against a local stub before the FIT re-check.
 3. **Setup** (`docs/labs/m2-donor-corpus/pod.sh setup`): download `deepseek-ai/DeepSeek-V4.1-Flash-1017` at revision `08c8657f02291e11b6f6b63e0e16014f8e748518` (MIT, not gated, about 511 GB in 48 shards). Check every LFS file against Hugging Face's sha256. Build the client on the pod at the receipt's instrument commit. Then `drive.sh machine POD` writes `machine.json` from the lease (offer, rate, lease time) and the pod's `gpus.csv`, `host-mem.txt` and vLLM version, and pushes it to the pod. `model.json` and `engine.json` are written on the laptop before `put` and hold the pins of Base artifact.
-4. **Serve:** one vLLM server, `--data-parallel-size 2 --tensor-parallel-size 4`, with the recipe's H200 settings: `--tokenizer-mode deepseek_v41`, `--kv-cache-dtype fp8`, `--engram-config '{"cpu_offload":true}'`, `--reasoning-parser deepseek_v41`, `--language-model-only`, no speculative decoding (the recipe marks it for small batches), `--max-num-seqs 256 --max-num-batched-tokens 8192`.
+4. **Serve:** one vLLM server, `--tensor-parallel-size 4` with `--data-parallel-size` set to the GPU count over 4 (1 on a 4×H200; `pod.sh serve` refuses a count that is not a multiple of 4), with the recipe's H200 settings: `--tokenizer-mode deepseek_v41`, `--kv-cache-dtype fp8`, `--engram-config '{"cpu_offload":true}'`, `--reasoning-parser deepseek_v41`, `--language-model-only`, no speculative decoding (the recipe marks it for small batches), `--max-num-seqs 256 --max-num-batched-tokens 8192`.
 5. **Smoke** (instrument check, not corpus): `generate --limit 32 --parallel 8` into `smoke/`. It checks that `reasoning` and `answer` arrive in separate fields with no markup, that two-turn prompts run, and that `seal`/`verify` pass on the smoke directory. Smoke refuses to start if `model.json`, `machine.json` or `engine.json` is missing. It fails unless the recorded segment shows effort 50, max_tokens 16,384, base seed 20261116 and model name `donor`; temperature 1 and top-p 1 are fixed in the request body. The smoke output is never part of the corpus.
 6. **Tuning, at most 20 minutes:** client `--parallel` 256, then 512, each for 8 minutes from the start of the bank. The setting with the higher kept tokens per minute over its last 5 minutes is kept. These records stay in the corpus, because they are the bank's first prompts at the same sampling.
 7. **The measured hour:** 60 minutes at the kept setting, read from `rate.jsonl` (kept tokens in donor tokens per minute). The projection is P_cost = spent + (1B − kept) / R / 3600 × rate_per_h, and P_time = elapsed + (1B − kept) / R / 3600, where R is the hour's mean kept tokens/s. Because the bank is globally shuffled, the hour also gives the bank's yield, P_yield = (kept tokens / prompts dispatched) × 692,364. The yield is recorded and reported, with no stop on it. If P_yield < 1B, the run continues until the bank runs out (an S reading), and a top-up bank from WildChat's other 43 files is a new sheet.
@@ -69,7 +69,7 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 8×H200 po
 - **Donor:** `deepseek-ai/DeepSeek-V4.1-Flash-1017` at `08c8657f02291e11b6f6b63e0e16014f8e748518`, MIT (card and `LICENSE` read 15 Nov 2026). Recommended sampling is temperature 1.0 and top-p 1.0. Thinking mode is on, with reasoning effort 50 (the card's "low").
 - **Engine:** vLLM `v0.33.0-x86_64`, image digest `sha256:91ee972ab751fb7180bc71c175865e36b091686600dca783d52b2511399810b3` on Docker Hub (2 Nov 2026). It runs on the pod, outside every compiled module (§3.4).
 - **Instrument:** `docs/labs/m2-donor-corpus/instrument` (Rust, a client with no model code) at the commit each segment records.
-- **Machine:** one Vast 8×H200. The offer id, host, GPU UUIDs and driver are recorded in the receipt.
+- **Machine:** one Vast 4×H200 (or an 8×H200 if one is under the cap at lease time). The offer id, host, GPU UUIDs and driver are recorded in the receipt.
 
 ## Data split
 
@@ -91,11 +91,19 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 8×H200 po
 
 ## Cost
 
-- **DeepSeek path:** $34.25/h was quoted on 15 Nov. At R kept tokens/s, 1B takes 277,778 / R hours. Both bounds are on one basis: about 1.5 h of setup produces nothing, while tuning and the measured hour produce corpus records. The $1,000 bound leaves $949 for 27.7 h of generation, so it needs R ≥ about 10,030. The 48 h bound leaves 46.5 h, so it needs R ≥ about 5,970. Step 8's P_cost and P_time govern; these figures are a guide only.
-- **Unmeasured guess:** 10–30 h and $340–1,030. Weights download at about 1 GB/s; setup is estimated at 1–1.5 h.
+- **DeepSeek path:** one 4×H200 was $23.08/h on 16 Nov (offer 45686955). At R kept tokens/s, 1B takes 277,778 / R hours. Both bounds are on one basis: about 1.5 h of setup produces nothing, while tuning and the measured hour produce corpus records.
+  - The $1,000 bound leaves $965 for 41.8 h of generation, so it needs R ≥ about 6,650.
+  - The 48 h bound leaves 46.5 h, so it needs R ≥ about 5,970.
+
+  At another rate p, the cost bound needs R ≥ 277,778 / ((1,000 − 1.5p) / p). Step 8's P_cost and P_time govern; these figures are a guide only.
+- **Unmeasured guess:** one replica gives about half of the two-replica guess, so 20–60 h and $460–1,390. Weights download at about 1 GB/s; setup is estimated at 1–1.5 h.
 - **Fallback recommendation (not run here):** about 5–10 h on 2×B200 at about $25/h, if the published per-B200 rate holds. That is a hypothesis, given to Casey with the measured hour if F applies.
-- **F path cost:** setup plus the measured hour, about 2.5–3 h at $34.25/h (about $85–105).
-- **Caps:** at $34.25/h this run alone nearly fills the $35/h cap, so it is one pod, not four, and no other lab can lease meanwhile. Other labs' pods are counted at lease time, and the run waits if they would breach the cap.
+- **F path cost:** setup plus the measured hour, about 2.5–3 h at $23.08/h (about $58–70).
+- **Caps:**
+  - Per replica, the price is the same as the 8×H200's, about $17–23/h against $17/h. So D87's $35/h buys about one replica, not the four pods D87 allowed.
+  - On 16 Nov no second 4×H200 fitted beside the first under the cap ($23.08 + $17.36 = $40.44). Fan-out is therefore not part of this sheet.
+  - If F applies, the REPORT adds the fleet projection: the pods of the measured shape that the cap would need to meet both bounds. The parent session can then put the choice to Casey: the cap, the time bound, or the fallback.
+  - Other labs' pods are counted at lease time, and the run waits if they would breach the cap.
 
 ## Stop rule
 
