@@ -505,7 +505,8 @@ mod tests {
         planted.triples[1].count += 1;
         let mut assembler = NgramAssembler::new(1, false).unwrap();
         assembler.push(&planted).unwrap();
-        assert_ne!(assembler.finish().0.triple_sha256, digest.triple_sha256);
+        let (planted_digest, ..) = assembler.finish();
+        assert_ne!(planted_digest.triple_sha256, digest.triple_sha256);
         let mut swapped = oracle_partition(&stream, 1, 0, 4096).unwrap();
         swapped.triples.swap(0, 1);
         assert!(NgramAssembler::new(1, false).unwrap().push(&swapped).is_err());

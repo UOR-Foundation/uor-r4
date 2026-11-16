@@ -71,7 +71,8 @@ fn ngram_count_cuda_max_order_and_short_streams() {
     let counter = NgramCounter::new(0, &short).expect("counter");
     for order in 0..=4u32 {
         let (digest, _, _, _) = gpu(&counter, order, u64::MAX);
-        assert_eq!(digest, oracle_count(&short, order).expect("oracle").0, "order {order}");
+        let (oracle_digest, ..) = oracle_count(&short, order).expect("oracle");
+        assert_eq!(digest, oracle_digest, "order {order}");
     }
     assert!(NgramCounter::new(0, &[1, 4096]).is_err());
 }
