@@ -1,6 +1,8 @@
 # ORDER — m2-student-corpus-ingest (claude-403)
 
-Lab: claude. Unit: claude-403. Task: `m2-student-corpus-ingest`.
+Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407).
+Unit: claude-403. Task: `m2-student-corpus-ingest`, the corpus-ingest step before D86 step 6's
+native training run.
 
 ## Goal
 
@@ -10,10 +12,11 @@ by the native trainer and its tokenizer coverage is known before any training ru
 
 ## Scope
 
-- Slice A (this PR): the standalone package `docs/labs/m2-student-corpus-ingest/instrument/`
-  (its own `[workspace]`), binary `student-ingest --tokenizer <tokenizer.json> --out <dir>
-  <shard>...`, and its tests on hand-written fixtures. No training, no GPU, no real-data run.
-- Slice B (later): run the release binary on pod 3's shards, read-only, and write `REPORT.md`.
+- The standalone package `docs/labs/m2-student-corpus-ingest/instrument/` (its own
+  `[workspace]`), binary `student-ingest --tokenizer <tokenizer.json> --out <dir> <shard>...`,
+  and its tests on hand-written fixtures.
+- A host run of the release binary on pod 3's finished D87 shards, read-only, with the outputs
+  under the worktree's gitignored `local/`, and `REPORT.md`. No training, no GPU.
 
 Inputs: `.jsonl` or `.jsonl.zst` shards. The format is detected per record by its keys:
 (a) the D41 pilot (`id`, `kind`, `messages[{role,content}]`, `answers[1..4]`; the ingest uses
@@ -35,12 +38,21 @@ to one byte ≥ 0x80.
 
 ## Open decision: turn framing (the lab's call, reversible)
 
-No new tokens and no reasoning marker. Per record: BOS; then per turn the user marker and
-the user content, the assistant marker, the reasoning text, `"\n\n"`, the answer text; EOS
-at the end of the record. The markers are the ones `turn_census::Marks` reads. Segment tags
-in `segment.u8`: 0 frame (BOS, EOS, markers, separator), 1 prompt, 2 reasoning, 3 answer.
-`response_mask` is 1 on reasoning and answer (D87 makes both hard targets), 0 elsewhere.
-A reviewer or slice B may change this framing; the instrument keeps it in one place.
+No new tokens and no reasoning marker. Per record: BOS; then per turn the user marker
+`"\nUser:"` and `" "` + the user content, the assistant marker `"\nAssistant:"`, `" "` + the
+reasoning text, the separator `"\n\n"`, the answer text (an empty reasoning drops the
+separator and the answer takes the leading space); EOS at the end of the record. A D41
+record's messages keep their roles (`"\nSystem:"` for a system message) as prompt context,
+and its first answer is the answer. Each piece is encoded on its own, so a segment boundary
+is always a token boundary.
+
+Segment tags in `segment.u8`: 0 frame (BOS, EOS, markers, separator), 1 prompt, 2 reasoning,
+3 answer. `response_mask` is 1 on every token the donor assistant emits after its header —
+the reasoning, the separator, the answer and the record's closing EOS — and 0 elsewhere. D87
+makes reasoning and answer hard targets; the separator and EOS are masked in so the model
+learns to move from reasoning to answer and to stop, matching `turn_census::documents`,
+which masks the end mark in. A reviewer may change this framing; the instrument keeps it in
+one place (the marker constants and `parse_record` in `src/lib.rs`).
 
 ## Gates
 
@@ -48,5 +60,7 @@ A reviewer or slice B may change this framing; the instrument keeps it in one pl
 - G2: `cargo test` on the instrument passes with more than zero tests.
 - G3: this ORDER commit is the first commit on the branch.
 - G4: `git diff --check origin/main...HEAD` is empty.
+- G5: the host run writes a `summary.json` with a nonzero record count, and `tokens.u16` is
+  exactly 64 + 2 × the token count bytes.
 
 No GPU; no pod; no corpus or binary is committed.
