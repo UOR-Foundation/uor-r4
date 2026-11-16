@@ -69,8 +69,8 @@ fn a_restored_type_head_session_continues_exactly() {
 
 #[test]
 fn a_type_head_session_saves_and_restores_through_a_file_at_production_shape() {
-    // The payloads are `context * width` i64 a read: a shape with width 256 and context 192 makes
-    // the JSON large enough to exercise the file-size bound that the in-memory test cannot.
+    // The payloads are `context * width` i64 a read: a shape with width 256 and context 1,024
+    // makes the JSON large enough to exercise the file-size bound the in-memory test cannot.
     let shape = FbsSynth {
         vocab: 256,
         d: 256,
