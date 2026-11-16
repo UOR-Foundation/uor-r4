@@ -6,7 +6,7 @@
 #   put POD                    copy the instrument, pod.sh, bank and receipt inputs to the pod, and restore
 #                              every finished file of $LOCAL/out (a re-leased pod resumes from them); it
 #                              refuses a pod whose out/ is not empty, and checks each restored file by sha256
-#   offer POD                  right after up: check the rented Vast instance (4 GPUs, >= 1000 GB RAM, NVLink
+#   offer POD                  right after up: check the rented Vast instance (4 or 8 GPUs, >= 1000 GB RAM per replica, NVLink
 #                              >= 400 GB/s, datacenter) and save it to offer.json; exit 1 on a mismatch
 #   machine POD                write machine.json from the lease and the pod's gpus.csv, and push it
 #   sync POD [final]           copy finished shards/counts off the pod, checked by sha256 (a finished shard
@@ -245,7 +245,7 @@ offer)
   mkdir -p "$LOCAL"
   "${VASTAI:-vastai}" show instance "${POD#vast-}" --raw > "$LOCAL/offer.json"
   jq -c '{id, machine_id, host_id, gpu_name, num_gpus, cpu_ram, bw_nvlink, gpu_mem_bw, hosting_type, dph_total, geolocation, driver_version}' "$LOCAL/offer.json"
-  if jq -e '.num_gpus == 4 and (.gpu_name | test("H200")) and .cpu_ram >= 1000000 and (.bw_nvlink // 0) >= 400' "$LOCAL/offer.json" > /dev/null; then
+  if jq -e '(.num_gpus == 4 or .num_gpus == 8) and (.gpu_name | test("H200")) and .cpu_ram >= 1000000 * (.num_gpus / 4) and (.bw_nvlink // 0) >= 400' "$LOCAL/offer.json" > /dev/null; then
     log "offer metadata matches the sheet"
   else
     alert "rented instance does not match the sheet's filters: down it now"; exit 1
@@ -254,7 +254,7 @@ offer)
   # all. Every GPU pair in the pod's own topology must be NV#, or TP4 runs over PCIe.
   ssh_pod "nvidia-smi topo -m" > "$LOCAL/offer-topo.txt" 2>&1 || { alert "cannot read the pod's GPU topology: down it now"; exit 1; }
   # Strip colour codes; GPU rows only; any non-NV entry other than the diagonal X fails.
-  if sed 's/\x1b\[[0-9;]*m//g' "$LOCAL/offer-topo.txt" | awk '/^GPU[0-9]/ { for (i = 2; i <= 5; i++) if ($i != "X" && $i !~ /^NV[0-9]+$/) bad = 1; n++ } END { exit (n == 4 && !bad) ? 0 : 1 }'; then
+  if sed 's/\x1b\[[0-9;]*m//g' "$LOCAL/offer-topo.txt" | awk -v NG="$(jq -r .num_gpus "$LOCAL/offer.json")" '/^GPU[0-9]/ { for (i = 2; i <= NG + 1; i++) if ($i != "X" && $i !~ /^NV[0-9]+$/) bad = 1; n++ } END { exit (n == NG && !bad) ? 0 : 1 }'; then
     log "GPU topology: NVLink between every pair"
   else
     alert "GPU topology is not NVLink between every pair (see offer-topo.txt): down it now"; exit 1
