@@ -9,13 +9,14 @@
 //!                         [--server-wait-seconds W]
 //!   donor-corpus seal     --dir DIR --prompts FILE --model FILE --machine FILE --engine FILE
 //!   donor-corpus verify   --dir DIR --prompts FILE
+//!   donor-corpus balance  --server URL (--api-key-env NAME | --api-key-file PATH)
 //!
 //! `generate` sends each bank prompt to a vLLM OpenAI-compatible server and keeps the
 //! teacher's reasoning text and final answer text per turn. It resumes from whatever a
 //! previous segment left in DIR. No logits, probabilities, scores or ranks are requested
 //! or stored.
 
-use m2_donor_corpus::{cmd_generate, cmd_seal, cmd_verify, Args, Res};
+use m2_donor_corpus::{cmd_balance, cmd_generate, cmd_seal, cmd_verify, Args, Res};
 
 fn args_map(args: &[String]) -> Res<Args> {
     let mut m = Args::new();
@@ -41,9 +42,12 @@ fn main() {
             "generate" => cmd_generate(&m).map(|v| println!("{v}")),
             "seal" => cmd_seal(&m).map(|v| println!("{v}")),
             "verify" => cmd_verify(&m).map(|v| println!("{v}")),
+            "balance" => cmd_balance(&m).map(|v| println!("{v}")),
             other => Err(format!("unknown command {other}")),
         }),
-        None => Err("usage: donor-corpus bank|generate|seal|verify --flag value ...".into()),
+        None => {
+            Err("usage: donor-corpus bank|generate|seal|verify|balance --flag value ...".into())
+        }
     };
     if let Err(e) = res {
         eprintln!("donor-corpus: {e}");

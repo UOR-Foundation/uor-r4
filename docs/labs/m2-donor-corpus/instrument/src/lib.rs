@@ -1227,6 +1227,28 @@ pub fn cmd_seal(m: &Args) -> Res<Value> {
     Ok(json!({"records": r["records"], "merkle_root": r["merkle_root"]}))
 }
 
+/// `balance`: GETs `{server}/user/balance` with the key from `--api-key-env` or
+/// `--api-key-file` and returns the provider's JSON as it came (it holds no secret).
+/// The spend watcher reads it; the key is read the same way as `generate` reads it.
+pub fn cmd_balance(m: &Args) -> Res<Value> {
+    let server = need(m, "server")?.trim_end_matches('/').to_string();
+    let (Some(bearer), _) = read_key(m)? else {
+        return Err("balance needs --api-key-env or --api-key-file".into());
+    };
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(30)))
+        .build()
+        .into();
+    let mut resp = agent
+        .get(format!("{server}/user/balance"))
+        .header("Authorization", bearer.0.as_str())
+        .call()
+        .map_err(|e| format!("balance: {e}"))?;
+    resp.body_mut()
+        .read_json::<Value>()
+        .map_err(|e| format!("balance: unreadable body: {e}"))
+}
+
 /// `verify`: recomputes every hash and the root, checks every record against the bank
 /// and the counts files, and fails on any mismatch.
 pub fn cmd_verify(m: &Args) -> Res<Value> {

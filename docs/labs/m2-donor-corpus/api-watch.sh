@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# api-watch.sh STATE_DIR CAP_CENTS OUT_DIR... (claude-400, amendment 6)
+#
+# The spend watcher for the API segments. It runs on the laptop beside `generate --api openai`.
+# Every M2_API_POLL seconds (default 60) it reads the provider's balance with `donor-corpus
+# balance` (the key is read by the client from M2_API_KEY_FILE, never by this script) and counts
+# spend as the balance at its first reading minus the balance now. That first reading is kept in
+# STATE_DIR/start-balance-cents, so a restarted watcher keeps counting from it.
+#
+# - Spend at or above CAP_CENTS: writes STOP into every OUT_DIR and an alert to STATE_DIR/ALERTS.
+# - A segment that ended `refused`: an alert (once per segment line).
+# - A balance it cannot read: an alert after 5 failed readings in a row; it keeps trying.
+# It exits when STATE_DIR/WATCH-END exists. It never kills a process.
+set -u
+[ $# -ge 3 ] || { echo "usage: api-watch.sh STATE_DIR CAP_CENTS OUT_DIR..."; exit 2; }
+STATE=$1; CAP=$2; shift 2
+case $CAP in *[!0-9]*|'') echo "api-watch: CAP_CENTS must be a whole number of cents, got $CAP"; exit 2 ;; esac
+BIN=${M2_API_BIN:?set M2_API_BIN to the donor-corpus binary}
+KEY=${M2_API_KEY_FILE:?set M2_API_KEY_FILE to the key file path}
+SERVER=${M2_API_SERVER:-https://api.deepseek.com}
+POLL=${M2_API_POLL:-60}
+mkdir -p "$STATE"
+LOG=$STATE/api-watch.log
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+alert() { echo "$(now) $*" | tee -a "$STATE/ALERTS" >> "$LOG"; }
+
+# The USD total balance in cents, or nothing when it cannot be read.
+balance_cents() {
+  local v
+  v=$("$BIN" balance --server "$SERVER" --api-key-file "$KEY" 2>/dev/null \
+    | jq -r '.balance_infos[] | select(.currency == "USD") | .total_balance' 2>/dev/null) || return 0
+  case $v in
+    *.[0-9][0-9]) v=${v%.*}${v##*.} ;;
+    *.[0-9]) v=${v%.*}${v##*.}0 ;;
+    *[!0-9]*|'') return 0 ;;
+    *) v=${v}00 ;;
+  esac
+  echo $((10#$v))
+}
+
+fails=0
+while [ ! -e "$STATE/WATCH-END" ]; do
+  b=$(balance_cents)
+  if [ -z "$b" ]; then
+    fails=$((fails + 1))
+    [ "$fails" -ne 5 ] || alert "balance unreadable 5 times in a row"
+  else
+    fails=0
+    [ -s "$STATE/start-balance-cents" ] || echo "$b" > "$STATE/start-balance-cents"
+    start=$(cat "$STATE/start-balance-cents")
+    spent=$((start - b))
+    echo "$(now) balance_cents=$b spent_cents=$spent cap_cents=$CAP" >> "$LOG"
+    if [ "$spent" -ge "$CAP" ]; then
+      for d in "$@"; do [ -e "$d/STOP" ] || { touch "$d/STOP" && alert "spent_cents=$spent >= cap $CAP: STOP written to $d"; }; done
+    fi
+  fi
+  for d in "$@"; do
+    [ -s "$d/segments.jsonl" ] || continue
+    n=$(grep -c '"stopped_by":"refused"' "$d/segments.jsonl")
+    seen=$(cat "$STATE/refused-seen-$(echo "$d" | tr / _)" 2>/dev/null || echo 0)
+    if [ "$n" -gt "$seen" ]; then
+      alert "a segment in $d ended refused ($n in all)"
+      echo "$n" > "$STATE/refused-seen-$(echo "$d" | tr / _)"
+    fi
+  done
+  sleep "$POLL"
+done
+echo "$(now) WATCH-END found; exiting" >> "$LOG"

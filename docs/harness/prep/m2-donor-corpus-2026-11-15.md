@@ -170,7 +170,7 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 4×H200 po
      - Base URL and model come from the command line, so the provider is not fixed: `https://api.deepseek.com`, model `deepseek-flash`. DeepSeek's page names it DeepSeek-V4.1-Flash-1017 and allows at most 2,500 requests in flight.
      - The client runs on the laptop. It is an HTTP client with no model code, and nothing is trained or evaluated there.
    - **Sampling (DeepSeek's thinking-mode guide, https://api-docs.deepseek.com/guides/thinking_mode, read by the parent 16 Nov):**
-     - The `--extra-body` file is `{"thinking": {"type": "enabled"}, "reasoning_effort": "high"}`. The response carries the reasoning in `choices[0].message.reasoning_content`, which the client already reads.
+     - The probe's first `--extra-body` file is `{"thinking": {"type": "enabled"}, "reasoning_effort": "high"}`; the probe result below sets the production level. The response carries the reasoning in `choices[0].message.reasoning_content`, which the client already reads.
      - In thinking mode the API ignores `temperature`, and on `deepseek-flash` it clamps `top_p` to 0.95–1.0. The body still sends temperature 1, top_p 1 and max_tokens 16,384, as on pod 3, but the API samples at its own settings.
      - Pod 3 samples at temperature 1, top_p 1, effort 50, and these API settings cannot match that exactly. The receipt records what was sent and the documented limits, never a claim that the sampling matched.
      - The effort level is chosen by the probe. `high` is tried first; if the mean length is outside ±30% of pod 3's, one more probe runs at the neighbouring level in that direction (`low` or `max`). The level whose length is closer is used, and recorded.
@@ -182,6 +182,16 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 4×H200 po
      - **Consistent** if the `model` field names the Flash model, every turn has reasoning, math answers agree on at least 70% of the prompts where pod 3's answer is extractable, and the mean length is within ±30%. Sampling at temperature 1 makes exact agreement impossible.
      - **Inconsistent** otherwise: no API corpus is made, pod 3 keeps running, and the parent puts the numbers to Casey.
      - The weights behind an API cannot be verified, so the receipt records the provider, the model id and the `model` field returned, never a weights hash.
+   - **Probe result (16 Nov, 08:08–08:12Z, peak hours, about $0.40; instrument 157a1bcde; files in `local/m2-run/api-probe/`).** The probe ran at `high`, then at `low` because `high` was outside the length band.
+
+     | Effort | Kept / sent | Dropped | Length vs pod 3 (same 62 prompts) | Turns without reasoning | Math answers, exact string after normalising | Math answers, read |
+     |---|---|---|---|---|---|---|
+     | `high` | 62 / 64 | 2, both for length | 2,776 vs 2,094 (1.325×, outside ±30%) | 0 of 63 | 16 / 38 | 38 / 38 |
+     | `low` | 62 / 64 | the same 2, for length | 1,826 vs 2,094 (0.872×, inside) | 0 of 63 | 17 / 38 | 38 / 38 |
+
+     - The `model` field says `deepseek-flash` in every response, and no `system_fingerprint` was returned. That field echoes the requested alias, so it is weak evidence; the receipt records it and makes no further claim.
+     - **The exact-string comparison is an instrument failure, not a model result** (§4.2, L-007). The extractor took the last `\boxed{}`, else the last number. Many of the math prompts are proofs, constructions or essays, so the last number is an arbitrary digit. The normaliser also misses equivalent forms: `3/4165` against `0.0007203`, `1:2` against `1/2`, `k<-4/7` against the interval, and `\ ` inside `\boxed{}`, which turned pod 3's `700\ \text{rubles}` into "0rubles". The lab read the extracted pair of each mismatch at both levels (22 at `high`, 21 at `low`). It read the closing lines of the final answers of the six where the pairs differ in substance (numina-367a8f982cdb88e7, numina-c7e1ca1096dda844, numina-04e782ebe306073f, openthoughts-9d1ef9b5822f9629, openthoughts-f1e5f448b124686e, openthoughts-1d1ea7dd80c1548c). None gives a different final result. The tables of every id are `high-compare.json` and `low-compare.json`.
+     - **Verdict: consistent, at `low`.** The `--extra-body` file for every API segment is `{"thinking": {"type": "enabled"}, "reasoning_effort": "low"}`. `low` is also the card's name for pod 3's effort 50.
    - **Terms (reported by the parent, 16 Nov, quoted from the source pages):**
      - DeepSeek Open Platform Terms §4.2 assigns the Output rights to the user. It says you "may apply the Inputs and Outputs … to a wide range of use cases, including … training other models (such as model distillation)" (https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html).
      - OpenAI Services Agreement §3.3(e), by contrast: the customer will not, "except for a Permitted Exception, use Output to develop artificial intelligence models that compete with OpenAI's products and services" (https://openai.com/policies/services-agreement/).
@@ -193,10 +203,21 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 4×H200 po
      - **Part A:** bank lines 200,787–692,364, the former parts 1 and 2 (491,578 prompts), into `local/m2-run/api/out/`. Its budget is 1B minus pod 3's final part 0 kept total, set when pod 3 stops.
      - **Part B,** only if A runs out first: part 0's lines after the last index pod 3 dispatched, into `local/m2-run/api-b/out/`.
    - **Concurrency:** start at `--parallel 256` for 5 min. Then 1,000, then 2,000 (below the 2,500 limit), each after a clean 5-minute rate row: no `refused` and errors under 1% of requests. 429s mean step back to the last clean setting.
+   - **Segments.** `--parallel` is fixed for a segment, so the ramp is three segments into the same `out/`. Each one resumes from the final shards, and each finishes its in-flight prompts when its time ends. All run with `--api openai --api-key-file ~/.config/uor-r4/deepseek.key --server https://api.deepseek.com --model-name deepseek-flash --max-tokens 16384`, the `low` extra-body file and the bank of part A.
+     - **A1:** 10:00Z, `--parallel 256 --max-seconds 300 --budget 900000000`.
+     - **A2:** `--parallel 1000 --max-seconds 1500`, same budget. When it ends, `verify` runs on a copy of `out/` against part A's bank. If it passes, pod 3 gets `STOP`, then its final verified sync and down. That gives part 0's final kept total K0.
+     - **A3:** `--parallel 2000 --budget (1,000,000,000 − K0)`. Its `--max-seconds` ends it at 00:40Z, 20 min before the 01:00Z peak. If A runs out of prompts first, B runs the same way into `api-b/out/` with the budget still left.
+     - At 2,000 in flight, the probe's 22 tokens/s per stream gives about 44k generated tokens/s, so A3 should finish inside one off-peak window. If it does not, it resumes after 10:00Z on 17 Nov.
+     - Before each segment, the driver checks that `out/STOP` is absent. A STOP left by the watcher ends a new segment at once, which is the safe direction.
    - **Cost and watch:**
      - Cost is computed from the recorded usage: output tokens (kept and dropped) × $0.60/M, plus prompt tokens × $0.15/M, counted as cache misses.
      - At pod 3's measured 84% kept fraction, 1B kept tokens is about 1.19B output, about $715 plus about $20 of input.
-     - A watcher process stops the run (`STOP`) if computed spend passes $850, and alerts on any `refused` stop. The provider's prepaid balance is the outer stop (402).
+     - The probe at `low` kept 77.6% of what it generated, lower than pod 3's 84%, because its two length drops are 2 of only 64 prompts. Bounds for 1B kept are therefore 1.19B to 1.29B output, about $715 to $775, plus about $20 of input.
+     - **Watcher:** `docs/labs/m2-donor-corpus/api-watch.sh local/m2-run/api-watch 85000 local/m2-run/api/out local/m2-run/api-b/out`, started before A1.
+       - It reads the provider's balance once a minute with `donor-corpus balance`, which reads the key the same way `generate` does. It counts spend as its first reading minus the balance now, so peak pricing and dropped tokens are counted too.
+       - At $850 it writes `STOP` into both out folders. It alerts on a segment that ended `refused`, and on 5 failed readings in a row.
+       - The balance read at 08:14Z was $1,168.17, so the provider's prepaid balance (402) is the outer stop above the watcher.
+       - A stub test checked four things: no STOP below the cap, STOP in both folders at the cap, one alert per refused segment, and an alert on the fifth failed reading. shellcheck passes.
      - The `drive.sh` pod guard does not apply: there is no pod.
    - **Seal:** part 0 (pod 3), A, and B if made, each verified against the full `bank.jsonl`. They are stored at `results/claude/m2-donor-corpus-2026-11-16/{part-0,api-a,api-b}/` and read back. Each receipt's `engine.json` names its engine: vLLM on pod 3, or the API provider, base URL, model id and returned `model` field.
 3. **Setup** (`docs/labs/m2-donor-corpus/pod.sh setup`): download `deepseek-ai/DeepSeek-V4.1-Flash-1017` at revision `08c8657f02291e11b6f6b63e0e16014f8e748518` (MIT, not gated, about 511 GB in 48 shards). Check every LFS file against Hugging Face's sha256. Build the client on the pod at the receipt's instrument commit. Then `drive.sh machine POD` writes `machine.json` from the lease (offer, rate, lease time) and the pod's `gpus.csv`, `host-mem.txt` and vLLM version, and pushes it to the pod. `model.json` and `engine.json` are written on the laptop before `put` and hold the pins of Base artifact.
