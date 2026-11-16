@@ -16,10 +16,10 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 - **The target is the model's own next `query_q12` block**, not a gold next token (no reference
   tokens exist for these ids), so there is no quality measure here — only the update's L1 and
   whether a served token moves.
-- **The first run had two measurement faults.** The target lift was `<< 16`, which saturates on
-  this artifact's queries (they reach `2^15`), and the "lanes improved" count reported 0 of 64 while
-  the total fell. Both are fixed: the lift is `<< 14` (Q12 -> Q26), and the count compares each
-  lane's before and after. The first table is discarded.
+- **The first run had two measurement faults.** The target lift was `<< 16`, which places the largest
+  queries (`2^15`) exactly on the Q31 boundary and compresses the scale, and the "lanes improved"
+  count reported 0 of 64 while the total fell. Both are fixed: the lift is `<< 14` (Q12 -> Q26,
+  four times the headroom), and the count compares each lane's before and after. The first table is discarded.
 - **The L1 drops are tiny** (~0.15% shared, ~0.20% per-lane). Per-lane fitting its own objective
   slightly better is not a capability result.
 - **One served token moved under the per-lane state** (position 17, `466` -> `82`); with no

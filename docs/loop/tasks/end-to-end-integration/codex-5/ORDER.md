@@ -30,7 +30,8 @@ unit adds one test file and docs, no dependency, no `Cargo.lock` change.
   ids**, stated in the REPORT), tracing the 6 x 64 carries per step and the `query_q12` of each
   step.
 - Records: for each transition, each lane's carry `before` is the value; the next step's query
-  block `query_q12[4l..4l+4] << 19` is the target at Q31.
+  block `query_q12[4l..4l+4] << 14` is the target at Q26 (the queries reach 2^15, so a 16-bit lift
+  would sit on the Q31 boundary; 14 bits keep four times the headroom).
 - Train the shared gate on the pooled records and one gate per lane on its own records, 64 shipped
   `step_reference` steps each; no new arithmetic.
 - Report the update's own L1 and the served tokens for the shared and the per-lane state, on the
