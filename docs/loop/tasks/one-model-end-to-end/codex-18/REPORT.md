@@ -71,9 +71,12 @@ panel.
 `crates/uor-r4-integer/src/stack/relation_read.rs` implements the same rule as a served `ReadOut`.
 `RelationRead::PROBE` scans the context's `K v` facts, matches `Q(k)` to the asked fact, takes the
 distance bucket, excludes the asked fact and the earlier slots' asked facts, and returns
-`ReadOut::first_pick(other_value_pos, value)`. Three finite tests: a `K=1` row picks the only other
-fact (support 49, payload 529), an ambiguous row takes the first candidate and excludes an earlier
-slot, and a missing relation or bucket selects nothing. Integer library: **680 passed**, 1 ignored.
+`ReadOut::first_pick(other_value_pos, …)`. `select_with_table` fills the payload with the picked
+value's **table row** (the width-wide row the hard copy writes); `select` keeps the one-element token
+for tests. Four finite tests: a `K=1` row picks the only other fact (support 49, payload 529), an
+ambiguous row takes the first candidate and excludes an earlier slot, a missing relation or bucket
+selects nothing, and the table payload is the value's row (a short table is refused). Integer
+library: **681 passed**, 1 ignored.
 
 The ranges are the probe's encoding; the `ReadOut` shape is the served contract. The next step is to
 select this read in the session's read path and run the C2′ panel.

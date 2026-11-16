@@ -73,26 +73,53 @@ impl RelationRead {
         Some((asked, bucket))
     }
 
-    /// The read at `query_pos`: the asked fact's other fact, or `None` when the
-    /// context does not name one. `earlier_asked` are the earlier slots' asked
-    /// value positions in the same window.
+    /// The other fact's value position `p` at `query_pos`, or `None`. The
+    /// earlier slots' asked value positions are excluded.
+    fn pick(&self, tokens: &[u32], query_pos: usize, earlier_asked: &[usize]) -> Option<usize> {
+        let (asked, bucket) = self.asked(tokens, query_pos)?;
+        let (low, high) = self.buckets[bucket];
+        let facts = self.facts(tokens, query_pos);
+        facts.iter().copied().find(|&p| {
+            p != asked
+                && p < query_pos
+                && (low..=high).contains(&(query_pos - p))
+                && !earlier_asked.contains(&p)
+        })
+    }
+
+    /// The read at `query_pos`: the asked fact's other fact, with the value
+    /// token as a one-element payload. `earlier_asked` are the earlier slots'
+    /// asked value positions in the same window.
     pub fn select(
         &self,
         tokens: &[u32],
         query_pos: usize,
         earlier_asked: &[usize],
     ) -> Option<ReadOut> {
-        let (asked, bucket) = self.asked(tokens, query_pos)?;
-        let (low, high) = self.buckets[bucket];
-        let facts = self.facts(tokens, query_pos);
-        let pick = *facts.iter().find(|&&p| {
-            p != asked
-                && p < query_pos
-                && (low..=high).contains(&(query_pos - p))
-                && !earlier_asked.contains(&p)
-        })?;
+        let pick = self.pick(tokens, query_pos, earlier_asked)?;
         let value = i128::from(*tokens.get(pick)?);
         Some(ReadOut::first_pick(pick as u32, vec![value]))
+    }
+
+    /// [`select`](Self::select) with the picked value's **table row** as the
+    /// payload, the width-wide row the hard copy writes. The table is
+    /// `vocab * width` i16 words; the value token indexes it.
+    pub fn select_with_table(
+        &self,
+        tokens: &[u32],
+        query_pos: usize,
+        earlier_asked: &[usize],
+        table: &[i16],
+        width: usize,
+    ) -> Option<ReadOut> {
+        let pick = self.pick(tokens, query_pos, earlier_asked)?;
+        let value = *tokens.get(pick)? as usize;
+        let start = value.checked_mul(width)?;
+        let row = table.get(start..start.checked_add(width)?)?;
+        Some(ReadOut::first_pick(
+            pick as u32,
+            row.iter().map(|&word| i128::from(word)).collect(),
+        ))
     }
 }
 
@@ -126,6 +153,24 @@ mod tests {
         assert_eq!(out.support, vec![49]);
         assert_eq!(out.payload.as_deref(), Some(&[529][..]));
         assert_eq!(out.check(), Ok(()));
+    }
+
+    #[test]
+    fn the_served_payload_is_the_picked_values_table_row() {
+        let mut table = vec![0i16; 1_200 * 2];
+        table[529 * 2] = 7;
+        table[529 * 2 + 1] = -8;
+        let out = RelationRead::PROBE
+            .select_with_table(&window(false), 100, &[], &table, 2)
+            .expect("the other fact's row");
+        assert_eq!(out.pick(), 50);
+        assert_eq!(out.support, vec![49]);
+        assert_eq!(out.payload.as_deref(), Some(&[7, -8][..]));
+        assert_eq!(out.check(), Ok(()));
+        // A table without the value's row is refused rather than truncated.
+        assert!(RelationRead::PROBE
+            .select_with_table(&window(false), 100, &[], &table[..2], 2)
+            .is_none());
     }
 
     #[test]
