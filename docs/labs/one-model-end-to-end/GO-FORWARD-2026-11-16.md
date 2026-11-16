@@ -169,7 +169,9 @@ Two different defects have been measured and must not be confused:
 
 - **Input separation** (codex-20/21): the integer stream at depth 6 agrees with the float replay in
   sign 0.887; a read retrained on the integer stream recovers to 0.86/0.89 held. So the loss is
-  real, bounded, and already recoverable by training on the served stream.
+  real, bounded, and already recoverable by training on the served stream. Its **scale** is the
+  second half: the read's residual reaches ~2^18.5 against the gates' 2^31 (claude-390), so the
+  address is computed at the bottom of the domain.
 - **Write scale** (claude-386/387): the read's payload is **2.6% of the stream's norm**; a 97%
   correct choice moves the logits to at most 19/1,024. Scaling the payload ×16 reached R_ask 0.367.
 
@@ -205,34 +207,58 @@ problem is the choice, not the write, and the key experiment is the only remaini
 
 ## 6. The training plan (under one day on a 4090)
 
-**The arithmetic, from measurement.** The p recipe runs at **0.2033 s/step** on an RTX 4090
-(claude-381, "wick"), at 16,384 steps: **≈ 55 minutes per model**, about 70 minutes with a vector
-read (1.2–1.4×). Three seeds fit in a working day. The recipe sees 16,384 × 16 × 192–256 ≈ **50–67M
-tokens**, so the 1B donor corpus is **15–20×** more than one run consumes; one epoch over 1B tokens
-would be 10–14 h on a 5090 and 20–30 h on a 4090 — over the day, and not obviously better than more
-epochs over a memory curriculum.
+**The model.** The p-recipe FBS model is **1,112,576 learnable values**: the token table is
+1,048,576 (94%), the six recurrence layers 63,744, the final norm 256. There is no dense matmul;
+the projections are FBS table-gathers and quaternion rotations, and the exported artifact is
+19,345,344 B (turn memory is most of the table bytes).
 
-**What to train.** Not general chat first. The failing capability is memory recall, and the cheapest
-configuration with a measured prior is **arm r's recipe on a memory-line corpus** (recall=reply) with
-the p trunk, plus whichever fix from §5 the evidence supports:
+**Measured step times (not estimates).**
 
-1. retrain the read on the *served* stream (minutes; codex-21's path);
-2. add the payload write weight (§5);
-3. add the slot key (§4) as the next arm;
-4. 16,384 steps, batch 16, context 256, seeds 1–3, on wick.
+| Hardware | Steps | Rate | Note |
+|---|---|---|---|
+| RTX 5090 (claude-358) | 16,384 | 0.120–0.127 s/step | 33k context tok/s |
+| **RTX 4090, wick (claude-370)** | 16,384 | **0.300 s/step** | 13,653 context tok/s; 3.33 steps/s |
+| RTX 4090 (claude-380, W 192) | — | 0.308–0.355 s/step | corroborates |
 
-**Gates.** Every arm is scored on the protocol panel, not on TRAIN: exact matched pairs, the
-write-over count, and the first-divergence ledger. A run that raises exact matches by copying TRAIN
-replies is not a capability (the census catches it).
+So **the complete 16,384-step recipe is ≈ 1.4 h on wick**, and one epoch over the full 1B donor
+corpus is **≈ 20.3 h** — both inside the owner's day. The 0.2033 s/step in an earlier note was a
+256-step smoke, not a full run; 0.300 is the full-run figure.
+
+**What that means.** Compute is not the bottleneck, and "train a complete model" is already cheap.
+The bottleneck is that the current recipe **fails the goal**: claude-326 records 0 complete replies,
+0 pairs, and the failure is the **first reply token** — choosing which prompted value the question
+asks for. More steps on donor text do not target that choice. The donor corpus is 15–20× one run's
+tokens; one epoch of it is general chat, not the fix.
+
+**The order that avoids wasting the day.**
+
+0. **The pre-flight (≈ $2, half a day).** The registered probe of claude-326 Q4: Part A (laptop) —
+   the first-target rank and a Hamming trace on our own seals: does any head keep the asked value's
+   position? Part B (GPU, ~$1) — a two-class recall probe with **query ≠ key** and a **3–4-token
+   header gap**. B1 failing means this read cannot learn a query-conditioned choice at all; B2
+   failing means the trunk does not carry the question forward. Either failure makes a language run
+   pointless. *Note from this session:* on the synthetic recall family the asked-fact read already
+   reaches **0.977** (float) and **0.99** (FBS-retrained) when trained on the served stream
+   (codex-21), so the open part of the question is narrower — does the **text** trunk carry the
+   question word? The same probe answers it.
+1. **The write and the pick (§5).** Cheap, measured, and they decide whether a read can move the
+   logits at all: the read's input is ~2^18.5 against the gates' 2^31 (claude-390), and its payload
+   is 2.6% of the stream (claude-387). A run trained before this fix inherits both.
+2. **The run.** Arm r's recipe on the memory-line curriculum, p trunk, 16,384 steps, batch 16,
+   context 256, seeds 1–3, on wick: **≈ 1.4 h per seed**, ≈ 4.5 h for three. The read retrains on
+   the served stream in minutes (codex-21's path).
+3. **The measurement.** The protocol panel (§2.4), the ledger, and the verdict (§2.5). No arm is
+   called a capability on TRAIN.
 
 **What training cannot fix** (do not spend a run on these): the read's input fidelity (a read
-retrain, not a trunk run), the artifact size (compression), the seam and the service (code), and the
-C2′ choice (the gate family's ceiling — a mechanism change, not more steps).
+retrain, not a trunk run), the artifact size (compression), the serving seam (float→integer
+near-ties differ on 1.0–1.6% of rows, claude-354), and the C2′ choice (the gate family's ceiling).
 
 ## 7. Order of work
 
 | # | Unit | Owner | Blocks |
 |---|---|---|---|
+| 0 | The pre-flight probe (§6.0) | codex | whether any run can succeed |
 | 1 | Service slide (§2.8) | codex | anyone using the API |
 | 2 | Kept-set + tok/s curve (§2.6–7) | codex | the protocol's measures |
 | 3 | The read's write weight (§5) | codex | whether a run can succeed |
