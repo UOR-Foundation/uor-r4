@@ -71,6 +71,14 @@ struct Counts {
     float_rows: u64,
     x_rows: u64,
     x_sign_agree: u64,
+    /// The rows whose address margin was read.
+    margin_rows: u64,
+    /// The margins' sum, so a reader can divide.
+    margin_sum: u128,
+    /// Rows whose nearest and second-nearest candidates tied.
+    margin_zero: u64,
+    /// Rows with no second candidate.
+    margin_none: u64,
 }
 
 fn main() {
@@ -109,6 +117,12 @@ fn run() -> Result<(), String> {
         }
         None => None,
     };
+    // The dump carries the read and the per-row input it scores, so the address margin is
+    // readable without a session: it is the same read, on the same rows.
+    let margins = dump
+        .read
+        .margins(&dump.stream, &dump.ids, &dump.table, dump.batch, dump.time)
+        .map_err(|e| e.to_string())?;
     let artifact = fs::read(&args.artifact).map_err(|e| format!("{}: {e}", args.artifact.display()))?;
     let model = IntegerStackModel::parse(&artifact).map_err(|e| e.to_string())?;
     let mut buckets = vec![Counts::default(); 2];
@@ -155,6 +169,20 @@ fn run() -> Result<(), String> {
                 }
             }
             let c = &mut buckets[b];
+            match margins[row].margin() {
+                Some(margin) => {
+                    c.margin_rows += 1;
+                    c.margin_sum += u128::from(margin);
+                    c.margin_zero += u64::from(margin == 0);
+                    all.margin_rows += 1;
+                    all.margin_sum += u128::from(margin);
+                    all.margin_zero += u64::from(margin == 0);
+                }
+                None => {
+                    c.margin_none += 1;
+                    all.margin_none += 1;
+                }
+            }
             c.scored += 1;
             all.scored += 1;
             let q31_ask = q31 != 0 && q31 == ask[row];
@@ -218,6 +246,10 @@ fn counts_json(c: &Counts) -> serde_json::Value {
         "float_agree": c.float_agree,
         "x_rows": c.x_rows,
         "x_sign_agree": c.x_sign_agree,
+        "margin_rows": c.margin_rows,
+        "margin_sum": c.margin_sum.to_string(),
+        "margin_zero": c.margin_zero,
+        "margin_none": c.margin_none,
     })
 }
 

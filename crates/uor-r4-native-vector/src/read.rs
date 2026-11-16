@@ -113,6 +113,37 @@ fn first_pick(query: &[i64; ADDRESS_LANES], keys: &[[i64; ADDRESS_LANES]]) -> us
     best
 }
 
+/// One row's pick with the two nearest earlier key distances: the address's margin.
+///
+/// The margin is what an exact copy needs. A pick whose best and second distances are equal
+/// had no margin (a tie, sent to the latest row), and a row with no earlier candidate has
+/// none at all. Reading the margins is how a caller measures address entropy without
+/// changing a pick.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PickMargin {
+    /// The 1-based pick, `0` when the row has no earlier candidate.
+    pub pick: u32,
+    /// The nearest earlier distance, `None` when there is no candidate.
+    pub best: Option<u64>,
+    /// The second-nearest earlier distance, `None` when fewer than two candidates.
+    pub second: Option<u64>,
+}
+
+impl PickMargin {
+    /// `best` and `second` together, `None` when the margin cannot be read.
+    pub fn margin(&self) -> Option<u64> {
+        match (self.best, self.second) {
+            (Some(best), Some(second)) => Some(second.saturating_sub(best)),
+            _ => None,
+        }
+    }
+
+    /// Whether the pick had no margin: a tie, or no second candidate.
+    pub fn zero_margin(&self) -> bool {
+        self.margin() == Some(0)
+    }
+}
+
 fn admit_words(stream: &[i64], table: &[i64]) -> Result<()> {
     if stream
         .iter()
@@ -365,6 +396,69 @@ impl Q31FirstPickRead {
         Ok((pick, out))
     }
 
+    /// The pick and its margins at every row of `batch` windows of `time`.
+    ///
+    /// The addressing is [`Self::apply`]'s exactly, and no payload is written and nothing is
+    /// trained: this is the reading a caller takes to see the margin the pick cleared.
+    /// Row 0 of a window and rows with no earlier key have pick `0` and no distances.
+    pub fn margins(
+        &self,
+        stream: &[i64],
+        ids: &[u32],
+        table: &[i64],
+        batch: usize,
+        time: usize,
+    ) -> Result<Vec<PickMargin>> {
+        let width = self.width();
+        let rows = batch
+            .checked_mul(time)
+            .ok_or_else(|| invalid("native Q31 read rows overflow"))?;
+        if stream.len() != rows.saturating_mul(width) || ids.len() != rows {
+            return Err(invalid("native Q31 read inputs do not match its shape"));
+        }
+        self.table_vocab(table)?;
+        let mut queries = Vec::with_capacity(rows);
+        let mut keys = Vec::with_capacity(rows);
+        for row in stream.chunks_exact(width) {
+            queries.push(q31_read_address(&self.query_gates, row)?);
+            keys.push(q31_read_address(&self.key_gates, row)?);
+        }
+        let mut margins = vec![
+            PickMargin {
+                pick: 0,
+                best: None,
+                second: None,
+            };
+            rows
+        ];
+        for window in 0..batch {
+            let first = window * time;
+            for t in 1..time {
+                let row = first + t;
+                let mut best = u64::MAX;
+                let mut second = u64::MAX;
+                for key in &keys[first..row] {
+                    let distance = read_distance(&queries[row], key);
+                    if distance <= best {
+                        second = best;
+                        best = distance;
+                    } else if distance < second {
+                        second = distance;
+                    }
+                }
+                // `first_pick` is the same scan with the tie sent to the latest row; the
+                // two agree by construction, and a test pins it.
+                let pick = first_pick(&queries[row], &keys[first..row]) as u32 + 1;
+                margins[row] = PickMargin {
+                    pick,
+                    best: Some(best),
+                    second: (second != u64::MAX).then_some(second),
+                };
+            }
+        }
+        Ok(margins)
+    }
+
     fn table_vocab(&self, table: &[i64]) -> Result<usize> {
         if table.is_empty() || !table.len().is_multiple_of(self.width()) {
             return Err(invalid(
@@ -464,6 +558,49 @@ mod tests {
         let mut row = vec![0; width];
         row[0] = lane0;
         row
+    }
+
+    #[test]
+    fn a_margin_is_the_distance_the_second_candidate_lost_by() {
+        let read = identity_read(16, vec![1 << 24; 16], 0);
+        let table = vec![1i64 << 10; 4 * 16];
+        let ids = [0u32, 1, 2, 3];
+        // Row 3 asks; its candidates are 20, 10 and 0 away, so the pick clears 10.
+        let stream: Vec<i64> = [0, 10, 20, 20]
+            .iter()
+            .flat_map(|&lane| lane0_row(16, lane))
+            .collect();
+        let margins = read
+            .margins(&stream, &ids, &table, 1, 4)
+            .expect("margins");
+        assert_eq!(margins[0].pick, 0, "row 0 has no earlier candidate");
+        assert_eq!(margins[0].best, None);
+        assert_eq!(margins[3].pick, 3, "the nearest earlier row is row 2");
+        assert_eq!(margins[3].best, Some(0));
+        assert_eq!(margins[3].second, Some(10));
+        assert_eq!(margins[3].margin(), Some(10));
+        assert!(!margins[3].zero_margin());
+
+        // The margins' picks are `apply`'s picks, row for row.
+        let applied = read.apply(&stream, &ids, &table, 1, 4).expect("apply");
+        let picks: Vec<u32> = margins.iter().map(|margin| margin.pick).collect();
+        assert_eq!(picks, applied.picks);
+
+        // A tie has no margin, and the read sends it to the later row.
+        let tied: Vec<i64> = [5, 5, 0]
+            .iter()
+            .flat_map(|&lane| lane0_row(16, lane))
+            .collect();
+        let tied_ids = [0u32, 1, 2];
+        let margins = read
+            .margins(&tied, &tied_ids, &table, 1, 3)
+            .expect("margins");
+        assert_eq!(margins[2].pick, 2, "a tie goes to the later row");
+        assert_eq!(margins[2].margin(), Some(0));
+        assert!(margins[2].zero_margin());
+        // A row with one candidate has no second distance and so no margin.
+        assert_eq!(margins[1].second, None);
+        assert_eq!(margins[1].margin(), None);
     }
 
     #[test]
