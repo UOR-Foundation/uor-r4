@@ -1,4 +1,4 @@
-# REPORT: written-state-count-model, claude-411c (classify the D87 TRAIN/DEV-test shared spans as copied or stock)
+# REPORT: written-state-count-model, claude-414 (classify the D87 TRAIN/DEV-test shared spans as copied or stock)
 
 Lab: claude. Order: [ORDER.md](ORDER.md).
 
@@ -8,14 +8,15 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 - **claude-411's stock-wording reading was wrong for most records** [claude]. claude-411 expected the overlap to be the teacher's habitual wording [claude, hyp]. The widely shared spans are stock, but only 68 contaminated records are stock-only.
 - **The ranking by spread hides the copied spans** [claude]. All 200 spans held by the most DEV-test records are stock. Each copied span is held by few records, so a top-200 sample alone would have pointed the wrong way. The record-level count decides the bar, not the sample.
 - **Two builders stopped before any run** [claude]. The first stopped at its context limit. A second was blocked by the worktree edit guard. Neither had run anything on wick, so no run was lost or repeated.
+- **The unit was first named claude-411c** [claude]. `loop pr-check` parses the `<lab>-<n>` folder name as an integer, so `order` and `report` failed. The folder, the summary's `unit` label and the code comments were renamed to claude-414 after the run; no number changed. The laptop folder moved too, to `local/claude/claude-414/`.
 - **This builder's worktree started at `main`, not at the unit's code commit** [claude]. It was fast-forwarded to `77dc47702` before the run; nothing was rewritten.
 
 ## What changed
 
-- `docs/loop/tasks/written-state-count-model/claude-411c/classify-summary.json` [claude]: counts only, 6,251 bytes, no corpus text.
+- `docs/loop/tasks/written-state-count-model/claude-414/classify-summary.json` [claude]: counts only, 6,251 bytes, no corpus text.
 - One notebook row in `docs/research/notebook/data-tokenizer.md` [claude], at the top of the table, because that file's rows run newest first.
 - The instrument change (`--classify-spans`, per-span distinct TRAIN-record multiplicity, four fixture tests) landed in `77dc47702` [claude].
-- The decoded top 200 spans are in `local/claude/claude-411c/top-spans.tsv`, laptop-side and untracked [claude].
+- The decoded top 200 spans are in `local/claude/claude-414/top-spans.tsv`, laptop-side and untracked [claude].
 
 ## Measurements
 
@@ -70,7 +71,7 @@ The top 200 spans, ranked by the DEV-test records holding them [claude]:
 - G1: `cargo +1.97.1 test --release --locked --manifest-path docs/labs/d87-split-audit/instrument/Cargo.toml` on wick, on this head's code: 16 passed, 0 failed [claude].
 - G2 (run by the orchestrator at `77dc47702`): with the two within-record dedup lines removed, 4 tests failed, including `a_span_repeated_in_one_train_record_counts_once`; restored, 16 of 16 passed [claude].
 - G4: the wick job `c411c-run-1` returned rc 0. `classify-summary.json` holds the copied share, both histograms and the contaminated total, 1,936 [claude].
-- G5: `top-spans.tsv` is in `local/claude/claude-411c/`, and `git status --short` is clean [claude].
+- G5: `top-spans.tsv` is in `local/claude/claude-414/`, and `git status --short` is clean [claude].
 - G3: `UOR_LAB=claude uor-harness loop pr-check --local` at the committed head: see the PR [claude].
 - Nothing on `/mnt/plexpool` was touched; the run read only the `/workspace/in/d87` shard copies [claude].
 
