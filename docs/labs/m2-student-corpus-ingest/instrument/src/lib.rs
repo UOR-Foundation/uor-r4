@@ -202,6 +202,13 @@ pub fn parse_record(line: &str) -> Result<Record, String> {
                 msgs.len()
             ));
         }
+        let want_turns = if kind == "single" { 1 } else { 2 };
+        if turns.len() != want_turns {
+            return Err(format!(
+                "record {id}: kind {kind} with {} turns",
+                turns.len()
+            ));
+        }
         let want: BTreeSet<&str> = ["answer", "reasoning"].into_iter().collect();
         for ((role, content), turn) in msgs.into_iter().zip(turns) {
             if role != "user" {
@@ -316,6 +323,7 @@ impl Coder {
         let mut odd = vec![false; bytes.len()];
         let mut cursor = 0usize;
         let mut emitted = 0u64;
+        let mut dropped = 0u64;
         for &id in &ids {
             if id >= VOCAB {
                 return Err(format!("id {id} is not below {VOCAB}"));
@@ -328,7 +336,7 @@ impl Coder {
             // token's surface is plain ASCII, so the scan never eats into it.)
             while cursor < bytes.len() && !self.emittable[bytes[cursor] as usize] {
                 odd[cursor] = true;
-                count.dropped_bytes += 1;
+                dropped += 1;
                 cursor += 1;
             }
             if bytes.get(cursor..cursor + tb.len()) != Some(&tb[..]) {
@@ -346,7 +354,7 @@ impl Coder {
                 return Err(format!("unencoded emittable byte at {cursor}"));
             }
             odd[cursor] = true;
-            count.dropped_bytes += 1;
+            dropped += 1;
             cursor += 1;
         }
         // Cross-check: text bytes minus emitted token bytes equals the unemittable bytes.
@@ -354,9 +362,10 @@ impl Coder {
             .iter()
             .filter(|&&b| !self.emittable[b as usize])
             .count() as u64;
-        if bytes.len() as u64 - emitted != unemittable || unemittable != count.dropped_bytes {
+        if bytes.len() as u64 - emitted != unemittable || unemittable != dropped {
             return Err("dropped-byte cross-check failed".into());
         }
+        count.dropped_bytes += dropped;
         count.text_bytes += bytes.len() as u64;
         count.tokens += ids.len() as u64;
         let mut start = None;
@@ -492,6 +501,15 @@ impl<T: Write + Seek, M: Write, S: Write> Ingest<T, M, S> {
             let ids = coder
                 .encode_piece(&p.text, &mut count, &mut on_run)
                 .map_err(|e| format!("record {}: {e}", record.id))?;
+            // A literal `<|bos|>`/`<|eos|>`/`<|unk|>` inside donor text would encode as the
+            // role id itself: a false record boundary inside a target. Refuse the record.
+            if count.special_in_text > 0 {
+                return Err(format!(
+                    "record {}: a special-token surface inside {} text",
+                    record.id,
+                    p.segment.name()
+                ));
+            }
             for id in ids {
                 self.push(id, p.segment, p.mask).map_err(io)?;
             }
@@ -719,11 +737,24 @@ mod tests {
     }
 
     #[test]
-    fn literal_special_token_in_text_is_counted() {
+    fn literal_special_token_in_text_is_refused() {
         let c = coder(&[]);
-        let line = r#"{"id":"q3","kind":"single","source":"s","messages":[{"role":"user","content":"a<|eos|>b"}],"turns":[{"reasoning":"","answer":"x"}]}"#;
-        let (_, _, _, ing) = run_ingest(&c, &[line]);
-        assert_eq!(ing.per_segment[&Segment::Prompt].special_in_text, 1);
+        let mut count = SegmentCount::default();
+        c.encode_piece(" a<|eos|>b", &mut count, &mut |_| {})
+            .unwrap();
+        assert_eq!(count.special_in_text, 1);
+        let line = r#"{"id":"q3","kind":"single","source":"s","messages":[{"role":"user","content":"x"}],"turns":[{"reasoning":"","answer":"a<|eos|>b"}]}"#;
+        let mut ing = Ingest::new(Cursor::new(vec![]), vec![], vec![]).unwrap();
+        let e = ing.add(&c, &parse_record(line).unwrap()).unwrap_err();
+        assert!(e.contains("q3") && e.contains("answer"), "{e}");
+    }
+
+    #[test]
+    fn kind_must_match_turn_count() {
+        let one_as_two = r#"{"id":"k1","kind":"two-turn","source":"s","messages":[{"role":"user","content":"x"}],"turns":[{"reasoning":"","answer":"y"}]}"#;
+        assert!(parse_record(one_as_two).unwrap_err().contains("k1"));
+        let two_as_one = r#"{"id":"k2","kind":"single","source":"s","messages":[{"role":"user","content":"x"},{"role":"user","content":"y"}],"turns":[{"reasoning":"","answer":"a"},{"reasoning":"","answer":"b"}]}"#;
+        assert!(parse_record(two_as_one).unwrap_err().contains("k2"));
     }
 
     #[test]

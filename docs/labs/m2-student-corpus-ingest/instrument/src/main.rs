@@ -56,6 +56,11 @@ fn run(tokenizer: &PathBuf, out: &PathBuf, shards: &[PathBuf]) -> Result<(), Str
         }
     }
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    // A summary from an earlier run must not survive a failed one: it would describe other data.
+    let summary_path = out.join("summary.json");
+    if summary_path.exists() {
+        std::fs::remove_file(&summary_path).map_err(|e| format!("summary.json: {e}"))?;
+    }
     let create = |name: &str| {
         File::create(out.join(name))
             .map(BufWriter::new)

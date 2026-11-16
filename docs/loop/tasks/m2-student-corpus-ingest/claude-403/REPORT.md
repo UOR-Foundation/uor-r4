@@ -81,10 +81,18 @@ student-ingest --tokenizer <claude-370>/in/driver-data/tokenizer.json \
 
 - G1: `cargo build --release --manifest-path docs/labs/m2-student-corpus-ingest/instrument/Cargo.toml`
   (`CARGO_INCREMENTAL=0`, its own `CARGO_TARGET_DIR`): `Finished`.
-- G2: `cargo test` on the instrument: 7 passed, 0 failed (D41 framing and masks, D87 two-turn
+- G2: `cargo test` on the instrument: 8 passed, 0 failed (D41 framing and masks, D87 two-turn
   order and separator mask, dropped and fallback counts with a byte removed from a test
-  vocabulary, a literal special surface, refused key sets and turn counts, raw against zstd
-  shards with their file hashes, a tokenizer with the wrong BOS refused).
+  vocabulary, a literal special surface refused, refused key sets and turn counts, a `kind`
+  that disagrees with its turn count refused, raw against zstd shards with their file hashes,
+  a tokenizer with the wrong BOS refused). With the special-surface refusal and the kind check
+  each switched off, their two tests fail (6 passed, 2 failed); restored, all 8 pass.
+- Fresh-context adversarial review of e85f89794 [claude]: APPROVE, no blocker; eight minor
+  findings and nits. Taken at this head: a record with a literal `<|bos|>`/`<|eos|>`/`<|unk|>`
+  in its text is now refused (it would encode as a false record boundary inside a target; the
+  pod 3 run had none); a `kind` must match its turn count; a stale `summary.json` is removed
+  before a run; the dropped-byte cross-check uses a per-piece counter. The rerun on pod 3's 17
+  shards gives a byte-identical summary.
 - G3: the ORDER commit is the first on the branch.
 - G4: `git diff --check origin/main...HEAD` is clean.
 - G5: the summary has 31,910 records; the token file size matches its header.
@@ -107,7 +115,12 @@ student-ingest --tokenizer <claude-370>/in/driver-data/tokenizer.json \
 4. **Where the trainer's stream lives:** about 8.4 GB at the full corpus. The laptop has about
    22 GiB free; the stream can be written on wick's pool (`/mnt/plexpool/uor-r4-corpus`)
    instead, beside the shards.
-5. The next readiness units: a minimal whole-model native training step on CUDA over this
+5. Left from the review: a tokenizer whose merged token holds a byte with no one-byte token
+   would make the run refuse valid text (it aborts loudly, never miscounts); the native
+   tokenizer emits all 256 bytes, so it cannot happen with it. Also left: `--out` and input
+   paths are compared as text, not canonicalized; the frame segment's token count includes
+   BOS and EOS, so bytes per token is quoted per content segment only.
+6. The next readiness units: a minimal whole-model native training step on CUDA over this
    stream, then a pre-registered timed run on wick that measures seconds per step.
 
 ## Plain summary
