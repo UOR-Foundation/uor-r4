@@ -9,6 +9,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 - **Builders ran out of context before finishing** [claude]. The scout and the first builder stopped at the 150k mark, so round 1 and the device half of round 2 were written in the top session. The second builder did the host half of round 2 and handed back.
 - **The unit was first named claude-413a** [claude]. `loop pr-check` parses `<lab>-<n>` as an integer, so it was renamed claude-415 before any run.
 - **This builder's worktree started at `main`, not at the unit's tip** [claude]. It was fast-forwarded before work began; nothing was rewritten.
+- **The fresh review found two refusals untested** [claude]. The cross-check's refusals of a trailing extra context and a missing last context had no test. A new test, `ngram_count_assembler_refuses_an_extra_or_missing_context`, now covers both. With the `next != contexts.len()` check set aside it fails, and 16 others pass; restored, 17 of 17 pass. The review also asked for a guard on `ngram_admitted`'s `k <= j` precondition, so a `debug_assert!` was added. Its verdict was APPROVE-WITH-LOW, at `0b0f6efcf`.
 
 ## What changed
 
@@ -25,7 +26,10 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
   - The planning histogram runs on the device for each order.
   - The host unigram copy and its edge fields are removed.
 - The CUDA oracle test plants BOS every 61 ids [claude].
-- Two new host tests: the plan bound, and the document boundaries on a two-record stream [claude].
+- Three new host tests [claude]:
+  - the plan bound;
+  - the document boundaries on a two-record stream;
+  - an extra or missing context record, which the cross-check refuses.
 - `ngram_key_preserves_order` now separates its records with EOS (1), not 0, because 0 is now a boundary [claude].
 - The probe's first timing is relabelled `upload_ms` [claude].
 - One notebook row, in `docs/research/notebook/m4-serving.md` [claude].
@@ -52,7 +56,7 @@ Wick's RTX 4090 (`compute_89`), on the 15,471,412-token D87 student slice `c404/
 
 ## Checks run at the head
 
-- G1, laptop [claude]: `cargo test -p uor-r4-discrete --lib ngram_count`, 16 passed.
+- G1, laptop [claude]: `cargo test -p uor-r4-discrete --lib ngram_count`, 17 passed at the head (16 before the review's test). The review's own run at `0b0f6efcf` also passed 16 of 16.
 - Stub-nvcc [claude]: `cargo check -p uor-r4-discrete --features cuda --all-targets` is clean.
 - G2, negative gates on the host [claude]:
   - plan bound reverted to `u32::MAX`: 14 passed, 1 failed;
