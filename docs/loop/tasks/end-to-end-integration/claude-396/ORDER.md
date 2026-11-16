@@ -41,4 +41,3 @@ wiring, a dependency, a GPU run, a mechanism status.
 ## Cancel
 
 Stop if the null control fails for the normalised score, or if the unit needs a source change.
-
