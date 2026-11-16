@@ -23,6 +23,8 @@ setup)
   fi
   (cd "$W/instrument" && CARGO_INCREMENTAL=0 "$HOME/.cargo/bin/cargo" build --release 2>&1 | tail -2)
   # 2. Donor weights at the pinned revision, then every LFS file against HF's sha256.
+  # The vLLM image ships no jq (16 Nov, pod 3: setup stopped at the LFS list).
+  command -v jq > /dev/null || { apt-get update -qq > /dev/null && apt-get install -y -qq jq > /dev/null; }
   pip install -q 'huggingface_hub[hf_xet]' >/dev/null 2>&1 || true
   HF_XET_HIGH_PERFORMANCE=1 hf download "$MODEL_REPO" --revision "$MODEL_REV" --local-dir "$MODEL_DIR" >/dev/null
   curl -sf "https://huggingface.co/api/models/$MODEL_REPO/tree/$MODEL_REV?recursive=true" |
@@ -32,6 +34,9 @@ setup)
   split -n l/16 "$W/donor-lfs.sha256" "$W/lfs-part."
   (cd "$MODEL_DIR" && for p in "$W"/lfs-part.??; do sha256sum -c "$p" > "$p.out" 2>&1 & done; wait) || true
   if grep -h -v ': OK$' "$W"/lfs-part.*.out; then echo "donor LFS sha256 check FAILED (lines above)"; exit 1; fi
+  # An empty or short list must never read as a pass: at least the 48 weight shards, every line OK.
+  n_list=$(wc -l < "$W/donor-lfs.sha256"); n_ok=$(cat "$W"/lfs-part.*.out | grep -c ': OK$' || true)
+  [ "$n_list" -ge 48 ] && [ "$n_ok" -eq "$n_list" ] || { echo "donor LFS sha256 check FAILED: $n_ok OK of $n_list listed"; exit 1; }
   echo "donor LFS sha256: all $(cat "$W"/lfs-part.*.out | grep -c ': OK$') of $(wc -l < "$W/donor-lfs.sha256") OK"
   nvidia-smi --query-gpu=index,name,uuid,driver_version,memory.total --format=csv,noheader > "$W/gpus.csv"
   nvidia-smi topo -m > "$W/gpu-topo.txt" 2>&1 || true   # NV# between all four GPUs = the NVLink bridge TP4 needs
