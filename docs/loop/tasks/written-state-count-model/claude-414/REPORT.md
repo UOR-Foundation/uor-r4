@@ -9,6 +9,8 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 - **The ranking by spread hides the copied spans** [claude]. All 200 spans held by the most DEV-test records are stock. Each copied span is held by few records, so a top-200 sample alone would have pointed the wrong way. The record-level count decides the bar, not the sample.
 - **Two builders stopped before any run** [claude]. The first stopped at its context limit. A second was blocked by the worktree edit guard. Neither had run anything on wick, so no run was lost or repeated.
 - **The unit was first named claude-411c** [claude]. `loop pr-check` parses the `<lab>-<n>` folder name as an integer, so `order` and `report` failed. The folder, the summary's `unit` label and the code comments were renamed to claude-414 after the run; no number changed. The laptop folder moved too, to `local/claude/claude-414/`.
+- **The fresh review found the least-multiplicity rule unpinned** [claude]. In the first fixture, every DEV-test record held exactly one shared span, so taking the least, the greatest or the first multiplicity gave the same answer. A fifth test now has one record holding a copied span and a stock span. With `least` changed to `greatest`, that test fails and the other 16 pass; restored, 17 of 17 pass. The review returned APPROVE-WITH-LOW.
+- **Multiplicity counts only the TRAIN records split v1 keeps** [claude]. Exact, id and near duplicates were already dropped. A stock passage whose other copies sat in dropped duplicates can therefore read as copied. This matches the rule as written, "distinct TRAIN records", and it errs toward the dedup.
 - **This builder's worktree started at `main`, not at the unit's code commit** [claude]. It was fast-forwarded to `77dc47702` before the run; nothing was rewritten.
 
 ## What changed
@@ -68,7 +70,7 @@ The top 200 spans, ranked by the DEV-test records holding them [claude]:
 
 ## Checks run at the head
 
-- G1: `cargo +1.97.1 test --release --locked --manifest-path docs/labs/d87-split-audit/instrument/Cargo.toml` on wick, on this head's code: 16 passed, 0 failed [claude].
+- G1: `cargo +1.97.1 test --release --locked --manifest-path docs/labs/d87-split-audit/instrument/Cargo.toml` on wick, on the run's code: 16 passed, 0 failed. On the laptop at this head, with the fifth test: 17 passed [claude].
 - G2 (run by the orchestrator at `77dc47702`): with the two within-record dedup lines removed, 4 tests failed, including `a_span_repeated_in_one_train_record_counts_once`; restored, 16 of 16 passed [claude].
 - G4: the wick job `c411c-run-1` returned rc 0. `classify-summary.json` holds the copied share, both histograms and the contaminated total, 1,936 [claude].
 - G5: `top-spans.tsv` is in `local/claude/claude-414/`, and `git status --short` is clean [claude].
