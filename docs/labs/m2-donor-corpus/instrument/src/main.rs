@@ -5,6 +5,8 @@
 //!                         --instrument-commit SHA [--parallel P] [--max-seconds T]
 //!                         [--shard-records R] [--model-name N] [--max-tokens M]
 //!                         [--effort E] [--seed S] [--extra-body FILE] [--limit N]
+//!                         [--api vllm|openai] [--api-key-env NAME | --api-key-file PATH]
+//!                         [--server-wait-seconds W]
 //!   donor-corpus seal     --dir DIR --prompts FILE --model FILE --machine FILE --engine FILE
 //!   donor-corpus verify   --dir DIR --prompts FILE
 //!

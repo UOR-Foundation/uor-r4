@@ -190,6 +190,23 @@ pub fn turn_seed(base: u64, i: u64, t: u64) -> u32 {
     (base.wrapping_add(i.wrapping_mul(2)).wrapping_add(t) & 0xffff_ffff) as u32
 }
 
+/// Which server dialect a segment talks: a vLLM server, or a hosted OpenAI-format API
+/// (DeepSeek's), which takes no `seed` and no `chat_template_kwargs`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Api {
+    Vllm,
+    Openai,
+}
+
+impl Api {
+    pub fn name(self) -> &'static str {
+        match self {
+            Api::Vllm => "vllm",
+            Api::Openai => "openai",
+        }
+    }
+}
+
 /// The request settings shared by every turn of a segment.
 #[derive(Debug, Clone)]
 pub struct Request {
@@ -197,15 +214,21 @@ pub struct Request {
     pub max_tokens: u64,
     pub effort: u64,
     pub base_seed: u64,
+    pub api: Api,
     pub extra: Option<Value>,
 }
 
-/// The chat-completion body (JSON integers only); `extra` top-level keys override.
+/// The chat-completion body (JSON integers only); `extra` top-level keys override. In
+/// `openai` mode the body has no `seed` and no `chat_template_kwargs`.
 pub fn request_body(r: &Request, messages: &Value, seed: u32) -> Value {
-    let mut b = json!({"model": r.model_name, "messages": messages, "max_tokens": r.max_tokens,
-        "temperature": 1, "top_p": 1, "seed": seed,
-        "chat_template_kwargs": {"thinking": true, "reasoning_effort": r.effort},
-        "stream": false});
+    let mut b = match r.api {
+        Api::Vllm => json!({"model": r.model_name, "messages": messages,
+            "max_tokens": r.max_tokens, "temperature": 1, "top_p": 1, "seed": seed,
+            "chat_template_kwargs": {"thinking": true, "reasoning_effort": r.effort},
+            "stream": false}),
+        Api::Openai => json!({"model": r.model_name, "messages": messages,
+            "max_tokens": r.max_tokens, "temperature": 1, "top_p": 1, "stream": false}),
+    };
     if let Some(Value::Object(x)) = &r.extra {
         for (k, v) in x {
             b[k] = v.clone();
@@ -672,14 +695,67 @@ enum Outcome {
     },
     /// The server stayed down: the prompt is left undone (not dropped) for a later resume.
     Abandoned,
+    /// 401, 402 or 403: the account was refused; the prompt is left undone.
+    Refused,
 }
 
 /// Why a request failed after its retries.
 enum Fail {
-    /// The server refused this request (a 4xx other than 429): drop the prompt.
+    /// The server refused this request (a 4xx other than 401-403 and 429): drop the prompt.
     Prompt,
-    /// Connection error, 5xx, 429 or an unreadable body: the server, not the prompt.
+    /// 401, 402 or 403: the key, the balance or the access, not the prompt.
+    Refused,
+    /// 429 for longer than the server wait.
+    Limited,
+    /// Connection error, 5xx or an unreadable body: the server, not the prompt.
     Server,
+}
+
+/// Consecutive finished prompts dropped as `http` that stop a segment as `refused`.
+const HTTP_DROP_STOP: u64 = 32;
+
+/// The API key, read once at start. It has no `Debug` and is never written anywhere but
+/// the `Authorization` header.
+struct Bearer(String);
+
+/// Reads the key from `--api-key-env NAME` or `--api-key-file PATH`, trimmed of leading
+/// and trailing whitespace (a file's trailing newline among it). Returns the header value and the segment's `auth` field.
+/// Errors name only the variable or the path.
+fn read_key(m: &Args) -> Res<(Option<Bearer>, Value)> {
+    let (key, auth) = match (m.get("api-key-env"), m.get("api-key-file")) {
+        (Some(_), Some(_)) => {
+            return Err("--api-key-env and --api-key-file are mutually exclusive".into())
+        }
+        (None, None) => return Ok((None, Value::Null)),
+        (Some(name), None) => (
+            std::env::var(name).map_err(|_| format!("--api-key-env {name}: not set"))?,
+            json!(format!("env:{name}")),
+        ),
+        (None, Some(p)) => {
+            let b = fs::read(p).map_err(|_| format!("--api-key-file {p}: unreadable"))?;
+            let s = String::from_utf8(b).map_err(|_| format!("--api-key-file {p}: not UTF-8"))?;
+            (s, json!("file"))
+        }
+    };
+    let key = key.trim();
+    let what = m
+        .get("api-key-env")
+        .map(|n| format!("--api-key-env {n}"))
+        .unwrap_or_else(|| format!("--api-key-file {}", m["api-key-file"]));
+    if key.is_empty() || key.chars().any(char::is_whitespace) {
+        return Err(format!("{what}: the key is empty or holds whitespace"));
+    }
+    Ok((Some(Bearer(format!("Bearer {key}"))), auth))
+}
+
+/// The 429 backoff in ms: `min(60, 2^k)` s plus a 0-999 ms jitter from the prompt index.
+fn backoff_ms(k: u32, i: usize) -> u64 {
+    let secs = 1u64.checked_shl(k).unwrap_or(u64::MAX).min(60);
+    let jitter = (i as u64)
+        .wrapping_mul(7919)
+        .wrapping_add(u64::from(k) * 104_729)
+        % 1000;
+    secs * 1000 + jitter
 }
 
 struct Run<'a> {
@@ -687,6 +763,8 @@ struct Run<'a> {
     health: String,
     server_wait: Duration,
     req: Request,
+    bearer: Option<Bearer>,
+    http_drops: AtomicU64,
     bank: &'a [BankItem],
     done: &'a HashSet<String>,
     out: Mutex<Out>,
@@ -709,28 +787,46 @@ impl Run<'_> {
         self.stop.store(true, Ordering::SeqCst);
     }
 
-    fn post(&self, agent: &ureq::Agent, body: &Value) -> Result<Value, Fail> {
-        for attempt in 0..4u64 {
-            if attempt > 0 {
-                std::thread::sleep(Duration::from_secs(2 * attempt));
-            }
+    /// Four tries against a server error; a 429 is retried with backoff, apart from those
+    /// tries, until the server wait has passed since the request's first 429.
+    fn post(&self, agent: &ureq::Agent, body: &Value, i: usize) -> Result<Value, Fail> {
+        let mut attempt = 0u64;
+        let mut limited: Option<(Instant, u32)> = None;
+        loop {
             let t = Instant::now();
-            match agent.post(&self.url).send_json(body) {
-                Ok(mut r) => match r.body_mut().read_json::<Value>() {
-                    Ok(v) => {
+            let mut rq = agent.post(&self.url);
+            if let Some(b) = &self.bearer {
+                rq = rq.header("Authorization", b.0.as_str());
+            }
+            let res = rq.send_json(body);
+            self.errors.fetch_add(1, Ordering::SeqCst);
+            match res {
+                Ok(mut r) => {
+                    if let Ok(v) = r.body_mut().read_json::<Value>() {
+                        self.errors.fetch_sub(1, Ordering::SeqCst);
                         self.ms.lock().unwrap().push(t.elapsed().as_millis() as u64);
                         return Ok(v);
                     }
-                    Err(_) => self.errors.fetch_add(1, Ordering::SeqCst),
-                },
-                Err(ureq::Error::StatusCode(c)) if (400..500).contains(&c) && c != 429 => {
-                    self.errors.fetch_add(1, Ordering::SeqCst);
-                    return Err(Fail::Prompt);
                 }
-                Err(_) => self.errors.fetch_add(1, Ordering::SeqCst),
-            };
+                Err(ureq::Error::StatusCode(429)) => {
+                    let (first, k) = limited.get_or_insert((Instant::now(), 0));
+                    if first.elapsed() >= self.server_wait {
+                        return Err(Fail::Limited);
+                    }
+                    std::thread::sleep(Duration::from_millis(backoff_ms(*k, i)));
+                    *k += 1;
+                    continue;
+                }
+                Err(ureq::Error::StatusCode(401..=403)) => return Err(Fail::Refused),
+                Err(ureq::Error::StatusCode(400..=499)) => return Err(Fail::Prompt),
+                Err(_) => {}
+            }
+            attempt += 1;
+            if attempt >= 4 {
+                return Err(Fail::Server);
+            }
+            std::thread::sleep(Duration::from_secs(2 * attempt));
         }
-        Err(Fail::Server)
     }
 
     /// Polls `/v1/models` every 10 s until it answers, the wait runs out or the run stops.
@@ -744,7 +840,11 @@ impl Run<'_> {
             if self.stop.load(Ordering::SeqCst) {
                 return false;
             }
-            if agent.get(&self.health).call().is_ok() {
+            let mut rq = agent.get(&self.health);
+            if let Some(b) = &self.bearer {
+                rq = rq.header("Authorization", b.0.as_str());
+            }
+            if rq.call().is_ok() {
                 return true;
             }
             if start.elapsed() >= self.server_wait {
@@ -765,7 +865,7 @@ impl Run<'_> {
             let body = request_body(&self.req, &Value::Array(msgs.clone()), seed);
             let mut waits = 0;
             let v = loop {
-                match self.post(agent, &body) {
+                match self.post(agent, &body, i) {
                     Ok(v) => break v,
                     Err(Fail::Prompt) => {
                         return Outcome::Dropped {
@@ -773,6 +873,8 @@ impl Run<'_> {
                             generated,
                         }
                     }
+                    Err(Fail::Refused) => return Outcome::Refused,
+                    Err(Fail::Limited) => return Outcome::Abandoned,
                     Err(Fail::Server) if waits < 3 && self.wait_healthy() => waits += 1,
                     Err(Fail::Server) => return Outcome::Abandoned,
                 }
@@ -837,12 +939,19 @@ impl Run<'_> {
                     kept,
                 } => {
                     check_record(&rec).map_err(|e| format!("{}: {e}", self.bank[i].id))?;
+                    self.http_drops.store(0, Ordering::SeqCst);
                     out.keep(&line, &counts, &rec, kept, kept)?
                 }
                 Outcome::Dropped { reason, generated } => {
+                    if reason != "http" {
+                        self.http_drops.store(0, Ordering::SeqCst);
+                    } else if self.http_drops.fetch_add(1, Ordering::SeqCst) + 1 >= HTTP_DROP_STOP {
+                        self.set_stop("refused");
+                    }
                     out.drop_prompt(&self.bank[i].id, reason, generated)?
                 }
                 Outcome::Abandoned => self.set_stop("server"),
+                Outcome::Refused => self.set_stop("refused"),
             }
             if out.t.kept >= self.budget {
                 self.set_stop("budget");
@@ -896,7 +1005,17 @@ pub fn cmd_generate(m: &Args) -> Res<Value> {
             Some(v)
         }
     };
+    let api = match m.get("api").map(String::as_str) {
+        None | Some("vllm") => Api::Vllm,
+        Some("openai") => Api::Openai,
+        Some(other) => return Err(format!("--api: want vllm or openai, got {other}")),
+    };
+    if api == Api::Openai && m.contains_key("seed") {
+        return Err("--seed does not apply to --api openai (the body carries no seed)".into());
+    }
+    let (bearer, auth) = read_key(m)?;
     let req = Request {
+        api,
         model_name: m
             .get("model-name")
             .cloned()
@@ -921,6 +1040,8 @@ pub fn cmd_generate(m: &Args) -> Res<Value> {
         health: format!("{server}/v1/models"),
         server_wait: Duration::from_secs(num(m, "server-wait-seconds", Some(1800))?),
         req: req.clone(),
+        bearer,
+        http_drops: AtomicU64::new(0),
         bank: &bank,
         done: &done,
         out: Mutex::new(Out {
@@ -1016,7 +1137,8 @@ pub fn cmd_generate(m: &Args) -> Res<Value> {
     let seg = json!({"utc_start": utc_start, "utc_end": utc_now(), "instrument_commit": commit,
         "prompts_sha256": sha256_hex(&bank_bytes), "server": server, "model_name": req.model_name,
         "parallel": parallel, "max_tokens": req.max_tokens, "effort": req.effort,
-        "base_seed": req.base_seed, "budget": budget, "max_seconds": max_seconds,
+        "api": api.name(), "auth": auth,
+        "base_seed": (api == Api::Vllm).then_some(req.base_seed), "budget": budget, "max_seconds": max_seconds,
         "extra_body": req.extra, "stopped_by": stopped_by, "kept_tokens_at_end": t.kept,
         "generated_tokens_at_end": t.generated, "records_at_end": t.records});
     put_line(
