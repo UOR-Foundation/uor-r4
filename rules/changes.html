@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4571663e.js";
+            window.path_to_searchindex_js = "../searchindex-f28be2c7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-78e3d836.js"></script>
@@ -191,6 +191,32 @@
 <p><em>The charter replaced the older rules in one step on 19 October 2026. Later changes are added to this log as dated entries.</em></p>
 <h2 id="how-an-entry-is-written"><a class="header" href="#how-an-entry-is-written">How an entry is written</a></h2>
 <p>An entry gives the date, what changed, which charter clauses it touches, and who decided. The owner's own words are recorded verbatim when they are the reason. Old text is never edited or deleted: it moves unchanged to the <code>archive/</code> folder, and the live decision index keeps one line saying where each decision went (see the <a href="decision-map.html">decision map</a>).</p>
+<h2 id="16-november-2026-d87s-corpus-run-may-use-4-pods-at-4341h-d88"><a class="header" href="#16-november-2026-d87s-corpus-run-may-use-4-pods-at-4341h-d88">16 November 2026: D87's corpus run may use 4 pods at $43.41/h (D88)</a></h2>
+<p><strong>Decided by:</strong> the owner (Casey), 16 November 2026, in claude's chat (claude-401). Under D87's $35/h no
+qualifying Vast host was listed, so the one-hour measured run was approved piece by piece. The full corpus
+was approved after the lab reported that tuning segment A read about 9.5k kept tokens/s on vast-60886842
+(4×B200, $43.41/h): about 29 h and $1,270 for 1B on one pod, or about 7.3 h on 4 pods at about the same
+cost. Casey's words, verbatim:</p>
+<ul>
+<li>"approve the $56.85/h host for the one-hour measurement"</li>
+<li>Asked "Is the disk charge covered by your approval?": "Yes, that's fine"</li>
+<li>Asked "Allow any verified datacenter 8×H200 at up to $58/h for the hour?": "Yes, any such host"</li>
+<li>Asked "Allow a Vast datacenter 4×B200 at up to $44/h for the hour?": "Yes, use 4×B200"</li>
+<li>"yes approved go please", then "go i said go"</li>
+<li>"approve 4 pods at $43.41/h for the full 1B - make sure you do everything possible to make these run as
+quickly as possible for as cheap as possible because 1270$ sped is ridiculous"</li>
+</ul>
+<p><strong>What changed:</strong></p>
+<ul>
+<li><strong>§5.4's compute caps (the owner's term):</strong> "4 pods at $43.41/h" for the full 1B corpus, in place of
+D87's $35/h, with the direction to run it "as quickly as possible for as cheap as possible".</li>
+<li><strong>The lab's reading, not owner terms:</strong> $43.41/h is per pod (the measured 4×B200 pod's price), so
+$173.64/h in all across all labs. The raise is for this corpus run only, as D87's was, and the caps then
+return to 4 pods and $8/h. While four pods are leased, no other lab can lease one.</li>
+<li><strong>The lab's conditions and means, not owner terms:</strong> Vast verified datacenter hosts that pass the sheet's
+offer and NVLink checks; the guard with the amendment's caps; disjoint prompt ranges per pod; the cost per
+kept token worked down before the fan-out; any host above $43.41/h needs the owner's word.</li>
+</ul>
 <h2 id="16-november-2026-d41s-production-donor-is-deepseek-v41-flash-reasoning-kept-1b-first-d87"><a class="header" href="#16-november-2026-d41s-production-donor-is-deepseek-v41-flash-reasoning-kept-1b-first-d87">16 November 2026: D41's production donor is DeepSeek V4.1 Flash, reasoning kept, 1B first (D87)</a></h2>
 <p><strong>Decided by:</strong> the owner (Casey), 16 November 2026, in Claude's chat, recorded at
 <code>2026-11-16T02:37:46Z</code> (claude-399). The decision followed the gpt-oss-20b pilot (claude-390),
