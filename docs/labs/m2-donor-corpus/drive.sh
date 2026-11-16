@@ -250,6 +250,13 @@ offer)
   else
     alert "rented instance does not match the sheet's filters: down it now"; exit 1
   fi
+  # A lease approved for one named host at one price (amendment 2): M2_EXPECT_MACHINE and M2_MAX_DPH.
+  if [ -n "${M2_EXPECT_MACHINE:-}" ] && ! jq -e --argjson m "$M2_EXPECT_MACHINE" '.machine_id == $m' "$LOCAL/offer.json" > /dev/null; then
+    alert "rented machine is not the approved machine $M2_EXPECT_MACHINE: down it now"; exit 1
+  fi
+  if [ -n "${M2_MAX_DPH:-}" ] && ! jq -e --argjson p "$M2_MAX_DPH" '(.dph_total // 1e9) <= $p' "$LOCAL/offer.json" > /dev/null; then
+    alert "rented price is above the approved \$$M2_MAX_DPH/h: down it now"; exit 1
+  fi
   # Vast's bw_nvlink is not proof: pod 1 (16 Nov, 4xH200 NVL, listed 478 GB/s) had no NVLink at
   # all. Every GPU pair in the pod's own topology must be NV#, or TP4 runs over PCIe.
   ssh_pod "nvidia-smi topo -m" > "$LOCAL/offer-topo.txt" 2>&1 || { alert "cannot read the pod's GPU topology: down it now"; exit 1; }
