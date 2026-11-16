@@ -207,6 +207,27 @@ impl Q31FirstPickRead {
     }
 
     /// Lanes per row.
+    /// The same gates and picks with the payload weights moved by `e_w_shift` and a new gain.
+    /// The picks are unchanged (the address is scale-free); only the payload's scale moves from
+    /// the replay's `e_w` to the artifact's. A weight past the read's admitted words is refused.
+    pub fn rescale_payload(&self, e_w_shift: u32, gain_shift: u32) -> Result<Self> {
+        let weights = self
+            .weights
+            .iter()
+            .map(|&weight| {
+                weight
+                    .checked_shl(e_w_shift)
+                    .ok_or_else(|| invalid("the payload weight overflows the read's words"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Self::new(
+            self.query_gates.clone(),
+            self.key_gates.clone(),
+            weights,
+            gain_shift,
+        )
+    }
+
     pub fn width(&self) -> usize {
         self.weights.len()
     }
@@ -427,6 +448,20 @@ mod tests {
         let mut row = vec![0; width];
         row[0] = lane0;
         row
+    }
+
+    #[test]
+    fn rescaling_the_payload_keeps_every_pick() {
+        let read = identity_read(16, vec![1 << 24; 16], 0);
+        let moved = read.rescale_payload(6, 2).expect("rescale");
+        let stream: Vec<i64> = (0..4).flat_map(|t| lane0_row(16, t as i64)).collect();
+        let ids = [0u32, 1, 2, 3];
+        let table = vec![1i64 << 10; 4 * 16];
+        let a = read.apply(&stream, &ids, &table, 1, 4).expect("apply");
+        let b = moved.apply(&stream, &ids, &table, 1, 4).expect("apply");
+        assert_eq!(a.picks, b.picks, "the address is scale-free");
+        assert_ne!(a.out, b.out, "the payload moves to the artifact's scale");
+        assert!(read.rescale_payload(8, 0).is_err(), "a weight past 2^31 is refused");
     }
 
     fn refused<T: std::fmt::Debug>(result: Result<T>, needle: &str) {

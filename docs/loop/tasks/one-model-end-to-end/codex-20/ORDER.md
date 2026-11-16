@@ -39,6 +39,16 @@ this unit converts the float vector read to that read, carries it in the export,
 - `crates/uor-r4-integer/src/stack/session.rs` (the served Q31 read, already present)
 - `docs/loop/tasks/one-model-end-to-end/codex-20/**`
 
+## Scale derivation (2026-11-16)
+
+The FBS artifact's stream and table are Q12; the read sits after the MLP add at that scale. The
+`add_payload` shift is `31 - gain_shift`, so `e_w = e_x - e_t + 31 - gain_shift = 31 - gain_shift`
+for `e_x = e_t = 12`. The replay's read is at `e_w = 23` (its `e_t = 32`, `e_x = 24`, gain 0); the
+FBS read is at `e_w = 29` with gain 2 (the read's max weight ~3.7 fits `2^31`). The picks are
+scale-free (the gates are sign addresses); only the payload moves. `Q31FirstPickRead::rescale_payload`
+implements the move and is tested: the picks are identical, the payload moves, an over-range weight
+is refused.
+
 ## Done when
 
 1. The ext-s1 checkpoint exports with the vector read; the artifact's Q31 read picks match the float
