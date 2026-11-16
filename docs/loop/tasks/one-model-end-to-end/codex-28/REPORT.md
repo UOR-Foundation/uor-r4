@@ -79,3 +79,36 @@ line, held-out value).
 **Also found:** `--turn-memory-tail 9` refuses the export at 64 steps (`memory.reply.keys: entry 0 is
 not a key this engine reads`), and `--decision-trace` refuses an unsnapped artifact ("the snap is not
 a decision it records"), so the gate runs on `--hamming-trace` alone.
+
+## The H = 8 arm: the reach finds the positions; the margin zeroes their weight
+
+The restarted arm trained to 16,384 in 2,717 s (dev top-1 532, openings 608/1,226 — the best of the
+run) and exported an 18,661,248 B `/7` artifact, sha `84a8042f…`, with `asks [True, True]`,
+**`carry_rows 8`** and `hamming.d6.carry` (1,410 non-zero gains, max +106,402; the value token's gain
+**+871**, against −158 at H = 2).
+
+The trace at the first reply read (row 135) now shows the change the reach was for:
+
+| Read | Assert (pos 9) | Ack (22) | Line (126) |
+|---|---|---|---|
+| H = 2, any head | absent | absent at d6 | absent |
+| H = 8, d6 ask h2 | **kept, 23 bits** | absent | **kept, 23 bits** |
+| H = 8, d2 ask h2 | **kept, 24 bits** | absent | absent |
+
+**But the weight is zero.** The learned margin at d6 h2 is **1,325,781 at Q16 ≈ 20.23 bits**, and the
+distance to positions 9 and 126 is **23 bits**, so `max(0, m − d)/m = 0`. The mask keeps them; the
+readout gives them nothing. The `/10` artifact's ask margin was ~35 bits, which is why its keeps at
+24–26 bits carried 0.26–0.32.
+
+So the failure has moved: it is no longer *where the read looks* (reach 8 fixed that) but **the
+margin that turns a keep into a weight** — the same "write scale" defect as decision 12, now on the
+Hamming ask head. The margin is a learned per-head parameter (initialised at 16 bits, grown to 20.2
+here against ~35 in `/10`), and it is a table in the artifact, so a margin sweep is a **counterfactual
+that needs no training**: raise h2's margin to 30 bits and the same keeps would weigh 0.23; 35 bits,
+0.34.
+
+## The run's history, for the record
+
+The first H = 8 launch died silently at step 6,144 with no error and no OOM record; the restart
+reproduced steps 2,048 and 4,096 exactly (1,378; 604) and passed 6,144, so the death was
+environmental. Two restarts at the same step would have been a defect; one was not.
