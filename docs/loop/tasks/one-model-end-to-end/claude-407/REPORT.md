@@ -18,6 +18,8 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 - **Only one stream, one seed and checkpoint 0 were measured** [claude]. A trained model may cost more per call.
 - **The wick copy was synced before `rustfmt` ran** [claude]. The committed `device.rs` and `student_throughput.rs` differ from the copy that ran on wick in whitespace only.
 - **The `MAX_BATCH_ROWS` constant sits in `corpus.rs`, not in `device.rs` as the ORDER said** [claude]. `device.rs` compiles only with the `cuda` feature, and `corpus.rs` needs the same bound in every build.
+- **The planted-shift count would accept a failed call** [review]. It counts a coordinate as caught when `agrees()` is false, and `agrees()` is also false when the status is not 0. In this run every status was 0, so all 16 catches at each size are real shifts. A later unit should count a catch only at status 0.
+- **The refusal texts write 4096 by hand** [review] rather than formatting `MAX_BATCH_ROWS`, so a later change to the constant must change three texts as well.
 - **Two files outside the ORDER's list** [claude]:
   - the notebook row is in `m1-discrete-attention.md`, beside claude-406's row, not in `cpu-training.md`;
   - `PLAN.md` gains one owner-direction row: Casey's "start the 1b training run on wick" and the plan agreed for it.
