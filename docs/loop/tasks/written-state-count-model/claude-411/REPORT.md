@@ -14,6 +14,11 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 - **Regrouping by template did not fix it** [claude]. The template key is the normalized first user message with digit runs masked. It merged 527,571 records into 517,617 groups. After the re-split, 1,834 of 5,160 DEV-test records were contaminated (35.5%).
 - **The contaminated spans were not decoded** [claude]. So the overlap is not yet known to be the teacher's stock wording rather than copied content.
 - **The first `loop pr-check --local` failed `banned-presence`** [claude]. The D32 lexer counts a `.digit` after `)` or `]` as a float literal, so tuple fields such as `self.uniq[i].0` and `split_of(..).1` showed up as 8 sites. They are now destructured through two test helpers, `side` and `key`, plus one `get(i).is_some_and(..)`. The instrument has no float.
+- **The fresh review's findings** [claude]. The review returned APPROVE-WITH-LOW-ITEMS.
+  - **The split key reads `messages[0]`.** That would be wrong if a record opened with a system message. For D87 it cannot happen: `scan_line` calls the ingest parser first, and the parser refuses any D87 message whose role is not `user` (`docs/labs/m2-student-corpus-ingest/instrument/src/lib.rs:213-215`). For D87, the first message is therefore the first user message.
+  - **`pack` checked ids below 4,096 with `debug_assert` only.** In a release build an id of 4,096 or more would spill into the next slot. It is now a hard check, with a test that panics on 4,096. With the check set back to `debug_assert`, that test failed in release (11 passed, 1 failed); after the restore, 12 of 12 passed.
+  - **`bloom_log2 = 0` would panic.** The value is now refused outside 6..=40.
+  - **`template_key` masks by `char::is_numeric`,** so "²" and "½" become "#" as well, and `normalize` lowercases ASCII only. Both are recorded as they stand.
 - **The laptop disk filled up partway through** [claude]. Swap reached 16 GB, held by another program. That program was stopped with the owner's leave, and the unit lost no work.
 
 ## What changed
@@ -67,7 +72,7 @@ Contaminated DEV-test records, by span length [claude]:
 - At n = 50, 249,554 of the 17,348,151 distinct DEV spans also occur in TRAIN [claude].
 - Records whose answer 13-grams are at least half in TRAIN: 1,189 of 5,321; on the template split, 1,110 of 5,160 [claude].
 - **Novel targets**, meaning targets whose preceding 13-gram is not in TRAIN [claude]:
-  - response-mask targets: 14,190,847 of 18,751,676 (75.7%);
+  - response-mask targets: 14,190,847 of 18,751,676 (75.7%). The denominator is every response target, and a target with fewer than 13 preceding tokens never counts as novel;
   - all targets: 14,795,227 of the 21,285,724 that have 13 tokens before them, plus 63,852 with fewer than 13 before them;
   - on the template split: 13,988,802 of 18,243,140 response-mask targets.
 - Each audit took about 4.5 minutes on wick, using 12 CPUs [claude].
@@ -98,7 +103,7 @@ Contaminated DEV-test records, by span length [claude]:
 
 ## Checks run at the head
 
-- `cargo test --manifest-path docs/labs/d87-split-audit/instrument/Cargo.toml`: 11 passed, with this instrument's own target folder [claude].
+- `cargo test --release --manifest-path docs/labs/d87-split-audit/instrument/Cargo.toml`: 12 passed at this head, in the instrument's own target folder [claude].
 - **Negative gate** [claude]. With the span comparison set to `if false && run >= n`, both planted-span tests fail. The file was restored with `git checkout`.
 - On wick: a release build with `--locked`, then the full split and audit on both groupings. rc 0 [claude].
 - The corpus originals on the wick host were read only through copies, with sha256 matched. Nothing on `/mnt/plexpool` was touched [claude].
