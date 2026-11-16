@@ -29,6 +29,18 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
   - `snapshot_loader_delegates_position_step_bounds_to_cuda_validate` (`tests/position_device_controls.rs`), as claude-407 recorded;
   - `fbs::tests::ask_heads_at_both_hooks_match_serving_without_carry` and `fbs::tests::readout_ask_carry_matches_serving_over_a_multi_row_window` (`uor-r4-cpu-train` lib), which fail at `origin/main` too.
 - **The ORDER named the test file `pick_read.rs`** [claude]. It is `pick_read_cuda.rs`, compiled only with `test` and `cuda`, beside `cpu_oracle_parity.rs`. `cpu_oracle_parity`'s `Reading`, `compare_forward` and `compare_proposals` become `pub(crate)`, so the Pick test reuses the same comparer.
+- **The fresh review found three things to fix, now fixed** [review]:
+  - The first student-batch test checked forward words and the trace only. It printed `moved` without asserting it, so it would pass even if the read changed no row. It now asserts `moved`. It also compares loss words and choices with the CPU scorer over claude-404's fixed student parameter list, with a shifted-target planted negative (run 3).
+  - The bucket writer's evaluate path admitted the batch before refusing Pick. Every other entry point refuses first; this one now does too.
+  - The D11 artifact scorer instrument (`docs/labs/m1-d11-artifact-scorer`) matches `DiscreteReadMode` exhaustively and stopped compiling once Pick was added (E0004). It now refuses a Pick read. Checked with `--target aarch64-apple-darwin`: it fails without the arm and compiles with it.
+- **The planted faults are not the ORDER's "shifted pick"** [review]. The fixture negative swaps the transport word. The loss-word negatives shift the CPU targets. Both show the comparisons react, but neither plants a wrong pick with the same targets.
+- **Parts of the ORDER's planted-copy test are thinner than written** [review]:
+  - the CUDA planted-copy test is one row, not every row;
+  - it does not check the greedy token;
+  - "every gate 0 leaves the output equal to the read-off" is covered only through the 264-row oracle comparison, which includes gates `[0,0]`.
+
+  Serving parity compares read vectors and greedy tokens, not pick positions.
+- **Pick gates above level 0 are dead coordinates** [review]. The gate inventory is still blocks × stages, and Pick reads only level 0. So most Gate proposals cost a scoring pass and cannot change a loss. On flat losses the chooser keeps lane 0 (asserted in `pick_scorer_refuses_route_and_scores_gate_and_table`), so they never commit a change.
 - **Two builder subagents stopped early** [claude], at their context marks, on a 9,000-line file. Their committed parts were reviewed and taken; the CPU scorer tests, the applier refusal and the CUDA loss-word parity test were written in the main session.
 
 ## What changed
@@ -85,6 +97,16 @@ All CUDA runs are on wick's RTX 4090, with real `nvcc` (`UOR_NVCC_ARCH=compute_8
     - the CPU pass on shifted targets is caught.
 - Bucket writer tests (`bucket` filter): 7 of 7.
 
+**Run 3** (job `c408-run3`, head `2ef4ce000`, after the review fixes): `pick_read_cuda` 10 of 10 in 673.73 s, and bucket 7 of 7.
+
+The student-batch test now runs per transport word, 3 and 1:
+- read and trace: 64 rows, 0 mismatches, `moved` asserted;
+- against the CPU scorer and chooser, over 64 listed parameters:
+  - 2,048 forward words, 768 loss words and 48 choices (32 VectorBlocks and 16 gates);
+  - 16 Route parameters refused on both sides;
+  - 0 mismatches;
+- the shifted-target negative on the Gate parameters is caught.
+
 **Laptop, CPU oracle** (`cargo test -p uor-r4-cpu-train --lib pick`): 13 of 13. These cover:
 - the L1 = 2·popcount identity;
 - the planted copy and the latest-tie rule;
@@ -101,21 +123,28 @@ Negative gates, each run once and restored:
 ## What the numbers say
 
 - **The XOR + popcount distance is the model's own L1 root distance.** All 256 root pairs agree on CUDA and on the CPU, so the read needs no approximation and no learned key.
-- **One read, three places, one answer.** The CUDA kernel, the CPU oracle and the serving reader give the same read vectors on every fixture prefix. CUDA and the CPU oracle also agree on one 64-row batch from the D87 student stream at full size, and the served artifact gives the same greedy tokens as the CUDA forward.
+- **One read, three places, one answer.** The CUDA kernel, the CPU oracle and the serving reader give the same read vectors on every fixture prefix. CUDA and the CPU oracle also agree on one 64-row batch from the D87 student stream at full size. On the fixtures, the served artifact gives the same greedy tokens as the CUDA forward.
 - **The training signal reaches the Pick gates.** Each Gate counterfactual equals the forward loss of the model moved to that gate. CUDA and the CPU scorer give the same loss words and choices for every Table and Gate parameter (run 2).
 - **This does not show the read helps.** Whether training finds gates and tables that make the pick recall the right successor is the next question. It needs the conjunction memory and the readout objective first (PLAN.md, the 16 Nov order).
 
 ## Checks run at the head
 
-At head `c4b254c02` (the code head; later commits change only this REPORT and the notebook):
+The laptop suites ran at `c4b254c02`. The review fixes after it change only:
+- the CUDA test file;
+- the bucket evaluate order;
+- one CPU test assertion;
+- the scorer instrument.
 
-- G1, the CUDA tests on wick's 4090, real `nvcc`: `pick_read_cuda` 10 of 10, bucket 7 of 7 (run 2). Run 1 also gave device 7 of 7 and `cpu_oracle_parity` 3 of 3, at `125ca5e0e`; the later commits do not change the Route or Flock paths those tests cover.
+After the fixes, the CPU Pick tests (13 of 13), the stub-`nvcc` check and the instrument check were rerun. The CUDA tests were rerun on wick in run 3.
+
+- G1, the CUDA tests on wick's 4090, real `nvcc`: `pick_read_cuda` 10 of 10 and bucket 7 of 7, at `2ef4ce000` (run 3). Run 1 also gave device 7 of 7 and `cpu_oracle_parity` 3 of 3, at `125ca5e0e`; the later commits do not change the Route or Flock paths those tests cover.
 - G2, the laptop `uor-r4-discrete` suite, `--lib --bins --tests --no-fail-fast`: lib 361 passed and 1 failed, plus 28 other targets green. The only failures are the two `main` failures above.
 - G3, the laptop `uor-r4-cpu-train` lib: 521 passed and 2 failed. The failures are the two fbs tests above.
 - G4, the laptop `uor-r4-integer` lib: 185 of 185.
 - G5, `cargo check -p uor-r4-cpu-train -p uor-r4-training --all-targets`: clean.
 - G6, the stub-`nvcc` `cargo check -p uor-r4-discrete --features cuda --all-targets`: clean.
 - G7, the negative gates: two CPU fixes, each set aside and shown to turn its test red (Measurements).
+- G7b, `docs/labs/m1-d11-artifact-scorer` instrument, `cargo check --locked --target aarch64-apple-darwin --all-targets`, in its own target folder: clean, and E0004 with the fix set aside.
 - G8, the ORDER commit `1785dbbb2` is the first of this unit's commits.
 - `git diff --check` is clean.
 - `loop pr-check --local`: run before queueing.
@@ -132,7 +161,17 @@ At head `c4b254c02` (the code head; later commits change only this REPORT and th
 ## Still open
 
 1. **A CPU applier for Pick**, so a committed Pick proposal can be compared byte for byte with the CUDA apply, and the CPU corpus driver can step a Pick model.
-2. **A Pick-specific out-of-orbit refusal test**, and a frames-section test with a non-identity `candidate_to_frame`.
+2. **Load-time and test gaps the review named** [review]:
+   - a Pick-specific out-of-orbit refusal test;
+   - a frames-section test with a non-identity `candidate_to_frame`;
+   - the serving loader admits any frame below 64, not only the 17 step frames (CUDA behaves the same, so parity holds);
+   - a 19-table trunk artifact with Pick is accepted though nothing writes one;
+   - `evaluate_prefix_traced` returns no Pick trace;
+   - a planted wrong-pick fault;
+   - skipping Pick gate levels above 0 in the inventory;
+   - `CpuDiscretePick::from_parts` builds one gate level, where `from_bytes` builds all of them;
+   - the CUDA output loop recomputes `pick_prefix` for every gated block.
+   - The scorer instrument's `Cargo.lock` is stale against `main`. An unlocked build rewrites it. This predates this unit and is left alone.
 3. **The conjunction memory**: the next gap in Casey's 16 Nov order. The pair key here is the first conjunction key, read by position; the memory stores it.
 4. **The readout objective, state across windows, and closing the native-space state contract**, in that order. Then the corpus trainer, the D87 ingest and the 1B run on wick.
 5. **The tests that fail on `main`** (above).
