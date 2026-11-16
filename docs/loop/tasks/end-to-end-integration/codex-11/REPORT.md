@@ -7,12 +7,13 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 - `loop claim end-to-end-integration --lab-topic session-scan-timing` was refused because
   `crates/uor-r4-integer/src/stack/**` overlaps another lab's open order. The unit adds one test and
   docs, no dependency and no `Cargo.lock` change.
-- **The read-free overflow policy is not built.** It was the other half of the request. On
-  inspection it is not worth the code: a read-free model can only continue by dropping the oldest
-  token, and with the session's `Vec<u32>` that is `O(context)` per step (a ring would touch every
-  reader); no committed artifact is read-free, so the policy would serve a case that does not occur;
-  and `ContextFull` is the exact answer for every model the repo serves. The negative is recorded
-  here rather than a policy added for a hypothetical.
+- **The read-free overflow policy is not built.** It was the other half of the request. The case is
+  real — the committed `cpu-training-pilot` public artifacts carry no Hamming read or turn memory —
+  but the policy needs a ring buffer, not a one-line allow: the session stores `tokens: Vec<u32>`,
+  so dropping the oldest token is `O(context)` per step and would touch every reader; and
+  `ContextFull` is already exact. A correct policy is a session-data-structure change (a ring with
+  the same slice views), larger than this measurement unit and not on the current model path. The
+  negative is recorded rather than a half-policy added.
 - **The times are indicative, not a benchmark.** One run per cell in a debug build, on this machine.
   The asserted part is token equality and the ratio's shape; the absolute times move.
 - **4,096 is the largest CI-friendly context here.** 32k is not run in the suite; codex-8 measured
@@ -71,5 +72,6 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 
 A whole session served from the index is identical to one served from the scan and gets
 progressively cheaper as context grows: 2.56x at 1k, 4.82x at 2k, 9.59x at 4k, with tokens
-identical. The read-free overflow policy was inspected and dropped: it would cost O(context) a step,
-no served artifact is read-free, and `ContextFull` is already exact.
+identical. The read-free overflow policy was inspected and dropped: the case is real (the committed
+`cpu-training-pilot` artifacts are read-free), but the policy needs a ring-buffer session change to
+avoid O(context) eviction, and `ContextFull` is already exact.
