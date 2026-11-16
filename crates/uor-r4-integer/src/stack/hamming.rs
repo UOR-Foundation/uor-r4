@@ -1814,7 +1814,6 @@ impl ServedHamming {
     /// [`CopyRule::LongestAfterOpening`] reads.
     #[inline(never)]
     #[allow(clippy::too_many_arguments)]
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn stream(&self, depth: usize, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], x: &mut [i32], trace: Option<&mut Vec<HammingStepRead>>, force: Option<&[ReadForce]>, opening: bool, indexes: &mut [HammingIndex]) {
         if depth == self.layers {
             return;
@@ -1871,7 +1870,6 @@ impl ServedHamming {
     /// token there is `c`, in place of the copy heads' mean, at the weight of one whole candidate.
     /// `opening` is as [`Self::stream`]'s.
     #[inline(never)]
-    #[allow(clippy::too_many_arguments)]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn readout(&self, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], n: &mut [i64], trace: Option<&mut Vec<HammingStepRead>>, force: Option<&[ReadForce]>, offer: Option<usize>, opening: bool, indexes: &mut [HammingIndex]) {
         let Some(i) = self.reads.iter().position(|r| r.depth == self.layers) else {

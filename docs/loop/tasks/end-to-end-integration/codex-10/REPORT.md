@@ -14,6 +14,9 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   heads' keys, so one index serves both.
 - **The equality test is 96 steps on a 128-context synthetic trunk**, not 32k. It proves the index
   and the scan serve the same answer; the 32k work count is codex-8's measurement, not repeated.
+  Its Hamming-trace leg is computed by `record`, which scans for both sessions, so the meaningful
+  equality is `step_native`; the full position order is covered by the unit test
+  `the_indexed_copy_head_matches_the_scan_on_a_long_stream`.
 - **No timing here.** The switch exists for equality, not for a benchmark.
 - **The pair key is not indexed.** Copy key 2 falls back to the scan in `choose_indexed`.
 - The `HammingIndex` is `pub` only so the `pub` read methods can name it; the module is private, so
@@ -46,8 +49,9 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 - `cargo test --locked -p uor-r4-integer --features serving-wasm,fbs-synthetic --test
   hamming_index_parity` — 1 passed.
 - `rustfmt --check` — the added lines are clean (the files keep their pre-existing diffs).
-- `cargo clippy --locked --no-deps -p uor-r4-integer --features serving-wasm,fbs-synthetic --lib
-  --tests` — no warning in the changed files.
+- `cargo clippy --locked --no-deps -p uor-r4-integer --features serving-wasm,fbs-synthetic --lib`
+  — clean, no warning in the changed files. `--lib --tests` fails on a pre-existing deny in
+  `tests/openai_loopback.rs:1658`, outside this diff.
 - `git diff --check`, the harness contract rule, the REPORT check and the exact-head review — at the
   head.
 
