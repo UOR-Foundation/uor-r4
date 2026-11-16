@@ -14857,6 +14857,94 @@ pub struct PayloadProbeSettings {
     /// [`uor_r4_native_vector::Q31ReadDump`], for control 2 (CPU against CUDA); needs
     /// `native_replay`.
     pub native_dump: Option<std::path::PathBuf>,
+    /// claude-395: when set, the native replay and its dump read the first `n` TRAIN windows,
+    /// `recall_query_window(seed, i, ..)` at the run's own seed, instead of the held-out ones;
+    /// needs `native_dump`. The payload-probe passes stay on the held-out windows.
+    pub native_train_windows: Option<u64>,
+}
+
+/// claude-395: the native read's per-row files beside a dump, one entry per dump row
+/// (`window * time + offset`), each 0 away from a query row.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecallRowTargets {
+    /// The asked fact's value position `p` (a pick `s` copies `ids[s + 1]`, so the target is
+    /// `p`, the rule's `s + 1` form).
+    pub ask: Vec<u32>,
+    /// The other fact's value position.
+    pub other: Vec<u32>,
+    /// C2's control: a seeded uniform earlier row in `1..=scored_offset`.
+    pub random: Vec<u32>,
+    /// The query's far bucket, 1 or 2 (`RecallQuery::bucket + 1`).
+    pub bucket: Vec<u8>,
+}
+
+/// SplitMix64, one draw per seed.
+fn splitmix64(seed: u64) -> u64 {
+    let mut z = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// The seed of C2's random targets (the sheet's "fixed 393 seed").
+pub const RECALL_RANDOM_TARGET_SEED: u64 = 393;
+
+/// claude-395: the per-row targets of windows whose queries are `queries[w]`, each window
+/// `time` rows. A target must be an earlier row of its window, `1..=scored_offset`; each
+/// query row is written once. The random draw depends on `(window, slot)` only.
+pub fn recall_row_targets(queries: &[Vec<RecallQuery>], time: usize) -> Result<RecallRowTargets> {
+    let rows = queries
+        .len()
+        .checked_mul(time)
+        .ok_or_else(|| invalid("the targets' row count overflows"))?;
+    let mut out = RecallRowTargets {
+        ask: vec![0; rows],
+        other: vec![0; rows],
+        random: vec![0; rows],
+        bucket: vec![0; rows],
+    };
+    for (w, window) in queries.iter().enumerate() {
+        for q in window {
+            let offset = q.scored_offset;
+            if offset == 0 || offset >= time {
+                return Err(invalid("a query's scored row is outside its window"));
+            }
+            let row = w * time + offset;
+            if out.bucket[row] != 0 {
+                return Err(invalid("two queries score the same row"));
+            }
+            for pos in [q.ask_value_pos, q.other_value_pos] {
+                if pos == 0 || pos > offset {
+                    return Err(invalid("a target is not an earlier row of its window"));
+                }
+            }
+            let bucket = u8::try_from(q.bucket + 1)
+                .map_err(|_| invalid("a query's bucket does not fit a byte"))?;
+            let draw = splitmix64(RECALL_RANDOM_TARGET_SEED ^ ((w as u64) << 8) ^ q.slot as u64);
+            out.ask[row] = q.ask_value_pos as u32;
+            out.other[row] = q.other_value_pos as u32;
+            out.random[row] = (draw % offset as u64) as u32 + 1;
+            out.bucket[row] = bucket;
+        }
+    }
+    Ok(out)
+}
+
+/// `path` with `suffix` appended to its file name.
+fn with_suffix(path: &std::path::Path, suffix: &str) -> std::path::PathBuf {
+    let mut name = path.as_os_str().to_owned();
+    name.push(suffix);
+    std::path::PathBuf::from(name)
+}
+
+/// claude-395: the four row files beside a dump: `.ask.u32`, `.other.u32`, `.random.u32`
+/// (little-endian `u32` per row) and `.bucket.u8`.
+pub fn write_recall_row_targets(dump: &std::path::Path, targets: &RecallRowTargets) -> Result<()> {
+    let le = |v: &[u32]| v.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>();
+    write_new(&with_suffix(dump, ".ask.u32"), &le(&targets.ask))?;
+    write_new(&with_suffix(dump, ".other.u32"), &le(&targets.other))?;
+    write_new(&with_suffix(dump, ".random.u32"), &le(&targets.random))?;
+    write_new(&with_suffix(dump, ".bucket.u8"), &targets.bucket)
 }
 
 /// claude-389: the hard-copy forward of every held-out window at payload scale 1, each forward's
@@ -15130,6 +15218,12 @@ pub fn recall_payload_probe(
     if settings.native_dump.is_some() && !settings.native_replay {
         return Err(invalid("the native dump is the replay's input: it needs native_replay"));
     }
+    if settings.native_train_windows.is_some() && settings.native_dump.is_none() {
+        return Err(invalid("the TRAIN replay is only for its dump: it needs native_dump"));
+    }
+    if settings.native_train_windows == Some(0) {
+        return Err(invalid("the TRAIN replay reads at least one window"));
+    }
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(settings.retain_rates);
     crate::geometric_stack::set_folded_scores(settings.fold_scores);
@@ -15202,18 +15296,28 @@ pub fn recall_payload_probe(
     });
     // claude-389: the native Q31 replay of the hard-copy read, once over every forward's capture.
     let native_replay = if settings.native_replay {
-        let (state, windows) = native_replay_pass(&model, &held, settings.seed)?;
+        // claude-395: the TRAIN windows at the run's own seed, when the settings ask.
+        let train = match settings.native_train_windows {
+            Some(n) => Some(
+                (0..n)
+                    .map(|i| recall_query_window(settings.seed, i, SHEET_CONTEXT, settings.header))
+                    .collect::<Result<Vec<_>>>()?,
+            ),
+            None => None,
+        };
+        let replayed = train.as_deref().unwrap_or(&held[..]);
+        let (state, windows) = native_replay_pass(&model, replayed, settings.seed)?;
         let (summary, dump) = crate::native_replay::replay_with_dump(&state, &windows)?;
         if let Some(path) = &settings.native_dump {
             let dump = dump.ok_or_else(|| invalid("a refused state has no read to dump"))?;
+            if dump.batch != replayed.len() || dump.time != SHEET_CONTEXT {
+                return Err(invalid("the dump's shape is not the replayed windows'"));
+            }
             let bytes = dump.to_bytes().map_err(|e| invalid(e.to_string()))?;
             // `create_new`: the dump never writes over a file, even one made during the run.
-            std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(path)
-                .and_then(|mut file| std::io::Write::write_all(&mut file, &bytes))
-                .map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+            write_new(path, &bytes)?;
+            let queries: Vec<Vec<RecallQuery>> = replayed.iter().map(|(_, q)| q.clone()).collect();
+            write_recall_row_targets(path, &recall_row_targets(&queries, SHEET_CONTEXT)?)?;
         }
         serde_json::to_value(summary)?
     } else {
@@ -17417,6 +17521,70 @@ mod tests {
         chosen[t] = t as u32 + 1;
         let later = count_read_choices(&held_out, &[], &chosen).unwrap_err().to_string();
         assert!(later.contains("later position"), "{later}");
+    }
+
+    /// claude-395: the row files put each query's targets at `window * time + scored_offset`,
+    /// and nowhere else.
+    #[test]
+    fn recall_row_targets_sit_at_the_scored_rows() {
+        let windows: Vec<Vec<RecallQuery>> = (0..3)
+            .map(|i| recall_query_window(11, i, SHEET_CONTEXT, 4).unwrap().1)
+            .collect();
+        let t = recall_row_targets(&windows, SHEET_CONTEXT).unwrap();
+        assert_eq!(t.ask.len(), 3 * SHEET_CONTEXT);
+        assert_eq!(t.bucket.len(), 3 * SHEET_CONTEXT);
+        let mut marked = 0;
+        for (w, qs) in windows.iter().enumerate() {
+            for q in qs {
+                let row = w * SHEET_CONTEXT + q.scored_offset;
+                assert_eq!(t.ask[row] as usize, q.ask_value_pos);
+                assert_eq!(t.other[row] as usize, q.other_value_pos);
+                assert_eq!(t.bucket[row] as usize, q.bucket + 1);
+                assert!(t.random[row] >= 1 && t.random[row] as usize <= q.scored_offset);
+                marked += 1;
+            }
+        }
+        assert_eq!(marked, 3 * RECALL_QUERY_EPISODES);
+        let nonzero = |v: &[u32]| v.iter().filter(|&&x| x != 0).count();
+        assert_eq!(nonzero(&t.ask), marked);
+        assert_eq!(nonzero(&t.other), marked);
+        assert_eq!(nonzero(&t.random), marked);
+        assert_eq!(t.bucket.iter().filter(|&&b| b != 0).count(), marked);
+    }
+
+    /// claude-395: a target that is not an earlier row of its window, a row outside the window
+    /// and two queries on one row are each refused.
+    #[test]
+    fn recall_row_targets_refuse_a_bad_query() {
+        let (_, qs) = recall_query_window(11, 0, SHEET_CONTEXT, 4).unwrap();
+        let mut late = qs.clone();
+        late[0].ask_value_pos = late[0].scored_offset + 1;
+        assert!(recall_row_targets(&[late], SHEET_CONTEXT).is_err());
+        let mut zero = qs.clone();
+        zero[1].other_value_pos = 0;
+        assert!(recall_row_targets(&[zero], SHEET_CONTEXT).is_err());
+        let mut outside = qs.clone();
+        outside[2].scored_offset = SHEET_CONTEXT;
+        assert!(recall_row_targets(&[outside], SHEET_CONTEXT).is_err());
+        let mut twice = qs.clone();
+        twice[3].scored_offset = twice[2].scored_offset;
+        assert!(recall_row_targets(&[twice], SHEET_CONTEXT).is_err());
+        assert!(recall_row_targets(&[qs], SHEET_CONTEXT).is_ok());
+    }
+
+    /// claude-395: C2's random targets depend on `(window, slot)` only: the same windows give
+    /// the same draws, and a window's draws do not change when another window is added.
+    #[test]
+    fn recall_row_targets_draw_the_same_random_rows() {
+        let windows: Vec<Vec<RecallQuery>> = (0..4)
+            .map(|i| recall_query_window(13, i, SHEET_CONTEXT, 4).unwrap().1)
+            .collect();
+        let a = recall_row_targets(&windows, SHEET_CONTEXT).unwrap();
+        let b = recall_row_targets(&windows, SHEET_CONTEXT).unwrap();
+        assert_eq!(a, b);
+        let fewer = recall_row_targets(&windows[..2], SHEET_CONTEXT).unwrap();
+        assert_eq!(fewer.random[..], a.random[..2 * SHEET_CONTEXT]);
+        assert_ne!(a.random, a.ask);
     }
 
     /// claude-328's I-2 and I-3 on every structural rule, for both forms: the query token, the
