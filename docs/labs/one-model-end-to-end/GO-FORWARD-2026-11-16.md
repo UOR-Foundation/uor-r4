@@ -117,16 +117,51 @@ and angular router"). What is measured:
 What the FBS line adds (measurement): arm r's recall is the **copy read** with a memory line, and
 the turn memory adds nothing to it; arm rt's failures are **write-overs after a copied value**.
 
-**Decision (recommendation).** Memory should be **an exact table keyed by the question's slot
-(entity, attribute), read at the readout, with copy precedence over the table**. The zeta/angular
-machinery is a *code* for the key (a fixed angular code per token costs nothing per token) but the
-measured record says it is not a router and not a value carrier. The two things that must be built
-are the two the archive never built: the **slot key** and the **write priority**.
+**Outside evidence (research of 16 Nov, cited in §9).** The literature agrees with the archive and
+narrows the design:
 
-**Falsifier.** On arm r's matched-pair panel, a slot-keyed table with copy precedence must beat the
-0.75–0.78 copy-only recall on *reworded* questions, with the "47 → 40" write-over count falling to
-zero. If it does not, the key is not the mechanism and the next candidate is a learned content key
-(the question's content word), not the geometry.
+- **An explicit key→value table is the only exact, cheap, capacity-safe family at this size.** VSA /
+  HRR binds at ~0.04–0.06·d items (40–70 pairs at d = 1,024) and every VSA family ends in a
+  cleanup table anyway; our 16–32 facts do not need it.
+- **Hamming/SDM addressing fails on the two things we need.** Its read is a majority centroid, not
+  an exact value, and its counters are commutative — **SDM has no recency, so "latest exact" cannot
+  fall out of it**. That is exactly our symptom. Attention matches SDM only after cosine/phase
+  normalisation, not raw Hamming.
+- **Zeta zeros as an address scheme appear nowhere** outside self-published preprints; treat as
+  crank-adjacent. Prime phases are *structured* (multiplicatively dependent), which is worse than
+  random or hashed for a low-coherence codebook. Prime products are also **unordered** — gcd cannot
+  tell (a,b) from (b,a) without squaring one factor — and single-token rows shadow pair rows that
+  share a factor. That is a precise criticism of our pair rows and prime route.
+- **The published answer to generalisation is shortlist-then-copy:** a coarse fuzzy code selects m
+  candidates, then an **exact equality verify** returns the value (FAISS-style; RETRO and kNN-LM
+  both). Memorizing Transformers state it plainly: retrieval does **not** average or summarise; it
+  retrieves exact values. Quantised 64-byte keys cost ~3% for 64× compression.
+- **Relative offset, not absolute position.** With relative position the previous-token head stores
+  >90% of associations at any position; with absolute encoding it **fails for 128 < t < 256**. Our
+  turn keys are absolute token ids, which predicts exactly the context-length cliff we see.
+
+**Decision (recommendation).** Memory is **an exact table keyed on a canonical code of the
+question's slot, shortlisted coarsely and verified exactly, with latest-wins overwrite and copy
+precedence over the table**. Concretely: key = (entity id, attribute id) or, cheaper and more
+general, a canonical **bigram of the question's content words with a relative offset**; the code
+selects ≤ m rows by popcount/L1 over a 64-bit code; an exact compare returns the value; a written
+value overwrites by recency ("read-then-overwrite", DeltaNet's fix). The zeta/angular machinery is
+at most a *code* for the key, and the measured record says it is neither a router nor a value
+carrier. The two things still to build are the two the archive never built: the **slot key** and the
+**write priority**.
+
+**Falsifiers (any one retires the mechanism).**
+1. **Value swap:** same keys, values permuted. If accuracy is unchanged, nothing reads the pairing.
+2. **Oracle-key headroom:** feed the gold key. Oracle ≈ 100% with the derived key ≈ 40% and flat as
+   paraphrases are added means the failure is canonicalisation, not the read.
+3. **Capacity curve:** exact recall against N at fixed d. Collapse near N ≈ d (or 0.05·d) is a
+   capacity bug, not an addressing bug.
+4. **Address entropy:** if the top pick's weight over candidates is below half, exact copy is
+   impossible — a cheap leading indicator.
+5. **Prime ambiguity:** the fraction of queries whose gcd match set has size > 1. If it grows with
+   context, drop the prime scheme.
+6. On arm r's panel: the slot-keyed table must beat 0.75–0.78 copy-only recall on *reworded*
+   questions with the "47 → 40" write-over count at zero.
 
 ## 5. Decision 12 — the read's input and its write
 
@@ -144,13 +179,26 @@ exist per layer and are **not** offered to the read as a key; the Hamming codes 
 (head 4), not part of the Q31 read's key. Whether adding them separates the fact positions is
 **untested**.
 
+**Outside evidence (16 Nov).** The read's two defects have known names. The payload's dilution is
+**averaging**: a read that mixes k picks by an equal mean cannot return an exact value, and the
+retrieval literature is explicit that exact memory must not average (Memorizing Transformers); a
+spiky, monotonic address is what makes copy possible (Hedgehog). The layer choice also matters: the
+key works best from the **pre-FFN (LN2)** hidden state, not the block output (kNN-LM's layer study).
+
 **Decision (recommendation).** Fix the write first, because it is cheap and measured: give the read
 a **learned write weight** (or a declared scale) so the picked row enters at a strength the readout
-can see, and measure the payload share beside the picks. Only then test a **spin-augmented key** —
-the per-layer transport quaternion, or the Hamming codes, appended to the read's address — as the
-alternative the owner suggests. The cheap version of the key test is a host/device experiment on
-the existing dumps: score with the residual alone, then with the residual plus the spin, and compare
-the rank of the asked fact. **Size: 1 unit for the write, 1–2 for the key.**
+can see, and **stop averaging** — make the pick spiky (one row, or a weighted mix with a declared
+distribution) rather than the equal mean of the kept cells. Then take the key from the **pre-FFN
+row** rather than the block output, and only after that test a **spin-augmented key** — the
+per-layer transport quaternion, or the Hamming codes, appended to the read's address — as the
+alternative the owner suggests. The cheap version of the key test is a host/device experiment on the
+existing dumps: score with the residual alone, then with the residual plus the spin, and compare the
+rank of the asked fact. **Size: 1 unit for the write, 1 for the spiky pick, 1–2 for the key.**
+
+**Falsifier.** If a write weight that raises |p|/|x| to ≥ 0.2 and a single-row pick do not raise
+R_ask, the read's problem is the choice, not the write, and the key experiment is the only remaining
+lever. The value-swap test of §4 applies here too: if permuting the values leaves R_ask unchanged,
+the read is not reading the binding at all.
 
 **Falsifier.** If a write weight that raises |p|/|x| to ≥ 0.2 does not raise R_ask, the read's
 problem is the choice, not the write, and the key experiment is the only remaining lever.
@@ -197,6 +245,14 @@ C2′ choice (the gate family's ceiling — a mechanism change, not more steps).
 
 Items 1–5 are code and can run beside claude's pipeline. Item 6 is the run. Item 7 closes the
 verdict. Item 8 is the only research item that could change what ships.
+
+## 9. Sources outside the project (16 Nov research)
+
+kNN-LM (arXiv 1911.00172) · RETRO (2112.04426) · Memorizing Transformers (2203.08913) · Zoology /
+MQAR (ICLR 2024) · Hedgehog (2402.04347) · DeltaNet (PMLR v139) · Plate HRR and FHRR · Kent
+resonators (2020) · Kanerva SDM · SDM capacity (Chou 1987) · attention ≈ SDM (2111.05498) · modern
+Hopfield (2008.02217) · Lisman & Idiart theta-gamma (1995) · RPE vs APE induction heads (2412.11459)
+· L1 vs L2 contrast · quantised kNN-LM (2109.04212).
 
 ## 8. What would falsify this plan
 
