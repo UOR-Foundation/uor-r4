@@ -84,18 +84,21 @@ serve)
   echo "vllm pid $(cat "$W/vllm.pid"), log $W/vllm.log"
   ;;
 unserve)
-  # Stop this pod's vLLM for a serve restart (amendment 4 tuning), by pid only: the server's pid,
-  # then any GPU compute process left (on this rented pod only our own vLLM workers use the GPUs).
+  # Stop this pod's vLLM for a serve restart (amendment 4 tuning). serve starts vLLM from a fresh
+  # ssh session, so the server and all of its workers share one process group, which holds nothing
+  # else: signal that group, never a pid read from nvidia-smi (in a container it can be a host pid).
   pid=$(cat "$W/vllm.pid")
-  kill -TERM "$pid" 2>/dev/null || true
-  for _ in $(seq 1 36); do kill -0 "$pid" 2>/dev/null || break; sleep 5; done
-  for sig in TERM KILL; do
-    left=$(nvidia-smi --query-compute-apps=pid --format=csv,noheader | tr -d ' ' || true)
-    [ -z "$left" ] && break
-    echo "unserve: GPU processes left ($(echo "$left" | tr '\n' ' ')): SIG$sig by pid"
-    for p in $left; do kill -"$sig" "$p" 2>/dev/null || true; done
-    sleep 30
-  done
+  pgid=$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ' || true)
+  if [ -n "$pgid" ]; then
+    [ "$pgid" != "$(ps -o pgid= -p $$ | tr -d ' ')" ] || { echo "unserve: vllm shares this shell's process group: refusing"; exit 1; }
+    for sig in TERM KILL; do
+      echo "unserve: SIG$sig to vllm's process group $pgid ($(ps -e -o pgid= | awk -v g="$pgid" '$1 == g' | wc -l | tr -d ' ') processes)"
+      kill -"$sig" -- "-$pgid" 2>/dev/null || true
+      for _ in $(seq 1 36); do [ -z "$(ps -e -o pgid= | awk -v g="$pgid" '$1 == g')" ] && break; sleep 5; done
+      [ -z "$(ps -e -o pgid= | awk -v g="$pgid" '$1 == g')" ] && break
+    done
+  fi
+  sleep 10
   used=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | sort -n | tail -1)
   [ "$used" -lt 2048 ] || { echo "unserve: a GPU still holds $used MiB"; exit 1; }
   echo "unserve: vllm stopped, every GPU under 2 GiB"
