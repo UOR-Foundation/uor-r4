@@ -488,3 +488,60 @@ fn cuda_pick_read_matches_cpu_oracle_on_the_student_batch() {
         assert_eq!(rows, 64);
     }
 }
+
+/// The CUDA Pick proposal path and the CPU scorer and chooser, loaded from the
+/// same exported bytes, give the same forward words, loss words and choices
+/// for every Table and Gate parameter; both refuse every Route parameter. A
+/// CPU pass on shifted targets is the planted negative: its loss words differ.
+#[test]
+#[ignore = "requires a CUDA GPU"]
+fn cuda_pick_loss_words_and_choices_match_the_cpu_scorer() {
+    use crate::cpu_oracle_parity::{compare_forward, compare_proposals, Reading};
+    use uor_r4_cpu_train::{
+        CpuDiscreteProposalChooser, CpuDiscreteProposalSample, CpuDiscreteProposalScorer,
+    };
+    let rows: Vec<CpuDiscreteProposalSample> = every_prefix()
+        .into_iter()
+        .map(|prefix| CpuDiscreteProposalSample {
+            target: (prefix[0] + prefix.len() as u32) % SPEC.vocabulary,
+            prefix,
+        })
+        .collect();
+    let shifted: Vec<CpuDiscreteProposalSample> = rows
+        .iter()
+        .map(|s| CpuDiscreteProposalSample {
+            prefix: s.prefix.clone(),
+            target: (s.target + 1) % SPEC.vocabulary,
+        })
+        .collect();
+    for mode in [PositionMode::IdentityControlV1, PositionMode::PrefixHolonomyV1] {
+        let config = PositionConfig::new(mode, patterned_steps(SPEC.blocks));
+        let (device, _) = pick_device(SPEC, config, &[1, -1], Some(&distinct_roots));
+        let bytes = crate::d11_export::export_d11(&device.snapshot().expect("snapshot"))
+            .expect("export");
+        let scorer = CpuDiscreteProposalScorer::from_bytes(&bytes).expect("cpu scorer");
+        let chooser = CpuDiscreteProposalChooser::from_bytes(&bytes).expect("cpu chooser");
+        let mut r = Reading::default();
+        compare_forward(&device, &scorer, &rows, &mut r);
+        compare_proposals(&device, ReadSpec::Pick, &scorer, &chooser, &rows, &rows, false, &mut r);
+        let snapshot = device.snapshot().expect("snapshot");
+        eprintln!(
+            "{mode:?}: {} forward words, {} loss words, {} choices, {} refusals both sides, {} mismatches",
+            r.forward_words,
+            r.loss_words,
+            r.choices,
+            r.refusals,
+            r.mismatches.len()
+        );
+        assert!(r.mismatches.is_empty(), "{mode:?}: {:#?}", &r.mismatches[..r.mismatches.len().min(8)]);
+        assert_eq!(r.refusals, snapshot.routes.len(), "{mode:?}: every Route refused");
+        assert_eq!(r.choices, snapshot.table.len() / 8 + snapshot.gates.len(), "{mode:?}");
+        assert_eq!(r.loss_words, 16 * r.choices, "{mode:?}");
+        let mut planted = Reading::default();
+        compare_proposals(&device, ReadSpec::Pick, &scorer, &chooser, &rows, &shifted, false, &mut planted);
+        assert!(
+            planted.mismatches.iter().any(|m| m.starts_with("losses")),
+            "{mode:?}: shifted targets left every loss word equal"
+        );
+    }
+}

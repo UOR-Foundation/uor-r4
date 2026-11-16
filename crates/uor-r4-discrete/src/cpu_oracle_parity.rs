@@ -110,19 +110,19 @@ fn parameters(device: &Device, read: ReadSpec) -> Vec<(Parameter, CpuDiscretePro
 /// One comparison pass. Returns the mismatches as readable lines and the
 /// counts of words compared, so a fault test can show which step caught it.
 #[derive(Default, Debug)]
-struct Reading {
-    forward_words: usize,
-    loss_words: usize,
-    choices: usize,
+pub(crate) struct Reading {
+    pub(crate) forward_words: usize,
+    pub(crate) loss_words: usize,
+    pub(crate) choices: usize,
     /// Parameters both sides refuse.
-    refusals: usize,
+    pub(crate) refusals: usize,
     /// Artifact pairs whose raw bytes differ only in header key order.
     key_order_only: usize,
     /// Artifact pairs whose headers differ only in `source.snapshot_sha256`.
     snapshot_sha_only: usize,
     /// Named findings that are not mismatches.
     notes: Vec<String>,
-    mismatches: Vec<String>,
+    pub(crate) mismatches: Vec<String>,
 }
 
 impl Reading {
@@ -146,7 +146,7 @@ impl Reading {
     }
 }
 
-fn compare_forward(
+pub(crate) fn compare_forward(
     device: &Device,
     cpu: &CpuDiscreteProposalScorer,
     rows: &[CpuDiscreteProposalSample],
@@ -179,7 +179,7 @@ fn compare_forward(
 /// CPU chooser gets the CUDA losses with CUDA's chosen lane swapped into lane
 /// 0, so the planted losses and choose faults run through this same code.
 #[allow(clippy::too_many_arguments)]
-fn compare_proposals(
+pub(crate) fn compare_proposals(
     device: &Device,
     read: ReadSpec,
     scorer: &CpuDiscreteProposalScorer,
