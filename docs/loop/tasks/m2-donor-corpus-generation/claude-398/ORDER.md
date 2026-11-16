@@ -18,8 +18,8 @@ D86 (Casey, 15 Nov 2026, in `docs/integration/DECISIONS.md` and the 15 Nov entry
 1. **The instrument** (`docs/labs/d41-driver-math-pilot/instrument/`) gains, at the head:
    - `--instrument-commit SHA` on `generate`, required and written into `run.json`, so every receipt names the client commit (pilot REPORT, item 5);
    - `--mode seq|n4|g-n3`: four requests per prompt as now; one request with `n` = 4; or one greedy request plus one with `n` = 3, which keeps the pilot's seed rule because llama.cpp seeds child completions `seed + k`;
-   - `--no-tokenize`, and a `count` command that tokenizes the kept answers of a finished directory outside the timed window;
-   - `--system TEXT`, which replaces the system message.
+   - `--tokenize 0`, which skips the per-answer `/tokenize` call, and a `count` command that tokenizes the kept answers of a finished directory outside the timed window;
+   - `--system-file FILE`, which replaces the system message with the text of FILE.
    The pilot's sampling values, record format, `seal` and `verify` are unchanged.
 2. **The smoke first:** the head `generate` runs on 4 prompts in each mode against `llama-server` before any timed arm. Its integer sampling request has never been sent to the engine (pilot REPORT, item 5).
 3. **The timed arms on wick**, each a 300 s dispatch window from the start of the pilot's fixed prompt set (`6a6630b2…`): the pilot's settings, re-measured with the head client; `-np` 64 and 128 with larger `-b`/`-ub`; a shorter system message; no `/tokenize`; four answers in one request (`n4` and `g-n3`); backend sampling; and one arm combining the levers that won. vLLM is optional and is named in the receipt if run.
