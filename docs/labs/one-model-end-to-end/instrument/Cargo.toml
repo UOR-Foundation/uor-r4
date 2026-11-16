@@ -85,3 +85,7 @@ hex = "0.4.3"
 
 [dev-dependencies]
 uor-r4-integer = { path = "../../../../crates/uor-r4-integer", features = ["fbs-synthetic", "serving-wasm"] }
+
+[[bin]]
+name = "protocol-row"
+path = "src/bin/protocol-row.rs"

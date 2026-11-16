@@ -35,6 +35,21 @@ heldout-panel check-queries split=PANEL tokenizer=TOKENIZER.json   # checked N q
 The test that writes a chained panel needs the pinned d36d3e87 tokenizer:
 `UOR_R4_PINNED_TOKENIZER=TOKENIZER.json cargo test --features panel-writer -- --include-ignored`.
 
+## `protocol-row`
+
+The item's verdict rule, executable (Done-when 3). It measures nothing: it applies the
+pre-registered rule to one JSON input and reports the verdict with every reading it was drawn
+from, or `undetermined` with the missing reading named.
+
+```sh
+cargo run --release --offline --bin protocol-row -- --input ROW.json [--out REPORT.json]
+```
+
+`ROW.json` is a `VerdictInput`: the three strata (`keyed`, `unkeyed`, `new_template`, each
+`{targets, correct}`) for the arm, the memory-off control (r0) and the longest-suffix table, plus
+`verbatim_train_replies`, `replies`, and the novelty shares in parts per million. Two knobs are
+the sheet's, not the instrument's: `mostly_training_ppm` (default one half) and `novelty_band_ppm`.
+
 ## `m2-evidence`
 
 The input paths are explicit. `train-role` is required with a reference index and records whether it

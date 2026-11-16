@@ -1,6 +1,11 @@
 //! Shared types for standalone one-model instruments.
 
 pub mod reply_control_controller;
+pub mod verdict;
+#[cfg(feature = "cpu-parity")]
+pub mod carry_geometry;
+#[cfg(feature = "cpu-parity")]
+pub mod evidence;
 
 use serde::Deserialize;
 
