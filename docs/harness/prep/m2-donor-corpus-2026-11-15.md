@@ -10,13 +10,22 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 8×H200 po
 
 ## Steps
 
-1. **Prompt bank** (laptop, no model): `donor-corpus bank --sources local/m2-sources --panels data/panels --seed 20261116 --out bank.jsonl`, at the instrument commit named in the receipt. The sources are fetched at pinned revisions by `docs/labs/m2-donor-corpus/fetch-sources.sh`, which checks each file against Hugging Face's LFS sha256. The bank's sha256, size and per-source counts are fixed here before the FIT: `BANK_SHA256` (filled in below).
+1. **Prompt bank** (laptop, no model): `donor-corpus bank --sources local/m2-sources --panels data/panels --seed 20261116 --out bank.jsonl`, at the instrument commit named in the receipt. The sources are fetched at pinned revisions by `docs/labs/m2-donor-corpus/fetch-sources.sh`, which checks each file against Hugging Face's LFS sha256. The bank's sha256, size and per-source counts are fixed here before the FIT:
+   - **Bank:** sha256 `787e5ab4b7e783d0aab1ae2ea7c891b78b55cdafc775b8096bfd644d99ed1a61`, 773,996,008 bytes, 692,364 prompts (646,527 single, 45,837 two-turn). It was built at instrument commit `f8b838fa3`, and `bank.rs` is unchanged at the run's commit. A second build from the same sources compares byte-identical.
+   - **Kept per source:**
+     - wildchat 454,231 (45,319 two-turn), below its 650,000 cap;
+     - numina 120,000 (cap);
+     - openthoughts 112,091;
+     - oasst2 4,963 (518 two-turn);
+     - gsm8k 1,079.
+   - **Dropped by the panel guard:** 20,169 in all (wildchat 11,004, numina 7,895, openthoughts 1,259, oasst2 10, gsm8k 1). The guard matches sentence by sentence, so it errs toward dropping.
+   - **Dropped as duplicates:** 6,393 of gsm8k's 7,473 duplicate NuminaMath-1.5's GSM8K problems. Dedup runs across sources.
 2. **Lease** after D87 is on `main`: one Vast 8×H200 verified datacenter offer at ≤ $35/h, with all labs' running pods counted. The lease uses `UOR_POD_MAX_RATE=35 UOR_POD_VAST_DISK_GB=1200 UOR_POD_VAST_MIN_INET_MBPS=1000 UOR_POD_IMAGE=vllm/vllm-openai:v0.33.0-x86_64 scripts/pod/uor-pod up --gpu h200 --count 8 --no-bootstrap --owner-approved` (the owner approval is D87). The pod has ≥ 1 TB of RAM for two Engram host-table copies. A completion watcher is armed in the same command that launches the run (L-004).
 3. **Setup** (`docs/labs/m2-donor-corpus/pod.sh setup`): download `deepseek-ai/DeepSeek-V4.1-Flash-1017` at revision `08c8657f02291e11b6f6b63e0e16014f8e748518` (MIT, not gated, about 511 GB in 48 shards). Check every LFS file against Hugging Face's sha256. Build the client on the pod at the receipt's instrument commit.
 4. **Serve:** one vLLM server, `--data-parallel-size 2 --tensor-parallel-size 4`, with the recipe's H200 settings: `--tokenizer-mode deepseek_v41`, `--kv-cache-dtype fp8`, `--engram-config '{"cpu_offload":true}'`, `--reasoning-parser deepseek_v41`, `--language-model-only`, no speculative decoding (the recipe marks it for small batches), `--max-num-seqs 256 --max-num-batched-tokens 8192`.
 5. **Smoke** (instrument check, not corpus): `generate --limit 32 --parallel 8` into `smoke/`. It checks that `reasoning` and `answer` arrive in separate fields with no markup, that two-turn prompts run, and that `seal`/`verify` pass on the smoke directory. The smoke output is never part of the corpus.
 6. **Tuning, at most 20 minutes:** client `--parallel` 256, then 512, each for 8 minutes from the start of the bank. The setting with the higher kept tokens per minute over its last 5 minutes is kept. These records stay in the corpus, because they are the bank's first prompts at the same sampling.
-7. **The measured hour:** 60 minutes at the kept setting, read from `rate.jsonl` (kept tokens in donor tokens per minute). The projection is P_cost = spent + (1B − kept) / R / 3600 × rate_per_h, and P_time = elapsed + (1B − kept) / R / 3600, where R is the hour's mean kept tokens/s.
+7. **The measured hour:** 60 minutes at the kept setting, read from `rate.jsonl` (kept tokens in donor tokens per minute). The projection is P_cost = spent + (1B − kept) / R / 3600 × rate_per_h, and P_time = elapsed + (1B − kept) / R / 3600, where R is the hour's mean kept tokens/s. Because the bank is globally shuffled, the hour also gives the bank's yield, P_yield = (kept tokens / prompts dispatched) × 692,364. The yield is recorded and reported, with no stop on it. If P_yield < 1B, the run continues until the bank runs out (an S reading), and a top-up bank from WildChat's other 43 files is a new sheet.
 8. **Continue or switch:** if P_cost ≤ $1,000 and P_time ≤ 48 h, the run continues to the 1B kept-token budget. Otherwise the DeepSeek run stops, its shards are copied off, sealed and verified as a separate partial set, the pod goes `down`, and the unit reports P_cost, P_time, R and the fallback recommendation below as its result. The parent session puts the choice to Casey; nothing more is leased under this sheet until Casey answers.
 9. **Offload:** every 10 minutes, finished shards and their counts files are copied off the pod to the laptop and checked by sha256. That copy is the watcher's main job. `down` comes only after the last copy is verified.
 10. **Seal and verify:** `seal` writes `receipt.json` (shard sha256s and Merkle root, the bank's sha256, the counts, rate and segment logs, the instrument commits, model, engine image and digest, GPUs). `verify` runs on the laptop, and again after a fetch back from the HF store (`results/claude/m2-donor-corpus-2026-11-16/`).
@@ -32,7 +41,7 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 8×H200 po
 - **B4 panels:** the bank holds no panel string (dropped by the guard; the count is reported).
 - **B5 bounds:** dollars spent ≤ $1,100, which is the $1,000 bound plus at most one tuning or setup overrun; wall time from lease to `down` ≤ 60 h.
 
-**Recorded, with no bar:** kept and generated tokens/s per minute; the share of empty reasoning; tokens per record by source and kind; reasoning versus answer bytes; request p50/p95; GPU and host-memory use; and the count in the project tokenizer.
+**Recorded, with no bar:** kept and generated tokens/s per minute; P_yield; segments that stopped with `stopped_by: "server"` (the client waits up to 30 min for `/v1/models`, three times per prompt, and never drops a prompt because the server was down; only a 4xx other than 429 counts as an `http` drop); the share of empty reasoning; tokens per record by source and kind; reasoning versus answer bytes; request p50/p95; GPU and host-memory use; and the count in the project tokenizer.
 
 **Reading map** (fixed before the run):
 - **P:** B1–B5 hold. The corpus is sealed and stored. The REPORT gives tok/s, wall time and dollars.
