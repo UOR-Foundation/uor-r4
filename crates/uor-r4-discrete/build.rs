@@ -37,12 +37,13 @@ const ENTRIES: [&str; 13] = [
     "discrete_count_score",
     "discrete_carrier_select",
 ];
-const NATIVE_VECTOR_ENTRIES: [&str; 7] = [
+const NATIVE_VECTOR_ENTRIES: [&str; 8] = [
     "native_q31_hamilton_rotate",
     "native_q31_hamilton_train_step",
     "native_q31_read_address",
     "native_q31_first_pick_read",
     "native_q31_read_pick_loss",
+    "native_q31_read_bind_loss",
     "native_q31_read_gate_credit_partial",
     "native_q31_read_gate_apply",
 ];

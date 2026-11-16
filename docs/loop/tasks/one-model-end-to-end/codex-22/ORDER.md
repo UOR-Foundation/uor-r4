@@ -26,9 +26,9 @@ trainer the hinge is a cost function with nothing that descends it, and line 2 i
   competing row (or the read's own first pick when the row carries no competing label). The
   rank hinge is discrete, so the descent criterion is the pairwise distance gap and the rank
   cost decides the ties.
-- **No device twin in this unit.** The CUDA pick kernel computes a distance rival; the rank
-  hinge needs both ranks. The host step is the reference, as `train_pick_step` was before its
-  kernel.
+- **The device step after the host reference holds.** The CUDA pick kernel computes a distance
+  rival; the rank hinge needs both ranks, so the kernel takes the bound and a competing mask and
+  writes both ranks' cost. The host step lands first and the device matches it gate for gate.
 
 ## Files
 
@@ -45,7 +45,7 @@ trainer the hinge is a cost function with nothing that descends it, and line 2 i
 1. The hinge and the step have finite tests: the rank gap, the miss, an absent label, a refusal,
    and a step that moves the bound to the front.
 2. The trainer runs on the FBS dumps of both states, on a held window split, with the hinge
-   before and after.
+   before and after, and the device step reproduces the host read byte for byte.
 3. The memory arm's held bound-pick rate is stated against the plain pick trainer's, and the
    `--reverse` arm's is stated against codex-18's 0.125.
 4. The mechanism's ceiling is named: whether the hinge reaches the other fact or not.

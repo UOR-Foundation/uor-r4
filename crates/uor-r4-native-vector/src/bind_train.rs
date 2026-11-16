@@ -78,6 +78,27 @@ impl BindLabels {
     pub fn is_competing(&self, row: usize, position: u32) -> bool {
         position != 0 && self.competing[row].contains(&position)
     }
+
+    /// The device sidecar: the competing positions packed into `comp_words` u32 words a
+    /// row (32 positions a word). The design's 64-leaf mask is `comp_words == 2`; a
+    /// `time`-row window takes `time.div_ceil(32)`. A position past the mask is refused.
+    pub fn comp_masks(&self, comp_words: usize) -> Result<Vec<u32>> {
+        if comp_words == 0 && self.competing.iter().any(|row| !row.is_empty()) {
+            return Err(invalid("a competing position needs at least one mask word"));
+        }
+        let limit = comp_words as u32 * 32;
+        let mut masks = vec![0u32; self.bound.len() * comp_words];
+        for (row, positions) in self.competing.iter().enumerate() {
+            for &position in positions {
+                if position == 0 || position > limit {
+                    return Err(invalid("a competing position is past the mask's words"));
+                }
+                let word = (position - 1) / 32;
+                masks[row * comp_words + word as usize] |= 1 << ((position - 1) % 32);
+            }
+        }
+        Ok(masks)
+    }
 }
 
 /// One labelled row's hinge.
@@ -496,6 +517,23 @@ mod tests {
         assert!(labels.set(0, 1, &[130]).is_ok());
         assert!(labels.is_competing(0, 130));
         assert!(!labels.is_competing(0, 129));
+    }
+
+    #[test]
+    fn the_device_mask_packs_positions_at_its_stride() {
+        let mut labels = BindLabels::new(1);
+        labels.set(0, 2, &[1, 32, 33, 64]).expect("label");
+        let two = labels.comp_masks(2).expect("the design's two words");
+        assert_eq!(two, vec![0b1 | 1 << 31, 0b1 | 1 << 31]);
+        // A 192-row window takes six words; position 130 lives in the fifth.
+        labels.set(0, 2, &[130]).expect("label");
+        let six = labels.comp_masks(6).expect("six words");
+        assert_eq!(six.len(), 6);
+        assert_eq!(six[4], 1 << ((130 - 1) % 32));
+        // A position past the mask's words is refused, not dropped.
+        let message = labels.comp_masks(2).expect_err("past the mask");
+        assert!(format!("{message}").contains("past the mask"));
+        assert!(BindLabels::new(1).comp_masks(0).is_ok());
     }
 
     #[test]

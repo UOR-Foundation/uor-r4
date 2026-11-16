@@ -305,6 +305,105 @@ extern "C" __global__ void native_q31_read_pick_loss(
     }
 }
 
+// Kernel C2 (codex-22): per row with a bound label, the best competing position, both
+// ranks among the earlier rows (the read's tie rule: an equal distance goes to the later
+// row), the registered cost (rank margin + miss) and the pairwise gap. `loss` holds two
+// u64 words a row: the cost, then the gap. `rivals` holds the position the credit pulls
+// against (the best competing row, or the read's first pick when the row has no competing
+// label), and the three sign residuals when the cost is positive. The competing set is a
+// bitmask over positions at `comp_words` u32 words a row: the design's 64-leaf sidecar is
+// `comp_words == 2`, and a 192-row window takes six.
+extern "C" __global__ void native_q31_read_bind_loss(
+    const s64* queries,
+    const s64* keys,
+    const unsigned* bound,
+    const unsigned* comp_mask,
+    unsigned comp_words,
+    unsigned rows,
+    unsigned time,
+    unsigned* rivals,
+    u64* loss,
+    s64* residuals
+) {
+    unsigned item = blockIdx.x * blockDim.x + threadIdx.x;
+    if (item >= rows) return;
+    unsigned t = item % time;
+    unsigned first = item - t;
+    s64* residual = residuals + (u64)item * 48ull;
+    for (unsigned c = 0; c < 48; ++c) residual[c] = 0;
+    rivals[item] = 0;
+    loss[2ull * item] = 0;
+    loss[2ull * item + 1] = 0;
+    unsigned b = bound[item];
+    if (t == 0 || b == 0) return;
+    const s64* query = queries + (u64)item * 16ull;
+    if (b > t) {
+        // No bound candidate at all: the miss alone, and nothing to pull against.
+        loss[2ull * item] = 4u;
+        return;
+    }
+    const unsigned* mask = comp_mask + (u64)item * (u64)comp_words;
+    u64 d_bound = address_distance(query, keys + (u64)(first + b - 1u) * 16ull);
+    bool has_comp = false;
+    unsigned comp = 0;
+    u64 d_comp = 0;
+    for (unsigned s = 0; s < t; ++s) {
+        unsigned pos = s + 1u;
+        unsigned w = (pos - 1u) >> 5;
+        if (w >= comp_words) continue;
+        if (((mask[w] >> ((pos - 1u) & 31u)) & 1u) == 0u) continue;
+        u64 d = address_distance(query, keys + (u64)(first + s) * 16ull);
+        if (!has_comp || d < d_comp || (d == d_comp && s > comp)) {
+            d_comp = d;
+            comp = s;
+            has_comp = true;
+        }
+    }
+    unsigned rank_bound = 0;
+    unsigned rank_comp = 0;
+    for (unsigned s = 0; s < t; ++s) {
+        u64 d = address_distance(query, keys + (u64)(first + s) * 16ull);
+        if (d < d_bound || (d == d_bound && s > b - 1u)) ++rank_bound;
+        if (has_comp && (d < d_comp || (d == d_comp && s > comp))) ++rank_comp;
+    }
+    unsigned miss = rank_bound == 0u ? 0u : 4u;
+    unsigned margin = 0;
+    if (has_comp) {
+        long delta = (long)rank_comp - (long)rank_bound;
+        long need = 2 - delta;
+        if (need > 0) margin = (unsigned)need;
+    }
+    loss[2ull * item] = (u64)(margin + miss);
+    if (has_comp) {
+        u64 m = comp > b - 1u ? 1ull : 0ull;
+        s128 gap = (s128)d_bound + (s128)m - (s128)d_comp;
+        loss[2ull * item + 1] = gap > 0 ? (u64)gap : 0ull;
+    }
+    if (margin + miss == 0u) return;
+    unsigned rival;
+    if (has_comp) {
+        rival = comp + 1u;
+    } else {
+        unsigned best = 0;
+        u64 best_distance = ~0ull;
+        for (unsigned s = 0; s < t; ++s) {
+            u64 d = address_distance(query, keys + (u64)(first + s) * 16ull);
+            if (d <= best_distance) { best_distance = d; best = s; }
+        }
+        rival = best + 1u;
+    }
+    rivals[item] = rival;
+    const s64* bound_key = keys + (u64)(first + b - 1u) * 16ull;
+    const s64* rival_key = keys + (u64)(first + rival - 1u) * 16ull;
+    for (unsigned l = 0; l < 16; ++l) {
+        s64 to_bound = sign_word(query[l] - bound_key[l]);
+        s64 to_rival = sign_word(query[l] - rival_key[l]);
+        residual[l] = to_bound - to_rival;
+        residual[16 + l] = -to_bound;
+        residual[32 + l] = to_rival;
+    }
+}
+
 // Word `k` of `residual (x) conj(block * 2^shift)`, exact; the residual is in
 // sign units. Multiplying by `2^shift` avoids shifting a negative __int128.
 __device__ __forceinline__ s128 credit_word(

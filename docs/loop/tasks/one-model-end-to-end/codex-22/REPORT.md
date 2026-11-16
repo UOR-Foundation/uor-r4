@@ -31,9 +31,20 @@ Lab: codex. Order: [ORDER.md](ORDER.md). Parent: [codex-21](../codex-21/REPORT.m
   the best competing row, accepted while `(gap, rank cost)` strictly falls.
 - `crates/uor-r4-native-vector/src/read_train.rs`: `addresses`, `add_credit` and `apply_credit` are
   crate-visible so the hinge shares the exact credit math instead of re-deriving it.
+- `crates/uor-r4-discrete/src/native_vector.cu`: `native_q31_read_bind_loss`, one thread a row.
+  It finds the best competing position, both ranks under the read's tie rule, the registered cost
+  and the pairwise gap, and writes the three sign residuals when the cost is positive. The credit
+  and the gate apply are the pick step's own kernels.
+- `crates/uor-r4-discrete/src/native_vector_device.rs`: `NativeVectorEngine::read_train_bind_step`
+  — the same accept rule on the host — and `Q31BindDeviceStep`.
+- `crates/uor-r4-discrete/build.rs`: the eighth admitted native-vector entry.
+- `crates/uor-r4-native-vector/src/bind_train.rs`: `BindLabels::comp_masks(comp_words)`, the
+  device sidecar. The design's four-word 64-leaf mask is the `comp_words == 2` case; a 192-row
+  window takes six words, and a position past the mask's words is refused.
 - `crates/uor-r4-discrete/examples/native_bind_train.rs` (new): reads a `Q31ReadDump` with its
-  `.ask/.other` sidecars, trains, and writes one JSON line an eval step with the hinge, the two
-  pick counts and an optional `--eval-dump`'s held reading.
+  `.ask/.other` sidecars, steps on the device by default (`--host` for the reference,
+  `--check-host-steps N` for the gate-for-gate comparison), and writes one JSON line an eval step
+  with the hinge, the two pick counts and an optional `--eval-dump`'s held reading.
 - `docs/labs/read-binding-on-lawful-read/README.md`: the correction points at the implementation.
 
 Eight finite tests: the one-place margin, the competing row ahead, no competing label, a bound
@@ -71,9 +82,6 @@ misses and **913/1,024 (0.892)** bound-first, from 22,991 and 9/1,024 at identit
 
 ## Still open
 
-- **The device twin.** `native_q31_read_pick_loss` computes a distance rival; the rank hinge needs
-  the bound's and the competitor's ranks, so the kernel takes two sidecar words a row. This unit is
-  the host reference, as `train_pick_step` was before its kernel.
 - The archived lab's 120-item memory panel is not in this repository; the held split above is the
   probe's own window family, which is what the served artifact carries.
 - The 1B read is claude's line.
@@ -84,3 +92,6 @@ misses and **913/1,024 (0.892)** bound-first, from 22,991 and 9/1,024 at identit
 - `cargo build --release --locked -p uor-r4-discrete --example native_bind_train` — clean.
 - Four held-split runs (`ext-s1`/`ext-s2` × both arms) and the all-window arm; the held-split
   `ext-s1` forward run repeats byte-for-byte after the eval-dump refactor.
+- The device step: host = device on the first two steps of every run, and the saved read is
+  **byte-identical** to the host run at `ext-s1` (512 steps) and at `ext-s2` (2,048 steps, both
+  arms). The device and host JSON readings agree row for row.

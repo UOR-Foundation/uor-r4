@@ -127,9 +127,11 @@ use this rank-gap margin; `m_bind` and `W_miss` are unchanged.
 
 The same hinge, on the native Q31 read the stack serves, is
 `crates/uor-r4-native-vector/src/bind_train.rs`; its trainer is
-`crates/uor-r4-discrete/examples/native_bind_train.rs` (host reference; the device
-twin needs two sidecar words a row, because the rank hinge needs both ranks and the
-pick kernel computes one rival). The candidates are the window's earlier rows, ranked
+`crates/uor-r4-discrete/examples/native_bind_train.rs` (device by default, `--host` for
+the Rust reference). The device sidecar packs the competing positions at a runtime
+stride: the four-word 64-leaf mask is the stride-two case, and a 192-row window takes
+six words, because the rank hinge needs both ranks and the pick kernel computes one
+rival. The candidates are the window's earlier rows, ranked
 by the read's own L1 order, and the labels come from the probe's `.ask`/`.other`
 targets. Measured on the probe's windows with a 128/128 split, the memory arm's held
 bound-pick rate is **0.813 / 0.764** and the `--reverse` arm's is **0.006 / 0.000**:

@@ -3,17 +3,17 @@
 //!
 //! `usage: native_bind_train --dump F [--reverse] [--start identity|dump|FILE]
 //!   [--steps N] [--step-shift S] [--batch N] [--eval-at L,...]
-//!   --out-jsonl F --save-read F`
+//!   [--host] [--check-host-steps N] --out-jsonl F --save-read F`
 //!
 //! The labels are the dump's own sidecars: `<dump>.ask.u32` (the asked fact's value
 //! position) bounds the row and `<dump>.other.u32` (the other fact's) competes, or the
 //! other way round under `--reverse` — the codex-18 control that asks whether hinge
 //! supervision can reach the other fact at all.
 //!
-//! This is the host reference step. It has no device twin yet: the pick trainer's CUDA
-//! kernel (`native_q31_read_pick_loss`) computes a distance rival, and the rank hinge
-//! needs the two ranks, so the device port is its own unit. One JSON line an eval step,
-//! the read saved with `Q31FirstPickRead::to_bytes`.
+//! The device step is the default (`native_q31_read_bind_loss` computes both ranks and the
+//! cost); `--host` runs the Rust reference, and `--check-host-steps N` compares the two on
+//! the first N steps, gate for gate. One JSON line an eval step, the read saved with
+//! `Q31FirstPickRead::to_bytes`.
 
 use std::io::Write;
 use std::path::Path;
@@ -37,6 +37,8 @@ struct Args {
     start: String,
     steps: usize,
     step_shift: u32,
+    host: bool,
+    check_host_steps: usize,
     batch: usize,
     eval_at: Vec<usize>,
     out_jsonl: String,
@@ -52,6 +54,8 @@ impl Default for Args {
             start: "identity".to_owned(),
             steps: 512,
             step_shift: 8,
+            host: false,
+            check_host_steps: 0,
             batch: 64,
             eval_at: vec![0, 64, 128, 256, 512],
             out_jsonl: String::new(),
@@ -86,6 +90,11 @@ fn parse_args(argv: &[String]) -> Result<Args> {
                 i += 1;
             }
             "--reverse" => args.reverse = true,
+            "--host" => args.host = true,
+            "--check-host-steps" => {
+                args.check_host_steps = number(flag, &value()?)?;
+                i += 1;
+            }
             "--start" => {
                 args.start = value()?;
                 i += 1;
@@ -135,6 +144,65 @@ fn parse_args(argv: &[String]) -> Result<Args> {
         return Err(invalid("an eval step is past the step budget"));
     }
     Ok(args)
+}
+
+/// One step's outcome, whichever backend ran it.
+struct Step {
+    read: Q31FirstPickRead,
+    accepted: bool,
+}
+
+enum Backend {
+    Host,
+    #[cfg(feature = "cuda")]
+    Device(uor_r4_discrete::native_vector_device::NativeVectorEngine),
+}
+
+fn backend(host: bool) -> Result<Backend> {
+    if host {
+        return Ok(Backend::Host);
+    }
+    #[cfg(feature = "cuda")]
+    {
+        Ok(Backend::Device(
+            uor_r4_discrete::native_vector_device::NativeVectorEngine::new(0)
+                .map_err(|e| invalid(format!("the device engine: {e}")))?,
+        ))
+    }
+    #[cfg(not(feature = "cuda"))]
+    Err(invalid(
+        "the device step needs --features cuda; pass --host for the Rust oracle",
+    ))
+}
+
+fn step(
+    backend: &Backend,
+    read: &Q31FirstPickRead,
+    stream: &[i64],
+    labels: &BindLabels,
+    batch: usize,
+    time: usize,
+    step_shift: u32,
+) -> Result<Step> {
+    match backend {
+        Backend::Host => {
+            let step = read.train_bind_step(stream, labels, batch, time, step_shift)?;
+            Ok(Step {
+                read: step.read,
+                accepted: step.accepted,
+            })
+        }
+        #[cfg(feature = "cuda")]
+        Backend::Device(engine) => {
+            let step = engine
+                .read_train_bind_step(read, stream, labels, batch, time, step_shift)
+                .map_err(|e| invalid(format!("the device step: {e}")))?;
+            Ok(Step {
+                read: step.read,
+                accepted: step.accepted,
+            })
+        }
+    }
 }
 
 fn read_file(path: &str) -> Result<Vec<u8>> {
@@ -281,6 +349,7 @@ fn run(args: &Args) -> Result<()> {
         return Err(invalid("the batch must divide the dump's windows"));
     }
     let batches = windows / args.batch;
+    let backend = backend(args.host)?;
     let mut read = start_read(&args.start, &dump)?;
     if eval
         .as_ref()

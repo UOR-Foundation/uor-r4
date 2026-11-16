@@ -2,7 +2,6 @@
 //! Static geometry compilation is a build dependency, excluded from the runtime graph.
 //! The routing atlas is one sixteen-root E8 orbit; this is not full-orbit learnability.
 pub mod address_cells;
-pub mod e_means;
 pub mod address_key_grade;
 pub mod attention_anchor;
 pub mod attention_anchor_device;
@@ -30,6 +29,7 @@ pub mod device;
 #[cfg(feature = "cuda")]
 pub mod driver_qualification;
 pub mod driver_source_pin;
+pub mod e_means;
 #[cfg(feature = "cuda")]
 pub mod measurement;
 pub mod metadata;
@@ -418,6 +418,21 @@ mod tests {
                         ".",
                         "apply",
                         "(kind, index, chosen).expect(\"cpu apply\");",
+                    ]
+                    .concat(),
+                ),
+                1,
+            ),
+            // The read's own batch operator behind `first_pick_read_reference`: a read,
+            // not a model update, and the only reach of this kind in the module.
+            (
+                (
+                    "native_vector_device.rs".into(),
+                    [
+                        "Ok(read",
+                        ".",
+                        "apply",
+                        "(stream, ids, table, batch, time)?)",
                     ]
                     .concat(),
                 ),

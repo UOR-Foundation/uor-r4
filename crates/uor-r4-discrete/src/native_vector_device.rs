@@ -3,7 +3,7 @@
 
 use crate::native_vector::{
     q31_batch_len_admitted, q31_coordinate_admitted, q31_hamilton_rotate, q31_hamilton_train_step,
-    q31_quaternion_admitted, q31_read_credit_shift, Q31FirstPickRead, Q31HamiltonModel,
+    q31_quaternion_admitted, q31_read_credit_shift, BindLabels, Q31FirstPickRead, Q31HamiltonModel,
     Q31ModelStep, Q31Quaternion, Q31ReadOutput, Q31ReadTrainStep, Q31TrainingStep, Q31Transport,
     MAX_Q31_BATCH_ITEMS, MAX_Q31_STEP_SHIFT,
 };
@@ -24,6 +24,7 @@ const ENTRY_TRAIN_STEP: &str = "native_q31_hamilton_train_step";
 const ENTRY_READ_ADDRESS: &str = "native_q31_read_address";
 const ENTRY_FIRST_PICK_READ: &str = "native_q31_first_pick_read";
 const ENTRY_READ_PICK_LOSS: &str = "native_q31_read_pick_loss";
+const ENTRY_READ_BIND_LOSS: &str = "native_q31_read_bind_loss";
 const ENTRY_READ_GATE_CREDIT_PARTIAL: &str = "native_q31_read_gate_credit_partial";
 const ENTRY_READ_GATE_APPLY: &str = "native_q31_read_gate_apply";
 /// Threads per block for every native-vector launch.
@@ -65,6 +66,7 @@ pub struct NativeVectorEngine {
     read_address: CudaFunction,
     first_pick_read: CudaFunction,
     read_pick_loss: CudaFunction,
+    read_bind_loss: CudaFunction,
     read_gate_credit_partial: CudaFunction,
     read_gate_apply: CudaFunction,
 }
@@ -74,6 +76,27 @@ struct PickLoss {
     loss: u128,
     rivals: CudaSlice<u32>,
     residuals: CudaSlice<i64>,
+}
+
+/// One batch's bind hinge under one pair of gate sets.
+struct BindLoss {
+    cost: u128,
+    gap: u128,
+    rivals: CudaSlice<u32>,
+    residuals: CudaSlice<i64>,
+}
+
+/// One bind step's device reading: the registered cost and the descent gap, before and
+/// after, with the accepted read. The host's [`crate::native_vector::TrainBindStep`] twin
+/// carries the full report, which is a reading rather than a step.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Q31BindDeviceStep {
+    pub read: Q31FirstPickRead,
+    pub accepted: bool,
+    pub cost_before: u128,
+    pub gap_before: u128,
+    pub cost_after: u128,
+    pub gap_after: u128,
 }
 
 fn row_config(rows: u32) -> LaunchConfig {
@@ -104,6 +127,7 @@ impl NativeVectorEngine {
         let read_address = module.load_function(ENTRY_READ_ADDRESS).map_err(cuda)?;
         let first_pick_read = module.load_function(ENTRY_FIRST_PICK_READ).map_err(cuda)?;
         let read_pick_loss = module.load_function(ENTRY_READ_PICK_LOSS).map_err(cuda)?;
+        let read_bind_loss = module.load_function(ENTRY_READ_BIND_LOSS).map_err(cuda)?;
         let read_gate_credit_partial = module
             .load_function(ENTRY_READ_GATE_CREDIT_PARTIAL)
             .map_err(cuda)?;
@@ -116,6 +140,7 @@ impl NativeVectorEngine {
             read_address,
             first_pick_read,
             read_pick_loss,
+            read_bind_loss,
             read_gate_credit_partial,
             read_gate_apply,
         })
@@ -528,6 +553,80 @@ impl NativeVectorEngine {
         })
     }
 
+    /// Addresses under `query_words`/`key_words`, then each labelled row's two ranks,
+    /// its cost and its gap; the host sums both word pairs exactly in `u128`.
+    #[allow(clippy::too_many_arguments)]
+    fn bind_loss(
+        &self,
+        stream: &CudaSlice<i64>,
+        query_words: &[i64],
+        key_words: &[i64],
+        bound: &CudaSlice<u32>,
+        comp_mask: &CudaSlice<u32>,
+        comp_words: u32,
+        rows: u32,
+        time: u32,
+        width: u32,
+    ) -> Result<BindLoss> {
+        let rows_usize = rows as usize;
+        let query_gates = self.stream.clone_htod(query_words).map_err(cuda)?;
+        let key_gates = self.stream.clone_htod(key_words).map_err(cuda)?;
+        let mut queries = self
+            .stream
+            .alloc_zeros::<i64>(rows_usize * 16)
+            .map_err(cuda)?;
+        let mut keys = self
+            .stream
+            .alloc_zeros::<i64>(rows_usize * 16)
+            .map_err(cuda)?;
+        let mut launch = self.stream.launch_builder(&self.read_address);
+        launch
+            .arg(stream)
+            .arg(&query_gates)
+            .arg(&key_gates)
+            .arg(&rows)
+            .arg(&width)
+            .arg(&mut queries)
+            .arg(&mut keys);
+        // SAFETY: the stream holds `rows * width` words, each gate buffer `width`
+        // words, and each address buffer `rows * 16` words.
+        unsafe { launch.launch(row_config(rows)) }.map_err(cuda)?;
+        let mut rivals = self.stream.alloc_zeros::<u32>(rows_usize).map_err(cuda)?;
+        let mut loss = self
+            .stream
+            .alloc_zeros::<u64>(rows_usize * 2)
+            .map_err(cuda)?;
+        let mut residuals = self
+            .stream
+            .alloc_zeros::<i64>(rows_usize * 48)
+            .map_err(cuda)?;
+        let mut launch = self.stream.launch_builder(&self.read_bind_loss);
+        launch
+            .arg(&queries)
+            .arg(&keys)
+            .arg(bound)
+            .arg(comp_mask)
+            .arg(&comp_words)
+            .arg(&rows)
+            .arg(&time)
+            .arg(&mut rivals)
+            .arg(&mut loss)
+            .arg(&mut residuals);
+        // SAFETY: same stream, so the addresses are written first; bound and the mask
+        // hold `rows` and `rows * comp_words` words, rivals `rows`, loss `2 * rows`,
+        // residuals `48 * rows`, and every label was checked against its window.
+        unsafe { launch.launch(row_config(rows)) }.map_err(cuda)?;
+        let words: Vec<u64> = self.stream.clone_dtoh(&loss).map_err(cuda)?;
+        let cost = words.chunks_exact(2).map(|pair| u128::from(pair[0])).sum();
+        let gap = words.chunks_exact(2).map(|pair| u128::from(pair[1])).sum();
+        Ok(BindLoss {
+            cost,
+            gap,
+            rivals,
+            residuals,
+        })
+    }
+
     /// One pick-margin update of the read's gates on CUDA, the twin of
     /// [`Q31FirstPickRead::train_pick_step`]: the same refusals in the same
     /// order, the rivals, hinges and residuals per row on the device, each
@@ -688,6 +787,159 @@ impl NativeVectorEngine {
             picks_before,
             picks_after,
             rivals,
+        })
+    }
+
+    /// One bind-margin update of the read's gates on CUDA, the twin of
+    /// [`Q31FirstPickRead::train_bind_step`]: the two ranks and the cost per row on the
+    /// device, each candidate gate word on the device, and the accept on the host by the
+    /// same `(gap, cost)` rule.
+    #[allow(clippy::too_many_arguments)]
+    pub fn read_train_bind_step(
+        &self,
+        read: &Q31FirstPickRead,
+        stream: &[i64],
+        labels: &BindLabels,
+        batch: usize,
+        time: usize,
+        step_shift: u32,
+    ) -> Result<Q31BindDeviceStep> {
+        if step_shift > MAX_Q31_STEP_SHIFT {
+            return Err(invalid(
+                "native Q31 read training step shift must be in 0..=31",
+            ));
+        }
+        let rows = batch * time;
+        let width = read.width();
+        if time == 0
+            || rows == 0
+            || stream.len() != rows * width
+            || labels.bound.len() != rows
+            || labels.competing.len() != rows
+        {
+            return Err(invalid("the bind step's inputs do not match its shape"));
+        }
+        for row in 0..rows {
+            if labels.bound[row] as usize > row % time {
+                return Err(invalid("a bind label must be an earlier row of its window"));
+            }
+        }
+        let rows_u32 =
+            u32::try_from(rows).map_err(|_| invalid("the bind step's rows exceed u32"))?;
+        if rows > MAX_Q31_BATCH_ITEMS {
+            return Err(invalid("the bind step's rows exceed the admitted batch"));
+        }
+        let width_u32 = width as u32;
+        let time_u32 = time as u32;
+        let comp_words = time.div_ceil(32);
+        let masks = labels.comp_masks(comp_words)?;
+        let comp_words_u32 = u32::try_from(comp_words)
+            .map_err(|_| invalid("the bind sidecar's words exceed u32"))?;
+        let stream_device = self.stream.clone_htod(stream).map_err(cuda)?;
+        let bound = self.stream.clone_htod(&labels.bound).map_err(cuda)?;
+        let comp_mask = self.stream.clone_htod(&masks).map_err(cuda)?;
+        let credit_shift = q31_read_credit_shift(stream);
+        let words =
+            |gates: &[Q31Quaternion]| -> Vec<i64> { gates.iter().flatten().copied().collect() };
+        let query_words = words(read.query_gates());
+        let key_words = words(read.key_gates());
+        let before = self.bind_loss(
+            &stream_device,
+            &query_words,
+            &key_words,
+            &bound,
+            &comp_mask,
+            comp_words_u32,
+            rows_u32,
+            time_u32,
+            width_u32,
+        )?;
+        if before.cost == 0 {
+            return Ok(Q31BindDeviceStep {
+                read: read.clone(),
+                accepted: false,
+                cost_before: 0,
+                gap_before: before.gap,
+                cost_after: 0,
+                gap_after: before.gap,
+            });
+        }
+        let query_gates = self.stream.clone_htod(&query_words).map_err(cuda)?;
+        let key_gates = self.stream.clone_htod(&key_words).map_err(cuda)?;
+        let mut candidate_query = self.stream.alloc_zeros::<i64>(width).map_err(cuda)?;
+        let mut candidate_key = self.stream.alloc_zeros::<i64>(width).map_err(cuda)?;
+        let windows = batch as u32;
+        let partial_items = (2 * width)
+            .checked_mul(batch)
+            .and_then(|items| u32::try_from(items).ok())
+            .ok_or_else(|| {
+                invalid("native Q31 read training on CUDA needs 2 * width * batch to fit u32")
+            })?;
+        let mut partials = self
+            .stream
+            .alloc_zeros::<u64>(2 * partial_items as usize)
+            .map_err(cuda)?;
+        let mut launch = self.stream.launch_builder(&self.read_gate_credit_partial);
+        launch
+            .arg(&stream_device)
+            .arg(&before.residuals)
+            .arg(&bound)
+            .arg(&before.rivals)
+            .arg(&windows)
+            .arg(&time_u32)
+            .arg(&width_u32)
+            .arg(&credit_shift)
+            .arg(&mut partials);
+        // SAFETY: same stream, so the residuals and rivals are written first; each item
+        // writes its own two words of `partials`, and a row's bound and rival index rows
+        // of its own window of the stream.
+        unsafe { launch.launch(row_config(partial_items)) }.map_err(cuda)?;
+        let mut launch = self.stream.launch_builder(&self.read_gate_apply);
+        launch
+            .arg(&partials)
+            .arg(&query_gates)
+            .arg(&key_gates)
+            .arg(&windows)
+            .arg(&width_u32)
+            .arg(&step_shift)
+            .arg(&mut candidate_query)
+            .arg(&mut candidate_key);
+        // SAFETY: same stream, so every partial is written first; each gate and candidate
+        // buffer holds `width` words.
+        unsafe { launch.launch(row_config(2 * width_u32)) }.map_err(cuda)?;
+        let candidate_query: Vec<i64> = self.stream.clone_dtoh(&candidate_query).map_err(cuda)?;
+        let candidate_key: Vec<i64> = self.stream.clone_dtoh(&candidate_key).map_err(cuda)?;
+        let quaternions = |words: &[i64]| -> Vec<Q31Quaternion> {
+            words
+                .chunks_exact(4)
+                .map(|chunk| [chunk[0], chunk[1], chunk[2], chunk[3]])
+                .collect()
+        };
+        let candidate = Q31FirstPickRead::new(
+            quaternions(&candidate_query),
+            quaternions(&candidate_key),
+            read.weights().to_vec(),
+            read.gain_shift(),
+        )?;
+        let after = self.bind_loss(
+            &stream_device,
+            &candidate_query,
+            &candidate_key,
+            &bound,
+            &comp_mask,
+            comp_words_u32,
+            rows_u32,
+            time_u32,
+            width_u32,
+        )?;
+        let accepted = (after.gap, after.cost) < (before.gap, before.cost);
+        Ok(Q31BindDeviceStep {
+            read: if accepted { candidate } else { read.clone() },
+            accepted,
+            cost_before: before.cost,
+            gap_before: before.gap,
+            cost_after: after.cost,
+            gap_after: after.gap,
         })
     }
 
