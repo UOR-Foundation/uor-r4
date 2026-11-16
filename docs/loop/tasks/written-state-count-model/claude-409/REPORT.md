@@ -37,17 +37,18 @@ None. This unit is doc-only and ran nothing on a GPU [claude].
 
 The bar the card adopts, quoted from DECISION §2 [claude]:
 - **A:** ≤ 0.90 BPB on the pinned `chat-v0-p2` stream through PRLL.
-- **R:** ≤ 0.80 × R\*, a sealed unpruned modified-KN, on D87 DEV-test.
-- **B:** the reply panels beat both the no-memory control and the shuffled-role control.
-- **Q:** ≥ 1e9 cells in ≤ 4 GB resident and ≥ 1,000 tok/s.
+- **Q (relative quality):** ≤ 0.80 × R\*, a sealed unpruned modified-KN, on D87 DEV-test.
+- **R (replies):** the reply panels beat both the no-memory control and the shuffled-role control.
+- **B (budget and speed):** ≥ 1e9 cells in ≤ 4 GB resident and ≥ 1,000 tok/s.
 
-Until all four pass, the label is "count-class, 1B-cell" [claude]. The top risk is that lawful counts with linear mixing stop near 0.90–0.95 × R\*, so the last ~10% rests on geometry, which P1's ceiling test and P2's equal-byte controls measure [claude, hyp].
+The label is "count-class, 1B-cell" until A, R and B all pass at once (DECISION §2). The honesty note adds that a miss on Q also keeps the count-class label [claude]. The first draft of this REPORT gave Q, R and B the wrong letters; the fresh review caught it. The top risk is that lawful counts with linear mixing stop near 0.90–0.95 × R\*, so the last ~10% rests on geometry, which P1's ceiling test and P2's equal-byte controls measure [claude, hyp].
 
 ## Checks run at the head
 
 - G1: ORDER is the first commit (71b1e040e) and REPORT the last [claude].
 - G2: `uor-harness check` gave no verdict within 600 s at the base [claude].
-- G3: `loop pr-check --local` before this REPORT failed only on the missing REPORT. `order`, `owner-paths`, `banned-presence` and `rendered-lock` passed [claude]. Advisory warnings: the ORDER is over 4,096 B; RED-R2's quoted rule headings trip `rule-sources`; FILEMAP has stale rows [claude]. Rerun at this head: see the PR.
+- G3: `loop pr-check --local` before this REPORT failed only on the missing REPORT. `order`, `owner-paths`, `banned-presence` and `rendered-lock` passed [claude]. Advisory warnings: the ORDER is over 4,096 B; RED-R2's quoted rule headings trip `rule-sources`; FILEMAP has stale rows [claude]. Rerun after the review fixes: verdict PASS. These checks passed: `order`, `banned-presence`, `report`, `owner-paths` and `rendered-lock`. The advisory warnings were `scope`, `commit-order`, `rule-sources`, `read-path` and `filemap`. The local `scope` list names files outside this diff, so it was measured against a lagging local base. The PR's own diff is 16 docs files [claude].
+- G5: fresh review. An Opus reviewer in a fresh context returned APPROVE-WITH-LOW-ITEMS. The medium item, the mislabelled bar letters, is fixed. The low items are also fixed: NATIVE-SPACE now separates the exact replay stream from the declared one, and names the CPU oracle as a D84 parity check that qualifies no bar [claude].
 - G4: a secret/email grep over `docs/research/reviews/` found no hits [claude]. A2 contains one absolute home path, which is not a secret; 111 other repo docs have the same kind of path [claude].
 
 ## Skills used
