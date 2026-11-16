@@ -20,7 +20,7 @@ Lab: claude. Item: [end-to-end-integration](../../../../roadmap/items/end-to-end
   - I2 carries the codex-3 witness pair as a required gate;
   - I3 and I5 are deferred until D86 step 6, I4 is withdrawn, and I6 is the D86 step 6 run itself;
   - a dated **Amendment 1** section lists the seven changes and their reasons, and the header names the amendment.
-- **`docs/roadmap/items/end-to-end-integration.md`:** "What is missing" and the done-when follow the ADR, and `depends_on` gains `one-model-end-to-end`. No cycle results: that item depends only on `turn-memory-reply`.
+- **`docs/roadmap/items/end-to-end-integration.md`:** "What is missing" and the done-when follow the ADR, and the scope gains `crates/uor-r4-native-vector/src/**`, where `Q31FirstPickRead` lives. I3 and the loss arm move out of the done-when into follow-ups, so the item still closes when I6 runs.
 
 No mechanism status, code, test, schema or GPU run changed. PR #4015 is untouched.
 
@@ -34,9 +34,9 @@ None. It is a docs unit. The evidence it rests on is cited, not re-measured:
 ## Checks run at the head
 
 - `git diff --check`: clean.
-- `uor-harness loop pr-check --local`: see the PR record.
+- `uor-harness loop pr-check --local`: PASS (D76 advisories only: the AGENTS.md and FILEMAP budgets, which are on main).
 - The docs link check: in CI (`docs archive and links`).
-- A fresh-context review at the exact head: see the PR record.
+- A fresh-context review: CHANGES at `3114703d2` (four findings: the new `depends_on` would hold I1 behind the run it feeds; done-when 5 contradicted "closes when I6 runs"; an unrecorded "29 Sep" citation for "no RoPE"; "D86 step 6" pointed at the D86 row, which has no steps). All four, and the low ones, are fixed at the next head. The approval record is on the PR.
 
 ## Skills used
 

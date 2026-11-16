@@ -6,9 +6,9 @@ area: integration
 status: ready
 open_to: lab
 needs_gpu: false
-depends_on: [integer-hamming-read, fbs-serving-kernels, native-space-state-contract, one-model-end-to-end]
+depends_on: [integer-hamming-read, fbs-serving-kernels, native-space-state-contract]
 notebook: docs/research/notebook/m4-serving.md
-scope: [docs/reference/adr/0007-stage-interfaces-for-end-to-end-integration.md, docs/roadmap/items/end-to-end-integration.md, docs/loop/tasks/end-to-end-integration/**, crates/uor-r4-integer/src/stack/**, crates/uor-r4-integer/tests/**, crates/uor-r4-float-train/src/**, crates/uor-r4-training/src/**, crates/uor-r4-discrete/src/**, crates/uor-r4-core/src/native_geometric/**]
+scope: [docs/reference/adr/0007-stage-interfaces-for-end-to-end-integration.md, docs/roadmap/items/end-to-end-integration.md, docs/loop/tasks/end-to-end-integration/**, crates/uor-r4-integer/src/stack/**, crates/uor-r4-integer/tests/**, crates/uor-r4-float-train/src/**, crates/uor-r4-training/src/**, crates/uor-r4-discrete/src/**, crates/uor-r4-native-vector/src/**, crates/uor-r4-core/src/native_geometric/**]
 ---
 
 ## Why it matters
@@ -49,9 +49,12 @@ Withdrawn or parked by ADR-0007 Amendment 1:
    gate.
 4. I6 is the same run as D86 step 6: one model trained and served natively, with artifact fields per
    stage and the cost ledger, judged by its replies.
-5. After that run, and only then: I3 (e-means at one site) and any CE-free native `Loss` arm.
 
-Each unit is its own PR; this item closes when I6 runs.
+Each unit is its own PR; this item closes when I6 runs. "D86 step 6" is step 6 of the D86
+review's path in PLAN.md's owner direction of 2026-11-15.
+
+Follow-ups after it closes, as their own items: I3 (e-means at one site) and any CE-free native
+`Loss` arm.
 
 ## Out of scope
 

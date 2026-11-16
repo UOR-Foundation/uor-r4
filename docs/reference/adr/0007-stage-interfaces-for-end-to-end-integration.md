@@ -48,7 +48,7 @@ Rules:
 1. **Exactness first.** An exact mechanism must be bit-identical to its reference on the frozen corpus. A lossy mechanism states what it discards and must pass the witness-pair test for the reads it claims to preserve.
 2. **Quality second.** Frozen panels, pre-registered, the same evaluator for every arm. A promotion needs the panel and its control, not a single run.
 3. **Cost third.** `tokens/s`, `bytes/state`, `tables`, and `work/token` on the same corpus and machine. A cheaper arm that loses exactness or quality is not a candidate.
-4. **Ablations are staged.** Stage-by-stage first, then the interacting pairs (`Read × Position`, `Context × Read`, `Codebook × Embedding`), because the inventory shows these are where the rules disagree.
+4. **Ablations are staged.** Stage-by-stage first, then the interacting pairs (`Context × Read`, `Codebook × Embedding`; `Read × Position` left with I4, Amendment 1), because the inventory shows these are where the rules disagree.
 
 ### 3. The mechanism map
 
@@ -98,7 +98,7 @@ The map is a superset of the board's 28 rows: it splits the Hamming form out of 
 
 **CIRISKernel → `Context`.** The transferable part is the checkpoint/purge discipline: a span may be replaced by a stub only when its answer can no longer change (for the kernel, `n − t + 1` clean receipts; for us, the read-invariance criterion), and the stub keeps the digest, the fields the read consumes and the conclusion. The concrete form is a ring of `w` spans with a settlement gate before overwrite, a mergeable fold for branched sessions, and an overflow policy that replaces today's silent drop/reset. Gates: bit-identical tokens against a full-history session; a witness-pair suite for every read that claims preservation; `bytes/token` reported.
 
-**RoPE: withdrawn (Amendment 1).** As first written, RoPE would have been a `Position` arm compared against transport spin. The mechanism board and the owner's 29 Sep direction carry position as SpiralCore transport spin, "no RoPE", so the arm is withdrawn. `Position` has one mechanism, transport spin. Reopening RoPE would need an owner decision.
+**RoPE: withdrawn (Amendment 1).** As first written, RoPE would have been a `Position` arm compared against transport spin. The mechanism board (`docs/mechanisms/README.md`, its Position and positional-encoding rows) carries position as SpiralCore transport spin, "no RoPE", so the arm is withdrawn. `Position` has one mechanism, transport spin. Reopening RoPE would need an owner decision.
 
 **JEPA: parked (Amendment 1).** The JEPA trainer (`crates/uor-r4-core/src/native_geometric/learner/jepa_trainer.rs`) optimises `L_CE + λ·d_FS + λ_fiber·d_U(1)` with an f64 Adam. The `L_CE` term is cross-entropy, which CHARTER §3.2 names in its ban, and the optimiser's float state breaks §3.7. So the trainer cannot attach behind `Loss` as written. Its latent terms (`d_FS`, `d_U(1)`) may be proposed again as a `Loss` arm under three conditions: their loss, gradient and update are native Q31, nothing in them is cross-entropy or a normalised exponential, and they are judged on served replies.
 
@@ -123,8 +123,10 @@ I1 is the critical path, because it is where this ADR and D86's native read meet
 
 At Casey's request, after a zoomed-out read of this ADR posted on [#2028](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6903557510). The amendment adds no rule. It brings the ADR in line with rules already in force and points its first unit at D86.
 
+"D86 step 6" here means step 6 of the path the D86 review set out, which is recorded in [PLAN.md](../../../PLAN.md)'s owner direction of 2026-11-15: one model trained and served natively, judged by its replies. The D86 row in DECISIONS.md records the donor release and does not list the steps.
+
 1. **Training.** The ADR first said "training may use float". CHARTER §3.7 and D85 say otherwise: gradients and optimizer updates land in the native representation, and float is reference code only. §1 now says so.
-2. **RoPE is withdrawn** from `Position`. The mechanism board and the owner's 29 Sep direction carry position as transport spin, "no RoPE". I4 is withdrawn with it.
+2. **RoPE is withdrawn** from `Position`. The mechanism board carries position as transport spin, "no RoPE". I4 is withdrawn with it.
 3. **JEPA is parked** as a `Loss` arm. Its trainer's `L_CE` term is cross-entropy, which §3.2 bans by name, and its f64 Adam breaks §3.7. I5 waits for a CE-free, native form.
 4. **I1 is narrowed** to the one `Read` interface D86 step 6 needs, with the native Q31 first-pick read as its reference, so that this ADR and D86's read line meet instead of forking.
 5. **I3 and I5 are deferred until D86 step 6.** The evidence says the model's gaps are data (about 39k usable TRAIN windows, D86's review) and a read that averages the fact it found (claude-387/388). Neither is a codebook solver or a loss term. Interface units that move no reply are L-008's pattern.
