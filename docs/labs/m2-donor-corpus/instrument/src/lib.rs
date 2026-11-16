@@ -1145,7 +1145,8 @@ pub fn cmd_generate(m: &Args) -> Res<Value> {
     )?;
     let seg = json!({"utc_start": utc_start, "utc_end": utc_now(), "instrument_commit": commit,
         "prompts_sha256": sha256_hex(&bank_bytes), "server": server, "model_name": req.model_name,
-        "parallel": parallel, "max_tokens": req.max_tokens, "effort": req.effort,
+        "parallel": parallel, "max_tokens": req.max_tokens,
+        "effort": (api == Api::Vllm).then_some(req.effort),
         "api": api.name(), "auth": auth,
         "base_seed": (api == Api::Vllm).then_some(req.base_seed), "budget": budget, "max_seconds": max_seconds,
         "extra_body": req.extra, "stopped_by": stopped_by, "kept_tokens_at_end": t.kept,

@@ -187,6 +187,7 @@ fn openai_mode_body_auth_and_no_key_on_disk() {
         (&seg["api"], &seg["auth"], &seg["base_seed"]),
         (&json!("openai"), &json!("file"), &Value::Null)
     );
+    assert_eq!(seg["effort"], Value::Null);
     // The key file ends with a newline; the header carries the key without it.
     let auth = format!("authorization: bearer {}\r\n", KEY.to_ascii_lowercase());
     {
@@ -226,6 +227,7 @@ fn openai_mode_body_auth_and_no_key_on_disk() {
         (&json!("vllm"), &json!("env:DONOR_TEST_KEY"))
     );
     assert_eq!(seg["base_seed"], 20261116);
+    assert_eq!(seg["effort"], 50);
     let seen = mock.seen.lock().unwrap();
     assert!(!seen.is_empty());
     for (head, body) in seen.iter() {
