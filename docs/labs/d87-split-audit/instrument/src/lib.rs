@@ -683,7 +683,7 @@ impl SpanSet {
                 return false;
             }
             let i = self.uniq.partition_point(|u| u.0 < h);
-            (i..self.uniq.len()).take_while(|&j| self.uniq[j].0 == h).any(|j| {
+            (i..self.uniq.len()).take_while(|&j| { let (k, _, _) = self.uniq[j]; k == h }).any(|j| {
                 let (_, r, s) = self.uniq[j];
                 (1..=COPIED_MAX).contains(&mult[j].load(Ordering::Relaxed))
                     && dev[r as usize].tokens[s as usize..s as usize + n] == train[e - n..e]
@@ -1000,6 +1000,9 @@ fn audit_with(plan: &Plan, coder: &Coder, threads: usize, bloom_log2: u32, opts:
     }
     if opts.find_drop.is_some_and(|n| !SPANS.contains(&n)) {
         return Err(format!("find_drop must be one of {SPANS:?}"));
+    }
+    if opts.find_copied && !opts.drop.is_empty() {
+        return Err("find_copied counts multiplicity over split v1, so it takes no TRAIN drop list".into());
     }
     let classify_top = opts.classify_top;
     let paths: Vec<PathBuf> = plan.shards.iter().map(|(p, _)| p.clone()).collect();

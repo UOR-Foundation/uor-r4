@@ -488,6 +488,13 @@ fn every_holder_of_a_shared_span_is_listed_for_drop() {
 /// DEV-test "dc" holds a 60-token answer span shared with `holders` TRAIN records (copied at 1
 /// or 2); DEV-test "ds" holds one shared with three TRAIN records (stock) (claude-417).
 fn copied_fixture(threads: usize, holders: usize, drop: &[&str], drop_dev: &[&str]) -> Result<(Value, Extras), String> {
+    let ids = |l: &[&str]| l.iter().map(|s| s.to_string()).collect();
+    let opts = AuditOptions { drop: ids(drop), drop_dev_test: ids(drop_dev), find_copied: drop.is_empty(), ..AuditOptions::default() };
+    copied_audit(threads, holders, &opts)
+}
+
+/// The audit of `copied_fixture`'s records under any options.
+fn copied_audit(threads: usize, holders: usize, opts: &AuditOptions) -> Result<(Value, Extras), String> {
     let d = Dir::new("copied");
     let sp = Splitter::new(Config { dev_tune: (0, 1), dev_test: (1, 2), ..Config::default() }).unwrap();
     let c = letters(b"abcdefghijklmnopqrstuvwxyz0123456789", 7, 3, 60);
@@ -504,9 +511,7 @@ fn copied_fixture(threads: usize, holders: usize, drop: &[&str], drop_dev: &[&st
     let s1: Vec<String> = (1..=3).map(|k| trn(&format!("k{k}"), format!("train k{k} [{st}] side"))).collect();
     let p = plan(&sp, &[d.shard("s0.jsonl", &s0), d.shard("s1.jsonl", &s1)], threads).unwrap();
     assert_eq!(kept(&p).len(), 6 + holders, "no fixture record is a duplicate");
-    let ids = |l: &[&str]| l.iter().map(|s| s.to_string()).collect();
-    let opts = AuditOptions { drop: ids(drop), drop_dev_test: ids(drop_dev), find_copied: true, ..AuditOptions::default() };
-    audit_opts(&p, &coder(), threads, 12, &opts)
+    audit_opts(&p, &coder(), threads, 12, opts)
 }
 
 #[test]
@@ -547,6 +552,17 @@ fn a_dev_test_drop_id_that_is_not_a_kept_dev_test_record_is_refused() {
         let Err(err) = copied_fixture(2, 1, &[], bad) else { panic!("{bad:?} was accepted") };
         assert!(err.contains("DEV-test drop ids are kept DEV-test records"), "{bad:?}: {err}");
     }
+}
+
+/// Multiplicity is counted over split v1, so the copied finder refuses a TRAIN drop list
+/// (review L1 on PR 4053).
+#[test]
+fn the_copied_finder_refuses_a_train_drop_list() {
+    let (_, x) = copied_fixture(2, 2, &[], &[]).unwrap();
+    let drop: HashSet<String> = x.copied_found.into_iter().collect();
+    let opts = AuditOptions { drop, find_copied: true, ..AuditOptions::default() };
+    let Err(err) = copied_audit(2, 2, &opts) else { panic!("find_copied with a drop list was accepted") };
+    assert!(err.contains("takes no TRAIN drop list"), "{err}");
 }
 
 #[test]
