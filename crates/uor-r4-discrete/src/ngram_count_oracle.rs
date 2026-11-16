@@ -1,6 +1,6 @@
 //! Test-only CPU oracle for the CUDA n-gram counter (claude-412). An ordered
 //! map over packed keys, independent of the GPU's sort-and-reduce. Nothing
-//! here is a product path; GPU counts are the ones that qualify (§3.5).
+//! here is a product path; GPU counts are the ones that qualify (CHARTER section 3, part 5).
 
 use crate::ngram_count::{
     check_tokens, partition_offset, NgramAssembler, NgramContext, NgramOrderDigest,

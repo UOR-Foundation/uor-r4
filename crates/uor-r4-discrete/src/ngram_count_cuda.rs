@@ -1,7 +1,7 @@
 //! CUDA tests of the exact n-gram counter (claude-412): GPU records equal the
 //! CPU oracle's byte for byte, the SHA does not move across partition budgets
 //! or runs, and a planted single-count change is caught. Run on wick's 4090
-//! with `--release` (the 1e7-token oracle is slow in a debug build).
+//! with `--release` (the ten-million-token oracle is slow in a debug build).
 
 use crate::ngram_count::{NgramAssembler, NgramOrderDigest, NgramTriple};
 use crate::ngram_count_device::NgramCounter;

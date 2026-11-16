@@ -29,7 +29,7 @@ fn invalid(message: impl Into<String>) -> Error {
     Error::Invalid(message.into())
 }
 
-/// The ordered context key of DECISION §3.2. By unique factorization the
+/// The ordered context key of the DECISION, section 3, part 2. By unique factorization the
 /// positional-prime product K_k = prod_{s<=k} q(t_{-s}, s) is one-to-one with
 /// the ordered tuple (t_{-1}..t_{-k}); the stored word is that tuple, 12 bits
 /// per slot. Slot 1 (the latest token) occupies bits 108..120, slot s bits
