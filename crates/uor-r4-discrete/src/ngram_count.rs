@@ -467,6 +467,7 @@ pub const NGRAM_BOS: u16 = 0;
 /// no BOS lies inside the context except in its oldest slot `tokens[j - k]`,
 /// so no gram reaches back across a document start.
 pub fn ngram_admitted(tokens: &[u16], j: usize, k: usize) -> bool {
+    debug_assert!(k <= j, "target {j} has no full order-{k} context");
     tokens[j] != NGRAM_BOS && (1..k).all(|s| tokens[j - s] != NGRAM_BOS)
 }
 
@@ -719,6 +720,20 @@ mod tests {
         partition.contexts[0].n1 += 1;
         partition.contexts[0].n3_plus -= 1;
         assert!(refusal(1, &[partition]).contains("context records differ"));
+    }
+
+    /// A partition with one context record more, or one fewer, than its
+    /// triples imply is refused by the streamed comparison.
+    #[test]
+    fn ngram_count_assembler_refuses_an_extra_or_missing_context() {
+        let mut extra = oracle_partition(&HAND, 1, 0, 4096).unwrap();
+        let mut last = *extra.contexts.last().unwrap();
+        last.key += 1;
+        extra.contexts.push(last);
+        assert!(refusal(1, &[extra]).contains("context records differ"));
+        let mut missing = oracle_partition(&HAND, 1, 0, 4096).unwrap();
+        missing.contexts.pop();
+        assert!(refusal(1, &[missing]).contains("context records differ"));
     }
 
     #[test]
