@@ -205,6 +205,35 @@ fn code_distance(a: &[u8], b: &[u8]) -> u32 {
     a.iter().zip(b).map(|(&x, &y)| u32::from(ring_step(x, y))).sum()
 }
 
+
+/// The first `n` zeros: from `UOR_ZETA_ZEROS` (a gz of Odlyzko's `zeros6.gz`) when set and
+/// readable, else the sixteen embedded values. The receipt beside this binary names the source
+/// and the gzip's sha256.
+fn load_zeros(n: usize) -> Vec<f64> {
+    if let Ok(path) = std::env::var("UOR_ZETA_ZEROS") {
+        if let Ok(bytes) = std::fs::read(&path) {
+            let out = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(format!(
+                    "gzip -dc '{}' | head -n {n}",
+                    path.replace('\'', "'\\''")
+                ))
+                .output();
+            if let Ok(out) = out {
+                let text = String::from_utf8_lossy(&out.stdout);
+                let zeros: Vec<f64> = text
+                    .lines()
+                    .filter_map(|line| line.trim().parse::<f64>().ok())
+                    .collect();
+                if !zeros.is_empty() {
+                    return zeros;
+                }
+            }
+        }
+    }
+    ZEROS.iter().copied().take(n).collect()
+}
+
 /// The zeta phase code at `channels` channels: two numbers, honestly measured.
 ///
 /// (a) **Resolution**: how many of `k` primes share a code with another. The phase is
@@ -232,6 +261,92 @@ fn zeta_resolution(k: usize, channels: usize) -> (usize, u64) {
     (distinct.len(), local)
 }
 
+
+/// The routed-zero read. Each **class** owns a sparse set of channels (the zeros it routes to);
+/// stored surface forms carry the class's channels plus a per-form phase signature; a query is a NEW
+/// surface form of the same class, so it shares the channels and none of the signature. The read is
+/// the least energy over the union: a shared channel costs its circular phase distance, a channel on
+/// one side only costs a fixed penalty.
+///
+/// `permute` rotates the class→channel assignment in the store (the control: identical occupancy,
+/// broken routing). `swap_values` rotates the values across classes (the value-swap falsifier: if
+/// accuracy survives, nothing reads the pairing).
+fn routed_arm(
+    j: usize,
+    classes: usize,
+    class_channels: usize,
+    forms: usize,
+    permute: bool,
+    swap_values: bool,
+    seed: u64,
+) -> f64 {
+    const PENALTY: u32 = 128;
+    let mut rng = Lcg(seed);
+    let mut sets: Vec<Vec<u16>> = Vec::with_capacity(classes);
+    for _ in 0..classes {
+        let mut set = Vec::with_capacity(class_channels);
+        while set.len() < class_channels {
+            let c = rng.below(j) as u16;
+            if !set.contains(&c) {
+                set.push(c);
+            }
+        }
+        set.sort_unstable();
+        sets.push(set);
+    }
+    // The values are the memory's content, bound to their class. `swap_values` changes only the
+    // *stored* value, so a read that follows the channels returns the wrong one; the ground truth
+    // stays each class's own value.
+    let values: Vec<u8> = (0..classes).map(|_| rng.below(256) as u8).collect();
+    // The store: for each class, `forms` entries on the class's channels (or the rotated set).
+    let mut entries: Vec<(Vec<u16>, Vec<u8>, u8)> = Vec::new();
+    for c in 0..classes {
+        let set = if permute {
+            sets[(c + 1) % classes].clone()
+        } else {
+            sets[c].clone()
+        };
+        let stored_value = if swap_values {
+            values[(c + 1) % classes]
+        } else {
+            values[c]
+        };
+        for _ in 0..forms {
+            let phases: Vec<u8> = (0..set.len()).map(|_| rng.below(256) as u8).collect();
+            entries.push((set.clone(), phases, stored_value));
+        }
+    }
+    let mut ok = 0usize;
+    let queries = 3;
+    for c in 0..classes {
+        for _ in 0..queries {
+            let phases: Vec<u8> = (0..sets[c].len()).map(|_| rng.below(256) as u8).collect();
+            let mut best = 0usize;
+            let mut best_e = u32::MAX;
+            for (i, (set, stored, _)) in entries.iter().enumerate() {
+                let mut energy = 0u32;
+                for (k, &ch) in sets[c].iter().enumerate() {
+                    match set.iter().position(|&s| s == ch) {
+                        Some(at) => energy += u32::from(ring_step(phases[k], stored[at])),
+                        None => energy += PENALTY,
+                    }
+                }
+                for &ch in set.iter() {
+                    if !sets[c].contains(&ch) {
+                        energy += PENALTY;
+                    }
+                }
+                if energy <= best_e {
+                    best_e = energy;
+                    best = i;
+                }
+            }
+            ok += usize::from(entries[best].2 == values[c]);
+        }
+    }
+    ok as f64 / (classes * queries) as f64
+}
+
 fn main() {
     println!("phase-ring-probe: planted ring vs a fixed-bijection control, and a prime-gcd arm");
     println!("(the bijection keeps occupancy and injectivity identical; only ring adjacency is destroyed)");
@@ -247,6 +362,22 @@ fn main() {
                 (ring as f64 - bij as f64) / k as f64,
             );
         }
+    }
+    println!();
+    let zeros = load_zeros(4_096);
+    let j = zeros.len();
+    println!("routed-zero read: each class owns a sparse channel set among the first {j} zeros;");
+    println!("a query is a new surface form (same channels, new phases); least energy over the union.");
+    for classes in [64usize, 256] {
+        let (r, c, v) = (
+            routed_arm(j.min(1024), classes, 8, 4, false, false, 0x701 ^ classes as u64),
+            routed_arm(j.min(1024), classes, 8, 4, true, false, 0x701 ^ classes as u64),
+            routed_arm(j.min(1024), classes, 8, 4, false, true, 0x701 ^ classes as u64),
+        );
+        println!(
+            "classes={classes:4} channels={}  routed {r:.3}  permuted control {c:.3}  value-swapped {v:.3}",
+            j.min(1024)
+        );
     }
     println!();
     println!("zeta phase code: resolution (distinct codes of K primes) and locality (phase(p+2) finds p):");

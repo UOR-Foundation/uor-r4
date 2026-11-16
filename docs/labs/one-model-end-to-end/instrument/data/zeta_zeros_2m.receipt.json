@@ -1,0 +1,11 @@
+{
+  "schema": "uor-r4.zeta-zeros-receipt/1",
+  "source": "Andrew Odlyzko, zeros6.gz (the first 2,001,052 non-trivial zeros)",
+  "url": "https://www-users.cse.umn.edu/~odlyzko/zeta_tables/zeros6.gz",
+  "fetched": "2026-11-16",
+  "count": 2001052,
+  "last_zero": 1132490.658714411,
+  "gzip_sha256": "6acacb4707c429bf368f32823a8eef0e0737b6318d3e144c78975a4986d155da",
+  "gzip_bytes": 14576371,
+  "use": "set UOR_ZETA_ZEROS to the path of the .gz; the probe reads the first J zeros (J <= 4096) and falls back to the 16 embedded values when unset"
+}

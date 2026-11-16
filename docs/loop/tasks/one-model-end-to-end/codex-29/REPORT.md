@@ -99,3 +99,40 @@ any pool size. Zeros are irrelevant to that axis.
 the map from the token table into the phase space), then measure paraphrase retrieval with the two
 falsifiers the literature demands: the **value swap** (permute values; unchanged accuracy means
 nothing reads the pairing) and the **oracle-key headroom** (gold code versus derived code).
+
+## The routed-zero read (owner's design), and its two falsifiers
+
+Owner: "use the prime addressing and then do least energy routing on the zeros in Riemannian for
+super cheap operations".
+
+The zeros are fetched and pinned: `data/zeta_zeros_2m.receipt.json` records Odlyzko's `zeros6.gz`
+(**2,001,052 zeros**, gzip sha `6acacb47…`, last zero 1,132,490.66) and the probe loads the first J
+from `UOR_ZETA_ZEROS` (falling back to the 16 embedded). The zeros are the *channel identities*; the
+cheap arithmetic is the homomorphism `θ(∏p) = Σθ(p)`, so a prime-product address is a sum of phases.
+
+The arm: each **class** owns a sparse set of 8 channels among the first 4,096 zeros; the store holds
+four surface forms per class (the class's channels plus a per-form phase signature); a query is a
+**new** surface form (same channels, new phases). The read is the least energy over the union — a
+shared channel costs its circular phase distance, a channel on one side only costs a fixed penalty —
+one subtract and one compare per channel, no multiplication.
+
+| Arm | Accuracy |
+|---|---|
+| routed (least energy) | **1.000** |
+| permuted control (the class→channel assignment rotated; occupancy identical) | **0.000** |
+| **value-swapped** (only the stored value rotated) | **0.000** |
+
+The control and the value swap both collapse, so the read is following the channels and the stored
+pairing, not the surface. (The first value-swap run scored 1.000 and was a **faulty falsifier**: it
+rotated the values on both sides. Only the stored side is rotated now, which is what makes it a
+test.)
+
+**The honest limit:** the routing here is *planted* — the query shares the class's channels by
+construction. The mechanism (route + least energy) works; the open piece is the **content routing**:
+which channels a class gets from the content. That is the assignment rule, and it is the next unit.
+
+## The 1M/2M decision
+
+The receipt is pinned and the loader reads the fetched gzip; 4,096 channels were enough for the
+arm above, and the table supports up to 2M. What more channels buy is resolution (measured above:
+16 channels already separate 2,000 primes), so the count is not the constraint — the assignment is.
