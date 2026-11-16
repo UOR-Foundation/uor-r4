@@ -38,7 +38,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f28be2c7.js";
+            window.path_to_searchindex_js = "searchindex-2fff1821.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-78e3d836.js"></script>
@@ -8578,6 +8578,61 @@ M4 remains open.</p>
 <p><em>The charter replaced the older rules in one step on 19 October 2026. Later changes are added to this log as dated entries.</em></p>
 <h2 id="how-an-entry-is-written"><a class="header" href="#how-an-entry-is-written">How an entry is written</a></h2>
 <p>An entry gives the date, what changed, which charter clauses it touches, and who decided. The owner's own words are recorded verbatim when they are the reason. Old text is never edited or deleted: it moves unchanged to the <code>archive/</code> folder, and the live decision index keeps one line saying where each decision went (see the <a href="#where-each-old-decision-went">decision map</a>).</p>
+<h2 id="16-november-2026-the-rest-of-d87s-corpus-is-streamed-from-the-deepseek-api-d89"><a class="header" href="#16-november-2026-the-rest-of-d87s-corpus-is-streamed-from-the-deepseek-api-d89">16 November 2026: the rest of D87's corpus is streamed from the DeepSeek API (D89)</a></h2>
+<p><strong>Decided by:</strong> the owner (Casey), 16 November 2026, in claude's chat (claude-402). The lab had leased a 4×B200
+and an 8×B200 for the fan-out. It then reported that DeepSeek's own API lists V4.1 Flash at $0.60 per 1M output
+tokens off-peak, so about $800–900 for 1B kept, against about $1,480 for the rented run (pod 3 plus the
+8×B200 plus the 4×B200 at $172.73/h, setup included). Casey's words,
+verbatim:</p>
+<ul>
+<li>Asked about one 8×B200 at about $85/h in place of two 4×B200 pods:
+"ok i mean yeah go for it just get it done please as quickly and cheaply as possible"</li>
+<li>"i can just stream deepseek from api..."</li>
+<li>To the lab's recommendation (down the two new pods, keep pod 3 generating while an API path is built and
+checked, then finish over the API off-peak): "go with your recommendation"</li>
+<li>"btw 1 million tokens from openai costs .25c so ive done like 10b before for like 200bucks"</li>
+</ul>
+<p><strong>What changed:</strong></p>
+<ul>
+<li><strong>D87's means of generation (the owner's terms):</strong>
+<ul>
+<li>Stream the rest of the donor corpus from DeepSeek's API, as the lab recommended, instead of a rented
+fan-out. In the owner's words: "i can just stream deepseek from api".</li>
+<li>The recommendation the owner accepted: down the two new pods, keep pod 3 (vast-60886842) generating while
+the API path is built and checked, then down it and finish over the API off-peak.</li>
+<li>D87's donor (DeepSeek V4.1 Flash), reasoning rule, hard-text-target rule and 1B size stand.</li>
+<li>The earlier yes to one 8×B200 is superseded by this answer: no 8×B200 may be leased under it.</li>
+</ul>
+</li>
+<li><strong>Amends D87's lab conditions:</strong>
+<ul>
+<li>In place of a pinned checkpoint and the engine and GPUs, the API receipt names the endpoint, the
+model-version string, the request dates and the off-peak window.</li>
+<li>Shards from pod 3 and from the API are tagged apart.</li>
+<li>The charter's §3.10 is unchanged.</li>
+</ul>
+</li>
+<li><strong>The lab's reading, not owner terms:</strong>
+<ul>
+<li>The two new pods (vast-60895844, vast-60895824) were deleted about 10 minutes after their lease, before
+any file reached them (about $21.55).</li>
+<li>D88's caps still cover pod 3 until it is downed.</li>
+<li>The OpenAI note was not taken as a donor switch, since a switch needs the owner's word (D87). The lab also
+notes that OpenAI's Services Agreement §3.3(e) bars using Output to develop competing models, while
+DeepSeek's Open Platform Terms §4.2 allow "training other models (such as model distillation)". The $0.25
+per 1M figure is the owner's, unverified by the lab and for a different model.</li>
+</ul>
+</li>
+<li><strong>The lab's conditions and means, not owner terms:</strong>
+<ul>
+<li><code>deepseek-flash</code> at the published off-peak rates.</li>
+<li>The seed is recorded as absent (not replayable).</li>
+<li>The instrument takes the key from a file or environment variable; the lab never reads, prints or logs it
+(§3.13).</li>
+<li>The production sheet's amendment and its non-author FIT come before the first API request.</li>
+</ul>
+</li>
+</ul>
 <h2 id="16-november-2026-d87s-corpus-run-may-use-4-pods-at-4341h-d88"><a class="header" href="#16-november-2026-d87s-corpus-run-may-use-4-pods-at-4341h-d88">16 November 2026: D87's corpus run may use 4 pods at $43.41/h (D88)</a></h2>
 <p><strong>Decided by:</strong> the owner (Casey), 16 November 2026, in claude's chat (claude-401). Under D87's $35/h no
 qualifying Vast host was listed, so the one-hour measured run was approved piece by piece. The full corpus
