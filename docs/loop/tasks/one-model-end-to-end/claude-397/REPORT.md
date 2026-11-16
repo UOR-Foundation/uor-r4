@@ -18,7 +18,11 @@ In plain terms:
   | ext-s1 | 0.449 / 0.429 | 0.106 / 0.106 |
   | ext-s2 | 0.463 / 0.421 | 0.120 / 0.116 |
 
-  `U` is a reference, not a proven Bayes rate (ORDER, Definitions). Even so, it means C2′'s `chose_other` half can be met in principle.
+  `U` is a reference, not a proven Bayes rate (ORDER, Definitions). It is also conservative, for two reasons (exact-head review):
+  - `C_i` ignores whether the remaining facts can still be paired into episodes. Each earlier slot's other fact must lie in that slot's bucket, and the bucket multiset is {0, 0, 1, 1}.
+  - So a full reader can sometimes narrow `C_i` further, and some rows counted as `K ≥ 2` are really `K = 1`.
+
+  A smaller set only raises the reachable rate, so outcome 1's "does not hold" stands. R2's split between `K = 1` and `K ≥ 2` rows is slightly blurred by the same effect. Even so, C2′'s `chose_other` half can be met in principle.
 - **The rule does not follow the identifiable part.** On rows where the other fact is the only consistent one (`K = 1`), C2′ hits it *less* often than on ambiguous rows:
 
   | Cell | C2′ hits, `K = 1` rows | C2′ hits, `K ≥ 2` rows | A's hits, `K = 1` rows |
@@ -88,6 +92,8 @@ Results are in the HF store at `caseyallard/uor-r4-store:results/claude/one-mode
 - `scope-guard`: one function, one bin and the docs. No bar or status changed.
 
 ## Still open
+
+**The registered unlock** is outcome 3, at ext-s1 b1: the gate-family reachability probe, item 2 below. Item 1 is a new proposal outside the map. The map grants a card only for "1 with 2 or 4", and outcome 1 does not hold. It rests on outcome 4's control-fault reading of the `chose_target` half alone.
 
 1. **A decision card for bar 4b's `chose_target` half** (§5.1; the top session approves it after a decision review). The half cannot discriminate on this task. The card should propose a control whose target the stream determines and a content match could find, for example the fact asked in the previous slot, whose relation is in the stream as that slot's `Q(K)`. Its GPU arm needs a sheet addendum and a non-author FIT (claude-398).
 2. **The gate-family question.** Can one fixed set of Q31 gates with an L1-nearest pick express a positional rule ("inside the asked fact's bucket")? A host probe of the best reachable `chose_other` on the `K = 1` rows would answer it.
