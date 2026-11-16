@@ -112,11 +112,12 @@ echo "== summary (rates in thousandths of a token per second; gpu = mean utiliza
     [ -s "$D/metrics.json" ] || continue
     KEPT=$(jq '.kept_answer_tokens' "$D/metrics.json")
     [ -s "$D/count.json" ] && KEPT=$(jq '.kept_answer_tokens' "$D/count.json")
-    G=$(awk -F', ' '{u+=$2; if ($1>m) m=$1; n++} END {if (n) printf "%d\t%d", u/n, m; else printf "-\t-"}' "$OUT/$A.gpu")
-    jq -r --argjson kept "$KEPT" --arg g "$G" --arg a "$A" \
+    GU=$(awk -F", " '{u+=$2; n++} END {if (n) printf "%d", u/n; else printf "-"}' "$OUT/$A.gpu")
+    GM=$(awk -F", " '{if ($1>m) m=$1} END {printf "%d", m}' "$OUT/$A.gpu")
+    jq -r --argjson kept "$KEPT" --arg gu "$GU" --arg gm "$GM" --arg a "$A" \
       '[$a, .wall_ms, .prompts_dispatched, .generated_tokens, $kept,
         (.generated_tokens * 1000000 / .wall_ms | floor), ($kept * 1000000 / .wall_ms | floor),
-        ($kept * 1000 / ([.generated_tokens, 1] | max) | floor), (.truncated_answers + .markup_answers), .errors, $g] | @tsv' \
+        ($kept * 1000 / ([.generated_tokens, 1] | max) | floor), (.truncated_answers + .markup_answers), .errors, $gu, $gm] | @tsv' \
       "$D/metrics.json"
   done
 } | tee "$OUT/summary.tsv"
