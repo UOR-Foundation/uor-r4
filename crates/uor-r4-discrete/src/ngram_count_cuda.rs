@@ -113,3 +113,33 @@ fn ngram_count_cuda_detects_a_planted_single_count_change() {
     let differing = triples.iter().zip(&want_triples).filter(|(a, b)| a != b).count();
     assert_eq!(differing, 1);
 }
+
+/// GPU = oracle on a real token stream, orders 0..5, plus two GPU runs equal.
+/// Run explicitly: `UOR_NGRAM_STREAM=path.u16 cargo test ... -- --ignored
+/// ngram_count_cuda_real_stream`. Fails when the variable is unset.
+#[test]
+#[ignore = "needs UOR_NGRAM_STREAM, a UORT token stream of at least 1M tokens"]
+fn ngram_count_cuda_real_stream_matches_the_oracle() {
+    let path = std::env::var("UOR_NGRAM_STREAM").expect("UOR_NGRAM_STREAM names a UORT stream");
+    let tokens = crate::ngram_count::read_uort_tokens(&std::fs::read(&path).expect("read"))
+        .expect("UORT tokens");
+    assert!(tokens.len() >= 1_000_000, "stream holds {} tokens", tokens.len());
+    let counter = NgramCounter::new(0, &tokens).expect("counter");
+    for order in 0..=5u32 {
+        let (digest, triples, contexts, partitions) = gpu(&counter, order, 4_000_000);
+        let (again, _, _, _) = gpu(&counter, order, 4_000_000);
+        let (want, want_triples, want_contexts) = oracle_count(&tokens, order).expect("oracle");
+        assert_eq!(digest, want, "digest, order {order}");
+        assert_eq!(again, digest, "second GPU run, order {order}");
+        assert!(triples == want_triples && contexts == want_contexts, "records, order {order}");
+        eprintln!(
+            "real tokens {} order {order}: partitions {partitions} grams {} contexts {} n1..n4 {:?} gpu=oracle sha {} ctx {}",
+            tokens.len(),
+            digest.grams,
+            digest.contexts,
+            digest.count_of_counts,
+            digest.triple_sha256,
+            digest.context_sha256
+        );
+    }
+}
