@@ -1134,6 +1134,16 @@ impl IntegerStackModel {
         Ok(())
     }
 
+    /// Whether this model's reads ignore token positions, so a full context may drop its oldest
+    /// token: no Hamming read (and therefore no place read) and no turn memory. The recurrence and
+    /// the native Q31 state carry the history; the token vector is only a read's window.
+    pub fn can_slide_tokens(&self) -> bool {
+        self.fbs
+            .as_ref()
+            .is_some_and(|fbs| fbs.hamming.is_none())
+            && self.memory.is_none()
+    }
+
     /// The attached native Q31 model handle, if any.
     pub fn native_q31_state(&self) -> Option<Q31ServingSession> {
         self.native_q31
@@ -1720,6 +1730,7 @@ impl IntegerStackModel {
                 .and_then(|f| f.hamming.as_ref())
                 .map_or(Vec::new(), |hamming| hamming.indexes()),
             hamming_index_on: true,
+            context_slide: false,
             hamming_payloads: self
                 .fbs
                 .as_ref()
@@ -1887,6 +1898,10 @@ pub struct SerializedStackSession {
     /// Optional sequence of tokens ingested so far (`[position]` entries).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tokens: Vec<u32>,
+    /// A Hamming read's per-position payload caches, per read (`context * width` i64 each, or
+    /// empty for a read without type heads). Saved so a type-head session restores exactly.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hamming_payloads: Vec<Vec<i64>>,
     /// Optional opt-in snap trace root indices recorded so far.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snap_trace: Option<Vec<u32>>,
@@ -2197,6 +2212,8 @@ pub struct IntegerStackSession<'m> {
     hamming_index: Vec<HammingIndex>,
     /// Whether reads use `hamming_index` (a switch for the on/off equality test).
     hamming_index_on: bool,
+    /// Whether a full context drops its oldest token instead of refusing (read-free models only).
+    context_slide: bool,
     /// The place read's register and the turns it has read (claude-351); idle without a place
     /// read.
     place: PlaceState,
@@ -2287,12 +2304,23 @@ pub(super) fn max_serialized_session_bytes(model: &IntegerStackModel) -> u64 {
     } else {
         0
     };
+    // A Hamming read's per-position payloads: `context * width` i64 for each read with type heads.
+    let payload_bytes = model
+        .fbs
+        .as_ref()
+        .and_then(|f| f.hamming.as_ref())
+        .map_or(0, |h| {
+            (h.payload_cache_elements(s.context) as u64)
+                .checked_mul(24)
+                .unwrap_or(u64::MAX / 4)
+        });
     let margin = 131072u64; // 128 KiB for schema, metadata keys, and formatting punctuation
 
     layer_bytes
         .checked_add(logits_bytes)
         .and_then(|acc| acc.checked_add(tokens_bytes))
         .and_then(|acc| acc.checked_add(trace_bytes))
+        .and_then(|acc| acc.checked_add(payload_bytes))
         .and_then(|acc| acc.checked_add(margin))
         .unwrap_or(100 * 1024 * 1024)
 }
@@ -2329,6 +2357,20 @@ impl IntegerStackSession<'_> {
     /// The read's steps recorded since the trace was turned on; `None` while it is off.
     pub fn q31_read_trace(&self) -> Option<&[Q31ReadStep]> {
         self.q31_read_trace.as_deref()
+    }
+
+    /// Let a full context drop its oldest token and continue, instead of refusing at
+    /// [`StackError::ContextFull`]. Refused unless [`IntegerStackModel::can_slide_tokens`]: a read
+    /// that names token positions would see a different window. Dropping the oldest token is
+    /// `O(context)` with the session's token vector; the cost is paid at the bound, not per step.
+    pub fn set_context_slide(&mut self, on: bool) -> Result<(), StackError> {
+        if on && !self.model.can_slide_tokens() {
+            return Err(StackError::Shape(
+                "a context slide needs a model whose reads do not use token positions",
+            ));
+        }
+        self.context_slide = on;
+        Ok(())
     }
 
     /// Select the Hamming read from its per-head index (the default) or scan every earlier
@@ -2781,6 +2823,7 @@ impl IntegerStackSession<'_> {
             copy_scale_q16: self.copy_scale_q16,
             logits,
             tokens: self.tokens.clone(),
+            hamming_payloads: self.hamming_payloads.clone(),
             snap_trace,
             pointer_keys,
             pointer_lifts,
@@ -2814,13 +2857,22 @@ impl IntegerStackSession<'_> {
                 "a session of a native Q31 read cannot be restored yet: its read history is not saved",
             ));
         }
-        if fbs
-            .and_then(|f| f.hamming.as_ref())
-            .is_some_and(|h| h.has_type_heads())
-        {
-            return Err(StackError::Shape(
-                "a session of a Hamming read with type heads cannot be restored yet: its per-position payloads are not saved",
-            ));
+        // A type-head read's payloads are in `hamming_payloads`; a saved session without them
+        // (an older snapshot) is refused rather than restored differently.
+        if let Some(hamming) = fbs.and_then(|f| f.hamming.as_ref()) {
+            let expected = hamming.payload_caches(self.model.shape.context);
+            if hamming.has_type_heads()
+                && (saved.hamming_payloads.len() != expected.len()
+                    || saved
+                        .hamming_payloads
+                        .iter()
+                        .zip(&expected)
+                        .any(|(saved, expected)| saved.len() != expected.len()))
+            {
+                return Err(StackError::Shape(
+                    "a type-head session needs its per-position payloads, which this snapshot does not carry",
+                ));
+            }
         }
         // The place read's register and turns are not saved either (claude-351).
         if fbs
@@ -3071,6 +3123,9 @@ impl IntegerStackSession<'_> {
         self.tokens.extend_from_slice(&saved.tokens);
         for index in &mut self.hamming_index {
             index.clear();
+        }
+        if !saved.hamming_payloads.is_empty() {
+            self.hamming_payloads = saved.hamming_payloads.clone();
         }
         // No step of the restored session has spoken yet.
         self.spoken = None;
@@ -4049,12 +4104,15 @@ fn stack_step_fbs(
             vocab: s.vocab,
         });
     }
-    if session.position >= s.context {
+    if session.position >= s.context && !session.context_slide {
         return Err(StackError::ContextFull { context: s.context });
     }
     native_q31_step_preflight(model, &session.states, session.b.snap_trace.is_some())?;
     q31_read_refused_preflight(session.q31_read_refused)?;
     // The Hamming read at this row needs `x_0..=x_t`.
+    if session.position >= s.context && session.tokens.len() >= s.context {
+        session.tokens.remove(0);
+    }
     session.tokens.push(token);
     let opening = session.at_reply_opening();
     // The place read's register moves on this token, before the row's readout (claude-351).
@@ -4386,11 +4444,14 @@ fn stack_step_fbs_timed(
             vocab: s.vocab,
         });
     }
-    if session.position >= s.context {
+    if session.position >= s.context && !session.context_slide {
         return Err(StackError::ContextFull { context: s.context });
     }
     native_q31_step_preflight(model, &session.states, session.b.snap_trace.is_some())?;
     q31_read_refused_preflight(session.q31_read_refused)?;
+    if session.position >= s.context && session.tokens.len() >= s.context {
+        session.tokens.remove(0);
+    }
     session.tokens.push(token);
     let opening = session.at_reply_opening();
     // The place read's register moves on this token, before the row's readout (claude-351).

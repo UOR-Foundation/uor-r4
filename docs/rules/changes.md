@@ -14,6 +14,77 @@ flowchart LR
 
 An entry gives the date, what changed, which charter clauses it touches, and who decided. The owner's own words are recorded verbatim when they are the reason. Old text is never edited or deleted: it moves unchanged to the `archive/` folder, and the live decision index keeps one line saying where each decision went (see the [decision map](decision-map.md)).
 
+## 16 November 2026: the rest of D87's corpus is streamed from the DeepSeek API (D89)
+
+**Decided by:** the owner (Casey), 16 November 2026, in claude's chat (claude-402). The lab had leased a 4×B200
+and an 8×B200 for the fan-out. It then reported that DeepSeek's own API lists V4.1 Flash at $0.60 per 1M output
+tokens off-peak, so about $800–900 for 1B kept, against about $1,480 for the rented run (pod 3 plus the
+8×B200 plus the 4×B200 at $172.73/h, setup included). Casey's words,
+verbatim:
+
+- Asked about one 8×B200 at about $85/h in place of two 4×B200 pods:
+  "ok i mean yeah go for it just get it done please as quickly and cheaply as possible"
+- "i can just stream deepseek from api..."
+- To the lab's recommendation (down the two new pods, keep pod 3 generating while an API path is built and
+  checked, then finish over the API off-peak): "go with your recommendation"
+- "btw 1 million tokens from openai costs .25c so ive done like 10b before for like 200bucks"
+
+**What changed:**
+
+- **D87's means of generation (the owner's terms):**
+  - Stream the rest of the donor corpus from DeepSeek's API, as the lab recommended, instead of a rented
+    fan-out. In the owner's words: "i can just stream deepseek from api".
+  - The recommendation the owner accepted: down the two new pods, keep pod 3 (vast-60886842) generating while
+    the API path is built and checked, then down it and finish over the API off-peak.
+  - D87's donor (DeepSeek V4.1 Flash), reasoning rule, hard-text-target rule and 1B size stand.
+  - The earlier yes to one 8×B200 is superseded by this answer: no 8×B200 may be leased under it.
+- **Amends D87's lab conditions:**
+  - In place of a pinned checkpoint and the engine and GPUs, the API receipt names the endpoint, the
+    model-version string, the request dates and the off-peak window.
+  - Shards from pod 3 and from the API are tagged apart.
+  - The charter's §3.10 is unchanged.
+- **The lab's reading, not owner terms:**
+  - The two new pods (vast-60895844, vast-60895824) were deleted about 10 minutes after their lease, before
+    any file reached them (about $21.55).
+  - D88's caps still cover pod 3 until it is downed.
+  - The OpenAI note was not taken as a donor switch, since a switch needs the owner's word (D87). The lab also
+    notes that OpenAI's Services Agreement §3.3(e) bars using Output to develop competing models, while
+    DeepSeek's Open Platform Terms §4.2 allow "training other models (such as model distillation)". The $0.25
+    per 1M figure is the owner's, unverified by the lab and for a different model.
+- **The lab's conditions and means, not owner terms:**
+  - `deepseek-flash` at the published off-peak rates.
+  - The seed is recorded as absent (not replayable).
+  - The instrument takes the key from a file or environment variable; the lab never reads, prints or logs it
+    (§3.13).
+  - The production sheet's amendment and its non-author FIT come before the first API request.
+
+## 16 November 2026: D87's corpus run may use 4 pods at $43.41/h (D88)
+
+**Decided by:** the owner (Casey), 16 November 2026, in claude's chat (claude-401). Under D87's $35/h no
+qualifying Vast host was listed, so the one-hour measured run was approved piece by piece. The full corpus
+was approved after the lab reported that tuning segment A read about 9.5k kept tokens/s on vast-60886842
+(4×B200, $43.41/h): about 29 h and $1,270 for 1B on one pod, or about 7.3 h on 4 pods at about the same
+cost. Casey's words, verbatim:
+
+- "approve the $56.85/h host for the one-hour measurement"
+- Asked "Is the disk charge covered by your approval?": "Yes, that's fine"
+- Asked "Allow any verified datacenter 8×H200 at up to $58/h for the hour?": "Yes, any such host"
+- Asked "Allow a Vast datacenter 4×B200 at up to $44/h for the hour?": "Yes, use 4×B200"
+- "yes approved go please", then "go i said go"
+- "approve 4 pods at $43.41/h for the full 1B - make sure you do everything possible to make these run as
+  quickly as possible for as cheap as possible because 1270$ sped is ridiculous"
+
+**What changed:**
+
+- **§5.4's compute caps (the owner's term):** "4 pods at $43.41/h" for the full 1B corpus, in place of
+  D87's $35/h, with the direction to run it "as quickly as possible for as cheap as possible".
+- **The lab's reading, not owner terms:** $43.41/h is per pod (the measured 4×B200 pod's price), so
+  $173.64/h in all across all labs. The raise is for this corpus run only, as D87's was, and the caps then
+  return to 4 pods and $8/h. While four pods are leased, no other lab can lease one.
+- **The lab's conditions and means, not owner terms:** Vast verified datacenter hosts that pass the sheet's
+  offer and NVLink checks; the guard with the amendment's caps; disjoint prompt ranges per pod; the cost per
+  kept token worked down before the fan-out; any host above $43.41/h needs the owner's word.
+
 ## 16 November 2026: D41's production donor is DeepSeek V4.1 Flash, reasoning kept, 1B first (D87)
 
 **Decided by:** the owner (Casey), 16 November 2026, in Claude's chat, recorded at
