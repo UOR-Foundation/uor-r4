@@ -1468,6 +1468,37 @@ impl IntegerStackModel {
         self.fbs.as_deref().map(|fbs| fbs.writer_table.as_slice())
     }
 
+    /// The Q31 read's input rows over `ids` read as `batch` windows of `time` tokens: each row is
+    /// the `x_in` the read scored at that token, in order, so `ids.len() * width` words.
+    ///
+    /// This is the artifact's own stream at the read, the input a `/14` read is trained and
+    /// evaluated on (`fbs-read-dump`). The windows are stepped in fresh sessions, as the served
+    /// task windows are; a model without a read refuses.
+    pub fn q31_read_rows(&self, ids: &[u32], time: usize) -> Result<Vec<i64>, StackError> {
+        if self.fbs.as_deref().is_none_or(|fbs| fbs.q31_read.is_none()) {
+            return Err(StackError::Shape("the artifact carries no Q31 read"));
+        }
+        if time == 0 || !ids.len().is_multiple_of(time) {
+            return Err(StackError::Shape(
+                "the read rows need whole windows of a positive length",
+            ));
+        }
+        let mut rows: Vec<i64> = Vec::new();
+        for window in ids.chunks_exact(time) {
+            let mut session = self.session();
+            session.set_q31_read_trace(true)?;
+            for &token in window {
+                session.step_native(token)?;
+                let step = session
+                    .q31_read_trace()
+                    .and_then(|trace| trace.last())
+                    .ok_or(StackError::Shape("a read step was not recorded"))?;
+                rows.extend_from_slice(&step.x_in);
+            }
+        }
+        Ok(rows)
+    }
+
     /// How many opening and reply keys the turn memory's tables hold, if it has one.
     pub fn turn_memory_table_lengths(&self) -> Option<(usize, Option<usize>)> {
         self.memory

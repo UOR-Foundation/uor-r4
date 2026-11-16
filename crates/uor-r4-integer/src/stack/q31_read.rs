@@ -783,4 +783,38 @@ mod tests {
             other => panic!("the same step is refused by its own rule again, got {other:?}"),
         }
     }
+
+    #[test]
+    fn read_rows_are_the_steps_x_in() {
+        // The rows a `/14` read is trained on are the ones the session scores, window for
+        // window: the dump builder must not invent an input.
+        let read = drawn_read(31, 32, 3);
+        let model = IntegerStackModel::parse(&with_read(&plain_trunk(), 1, read.clone()))
+            .expect("parse");
+        let (_, trace) = serve(&with_read(&plain_trunk(), 1, read));
+        let rows = model
+            .q31_read_rows(&PROMPT, PROMPT.len())
+            .expect("one window of rows");
+        let expected: Vec<i64> = trace.iter().flat_map(|step| step.x_in.clone()).collect();
+        assert_eq!(rows, expected);
+        assert_eq!(rows.len(), PROMPT.len() * 32);
+        // A window is a session: a split at a non-boundary serves from fresh history, so the
+        // rows of the second "window" are that window's own, not the continuation's.
+        let split = model
+            .q31_read_rows(&PROMPT, PROMPT.len() / 2)
+            .expect("two windows");
+        assert_eq!(split.len(), expected.len());
+        assert_eq!(&split[..PROMPT.len() * 16], &expected[..PROMPT.len() * 16]);
+    }
+
+    #[test]
+    fn read_rows_refuse_an_artifact_without_a_read() {
+        let model = IntegerStackModel::parse(&plain_trunk()).expect("parse");
+        let message = refusal(model.q31_read_rows(&PROMPT, PROMPT.len()));
+        assert!(message.contains("no Q31 read"), "{message}");
+        let read = drawn_read(31, 32, 3);
+        let model = IntegerStackModel::parse(&with_read(&plain_trunk(), 1, read)).expect("parse");
+        let message = refusal(model.q31_read_rows(&PROMPT, 0));
+        assert!(message.contains("whole windows"), "{message}");
+    }
 }

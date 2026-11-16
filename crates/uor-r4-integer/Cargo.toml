@@ -104,3 +104,8 @@ required-features = ["serving-wasm"]
 name = "read-panel"
 path = "src/bin/read-panel.rs"
 required-features = ["serving-wasm"]
+
+[[bin]]
+name = "fbs-read-dump"
+path = "src/bin/fbs-read-dump.rs"
+required-features = ["serving-wasm"]
