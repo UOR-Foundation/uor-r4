@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
 # drive.sh STEP POD: the laptop side of claude-400 (D87).
-#   note POD RATE_CENTS OFFER  record the lease (time now, $/h in cents, Vast offer id) in lease.env
-#   put POD                    copy the instrument, pod.sh, bank and receipt inputs to the pod, and
-#                              restore every finished file of $LOCAL/out (a re-leased pod resumes from
-#                              them, never from an empty out/); refuses if the pod's out/ is not empty
+#   note POD RATE_CENTS OFFER  record a lease (time now, $/h in whole cents, Vast offer id) in lease.env;
+#                              a re-lease carries the earlier pods' cents and the first lease time, so the
+#                              guard's $1,100 and 60 h stops count every pod of the run
+#   put POD                    copy the instrument, pod.sh, bank and receipt inputs to the pod, and restore
+#                              every finished file of $LOCAL/out (a re-leased pod resumes from them); it
+#                              refuses a pod whose out/ is not empty, and checks each restored file by sha256
 #   machine POD                write machine.json from the lease and the pod's gpus.csv, and push it
-#   sync POD [final]           copy finished shards/counts off the pod, checked by sha256; with
-#                              "final", the logs are checked by sha256 too
+#   sync POD [final]           copy finished shards/counts off the pod, checked by sha256 (a finished shard
+#                              already on the laptop is never overwritten); "final" checks the logs too
+#   hold POD                   tell the guard a vLLM restart is under way (counts as busy for 2 h)
 #   wait-segment POD           block until the current run segment has stopped (tells the driver)
-#   watch POD                  the guard (L-004), armed right after the lease and outliving segments:
-#                              syncs every 10 min; stops the run and downs the pod at $1,100 or 60 h;
-#                              downs the pod after a verified final sync once no run has been alive
-#                              for GRACE s (30 min; 3 h before the first segment, for setup); downs
-#                              it after 30 min unreachable. It exits only after `down` (or on a
-#                              final-sync mismatch, with the pod kept so nothing unique is lost).
+#   watch POD                  the guard (L-004), started detached right after the lease; see guard_help
 #   pod POD STEP...            run a pod.sh step on the pod
+guard_help='The guard syncs every 10 min. It stops the run and downs the pod at $1,100 or 60 h (all pods).
+It downs the pod after a verified final sync once no run has been alive for 30 min (3 h before the
+first segment). It downs it after 30 min unreachable. It never exits while the pod is up: a failed
+sync or down is retried every 5 min with an alert (stdout, ALERTS file, desktop notification).'
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd "$HERE/../../.." && pwd)
@@ -26,90 +28,151 @@ CAP_SECONDS=${M2_CAP_SECONDS:-216000}
 GRACE=${M2_GRACE:-1800}
 GRACE_FIRST=${M2_GRACE_FIRST:-10800}
 EVERY=${M2_EVERY:-600}
-step=${1:?usage: drive.sh note|put|machine|sync|wait-segment|watch|pod POD ...}; POD=${2:?POD}; shift 2
+RETRY=${M2_RETRY:-300}
+UNREACH_MAX=${M2_UNREACH_MAX:-1800}
+STOP_WAIT=${M2_STOP_WAIT:-1800}
+KILL_WAIT=${M2_KILL_WAIT:-60}
+POLL=${M2_POLL:-60}
+LOGS='rate.jsonl segments.jsonl dropped.jsonl metrics.json'
+step=${1:?usage: drive.sh note|put|machine|sync|hold|wait-segment|watch|pod POD ...}; POD=${2:?POD}; shift 2
 ssh_pod() { "$UP" ssh "$POD" "$@"; }
 log() { echo "$(date -u +%FT%TZ) $*"; }
+alert() {
+  log "ALERT: $*"
+  mkdir -p "$LOCAL"; echo "$(date -u +%FT%TZ) $POD $*" >> "$LOCAL/ALERTS"
+  command -v osascript >/dev/null && osascript -e "display notification \"$POD: $*\" with title \"claude-400 guard\"" >/dev/null 2>&1 || true
+}
 
-# ALIVE, DEAD or UNREACH; an SSH failure is retried three times, 30 s apart, before UNREACH.
+# ALIVE, HOLD, DEAD or UNREACH; an SSH failure is retried three times, 30 s apart, before UNREACH.
 probe() {
   local s
   for _ in 1 2 3; do
-    s=$(ssh_pod "if kill -0 \$(cat $W/run.pid 2>/dev/null) 2>/dev/null; then echo ALIVE; else echo DEAD; fi" 2>/dev/null | tail -1 || true)
-    case $s in ALIVE|DEAD) echo "$s"; return;; esac
+    s=$(ssh_pod "if kill -0 \$(cat $W/run.pid 2>/dev/null) 2>/dev/null; then echo ALIVE; elif [ -n \"\$(find $W/HOLD -mmin -120 2>/dev/null)\" ]; then echo HOLD; else echo DEAD; fi" 2>/dev/null | tail -1 || true)
+    case $s in ALIVE|HOLD|DEAD) echo "$s"; return;; esac
     sleep 30
   done
   echo UNREACH
 }
 
+# 0: synced and verified. 1: a mismatch. 2: no trustworthy listing (transport, or an empty final list
+# after a run started). 3: a restore is in progress on the pod (nothing is copied).
 do_sync() {
-  local final=${1:-}
+  local final=${1:-} pat='shard-*.jsonl counts-*.jsonl' raw list
   mkdir -p "$LOCAL/out"
-  local pat='shard-*.jsonl counts-*.jsonl'
-  [ "$final" = final ] && pat="$pat rate.jsonl segments.jsonl dropped.jsonl metrics.json"
-  # Final (renamed) files only; .part files are still being written.
-  local list
-  list=$(ssh_pod "cd $W/out 2>/dev/null && sha256sum $pat 2>/dev/null | grep -v '\.part' || true")
-  local need=()
+  [ "$final" = final ] && pat="$pat $LOGS"
+  # The remote prints its flags, the sums of final files only (.part files are still being written),
+  # then END; a listing without END is not trusted.
+  raw=$(ssh_pod "cd $W/out 2>/dev/null || { echo NOOUT; echo END; exit 0; }; [ -e .restoring ] && echo RESTORING; [ -e $W/run.pid ] && echo RAN; sha256sum $pat 2>/dev/null | grep -v '\.part' || true; echo END" 2>/dev/null) || { log "sync: listing failed (ssh)"; return 2; }
+  [ "$(echo "$raw" | tail -1)" = END ] || { log "sync: listing has no END"; return 2; }
+  echo "$raw" | grep -qx RESTORING && { log "sync: restore in progress, skipped"; return 3; }
+  list=$(echo "$raw" | grep -v -x -E 'END|NOOUT|RAN|RESTORING' || true)
+  if [ "$final" = final ] && [ -z "$list" ] && echo "$raw" | grep -qx RAN; then log "sync: empty final listing after a run started"; return 2; fi
+  local need=() bad=0 sum name
   while read -r sum name; do
     [ -n "$name" ] || continue
-    if [ ! -f "$LOCAL/out/$name" ] || [ "$(shasum -a 256 "$LOCAL/out/$name" | cut -d' ' -f1)" != "$sum" ]; then need+=("$name"); fi
+    case $name in
+    shard-*|counts-*)
+      # Finished shards are immutable: copy a missing one; a differing local copy is a mismatch, never overwritten.
+      if [ ! -f "$LOCAL/out/$name" ]; then need+=("$name")
+      elif [ "$(shasum -a 256 "$LOCAL/out/$name" | cut -d' ' -f1)" != "$sum" ]; then log "MISMATCH (kept local) $name"; bad=1; fi ;;
+    *) need+=("$name") ;;
+    esac
   done <<< "$list"
   if [ ${#need[@]} -gt 0 ]; then
-    ssh_pod "cd $W/out && tar cf - ${need[*]}" | tar xf - -C "$LOCAL/out"
+    ssh_pod "cd $W/out && tar cf - ${need[*]}" | tar xf - -C "$LOCAL/out" || { log "sync: copy failed"; return 2; }
   fi
   # Between final syncs the logs are still growing: copied each time, checked only by a final sync.
-  [ "$final" = final ] || { ssh_pod "cd $W/out && tar cf - rate.jsonl segments.jsonl dropped.jsonl metrics.json 2>/dev/null || true" | tar xf - -C "$LOCAL/out" 2>/dev/null || true; }
-  local bad=0
-  while read -r sum name; do
-    [ -n "$name" ] || continue
+  [ "$final" = final ] || { ssh_pod "cd $W/out && tar cf - $LOGS 2>/dev/null || true" | tar xf - -C "$LOCAL/out" 2>/dev/null || true; }
+  for name in "${need[@]+"${need[@]}"}"; do
+    sum=$(echo "$list" | awk -v n="$name" '$2 == n {print $1}')
     [ "$(shasum -a 256 "$LOCAL/out/$name" | cut -d' ' -f1)" = "$sum" ] || { log "MISMATCH $name"; bad=1; }
-  done <<< "$list"
-  log "synced${final:+ ($final)} $(echo "$list" | grep -c . || true) files (${#need[@]} new), mismatches=$bad; $(tail -1 "$LOCAL/out/rate.jsonl" 2>/dev/null || true)"
+  done
+  log "synced${final:+ ($final)} $(echo "$list" | grep -c . || true) files (${#need[@]} copied), mismatches=$bad; $(tail -1 "$LOCAL/out/rate.jsonl" 2>/dev/null || true)"
   return $bad
 }
 
-# A verified final sync (three tries), then down. On a persistent mismatch the pod is kept.
+pod_down() {
+  "$UP" down "$POD" --lab claude --session claude-400 --confirm-archived || return 1
+  echo "M2_DOWN_EPOCH=$(date +%s)" >> "$LOCAL/lease.env"
+}
+
+# Stop the run if it is still alive: STOP, then TERM and KILL after STOP_WAIT.
+stop_run() {
+  ssh_pod "touch $W/out/STOP" || true
+  local t=0
+  while [ "$(probe)" = ALIVE ] && [ "$t" -lt "$STOP_WAIT" ]; do sleep "$POLL"; t=$((t + POLL)); done
+  if [ "$(probe)" = ALIVE ]; then
+    alert "run still alive ${t}s after STOP: TERM, then KILL"
+    ssh_pod "kill -TERM \$(cat $W/run.pid); sleep $KILL_WAIT; kill -KILL \$(cat $W/run.pid) 2>/dev/null; true" || true
+  fi
+}
+
+# A verified final sync, then down. It never returns while the pod is up.
 finish() {
-  local why=$1 n
-  for n in 1 2 3; do
-    if do_sync final; then
+  local why=$1 rc unreach=0
+  while :; do
+    rc=0; do_sync final || rc=$?
+    if [ "$rc" = 0 ]; then
       log "final sync verified ($why); down"
-      "$UP" down "$POD" --lab claude --session claude-400 --confirm-archived && { log "pod down ($why)"; exit 0; }
-      log "down failed (try $n)"
+      if pod_down; then log "pod down ($why)"; exit 0; fi
+      alert "down failed after a verified sync ($why); retrying every ${RETRY}s"
+    elif [ "$rc" = 2 ] && [ "$(probe)" = UNREACH ]; then
+      unreach=$((unreach + RETRY))
+      if [ "$unreach" -ge "$UNREACH_MAX" ]; then
+        alert "unreachable ${unreach}s during finish: down without a final sync (the last verified sync holds the shards)"
+        if pod_down; then exit 3; fi
+      fi
+    else
+      alert "final sync not verified (code $rc, $why); pod kept up; retrying every ${RETRY}s"
     fi
-    sleep 60
+    sleep "$RETRY"
   done
-  log "FINISH FAILED ($why): pod $POD kept up; sync or down did not complete"; exit 1
 }
 
 case $step in
 note)
   RATE=${1:?RATE_CENTS}; OFFER=${2:?OFFER}
+  [[ $RATE =~ ^[0-9]{3,5}$ ]] || { echo "RATE_CENTS must be whole cents per hour, e.g. 2308" >&2; exit 1; }
   mkdir -p "$LOCAL"
-  printf 'M2_POD=%s\nM2_LEASE_EPOCH=%s\nM2_RATE_CENTS=%s\nM2_OFFER=%s\n' "$POD" "$(date +%s)" "$RATE" "$OFFER" > "$LOCAL/lease.env"
+  now=$(date +%s); prior=0; first=$now
+  if [ -f "$LOCAL/lease.env" ]; then
+    # shellcheck disable=SC1091
+    . "$LOCAL/lease.env"
+    end=${M2_DOWN_EPOCH:-$now}
+    prior=$(( ${M2_PRIOR_CENTS:-0} + (end - M2_LEASE_EPOCH) * M2_RATE_CENTS / 3600 ))
+    first=${M2_FIRST_LEASE_EPOCH:-$M2_LEASE_EPOCH}
+    mv "$LOCAL/lease.env" "$LOCAL/lease-$M2_POD.env"
+  fi
+  printf 'M2_POD=%s\nM2_LEASE_EPOCH=%s\nM2_RATE_CENTS=%s\nM2_OFFER=%s\nM2_PRIOR_CENTS=%s\nM2_FIRST_LEASE_EPOCH=%s\n' \
+    "$POD" "$now" "$RATE" "$OFFER" "$prior" "$first" > "$LOCAL/lease.env"
   cat "$LOCAL/lease.env"
   ;;
 put)
-  if [ -n "$(ssh_pod "ls $W/out 2>/dev/null | head -1" || true)" ]; then echo "pod $W/out is not empty: refusing" >&2; exit 1; fi
+  if [ -n "$(ssh_pod "ls -A $W/out 2>/dev/null | head -1")" ]; then echo "pod $W/out is not empty: refusing" >&2; exit 1; fi
   T=$(mktemp -d "${TMPDIR:-/tmp}/m2put.XXXX")
   mkdir -p "$T/instrument"
   cp -R "$HERE/instrument/Cargo.toml" "$HERE/instrument/Cargo.lock" "$HERE/instrument/src" "$T/instrument/"
   cp "$HERE/pod.sh" "$T/"
   for f in bank.jsonl bank.jsonl.manifest.json model.json machine.json engine.json; do
-    [ -f "$LOCAL/$f" ] && cp "$LOCAL/$f" "$T/"
+    if [ -f "$LOCAL/$f" ]; then cp "$LOCAL/$f" "$T/"; fi
   done
   tar cf - -C "$T" . | ssh_pod "mkdir -p $W && tar xf - -C $W && chmod +x $W/pod.sh && ls $W"
   rm -rf "$T"
-  # Restore finished work so a re-leased pod resumes instead of starting the bank again.
-  if ls "$LOCAL/out"/shard-*.jsonl >/dev/null 2>&1; then
-    (cd "$LOCAL/out" && ls shard-*.jsonl counts-*.jsonl dropped.jsonl rate.jsonl segments.jsonl metrics.json 2>/dev/null | grep -v '\.part' > "$LOCAL/restore.list")
-    (cd "$LOCAL/out" && shasum -a 256 $(cat "$LOCAL/restore.list")) > "$LOCAL/restore.sha256"
-    (cd "$LOCAL/out" && tar cf - $(cat "$LOCAL/restore.list")) | ssh_pod "mkdir -p $W/out && tar xf - -C $W/out"
+  # Restore finished work so a re-leased pod resumes instead of starting the bank again. The pod's
+  # .restoring marker keeps the guard from syncing a half-extracted file meanwhile.
+  files=()
+  for f in "$LOCAL"/out/shard-*.jsonl "$LOCAL"/out/counts-*.jsonl; do [ -f "$f" ] && files+=("$(basename "$f")"); done
+  for f in $LOGS; do [ -f "$LOCAL/out/$f" ] && files+=("$f"); done
+  if [ ${#files[@]} -gt 0 ]; then
+    (cd "$LOCAL/out" && shasum -a 256 "${files[@]}") > "$LOCAL/restore.sha256"
+    ssh_pod "mkdir -p $W/out && touch $W/out/.restoring"
+    (cd "$LOCAL/out" && tar cf - "${files[@]}") | ssh_pod "tar xf - -C $W/out"
     # Every restored file must read back "OK" on the pod; anything else stops before a run starts.
-    got=$(ssh_pod "cd $W/out && sha256sum -c" < "$LOCAL/restore.sha256" 2>&1 || true)
-    ok=$(echo "$got" | grep -c ': OK$' || true); want=$(wc -l < "$LOCAL/restore.list" | tr -d ' ')
-    [ "$ok" = "$want" ] || { echo "$got" | grep -v ': OK$' >&2; echo "restore check FAILED: $ok of $want OK" >&2; exit 1; }
-    log "restored $want files to $W/out, sha256 OK"
+    got=$(ssh_pod "cd $W/out && sha256sum -c -" < "$LOCAL/restore.sha256" 2>&1 || true)
+    ok=$(echo "$got" | grep -c ': OK$' || true)
+    [ "$ok" = "${#files[@]}" ] || { echo "$got" | grep -v ': OK$' >&2; echo "restore check FAILED: $ok of ${#files[@]} OK" >&2; exit 1; }
+    ssh_pod "rm -f $W/out/.restoring"
+    log "restored ${#files[@]} files to $W/out, sha256 OK"
   fi
   ;;
 machine)
@@ -126,6 +189,7 @@ machine)
   jq -c '{pod, offer, gpus: (.gpus_csv | length)}' "$LOCAL/machine.json"
   ;;
 sync) do_sync "${1:-}" ;;
+hold) ssh_pod "touch $W/HOLD" && log "hold set: the guard counts the pod busy for 2 h (remove $W/HOLD to end it)" ;;
 wait-segment)
   while :; do
     s=$(probe)
@@ -134,21 +198,24 @@ wait-segment)
   done
   ;;
 watch)
+  echo "$guard_help"
   # shellcheck disable=SC1091
   . "$LOCAL/lease.env"
-  idle=0; unreach=0; seen=0
+  first=${M2_FIRST_LEASE_EPOCH:-$M2_LEASE_EPOCH}; prior=${M2_PRIOR_CENTS:-0}
+  seenf="$LOCAL/guard-seen-$POD"; seen=0; [ -f "$seenf" ] && seen=1
+  idle=0; unreach=0
   while :; do
-    now=$(date +%s); el=$((now - M2_LEASE_EPOCH)); spent=$((el * M2_RATE_CENTS / 3600))
+    now=$(date +%s); el=$((now - first)); spent=$((prior + (now - M2_LEASE_EPOCH) * M2_RATE_CENTS / 3600))
     s=$(probe)
     log "state=$s elapsed=${el}s spent_cents=$spent idle=${idle}s"
     if [ "$spent" -ge "$CAP_CENTS" ] || [ "$el" -ge "$CAP_SECONDS" ]; then
-      log "HARD STOP: spent_cents=$spent elapsed=${el}s"
-      ssh_pod "touch $W/out/STOP" || true
-      for _ in $(seq 1 30); do [ "$(probe)" = ALIVE ] || break; sleep 60; done
+      alert "HARD STOP: spent_cents=$spent elapsed=${el}s"
+      stop_run
       finish "hard stop"
     fi
     case $s in
-    ALIVE) seen=1; idle=0; unreach=0; do_sync || true ;;
+    ALIVE) seen=1; touch "$seenf"; idle=0; unreach=0; do_sync || true ;;
+    HOLD) idle=0; unreach=0; do_sync || true ;;
     DEAD)
       unreach=0; do_sync || true
       g=$GRACE; [ "$seen" = 1 ] || g=$GRACE_FIRST
@@ -156,10 +223,10 @@ watch)
       idle=$((idle + EVERY)) ;;
     UNREACH)
       unreach=$((unreach + EVERY))
-      if [ "$unreach" -ge 1800 ]; then
-        log "pod unreachable for ${unreach}s: down without a final sync (the last verified sync holds the shards)"
-        "$UP" down "$POD" --lab claude --session claude-400 --confirm-archived || log "DOWN FAILED: destroy $POD by hand"
-        exit 3
+      if [ "$unreach" -ge "$UNREACH_MAX" ]; then
+        alert "unreachable ${unreach}s: down without a final sync (the last verified sync holds the shards)"
+        if pod_down; then exit 3; fi
+        alert "down failed while unreachable; retrying"
       fi ;;
     esac
     sleep "$EVERY"
