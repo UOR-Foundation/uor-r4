@@ -23,6 +23,12 @@ set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT=$(cd "$HERE/../../.." && pwd)
 UP=${UOR_POD:-$ROOT/scripts/pod/uor-pod}
+# uor-pod reaches Vast pods (ssh, renew, down) only through the Rust adapter, which is built in the
+# main checkout's local/ (a worktree has none): without it every pod call dies (16 Nov, pod 1).
+if [ -z "${UOR_POD_VAST_BIN:-}" ]; then
+  _main=$(cd "$(git -C "$ROOT" rev-parse --git-common-dir 2>/dev/null)/.." 2>/dev/null && pwd || true)
+  export UOR_POD_VAST_BIN=${_main:-$ROOT}/local/pod-provider-target/debug/uor-r4-pod-provider
+fi
 LOCAL=${M2_LOCAL:-$ROOT/local/m2-run}
 W=${M2_POD_W:-/workspace/m2}
 CAP_CENTS=${M2_CAP_CENTS:-110000}
@@ -240,9 +246,18 @@ offer)
   "${VASTAI:-vastai}" show instance "${POD#vast-}" --raw > "$LOCAL/offer.json"
   jq -c '{id, machine_id, host_id, gpu_name, num_gpus, cpu_ram, bw_nvlink, gpu_mem_bw, hosting_type, dph_total, geolocation, driver_version}' "$LOCAL/offer.json"
   if jq -e '.num_gpus == 4 and (.gpu_name | test("H200")) and .cpu_ram >= 1000000 and (.bw_nvlink // 0) >= 400' "$LOCAL/offer.json" > /dev/null; then
-    log "offer matches the sheet"
+    log "offer metadata matches the sheet"
   else
     alert "rented instance does not match the sheet's filters: down it now"; exit 1
+  fi
+  # Vast's bw_nvlink is not proof: pod 1 (16 Nov, 4xH200 NVL, listed 478 GB/s) had no NVLink at
+  # all. Every GPU pair in the pod's own topology must be NV#, or TP4 runs over PCIe.
+  ssh_pod "nvidia-smi topo -m" > "$LOCAL/offer-topo.txt" 2>&1 || { alert "cannot read the pod's GPU topology: down it now"; exit 1; }
+  # Strip colour codes; GPU rows only; any non-NV entry other than the diagonal X fails.
+  if sed 's/\x1b\[[0-9;]*m//g' "$LOCAL/offer-topo.txt" | awk '/^GPU[0-9]/ { for (i = 2; i <= 5; i++) if ($i != "X" && $i !~ /^NV[0-9]+$/) bad = 1; n++ } END { exit (n == 4 && !bad) ? 0 : 1 }'; then
+    log "GPU topology: NVLink between every pair"
+  else
+    alert "GPU topology is not NVLink between every pair (see offer-topo.txt): down it now"; exit 1
   fi
   ;;
 machine)
@@ -273,6 +288,9 @@ watch)
   [ -f "$LOCAL/lease.env" ] && . "$LOCAL/lease.env"
   if [ -z "${M2_LEASE_EPOCH:-}" ] || [ -z "${M2_RATE_CENTS:-}" ] || [ "${M2_POD:-}" != "$POD" ]; then
     alert "guard NOT started: $LOCAL/lease.env has no lease for $POD (run note first)"; exit 1
+  fi
+  if [ -z "${UOR_POD:-}" ] && [ ! -x "$UOR_POD_VAST_BIN" ]; then
+    alert "guard NOT started: no Vast adapter at $UOR_POD_VAST_BIN (it could neither reach nor down the pod)"; exit 1
   fi
   first=${M2_FIRST_LEASE_EPOCH:-$M2_LEASE_EPOCH}; prior=${M2_PRIOR_CENTS:-0}
   seenf="$LOCAL/guard-seen-$POD"; seen=0; [ -f "$seenf" ] && seen=1
