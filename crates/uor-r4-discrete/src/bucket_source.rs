@@ -584,7 +584,7 @@ extern "C" __global__ void discrete_bucket_counterfactual(
 ) {
     U candidate=blockIdx.x*blockDim.x+threadIdx.x;if(candidate>=16u)return;
     W sum=0;U eligible=0u;losses[candidate]=~(W)0;
-    bool gated=s[8]==MODE_FLOCK || s[8]==MODE_RELATION;
+    bool gated=s[8]==MODE_FLOCK || s[8]==MODE_RELATION || s[8]==MODE_PICK;
     if((kind==GATE_KIND && !gated) || (kind==0u && gated)){atomicExch(status,9u);return;}
     if(kind==GATE_KIND && index>=gate_count(s)){atomicExch(status,4u);return;}
     if(kind==GATE_KIND && candidate>=3u)return;
