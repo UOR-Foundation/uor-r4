@@ -146,8 +146,10 @@ nothing.
    `src/native_support.rs`, whose `transformerless` is `native_mod.rs` (tokenizers only), and its
    header calls `compiler.rs` "inactive evidence". `uor-r4-graph-compiler` also mounts
    `src/native_support.rs`, which states that no Cargo feature re-enables its historical surface.
-2. **e-means is live and parity-tested** in `crates/uor-r4-discrete/src/e_means.rs`: 4 epochs reach
-   within 1.003x of Lloyd at 16 passes in the unit's synthetic test, and two runs are identical.
+2. **e-means is live and parity-tested, in integer arithmetic**, in
+   `crates/uor-r4-discrete/src/e_means.rs`: Q16 counts/sums, a Q16 cosine table and `i128`
+   distances; 4 epochs reach within 0.999x of Lloyd at 16 passes in the unit's synthetic test, and
+   two runs are identical.
 3. **The only live codebook, A8 address cells, is not a k-means fit.** Its placement is greedy and
    quota-constrained; e-means on the same task measures 2.152x worse weighted cell-L1 on the
    fixture. That arm is opt-in and must not be promoted on this evidence.

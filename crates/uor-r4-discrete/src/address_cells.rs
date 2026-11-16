@@ -680,7 +680,7 @@ fn e_means_cells(
     quota: usize,
     seed: u64,
 ) -> Result<Vec<usize>> {
-    let mut points = vec![0.0f64; v * CELLS];
+    let mut points = vec![0i64; v * CELLS];
     for t in 0..v {
         let mut any = false;
         for &(s, c) in &counts.by_target[t] {
@@ -692,12 +692,14 @@ fn e_means_cells(
             if home >= CELLS {
                 return Err(invalid("fallback cell outside 0..256"));
             }
-            points[t * CELLS + home] += c as f64;
+            let weight = i64::try_from(c)
+                .map_err(|_| invalid("a predecessor count exceeds the integer fit"))?;
+            points[t * CELLS + home] += weight;
             any = true;
         }
         if !any {
             let home = usize::from(fallback_cells[t]);
-            points[t * CELLS + home] = 1.0;
+            points[t * CELLS + home] = 1;
         }
     }
     let centroids = crate::e_means::fit(&points, v, CELLS, CELLS, crate::e_means::EPOCHS, seed)
@@ -705,19 +707,7 @@ fn e_means_cells(
     let mut members: Vec<Vec<usize>> = vec![Vec::new(); CELLS];
     for t in 0..v {
         let point = &points[t * CELLS..(t + 1) * CELLS];
-        let mut best = 0usize;
-        let mut best_distance = f64::INFINITY;
-        for (cluster, centroid) in centroids.chunks_exact(CELLS).enumerate() {
-            let distance: f64 = centroid
-                .iter()
-                .zip(point)
-                .map(|(x, y)| (x - y) * (x - y))
-                .sum();
-            if distance < best_distance {
-                best_distance = distance;
-                best = cluster;
-            }
-        }
+        let best = crate::e_means::nearest(&centroids, CELLS, point);
         members[best].push(t);
     }
     let mut cluster_cell = vec![0usize; CELLS];
@@ -1353,9 +1343,11 @@ mod tests {
         assert_eq!(fitted.distinct_vectors, 512);
         assert_eq!(fitted.occupied_cells, 256);
         let (g, e) = (cost(&greedy.cells), cost(&fitted.cells));
+        let ratio = e.saturating_mul(1_000) / g.max(1);
         eprintln!(
-            "address cells weighted cell-L1 (lower is better): greedy {g}, e-means {e} ({:.3}x)",
-            e as f64 / g as f64
+            "address cells weighted cell-L1 (lower is better): greedy {g}, e-means {e} ({}.{:03}x)",
+            ratio / 1_000,
+            ratio % 1_000
         );
         assert_ne!(
             greedy.cells, fitted.cells,
