@@ -461,7 +461,10 @@ mod tests {
         let b = moved.apply(&stream, &ids, &table, 1, 4).expect("apply");
         assert_eq!(a.picks, b.picks, "the address is scale-free");
         assert_ne!(a.out, b.out, "the payload moves to the artifact's scale");
-        assert!(read.rescale_payload(8, 0).is_err(), "a weight past 2^31 is refused");
+        assert!(
+            read.rescale_payload(8, 0).is_err(),
+            "a weight past 2^31 is refused"
+        );
     }
 
     fn refused<T: std::fmt::Debug>(result: Result<T>, needle: &str) {

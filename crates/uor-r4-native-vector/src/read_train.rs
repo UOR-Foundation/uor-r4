@@ -52,7 +52,10 @@ fn sign(value: i64) -> i64 {
 type Address = [i64; ADDRESS_LANES];
 
 /// Per-row query and key addresses of one batch under one read.
-fn addresses(read: &Q31FirstPickRead, stream: &[i64]) -> Result<(Vec<Address>, Vec<Address>)> {
+pub(crate) fn addresses(
+    read: &Q31FirstPickRead,
+    stream: &[i64],
+) -> Result<(Vec<Address>, Vec<Address>)> {
     let width = read.width();
     let mut queries = Vec::with_capacity(stream.len() / width);
     let mut keys = Vec::with_capacity(stream.len() / width);
@@ -186,7 +189,7 @@ fn conjugate_product(a: [i128; 4], b: [i128; 4]) -> [i128; 4] {
 /// The residual is in sign units (`-2..=2` per lane); the step later divides
 /// the summed credit by `2^(step_shift + 1)`, the residual unit `2^30` over
 /// the product's `2^31`.
-fn add_credit(
+pub(crate) fn add_credit(
     credits: &mut [[i128; 4]],
     row: &[i64],
     residual: &[i64; ADDRESS_LANES],
@@ -206,7 +209,7 @@ fn add_credit(
     Ok(())
 }
 
-fn apply_credit(
+pub(crate) fn apply_credit(
     gates: &[Q31Quaternion],
     credits: &[[i128; 4]],
     step_shift: u32,

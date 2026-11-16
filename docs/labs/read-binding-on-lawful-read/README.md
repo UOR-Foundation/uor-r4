@@ -123,6 +123,19 @@ The integer reference and its finite tests are
 the absent span and the permuted sidecar. The pre-registered 4-arm run must
 use this rank-gap margin; `m_bind` and `W_miss` are unchanged.
 
+### 2.5 The hinge on the served read, and its trainer (2026-11-16, codex-22)
+
+The same hinge, on the native Q31 read the stack serves, is
+`crates/uor-r4-native-vector/src/bind_train.rs`; its trainer is
+`crates/uor-r4-discrete/examples/native_bind_train.rs` (host reference; the device
+twin needs two sidecar words a row, because the rank hinge needs both ranks and the
+pick kernel computes one rival). The candidates are the window's earlier rows, ranked
+by the read's own L1 order, and the labels come from the probe's `.ask`/`.other`
+targets. Measured on the probe's windows with a 128/128 split, the memory arm's held
+bound-pick rate is **0.813 / 0.764** and the `--reverse` arm's is **0.006 / 0.000**:
+the hinge trains the asked fact and does not reach the other fact. The numbers and the
+failures are in `docs/loop/tasks/one-model-end-to-end/codex-22/REPORT.md`.
+
 ---
 
 ## 3. Experimental Design & Verification Ladder
