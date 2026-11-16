@@ -534,13 +534,13 @@ pub struct SpanSet {
     hit: Vec<AtomicU64>,
     bloom: Vec<u64>,
     shift: u32,
-    /// Per distinct span, the number of distinct TRAIN records that hold it (claude-411c). Kept
+    /// Per distinct span, the number of distinct TRAIN records that hold it (claude-414). Kept
     /// only by a counted set: counting compares every candidate, found already or not.
     mult: Option<Vec<AtomicU32>>,
 }
 
 /// The largest TRAIN multiplicity at which a shared span is copied content; from 3 it is
-/// stock wording (claude-411c).
+/// stock wording (claude-414).
 pub const COPIED_MAX: u32 = 2;
 /// The multiplicity buckets of the span classification.
 pub const MULT_BUCKETS: [&str; 5] = ["1", "2", "3-9", "10-99", ">=100"];
@@ -722,7 +722,7 @@ impl SpanSet {
         };
         let borderline = contaminated > 0 && copied * 100 >= contaminated * 8 && copied * 100 <= contaminated * 12;
         let v = json!({
-            "unit": "claude-411c", "span": self.n,
+            "unit": "claude-414", "span": self.n,
             "rule": {
                 "multiplicity": "a shared span's TRAIN multiplicity is the number of distinct TRAIN records holding it; a span repeated inside one TRAIN record counts once",
                 "span_class": format!("copied when the multiplicity is 1..={COPIED_MAX}, stock when it is at least {}", COPIED_MAX + 1),
@@ -904,7 +904,7 @@ pub struct Extras {
     pub templates: Vec<(u64, Vec<u32>)>,
     /// Per span length in `SPANS`, the ids of the contaminated DEV-test records.
     pub contaminated: Vec<Vec<String>>,
-    /// The `GATE_SPAN` classification (claude-411c), when asked for: its summary and top spans.
+    /// The `GATE_SPAN` classification (claude-414), when asked for: its summary and top spans.
     pub classify: Option<(Value, Vec<TopSpan>)>,
 }
 
@@ -919,7 +919,7 @@ pub fn audit_full(plan: &Plan, coder: &Coder, threads: usize, bloom_log2: u32) -
 }
 
 /// `audit_full`, plus the classification of the `GATE_SPAN`-token shared spans by TRAIN
-/// multiplicity, with the `top` spans held by the most DEV-test records (claude-411c).
+/// multiplicity, with the `top` spans held by the most DEV-test records (claude-414).
 pub fn audit_classify(plan: &Plan, coder: &Coder, threads: usize, bloom_log2: u32, top: usize) -> Result<(Value, Extras), String> {
     audit_with(plan, coder, threads, bloom_log2, Some(top))
 }

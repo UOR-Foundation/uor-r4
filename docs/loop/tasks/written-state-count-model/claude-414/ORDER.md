@@ -1,7 +1,7 @@
-# ORDER — written-state-count-model (claude-411c)
+# ORDER — written-state-count-model (claude-414)
 
 Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md) (#3407).
-Unit: claude-411c. Task: `written-state-count-model`, decision item 3 of
+Unit: claude-414. Task: `written-state-count-model`, decision item 3 of
 [claude-411's REPORT](../claude-411/REPORT.md): classify the TRAIN/DEV-test shared spans of the
 D87 donor corpus as stock teacher wording or copied content.
 
@@ -25,7 +25,7 @@ contaminated records hold copied content.
 4. Histograms of multiplicity in buckets 1, 2, 3–9, 10–99 and ≥ 100: over distinct shared spans,
    and over contaminated records by each record's minimum multiplicity.
 5. The top 200 shared spans, ranked by the number of DEV-test records that hold them, are decoded
-   with their multiplicity and class to a laptop-side file under `local/claude/claude-411c/`,
+   with their multiplicity and class to a laptop-side file under `local/claude/claude-414/`,
    never committed (D87 text is never committed).
 
 ## Bar

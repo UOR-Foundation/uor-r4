@@ -314,7 +314,7 @@ fn template_resplit_is_deterministic() {
     assert_eq!(serde_json::from_str::<Value>(&t1).unwrap()["prompts"], 121);
 }
 
-/// The span classification fixture (claude-411c), three DEV-test records over four shards:
+/// The span classification fixture (claude-414), three DEV-test records over four shards:
 /// `dc` holds span A, which one TRAIN record holds; `ds` holds B, which three TRAIN records in
 /// three shards hold; `dr` holds C, which one TRAIN record holds three times.
 fn class_fixture(threads: usize) -> (Value, Vec<TopSpan>) {

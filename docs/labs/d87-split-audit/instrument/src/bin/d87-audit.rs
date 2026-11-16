@@ -8,7 +8,7 @@
 //! diagnostic, the novel-target counts and the per-split target counts. Beside it,
 //! `prompt-templates.tsv` (decoded corpus text) and `contaminated-ids.tsv`, never committed.
 //!
-//! With `--classify-spans <file>` (claude-411c) it also counts each shared 50-token span's
+//! With `--classify-spans <file>` (claude-414) it also counts each shared 50-token span's
 //! TRAIN record multiplicity, writes `<out>/classify-summary.json` (counts only) and decodes the
 //! 200 shared spans held by the most DEV-test records to `<file>` (corpus text, never
 //! committed).
