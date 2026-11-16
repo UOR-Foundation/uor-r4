@@ -73,13 +73,17 @@ panel.
 distance bucket, excludes the asked fact and the earlier slots' asked facts, and returns
 `ReadOut::first_pick(other_value_pos, …)`. `select_with_table` fills the payload with the picked
 value's **table row** (the width-wide row the hard copy writes); `select` keeps the one-element token
-for tests. Four finite tests: a `K=1` row picks the only other fact (support 49, payload 529), an
+for tests. Six finite tests: a `K=1` row picks the only other fact (support 49, payload 529), an
 ambiguous row takes the first candidate and excludes an earlier slot, a missing relation or bucket
-selects nothing, and the table payload is the value's row (a short table is refused). A fifth test steps the task window through a real `IntegerStackModel` session and reads the other
-fact's value row from the model's writer table. Integer library: **682 passed**, 1 ignored.
+selects nothing, the table payload is the value's row (a short table is refused), a full
+`IntegerStackModel` session steps the task window and reads the other fact's value row, and a
+session configured with `set_relation_read(read, header, header_last, scale)` applies the pick at the
+header's last row (`last_relation_pick` 50, while a plain session reports none). Integer library:
+**683 passed**, 1 ignored.
 
-The ranges are the probe's encoding; the `ReadOut` shape is the served contract. The next step is to
-select this read in the session's read path and run the C2′ panel.
+The session dispatch is a runtime prototype: the payload is added after the FBS read hook. The proper
+ADR-0007 form is a new `Read` artifact field, not a session setting; that schema field is the next
+unit. The ranges are the probe's encoding; the `ReadOut` shape is the served contract.
 
 ## Panel: both seeds, both splits
 
@@ -133,9 +137,9 @@ fact is suppressed. The injection is the probe's diagnostic hard copy, not the i
 
 ## Still open
 
-- **Integrate stage 2 into the model read.** The probe's rule uses the window's fact positions (the
-  generator's stream), so a served read needs a fact/relation scan over the context before the
-  candidate rule. The `ReadOut` support/payload interface is the place; that is the next unit.
+- **The artifact arm.** The relation read is a session setting now; the ADR-0007 form is a new
+  `Read` field in the artifact, with export, parse, refusal and a schema version. The step dispatch
+  itself is proven: a configured session applies the pick and reports `last_relation_pick`.
 - The `chose_target` half on the C2′ panel, with stage 2 active.
 - The 395/397 bars and the production panel.
 - Whether a global gate search would move the gate ceiling; not this mechanism.

@@ -87,6 +87,12 @@ impl RelationRead {
         })
     }
 
+    /// The asked fact's value position at `query_pos`, or `None` when the token
+    /// there is not a query. The session tracks the earlier slots' asks with it.
+    pub fn asked_at(&self, tokens: &[u32], query_pos: usize) -> Option<usize> {
+        self.asked(tokens, query_pos).map(|(asked, _)| asked)
+    }
+
     /// The read at `query_pos`: the asked fact's other fact, with the value
     /// token as a one-element payload. `earlier_asked` are the earlier slots'
     /// asked value positions in the same window.
@@ -204,6 +210,38 @@ mod tests {
             .collect();
         assert_eq!(out.payload.as_deref(), Some(&row[..]));
         assert_eq!(out.check(), Ok(()));
+    }
+
+    #[cfg(feature = "fbs-synthetic")]
+    #[test]
+    fn a_served_session_applies_the_rule_pick() {
+        use crate::stack::synthetic::{synthetic_fbs_trunk_with, FbsSynth, FBS_SYNTH_SMALL};
+        use crate::stack::{export_fbs_trunk_uorlut01, IntegerStackModel};
+
+        let shape = FbsSynth {
+            vocab: 2_048,
+            context: 192,
+            ..FBS_SYNTH_SMALL
+        };
+        let snap = synthetic_fbs_trunk_with(20_261_710, shape);
+        let bytes = export_fbs_trunk_uorlut01(&snap).expect("export a trunk");
+        let model = IntegerStackModel::parse(&bytes).expect("parse");
+        let mut tokens = window(false);
+        tokens[101..=104].copy_from_slice(&[48, 49, 50, 51]);
+        tokens[105] = 528;
+
+        let mut session = model.session();
+        session.set_relation_read(RelationRead::PROBE, 4, 51, 16);
+        for &id in &tokens[..=104] {
+            session.step_native(id).expect("step the header");
+        }
+        assert_eq!(session.last_relation_pick(), Some(50));
+
+        let mut plain = model.session();
+        for &id in &tokens[..=104] {
+            plain.step_native(id).expect("step the header");
+        }
+        assert_eq!(plain.last_relation_pick(), None);
     }
 
     #[test]

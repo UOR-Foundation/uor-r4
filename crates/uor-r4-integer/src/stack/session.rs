@@ -33,6 +33,7 @@ use crate::bitcode::{BitCode, BITCODE_LANES};
 
 use super::address::{address_image, AddressImage};
 use super::q31_read::{q31_read_image, Q31ReadStep, ServedQ31Read};
+use super::relation_read::RelationRead;
 use uor_r4_native_vector::Q31ReadHistory;
 use super::content_readout::{ContentReadout, CONTENT_CODE_SIGNATURE_BITS};
 use super::flock::{
@@ -1739,6 +1740,7 @@ impl IntegerStackModel {
             place: PlaceState::default(),
             spoken: None,
             open_reply_start: false,
+            relation: None,
             hamming_trace: None,
             native_q31_trace: None,
             q31_history: Q31ReadHistory::new(),
@@ -2192,6 +2194,55 @@ impl BucketTrace {
 }
 
 /// Incremental decoding of one stream of at most `context` positions.
+/// A configured relation read (a runtime prototype of the `Read` stage's relation arm).
+struct ServedRelation {
+    read: RelationRead,
+    header: usize,
+    header_last: u32,
+    scale: i64,
+    earlier: Vec<usize>,
+    last_pick: Option<usize>,
+}
+
+/// Add the relation read's value row to the stream at the header's last row.
+fn apply_relation(
+    relation: &mut ServedRelation,
+    tokens: &[u32],
+    n: &mut [i64],
+    table: &[i16],
+    width: usize,
+) {
+    let Some(row) = tokens.len().checked_sub(1) else {
+        return;
+    };
+    if tokens.get(row) != Some(&relation.header_last) {
+        return;
+    }
+    let Some(query_pos) = row.checked_sub(relation.header) else {
+        return;
+    };
+    let Some(asked) = relation.read.asked_at(tokens, query_pos) else {
+        return;
+    };
+    let Some(out) =
+        relation
+            .read
+            .select_with_table(tokens, query_pos, &relation.earlier, table, width)
+    else {
+        return;
+    };
+    let Some(payload) = out.payload.as_ref() else {
+        return;
+    };
+    for (slot, word) in n.iter_mut().zip(payload) {
+        let added = word.saturating_mul(i128::from(relation.scale));
+        *slot =
+            slot.saturating_add(added.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64);
+    }
+    relation.last_pick = Some(out.pick() as usize);
+    relation.earlier.push(asked);
+}
+
 pub struct IntegerStackSession<'m> {
     model: &'m IntegerStackModel,
     position: usize,
@@ -2223,6 +2274,8 @@ pub struct IntegerStackSession<'m> {
     /// Whether the asked place read opens the reply's first row (claude-363); a caller's
     /// setting, off by default ([`Self::set_open_reply_start`]).
     open_reply_start: bool,
+    /// The relation read configured on this session; `None` by default.
+    relation: Option<ServedRelation>,
     /// While `Some`, each Hamming read's choices at every step (claude-235's trace).
     hamming_trace: Option<Vec<HammingStepRead>>,
     /// While `Some`, every recurrence lane's raw native-Q31 transition.
@@ -2357,6 +2410,31 @@ impl IntegerStackSession<'_> {
     /// The read's steps recorded since the trace was turned on; `None` while it is off.
     pub fn q31_read_trace(&self) -> Option<&[Q31ReadStep]> {
         self.q31_read_trace.as_deref()
+    }
+
+    /// Configure the relation read: `header` tokens follow the query, `header_last`
+    /// is the header's last token, and `scale` multiplies the picked value's row.
+    /// Off by default; the relation read is applied at the row that ends the header.
+    pub fn set_relation_read(
+        &mut self,
+        read: RelationRead,
+        header: usize,
+        header_last: u32,
+        scale: i64,
+    ) {
+        self.relation = Some(ServedRelation {
+            read,
+            header,
+            header_last,
+            scale,
+            earlier: Vec::new(),
+            last_pick: None,
+        });
+    }
+
+    /// The value position the last applied relation read picked, if any.
+    pub fn last_relation_pick(&self) -> Option<usize> {
+        self.relation.as_ref().and_then(|relation| relation.last_pick)
     }
 
     /// Let a full context drop its oldest token and continue, instead of refusing at
@@ -4271,6 +4349,9 @@ fn stack_step_fbs(
             indexes,
         );
     }
+    if let Some(relation) = session.relation.as_mut() {
+        apply_relation(relation, &session.tokens, &mut b.scratch[..d], &fbs.writer_table, d);
+    }
     if let (Some(step), Some(decision)) = (traced.as_mut(), session.decision.as_deref_mut()) {
         step.readout = decision.take_read();
     }
@@ -4575,6 +4656,9 @@ fn stack_step_fbs_timed(
             opening,
             indexes,
         );
+    }
+    if let Some(relation) = session.relation.as_mut() {
+        apply_relation(relation, &session.tokens, &mut b.scratch[..d], &fbs.writer_table, d);
     }
     // The turn memory's move (units 2-3), after the Hamming readout as in the float trunk: the
     // opening table at the reply's first step's row, the reply table each later row.
