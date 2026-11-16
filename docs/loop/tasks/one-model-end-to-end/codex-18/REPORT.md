@@ -121,6 +121,13 @@ half could not. The other-fact rule stays exact on `K=1` in the same runs. Sheet
 `docs/harness/prep/one-model-end-to-end-c2-prime-control-2026-11-16.md`; the GPU arm is NOT RUN
 pending a sheet addendum and a non-author FIT.
 
+## Served decode
+
+The rule picks injected as the hard copy's first pick (`recall-payload-probe --native-picks`) answer
+the other fact at **`R_oth` 0.406 / 0.436** (scale 16) and the asked fact at **0**, against the
+A-ext baseline `R_oth` 0.002. The mechanism passes the pick class and the served answer; the asked
+fact is suppressed. The injection is the probe's diagnostic hard copy, not the integer session.
+
 ## Still open
 
 - **Integrate stage 2 into the model read.** The probe's rule uses the window's fact positions (the

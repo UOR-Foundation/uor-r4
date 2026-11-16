@@ -57,12 +57,27 @@ The bar is 0.90 of the 768 rows with a previous fact (per bucket: 378/390 seed 1
 finds the previous fact **768/768**, and the A-ext asked read 3/768. So the determined control
 separates the rule from the gate, and the gate fails it: another gate fit is not the mechanism.
 
+## Served decode (rule picks injected)
+
+`recall-rule-read --picks-out` writes the rule's 1-based pick per row; `recall-payload-probe
+--native-picks` injects it as the hard copy's first pick. On ext-s1, scale 16:
+
+| Reading | Rule picks | A-ext baseline |
+|---|---|---|
+| `R_oth` (decoded token = the other fact) | **0.406 / 0.436** | 0.002 |
+| `R_ask` (decoded token = the asked fact) | **0** | 0.984 / 0.969 |
+
+So the rule read passes the **served answer** as well as the pick class: the model answers the other
+fact at the all-rows ceiling and the asked fact at zero. The injection is the probe's hard copy (the
+D85 diagnostic), not the integer session; the served integer read is the next unit.
+
 ## Verdict
 
-The approved control **passes for the rule read** (host, 1.000) and **fails for the learned gate**
-(0.142/0.139). The C2′ `chose_target` half is now a determined target that the rule follows and the
-gate does not. The `chose_other` column here is the asked (salience) count, not the C2′ other-fact
-half; that half is measured separately by the rule (exact on `K=1`).
+The approved control **passes for the rule read** (host 1.000; served answer `R_oth` 0.406/0.436,
+`R_ask` 0) and **fails for the learned gate** (0.142/0.139). The C2′ `chose_target` half is now a
+determined target that the rule follows and the gate does not. The `chose_other` column here is the
+asked (salience) count, not the C2′ other-fact half; that half is measured separately by the rule
+(exact on `K=1`).
 
 ## Sources
 
