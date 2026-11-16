@@ -115,7 +115,8 @@ fn mock_with(status: fn(usize, &Value) -> u16) -> (String, Arc<Mock>) {
 }
 
 fn mock_server() -> String {
-    mock_with(ok_always).0
+    let (url, _) = mock_with(ok_always);
+    url
 }
 
 /// A fresh run root with a bank of `n` prompts.
