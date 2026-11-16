@@ -39,7 +39,7 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 4×H200 po
    - **No substitute.** If that offer is gone, or its listed price (before storage) is above $56.85/h, nothing is leased and the unit reports.
    - **Storage.** Vast adds a disk charge: at `UOR_POD_VAST_DISK_GB=700` the all-in price is $57.80/h. The 700 GB holds the 511 GB of weights, the image, the client build and `out/`.
      - So the lease sets `UOR_POD_MAX_RATE=58` for this lease only.
-     - That setting applies only once the parent session confirms that Casey's approval covers the disk charge. Without that confirmation, nothing is leased.
+     - Casey confirmed the disk charge. Asked in claude's chat at about 2026-11-16T04:40Z, "Is the disk charge covered by your approval?", Casey answered, word for word: "Yes, that's fine". The parent session relayed this. It covers offer 60874142 at about $57.80/h all-in with 700 GB of disk, and `UOR_POD_MAX_RATE=58` for this one-hour lease only; a larger disk (1.2 TB) is not covered.
    - **All labs' pods.** Right before `up`, the driver reads `uor-pod status` (with the adapter) and `vastai show instances`. The lease goes ahead only if no other pod of any lab is running, because any other pod would take the total past $58/h.
    - **Lease command:**
      `UOR_POD_VAST_BIN=~/uor-r4/local/pod-provider-target/debug/uor-r4-pod-provider UOR_POD_VAST_MIN_RELIABILITY=0.985 UOR_POD_MAX_RATE=58 UOR_POD_VAST_DISK_GB=700 UOR_POD_VAST_MIN_INET_MBPS=1000 UOR_POD_IMAGE=vllm/vllm-openai:v0.33.0-x86_64 scripts/pod/uor-pod up --lab claude --session claude-400 --purpose "D87 donor corpus: 8xH200 measured hour (Casey 04:30Z)" --hours 24 --gpu h200 --count 8 --no-bootstrap --owner-approved`
