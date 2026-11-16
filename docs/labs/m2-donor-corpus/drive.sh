@@ -245,7 +245,7 @@ offer)
   mkdir -p "$LOCAL"
   "${VASTAI:-vastai}" show instance "${POD#vast-}" --raw > "$LOCAL/offer.json"
   jq -c '{id, machine_id, host_id, gpu_name, num_gpus, cpu_ram, bw_nvlink, gpu_mem_bw, hosting_type, dph_total, geolocation, driver_version}' "$LOCAL/offer.json"
-  if jq -e '(.num_gpus == 4 or .num_gpus == 8) and (.gpu_name | test("H200")) and .cpu_ram >= 1000000 * (.num_gpus / 4) and (.bw_nvlink // 0) >= 400' "$LOCAL/offer.json" > /dev/null; then
+  if jq -e '(.num_gpus == 4 or .num_gpus == 8) and (.gpu_name | test("H200|B200")) and .cpu_ram >= 1000000 * (.num_gpus / 4) and (.bw_nvlink // 0) >= 400' "$LOCAL/offer.json" > /dev/null; then
     log "offer metadata matches the sheet"
   else
     alert "rented instance does not match the sheet's filters: down it now"; exit 1

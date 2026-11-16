@@ -42,14 +42,18 @@ setup)
 serve)
   # One endpoint, one TP4 replica per four GPUs; the recipe's H200 settings,
   # no speculative decoding (the recipe marks it for small batches).
+  # TP (default 4, the H200 recipe) and ATTN_CONFIG (the B200 recipe's --attention-config JSON,
+  # sheet amendment 3: TP=2) are the only per-GPU knobs; DP is the GPU count over TP.
   MAX_SEQS=${MAX_SEQS:-256}
-  NG=$(nvidia-smi -L | wc -l); DP=$((NG / 4))
-  [ "$DP" -ge 1 ] && [ $((DP * 4)) -eq "$NG" ] || { echo "serve: $NG GPUs is not a multiple of 4"; exit 1; }
-  echo "serve: $NG GPUs, data-parallel $DP x tensor-parallel 4"
+  TP=${TP:-4}
+  NG=$(nvidia-smi -L | wc -l); DP=$((NG / TP))
+  [ "$DP" -ge 1 ] && [ $((DP * TP)) -eq "$NG" ] || { echo "serve: $NG GPUs is not a multiple of $TP"; exit 1; }
+  echo "serve: $NG GPUs, data-parallel $DP x tensor-parallel $TP, max-num-seqs $MAX_SEQS${ATTN_CONFIG:+, attention $ATTN_CONFIG}"
   nohup env VLLM_ENGINE_READY_TIMEOUT_S=7200 vllm serve "$MODEL_DIR" \
     --served-model-name donor --port $PORT \
     --tokenizer-mode deepseek_v41 \
-    --data-parallel-size "$DP" --tensor-parallel-size 4 \
+    --data-parallel-size "$DP" --tensor-parallel-size "$TP" \
+    ${ATTN_CONFIG:+--attention-config "$ATTN_CONFIG"} \
     --kv-cache-dtype fp8 \
     --engram-config '{"cpu_offload":true}' \
     --reasoning-parser deepseek_v41 \
