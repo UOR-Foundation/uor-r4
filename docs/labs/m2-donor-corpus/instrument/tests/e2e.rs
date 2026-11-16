@@ -8,13 +8,15 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 const BASE_SEED: u64 = 77;
 
 fn reply(body: &Value) -> Value {
     let msgs = body["messages"].as_array().unwrap();
     let last = msgs.last().unwrap()["content"].as_str().unwrap();
-    let seed = body["seed"].as_u64().unwrap();
+    let seed = body["seed"].as_u64().unwrap_or(0);
     let mut answer = format!("ans[{}] s{seed}: {last}", msgs.len());
     if last.contains("MARK") {
         answer.push_str(" <think>");
@@ -37,49 +39,287 @@ fn reply(body: &Value) -> Value {
         "usage": {"completion_tokens": 10 + last.len(), "prompt_tokens": 5}})
 }
 
-fn serve(stream: TcpStream) {
+/// What a mock server saw and how it answers: `status(n, body)` gives the HTTP status for
+/// the n-th POST (200 answers with `reply`).
+struct Mock {
+    status: fn(usize, &Value) -> u16,
+    count: AtomicUsize,
+    seen: Mutex<Vec<(String, Value)>>,
+}
+
+fn ok_always(_: usize, _: &Value) -> u16 {
+    200
+}
+
+fn serve(stream: TcpStream, mock: Arc<Mock>) {
     let mut r = BufReader::new(stream.try_clone().unwrap());
     let mut w = stream;
     loop {
         let mut len = 0usize;
-        let mut first = true;
+        let mut head = String::new();
         loop {
             let mut line = String::new();
             if r.read_line(&mut line).unwrap_or(0) == 0 {
                 return;
             }
-            if first {
+            if head.is_empty() {
                 assert!(line.starts_with("POST /v1/chat/completions"), "{line}");
-                first = false;
             }
             let l = line.to_ascii_lowercase();
             if let Some(v) = l.strip_prefix("content-length:") {
                 len = v.trim().parse().unwrap();
             }
+            head.push_str(&line);
             if line == "\r\n" {
                 break;
             }
         }
         let mut body = vec![0u8; len];
         r.read_exact(&mut body).unwrap();
-        let out = reply(&serde_json::from_slice(&body).unwrap()).to_string();
-        let head = concat!("HTTP/1", ".1 200 OK\r\nContent-Type: application/json\r\n");
-        let msg = format!("{head}Content-Length: {}\r\n\r\n{out}", out.len());
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        let n = mock.count.fetch_add(1, Ordering::SeqCst);
+        let code = (mock.status)(n, &body);
+        let out = if code == 200 {
+            reply(&body).to_string()
+        } else {
+            "{}".to_string()
+        };
+        mock.seen.lock().unwrap().push((head, body));
+        let proto = concat!("HTTP/1", ".1");
+        let msg = format!(
+            "{proto} {code} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{out}",
+            out.len()
+        );
         if w.write_all(msg.as_bytes()).is_err() {
             return;
         }
     }
 }
 
-fn mock_server() -> String {
+fn mock_with(status: fn(usize, &Value) -> u16) -> (String, Arc<Mock>) {
+    let mock = Arc::new(Mock {
+        status,
+        count: AtomicUsize::new(0),
+        seen: Mutex::new(vec![]),
+    });
     let l = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
     let addr = l.local_addr().unwrap();
+    let m = mock.clone();
     std::thread::spawn(move || {
         for s in l.incoming().flatten() {
-            std::thread::spawn(move || serve(s));
+            let m = m.clone();
+            std::thread::spawn(move || serve(s, m));
         }
     });
-    format!("http://{addr}")
+    (format!("http://{addr}"), mock)
+}
+
+fn mock_server() -> String {
+    mock_with(ok_always).0
+}
+
+/// A fresh run root with a bank of `n` prompts.
+fn setup(name: &str, n: usize) -> (PathBuf, PathBuf, PathBuf) {
+    let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let bank = root.join("bank.jsonl");
+    fs::write(
+        &bank,
+        (0..n).map(|i| bank_line(i) + "\n").collect::<String>(),
+    )
+    .unwrap();
+    (root.join("run"), bank, root)
+}
+
+fn gen_args(server: &str, bank: &Path, dir: &Path, extra: &[(&str, String)]) -> Args {
+    let mut a = args(&[
+        ("server", server.to_string()),
+        ("prompts", bank.display().to_string()),
+        ("out", dir.display().to_string()),
+        ("budget", "1000000".into()),
+        ("instrument-commit", "testcommit".into()),
+        ("parallel", "1".into()),
+    ]);
+    a.extend(args(extra));
+    a
+}
+
+const KEY: &str = "sk-test-0123456789abcdef";
+
+/// Every file under `dir`, recursively.
+fn all_files(dir: &Path) -> Vec<PathBuf> {
+    let mut v = vec![];
+    for e in fs::read_dir(dir).unwrap() {
+        let p = e.unwrap().path();
+        if p.is_dir() {
+            v.extend(all_files(&p));
+        } else {
+            v.push(p);
+        }
+    }
+    v
+}
+
+/// `openai` mode: no seed and no template kwargs in any body, the bearer header on every
+/// request, the extra body merged, and the key in no file the run wrote.
+#[test]
+fn openai_mode_body_auth_and_no_key_on_disk() {
+    let (dir, bank, root) = setup("e2e-openai", 6);
+    let key_file = root.join("key.txt");
+    fs::write(&key_file, format!("{KEY}\n")).unwrap();
+    let extra = root.join("extra.json");
+    fs::write(&extra, r#"{"thinking": {"type": "enabled"}}"#).unwrap();
+    let (server, mock) = mock_with(ok_always);
+    let seg = cmd_generate(&gen_args(
+        &server,
+        &bank,
+        &dir,
+        &[
+            ("api", "openai".into()),
+            ("api-key-file", key_file.display().to_string()),
+            ("extra-body", extra.display().to_string()),
+        ],
+    ))
+    .unwrap();
+    assert_eq!(seg["stopped_by"], "exhausted");
+    assert_eq!(
+        (&seg["api"], &seg["auth"], &seg["base_seed"]),
+        (&json!("openai"), &json!("file"), &Value::Null)
+    );
+    // The key file ends with a newline; the header carries the key without it.
+    let auth = format!("authorization: bearer {}\r\n", KEY.to_ascii_lowercase());
+    {
+        let seen = mock.seen.lock().unwrap();
+        assert!(seen.len() >= 6);
+        for (head, body) in seen.iter() {
+            let o = body.as_object().unwrap();
+            assert!(!o.contains_key("seed") && !o.contains_key("chat_template_kwargs"));
+            assert_eq!(body["thinking"], json!({"type": "enabled"}));
+            assert!(head.to_ascii_lowercase().contains(&auth), "{head}");
+        }
+        mock.count.store(0, Ordering::SeqCst);
+    }
+    let (kept, _, _) = census(&dir);
+    assert!(!kept.is_empty());
+    for p in all_files(&dir) {
+        let b = fs::read(&p).unwrap();
+        assert!(
+            !b.windows(KEY.len()).any(|w| w == KEY.as_bytes()),
+            "the key is in {}",
+            p.display()
+        );
+    }
+    // The env form names the variable and is trimmed too; vllm mode records its seed.
+    std::env::set_var("DONOR_TEST_KEY", format!(" {KEY}\n"));
+    mock.seen.lock().unwrap().clear();
+    let dir2 = root.join("run-env");
+    let seg = cmd_generate(&gen_args(
+        &server,
+        &bank,
+        &dir2,
+        &[("api-key-env", "DONOR_TEST_KEY".into())],
+    ))
+    .unwrap();
+    assert_eq!(
+        (&seg["api"], &seg["auth"]),
+        (&json!("vllm"), &json!("env:DONOR_TEST_KEY"))
+    );
+    assert_eq!(seg["base_seed"], 20261116);
+    let seen = mock.seen.lock().unwrap();
+    assert!(!seen.is_empty());
+    for (head, body) in seen.iter() {
+        assert!(body["seed"].is_u64() && body["chat_template_kwargs"].is_object());
+        assert!(head.to_ascii_lowercase().contains(&auth), "{head}");
+    }
+    drop(seen);
+    fs::remove_dir_all(&root).unwrap();
+}
+
+/// Bad options are refused before any request, and no error carries the key.
+#[test]
+fn option_errors_are_refused() {
+    let (dir, bank, root) = setup("e2e-options", 2);
+    let (server, mock) = mock_with(ok_always);
+    let bad_key = root.join("bad.txt");
+    fs::write(&bad_key, "sk-has space\n").unwrap();
+    std::env::set_var("DONOR_TEST_EMPTY", "");
+    for extra in [
+        vec![("api", "openai".to_string()), ("seed", "5".into())],
+        vec![("api", "grpc".into())],
+        vec![
+            ("api-key-env", "DONOR_TEST_EMPTY".into()),
+            ("api-key-file", bad_key.display().to_string()),
+        ],
+        vec![("api-key-env", "DONOR_TEST_EMPTY".into())],
+        vec![("api-key-env", "DONOR_TEST_UNSET_XYZ".into())],
+        vec![("api-key-file", bad_key.display().to_string())],
+    ] {
+        let e = cmd_generate(&gen_args(&server, &bank, &dir, &extra)).unwrap_err();
+        assert!(!e.contains("sk-has"), "{e}");
+    }
+    assert_eq!(mock.count.load(Ordering::SeqCst), 0);
+    fs::remove_dir_all(&root).unwrap();
+}
+
+/// 401 stops the segment as `refused` and drops nothing.
+#[test]
+fn unauthorized_stops_refused_without_dropping() {
+    let (dir, bank, root) = setup("e2e-401", 4);
+    let (server, mock) = mock_with(|_, _| 401);
+    let seg = cmd_generate(&gen_args(&server, &bank, &dir, &[])).unwrap();
+    assert_eq!(seg["stopped_by"], "refused");
+    let (kept, dropped, _) = census(&dir);
+    assert!(
+        kept.is_empty() && dropped.is_empty(),
+        "{kept:?} {dropped:?}"
+    );
+    assert_eq!(mock.count.load(Ordering::SeqCst), 1);
+    fs::remove_dir_all(&root).unwrap();
+}
+
+/// A 429 is backed off and retried; the record is kept.
+#[test]
+fn rate_limit_then_ok_keeps_the_record() {
+    let (dir, bank, root) = setup("e2e-429", 1);
+    let (server, mock) = mock_with(|n, _| if n == 0 { 429 } else { 200 });
+    let seg = cmd_generate(&gen_args(&server, &bank, &dir, &[])).unwrap();
+    assert_eq!(seg["stopped_by"], "exhausted");
+    let (kept, dropped, _) = census(&dir);
+    assert_eq!((kept, dropped), (vec!["q00".to_string()], vec![]));
+    // q00 is two-turn: one 429 then two answers.
+    assert_eq!(mock.count.load(Ordering::SeqCst), 3);
+    fs::remove_dir_all(&root).unwrap();
+}
+
+/// A 429 that outlasts the server wait leaves the prompt undone.
+#[test]
+fn rate_limit_past_the_wait_abandons() {
+    let (dir, bank, root) = setup("e2e-429-wait", 2);
+    let (server, _) = mock_with(|_, _| 429);
+    let seg = cmd_generate(&gen_args(
+        &server,
+        &bank,
+        &dir,
+        &[("server-wait-seconds", "1".into())],
+    ))
+    .unwrap();
+    assert_eq!(seg["stopped_by"], "server");
+    let (kept, dropped, _) = census(&dir);
+    assert!(kept.is_empty() && dropped.is_empty());
+    fs::remove_dir_all(&root).unwrap();
+}
+
+/// 32 consecutive 400s stop the segment as `refused` instead of dropping the whole bank.
+#[test]
+fn consecutive_bad_requests_stop_refused() {
+    let (dir, bank, root) = setup("e2e-400", 40);
+    let (server, _) = mock_with(|_, _| 400);
+    let seg = cmd_generate(&gen_args(&server, &bank, &dir, &[])).unwrap();
+    assert_eq!(seg["stopped_by"], "refused");
+    let (kept, dropped, _) = census(&dir);
+    assert_eq!((kept.len(), dropped.len()), (0, 32));
+    fs::remove_dir_all(&root).unwrap();
 }
 
 fn bank_line(i: usize) -> String {

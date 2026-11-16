@@ -1,4 +1,4 @@
-use m2_donor_corpus::{check_record, parse_reply, request_body, Request};
+use m2_donor_corpus::{check_record, parse_reply, request_body, Api, Request};
 use serde_json::json;
 
 fn single() -> serde_json::Value {
@@ -66,6 +66,7 @@ fn request_body_uses_integers_and_extra_overrides() {
         max_tokens: 16384,
         effort: 50,
         base_seed: 1,
+        api: Api::Vllm,
         extra: Some(json!({"top_p": 1, "chat_template_kwargs": {"thinking": false}})),
     };
     let b = request_body(&req, &json!([]), 9);
