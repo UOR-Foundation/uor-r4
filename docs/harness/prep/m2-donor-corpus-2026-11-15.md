@@ -169,6 +169,12 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 4×H200 po
      - It stops (`refused`) on 401, 402 or 403, and on 32 refusals in a row. It backs off on 429.
      - Base URL and model come from the command line, so the provider is not fixed: `https://api.deepseek.com`, model `deepseek-flash`. DeepSeek's page names it DeepSeek-V4.1-Flash-1017 and allows at most 2,500 requests in flight.
      - The client runs on the laptop. It is an HTTP client with no model code, and nothing is trained or evaluated there.
+   - **Sampling (DeepSeek's thinking-mode guide, https://api-docs.deepseek.com/guides/thinking_mode, read by the parent 16 Nov):**
+     - The `--extra-body` file is `{"thinking": {"type": "enabled"}, "reasoning_effort": "high"}`. The response carries the reasoning in `choices[0].message.reasoning_content`, which the client already reads.
+     - In thinking mode the API ignores `temperature`, and on `deepseek-flash` it clamps `top_p` to 0.95–1.0. The body still sends temperature 1, top_p 1 and max_tokens 16,384, as on pod 3, but the API samples at its own settings.
+     - Pod 3 samples at temperature 1, top_p 1, effort 50, and these API settings cannot match that exactly. The receipt records what was sent and the documented limits, never a claim that the sampling matched.
+     - The effort level is chosen by the probe. `high` is tried first; if the mean length is outside ±30% of pod 3's, one more probe runs at the neighbouring level in that direction (`low` or `max`). The level whose length is closer is used, and recorded.
+     - Multi-turn prompts send only the previous answer back, never the reasoning, as on pod 3.
    - **Seed rule: recorded, not replayable.** API records carry no seed; their segment says `"api": "openai", "base_seed": null`. The receipt and the REPORT say that these records cannot be regenerated from a seed. Pod 3's records keep their seeds, though batched vLLM decoding is not bit-replayable either.
    - **Model-version check (the probe), before any API corpus record:**
      - 64 prompts from part 0 that pod 3 has already answered, sent through the API into `local/m2-run/api-probe/`. That folder is not part of the corpus.
@@ -176,7 +182,10 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 4×H200 po
      - **Consistent** if the `model` field names the Flash model, every turn has reasoning, math answers agree on at least 70% of the prompts where pod 3's answer is extractable, and the mean length is within ±30%. Sampling at temperature 1 makes exact agreement impossible.
      - **Inconsistent** otherwise: no API corpus is made, pod 3 keeps running, and the parent puts the numbers to Casey.
      - The weights behind an API cannot be verified, so the receipt records the provider, the model id and the `model` field returned, never a weights hash.
-   - **Terms:** no API corpus record is made until the parent reports that the provider's terms allow its outputs to train our model, quoting those terms. The REPORT carries that quote.
+   - **Terms (reported by the parent, 16 Nov, quoted from the source pages):**
+     - DeepSeek Open Platform Terms §4.2 assigns the Output rights to the user. It says you "may apply the Inputs and Outputs … to a wide range of use cases, including … training other models (such as model distillation)" (https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html).
+     - OpenAI Services Agreement §3.3(e), by contrast: the customer will not, "except for a Permitted Exception, use Output to develop artificial intelligence models that compete with OpenAI's products and services" (https://openai.com/policies/services-agreement/).
+     - So the API provider is DeepSeek (`deepseek-flash`), as D87 chose. The base URL and model stay on the command line. The parent records Casey's switch to the API as D89 in its own PR. The REPORT carries both quotes.
    - **Off-peak only:** off-peak is outside 01:00–04:00Z and 06:00–10:00Z on weekdays, at $0.60 per 1M output tokens and $0.15 per 1M cache-miss input tokens. Peak is double.
      - Each API segment's `--max-seconds` ends it at least 20 min before the next peak window, so prompts still in flight finish off-peak.
      - The first segment starts no earlier than 10:00Z on 16 Nov.
