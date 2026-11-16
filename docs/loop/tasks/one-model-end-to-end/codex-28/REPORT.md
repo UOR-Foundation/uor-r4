@@ -52,3 +52,30 @@ key" and "the model has a question key it was never given".
 - The `--decision-trace` path refuses an unsnapped artifact ("the snap is not a decision it
   records"), so the gate uses `--hamming-trace` alone, which steps the artifact and emits each head's
   kept positions per row.
+
+## The full arm and its gate (seed 2, 16,384 steps, 45 min)
+
+The arm trained on the 4090 in **2,687 s** (0.164 s/step; dev top-1 peaked at 527/14,287 at step
+12,288 and read 398 at 16,384; openings 587/1,226). It exported to an 18,661,248 B `/7` artifact,
+sha `a890d112…`, whose record reads `asks [True, True]`, **`carry_rows 2`**, depths [2, 6], heads 4,
+kept 16, with `hamming.d6.carry` present.
+
+**The gate is negative on the episode, and the carry did train.** At the first reply read (row 135)
+no head at either depth keeps any of the value's three occurrences — pos 9 (assert), 22 (ack) or 126
+(the memory line). The carry table itself is not idle: **1,359 of 4,096 gains are non-zero**, the
+largest +83,762 and -71,127 at Q16. But the **value token 2194 (`' ser') has a gain of −158 at Q16**
+(about −0.0024), i.e. the carry learned other tokens and not the value.
+
+**Why: the reach is two rows and the gap is six to eight.** At the reply start the rows behind are
+the memory line's tail and the role header, not the question; the question's last token (and the
+line's value) sit ~6–8 rows back. `ASK_CARRY_MAX` is 4,096, so this is not a structural ceiling — it
+is a vocabulary of reach. The arm tested H = 2 and the protocol's injected line makes the gap longer
+than 2.
+
+**The next unit is therefore one flag**: the same arm at `--hamming-carry-question 8`, which spans
+the gap to the question and to the line's value, with the same gate and then a bare-value read (no
+line, held-out value).
+
+**Also found:** `--turn-memory-tail 9` refuses the export at 64 steps (`memory.reply.keys: entry 0 is
+not a key this engine reads`), and `--decision-trace` refuses an unsnapped artifact ("the snap is not
+a decision it records"), so the gate runs on `--hamming-trace` alone.
