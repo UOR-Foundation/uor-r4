@@ -18,7 +18,7 @@ This unit is a finite kernel test plus a throughput probe on an existing D87 sli
 2. **Shared operators.** One counting operator in its own CUDA module, `ngram_count.cu`, built ahead of time by nvcc into its own admitted PTX and cubin through `build.rs`. No NVRTC, and nothing is appended to `CUDA_STACK_SOURCE` or `discrete.cu`. The host side packs keys, plans partitions, assembles partitions and hashes; it does no counting.
 3. **Replay oracle.** A test-only CPU oracle counts the same triples with an ordered map, independent of the GPU method. The D85 replay identity is the SHA-256 of the canonical triple stream per order. GPU and oracle must give the same bytes, and the SHA must not change across runs or partition sizes.
 4. **Forward, gradient, update.** The update rule is "count": integer sums only. The kernels use no float, and no atomics whose order could reach the output. A planted single-count change must be caught.
-5. **Serialization.** The lossless form is the canonical triple stream itself: 22 bytes per triple (key u128 LE, next u16 LE, count u32 LE) in ascending (key, next) order. The context stream is 36 bytes per record. The frozen pruned form is P1's work.
+5. **Serialization.** The lossless form is the canonical triple stream itself: 22 bytes per triple (key u128 LE, next u16 LE, count u32 LE) in ascending (key, next) order. The context stream is 40 bytes per record (key u128, total u64, then N1+, N1, N2, N3+ as u32). The frozen pruned form is P1's work.
 
 ## Design
 
