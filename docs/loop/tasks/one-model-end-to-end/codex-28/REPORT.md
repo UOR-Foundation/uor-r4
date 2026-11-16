@@ -34,6 +34,21 @@ key" and "the model has a question key it was never given".
 
 ## Checks run
 
-- None yet: the arm needs the corpus and a GPU build. The ORDER's step 1 is the smoke.
-- The flag's prerequisites and exclusivity were read from the trainer's parser; the export and the
-  served application from the code cited above.
+- **The 64-step smoke trained, exported and parsed.** Corpus `next02/input/uor-next02-inputs-92d7c0b36`
+  (4 MB, 28 MB extracted), the trainer built with `--features cuda` on the 4090, the arm at
+  `--hamming-ask 1 --hamming-carry-question 2`, 64 steps in 10 s. `fbs-snapshot` then
+  `fbs-export --legacy-artifact` produced a `/7` artifact whose record reads
+  **`asks [True, True]`, `carry_rows 2`, depths [2, 6], heads 4, kept 16**, with the table
+  **`hamming.d6.carry`** present. To our knowledge this is the first artifact in the project to carry
+  the relative-offset question key.
+- **The `turn-memory-tail 9` variant refuses the export at 64 steps**:
+  `memory.reply.keys: entry 0 is not a key this engine reads`. The base recipe (no tail) exports. The
+  tail-nine chain is therefore not trainable-then-exportable at this budget; it is a separate defect
+  to inspect before arm rt's configuration is rerun.
+- **The 64-step trace is uninformative, as expected**: the carry gain starts at zero, and every head
+  keeps the same 16 positions at row 135 at this budget. The gate needs the trained arm.
+- The full arm (seed 2, 16,384 steps, ~82 min on the 4090) is running from the same recipe; its
+  artifact is the one the trace and the bare-value panel are read on.
+- The `--decision-trace` path refuses an unsnapped artifact ("the snap is not a decision it
+  records"), so the gate uses `--hamming-trace` alone, which steps the artifact and emits each head's
+  kept positions per row.
