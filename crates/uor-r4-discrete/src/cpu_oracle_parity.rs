@@ -590,9 +590,13 @@ const STUDENT_SEED: u32 = 1;
 const STUDENT_ROWS: u32 = 64;
 const STUDENT_READS: [ReadSpec; 2] = [ReadSpec::Route, ReadSpec::Flock { kept: 8 }];
 /// Parameters per progress line.
-const STUDENT_PROGRESS: usize = 64;
+const STUDENT_PROGRESS: usize = 16;
 /// Routes and gates per read listed in the student parity (index below this).
-const STUDENT_READ_PARAMETERS: usize = 64;
+/// One baseline proposal on this batch takes about 4.8 s on the 4090
+/// (claude-406), so the list stays small.
+const STUDENT_READ_PARAMETERS: usize = 16;
+/// The batch's first distinct target tokens whose vector blocks are listed.
+const STUDENT_TARGET_TOKENS: usize = 8;
 
 struct StudentBatch {
     rows: Vec<CpuDiscreteProposalSample>,
@@ -672,16 +676,21 @@ fn student_batch() -> StudentBatch {
     }
 }
 
-/// Routes and gates 0..64, and the vector blocks of the batch's distinct target
-/// tokens. Fixed before any scoring; never chosen by loss.
+/// Routes and gates 0..16, and the vector blocks of the batch's first eight
+/// distinct target tokens (by id). Fixed before any scoring; never chosen by loss.
 fn student_parameters(
     device: &Device,
     read: ReadSpec,
     rows: &[CpuDiscreteProposalSample],
 ) -> Vec<(Parameter, CpuDiscreteProposalKind, usize)> {
     let blocks = STUDENT_SPEC.blocks as usize;
-    let targets: std::collections::BTreeSet<usize> =
-        rows.iter().map(|s| s.target as usize).collect();
+    let targets: std::collections::BTreeSet<usize> = rows
+        .iter()
+        .map(|s| s.target as usize)
+        .collect::<std::collections::BTreeSet<usize>>()
+        .into_iter()
+        .take(STUDENT_TARGET_TOKENS)
+        .collect();
     parameters(device, read)
         .into_iter()
         .filter(|(parameter, _, index)| match parameter {
@@ -729,19 +738,15 @@ fn student_stream_two_steps_agree_at_corpus_scale() {
             let chooser = CpuDiscreteProposalChooser::from_bytes(&bytes).expect("cpu chooser");
             let listed = student_parameters(&gpu, read, rows);
 
-            // CUDA-only diagnostic times; not a speed claim.
+            // CUDA-only diagnostic time; not a speed claim (claude-406 times
+            // the proposals).
             let clock = Instant::now();
             let carried = gpu.carry_windows(&windows(rows)).expect("carry");
             let _ = gpu.forward(&carried, &targets).expect("forward");
             let forward_us = clock.elapsed().as_micros();
-            let clock = Instant::now();
-            for &(parameter, _, _) in &listed {
-                let _ = gpu.propose(&carried, &targets, parameter);
-            }
-            let propose_us = clock.elapsed().as_micros();
 
             eprintln!(
-                "{read:?} step {step}: {} parameters listed; cuda carry+forward {forward_us} us, cuda propose all {propose_us} us",
+                "{read:?} step {step}: {} parameters listed; cuda carry+forward {forward_us} us",
                 listed.len()
             );
             let mut r = Reading::default();
@@ -770,7 +775,7 @@ fn student_stream_two_steps_agree_at_corpus_scale() {
             }
             let compare_us = clock.elapsed().as_micros();
             eprintln!(
-                "{read:?} step {step}: {} parameters, pick {pick:?}, epoch after {}; {} forward words, {} loss words, {} choices, {} refusals both sides, {} snapshot-sha-only, {} mismatches; cuda carry+forward {forward_us} us, cuda propose all {propose_us} us, full comparison {compare_us} us",
+                "{read:?} step {step}: {} parameters, pick {pick:?}, epoch after {}; {} forward words, {} loss words, {} choices, {} refusals both sides, {} snapshot-sha-only, {} mismatches; cuda carry+forward {forward_us} us, full comparison {compare_us} us",
                 listed.len(),
                 gpu.epoch().expect("epoch"),
                 r.forward_words,
