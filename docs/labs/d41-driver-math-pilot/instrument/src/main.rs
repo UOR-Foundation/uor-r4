@@ -370,6 +370,10 @@ struct Tally {
     distinct: [u64; 5],
     millis: Vec<u64>,
     by_kind: BTreeMap<String, (u64, u64)>,
+    window_generated: u64,
+    window_prompts: u64,
+    window_kept_tokens: u64,
+    window_ids: Vec<Value>,
 }
 
 fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
@@ -383,6 +387,7 @@ fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
     let shard_records: usize = num(m, "shard-records", 512)?;
     // The sheet's hard stop: no new prompt is dispatched after this many seconds.
     let max_seconds: u64 = num(m, "max-seconds", 10_800)?;
+    let window_ms = max_seconds * 1000;
     if budget == 0 || parallel == 0 || shard_records == 0 {
         return Err("--budget, --parallel and --shard-records must be positive".into());
     }
@@ -475,6 +480,9 @@ fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
                             t.markup += r.answers.iter().filter(|a| a.markup).count() as u64;
                             t.prompt_tokens += r.prompt_tokens;
                             t.millis.push(r.millis);
+                            if t0.elapsed().as_millis() as u64 <= window_ms {
+                                t.window_generated += r.completion_tokens;
+                            }
                             let kind = p["kind"].as_str().unwrap_or("?").to_string();
                             let row = t.by_kind.entry(kind).or_default();
                             row.1 += r.completion_tokens;
@@ -507,6 +515,15 @@ fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
                 t.kept_tokens += kept_tokens;
                 t.tokenize_errors += tokenize_failed;
                 t.kept_bytes += answers.iter().map(|a| a.len() as u64).sum::<u64>();
+                // The bar's rate counts only prompts whose record was complete inside the
+                // dispatch window, so the in-flight tail after it does not enter the rate.
+                if t0.elapsed().as_millis() as u64 <= window_ms {
+                    t.window_prompts += 1;
+                    t.window_kept_tokens += kept_tokens;
+                    if !answers.is_empty() {
+                        t.window_ids.push(p["id"].clone());
+                    }
+                }
                 let kind = p["kind"].as_str().unwrap_or("?").to_string();
                 let row = t.by_kind.entry(kind).or_default();
                 row.0 += 1;
@@ -560,6 +577,12 @@ fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
         "generated_millitokens_per_second": gen * 1_000_000 / wall_ms,
         "kept_answer_tokens": t.kept_tokens, "kept_answer_bytes": t.kept_bytes,
         "kept_answer_millitokens_per_second": t.kept_tokens * 1_000_000 / wall_ms,
+        "window": {"ms": window_ms, "tail_ms": wall_ms.saturating_sub(window_ms),
+            "rule": "counts requests and prompts that finished within ms of the start",
+            "prompts_finished": t.window_prompts, "generated_tokens": t.window_generated,
+            "kept_answer_tokens": t.window_kept_tokens,
+            "generated_millitokens_per_second": t.window_generated * 1_000_000 / window_ms.max(1),
+            "kept_answer_millitokens_per_second": t.window_kept_tokens * 1_000_000 / window_ms.max(1)},
         "truncated_answers": t.truncated, "markup_answers": t.markup, "tokenize_errors": t.tokenize_errors, "prompts_with_no_answer": t.empty_prompts,
         "prompts_by_distinct_answers": {"0": t.distinct[0], "1": t.distinct[1], "2": t.distinct[2], "3": t.distinct[3], "4": t.distinct[4]},
         "request_ms": {"p50": q(50), "p95": q(95), "max": t.millis.last()},
@@ -601,6 +624,9 @@ fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
             .map_err(|e| e.to_string())?
             .as_bytes(),
     )?;
+    // The ids of the kept records that finished inside the window, for `count`.
+    let window = json!({"ms": window_ms, "ids": t.window_ids});
+    write(&out.join("window.json"), window.to_string().as_bytes())?;
     println!("{metrics}");
     if recs.is_empty() {
         return Err("no record kept".into());
@@ -617,26 +643,40 @@ fn cmd_count(m: &BTreeMap<String, String>) -> Res<()> {
         .timeout_global(Some(Duration::from_secs(120)))
         .build()
         .into();
-    let (mut records, mut answers, mut tokens, mut bytes, mut errors) =
-        (0u64, 0u64, 0u64, 0u64, 0u64);
+    // Prompts that finished inside the generate window (window.json), when present.
+    let window_ids: Option<Vec<Value>> = match read_json(&dir.join("window.json")) {
+        Ok(w) => w["ids"].as_array().cloned(),
+        Err(_) => None,
+    };
+    let (mut records, mut answers, mut tokens, mut bytes, mut errors, mut window_tokens) =
+        (0u64, 0u64, 0u64, 0u64, 0u64, 0u64);
     for p in shard_paths(&dir)? {
         for line in String::from_utf8_lossy(&read(&p)?).lines() {
             let v: Value =
                 serde_json::from_str(line).map_err(|e| format!("{}: {e}", p.display()))?;
             records += 1;
+            let in_window = window_ids
+                .as_ref()
+                .is_some_and(|ids| ids.contains(&v["id"]));
             for a in v["answers"].as_array().into_iter().flatten() {
                 let text = a.as_str().ok_or("an answer is not a string")?;
                 answers += 1;
                 bytes += text.len() as u64;
                 match count_tokens(&agent, &server, text) {
-                    Ok(n) => tokens += n,
+                    Ok(n) => {
+                        tokens += n;
+                        if in_window {
+                            window_tokens += n;
+                        }
+                    }
                     Err(_) => errors += 1,
                 }
             }
         }
     }
     let out = json!({"records": records, "answers": answers, "kept_answer_tokens": tokens,
-        "kept_answer_bytes": bytes, "tokenize_errors": errors});
+        "kept_answer_bytes": bytes, "tokenize_errors": errors,
+        "window_kept_answer_tokens": window_ids.as_ref().map(|_| window_tokens)});
     write(
         &dir.join("count.json"),
         serde_json::to_string_pretty(&out)

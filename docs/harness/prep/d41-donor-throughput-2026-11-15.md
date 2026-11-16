@@ -3,6 +3,7 @@
 Lab: claude. Item: [m2-donor-corpus-generation](../../roadmap/items/m2-donor-corpus-generation.md) (#2848). Order: [claude-398](../../loop/tasks/m2-donor-corpus-generation/claude-398/ORDER.md). Code: branch `claude/claude-398-donor-throughput`, PR #4025. Release cited at dispatch: D86 (§3.10).
 
 TEST FITNESS: PENDING
+- Round 1 (fresh-context non-author, at `f53631e76`): NOT FIT. One blocker and five should-fix findings, all folded in: (1, blocker) A6 and A7 ran fewer sequences than A0, so they are oversubscribed at 16 workers, busy slots are polled from `--metrics`, and an under-occupied arm is not read as a negative; (2) the bar uses a window rate that leaves out the in-flight tail; (3) a failing `count` or empty smoke no longer stops the job; (4) a server that never answers `/health` is `server-failed`; (5) C takes only levers that co-exist and keep the plan; (6) production is sized only from an arm that won. Its notes are kept: `smoke-n4` gave 802 generated tokens against `smoke-seq`'s 789, so `usage.completion_tokens` counts every choice; the backend-sampler check is now automated; arm A9 was added after round 1.
 
 ## The question
 
@@ -13,9 +14,9 @@ The pilot's server log suggests a cause. With 32 slots busy, a decode step took 
 ## Steps
 
 1. **Smoke** (instrument check, not corpus): `wick-throughput.sh throughput/arms-smoke.txt smoke <commit>` runs the head `generate` on the set's first 4 prompts at `--parallel 1`, once per mode (`seq`, `n4`, `g-n3`), once with `--tokenize 0` then `count`, once with the short system message, and once with `--backend-sampling`. Each smoke must keep ≥ 3 records, with 0 markup answers, 0 errors and 16 answers returned. This is the first time the head client's integer sampling request reaches `llama-server`. **Done at `9d7c62536`: all six passed** (16 answers each, 0 markup, 0 errors, 0 tokenize errors; `count` gave 514 kept tokens for the `--tokenize 0` smoke). Two more smokes run inside the probe job, before A8a and A8b, with the trimmed chain on the CPU and on the GPU.
-2. **Probe** (`throughput/arms-probe.txt`): one job, eleven timed arms and A0's repeat. Each is a 300 s dispatch window from the start of the pilot's prompt set, and the prompts in flight then finish. A0 runs first and again last, so its spread is measured. Every arm uses `--max-tokens 1024`, seed 20261115 and the pilot's sampling values.
+2. **Probe** (`throughput/arms-probe.txt`): one job, eleven timed arms and A0's repeat. Each is a 300 s dispatch window from the start of the pilot's prompt set, and the prompts in flight then finish. **The rate the bar uses is the window rate:** tokens from requests, and kept-answer tokens from prompts, that finished within the 300 s, divided by 300 s. The in-flight tail after the window (`tail_ms`) is recorded and never enters it. For `--tokenize 0`, `count` tokenizes the same window's records afterwards, from `window.json`. A0 runs first and again last, so its spread is measured. Every arm uses `--max-tokens 1024`, seed 20261115 and the pilot's sampling values. The server runs with `--metrics`, and every 5 s the job records GPU memory, GPU utilization and busy slots (`llamacpp:requests_processing`).
 
-   | Arm | Server (`llama-server -ngl 99 -fa on --jinja` plus) | Client | Lever |
+   | Arm | Server (`llama-server -ngl 99 -fa on --jinja --metrics` plus) | Client | Lever |
    |---|---|---|---|
    | A0, A0-repeat | `-np 32 -c 131072` | `seq`, 32 workers | the pilot's settings, re-measured with the head client |
    | A1 | `-np 64 -c 131072` | `seq`, 64 | more slots |
@@ -23,33 +24,35 @@ The pilot's server log suggests a cause. With 32 slots busy, a decode step took 
    | A3 | `-np 128 -c 262144 -b 8192 -ub 2048` | `seq`, 128 | most slots, largest batches |
    | A4 | A0's | `seq`, 32, `--system-file short-system.txt` | a shorter system message |
    | A5 | A0's | `seq`, 32, `--tokenize 0`, then `count` | no per-answer `/tokenize` |
-   | A6 | A0's | `n4`, 8 | four answers in one request (all sampled) |
-   | A7 | A0's | `g-n3`, 11 | one greedy request, then `n` = 3 (the pilot's seed rule) |
+   | A6 | A0's | `n4`, 16 (oversubscribed: 64 asked, 32 slots) | four answers in one request (all sampled) |
+   | A7 | A0's | `g-n3`, 16 (oversubscribed) | one greedy request, then `n` = 3 (the pilot's seed rule) |
    | A9 | A0's | `final`, 32 | the analysis channel skipped: `/apply-template` renders the prompt, the client checks it ends at `<\|start\|>assistant`, appends `<\|channel\|>final<\|message\|>` and sends the pilot's four requests raw to `/completion` (a smoke, `smoke-final`, runs first) |
    | A8a | A0's plus `--samplers temperature` | `seq`, 32 | the same distribution through a shorter CPU chain (diagnostic) |
    | A8b | A0's plus `--samplers temperature --backend-sampling` | `seq`, 32 | the same chain on the GPU (diagnostic) |
 
-3. **Combined arm C**, a second job: every lever that wins (see Bar), on the fastest winning server setting, in one 300 s window, run twice.
+3. **Combined arm C**, a second job, run twice. C takes only levers that can co-exist and keep the corpus plan: the fastest winning server setting (from A1–A3, A8a, A8b), plus A5 and A7 if they won. Levers that change the plan (A4, A6, A9) never enter C; they are reported on their own.
 4. **Optional V (vLLM):** the same client against vLLM's OpenAI server on the donor's released safetensors, if it installs in Claude's container within 30 minutes. vLLM is Python and is named in the receipt with its version. If it does not install or serve gpt-oss on `sm_89`, V is reported as not run.
-5. **Storage:** each arm's `metrics.json`, `run.json`, `count.json`, server and GPU logs, and `summary.tsv` go to the HF store under `results/claude/d41-throughput-2026-11-15/`, fetched back and checked by sha256. Answer texts go there too, marked as probe output: not corpus, never training data.
+5. **Storage:** each arm's `metrics.json`, `run.json`, `window.json`, `count.json`, server and GPU logs, `backend-active.txt` and `summary.tsv` go to the HF store under `results/claude/d41-throughput-2026-11-15/`, fetched back and checked by sha256. Answer texts go there too, marked as probe output: not corpus, never training data.
 
 ## Bar
 
-The probe is a measurement. Its bar decides which numbers may size production.
-- **B1 smoke:** all six smokes pass, as in step 1.
+The probe is a measurement. Its bar decides which numbers may size production. Every rate below is the window rate of step 2.
+- **B1 smoke:** all six smokes pass, as in step 1, and the probe job's three smokes (`smoke-final`, `smoke-temp`, `smoke-temp-bs`) pass the same check.
 - **B2 arm quality:** an arm counts only if its truncated plus markup answers are ≤ 5% of answers returned, its request errors are ≤ 1% of prompts dispatched, and its tokenize errors (in `metrics.json` or `count.json`) are 0.
 - **B3 baseline:** A0's kept-answer rate lies within ±15% of the pilot's 220.7 tok/s, and A0 and A0-repeat lie within 10% of each other. This shows the head client and a 300 s window measure what the pilot measured.
 
 **A lever wins** when its arm passes B2 and its kept-answer rate is at least 1.10 × A0's and above the larger of A0 and A0-repeat by more than their difference.
 
-**Recorded, with no bar:** generated and kept tokens/s, kept tokens per 1,000 generated, request p50/p95, prompts dispatched, mean GPU utilization and peak memory.
+**Under-occupied, not lost:** an arm on A0's server whose mean busy slots fall below A0's by more than 10% has not tested its lever at A0's load. If it does not win, it is read as "under-occupied" and not as a negative.
+
+**Recorded, with no bar:** generated and kept tokens/s over the window and over the whole wall time, `tail_ms`, kept tokens per 1,000 generated, request p50/p95, prompts dispatched, mean GPU utilization, peak memory and mean busy slots.
 
 **Reading map** (fixed before the run):
-- **P:** B1–B3 hold. The REPORT sizes production as hours = 100,000,000 / (kept tok/s) / 3,600, from the best arm that passes B2. It gives two numbers: the best arm that keeps the corpus plan (the pilot's system message, one greedy and three sampled answers), and the best arm overall. A6 has no greedy answer, A4 changes the prompt and A9 skips the analysis channel, so each changes the plan, and production's own sheet would have to adopt that change.
+- **P:** B1–B3 hold. The REPORT sizes production as hours = 100,000,000 / (kept tok/s) / 3,600, from the best arm or C run that **won**, and from the mean of A0 and A0-repeat if none won. It gives two numbers: the best that keeps the corpus plan (the pilot's system message, one greedy and three sampled answers, the analysis channel left in), and the best overall. A6 has no greedy answer, A4 changes the prompt and A9 skips the analysis channel, so each changes the plan, and production's own sheet would have to adopt that change. C's two runs are both sizing numbers: the lower one is used.
 - **I (instrument):** B1 or B3 fails. The client or the window is repaired. No number sizes production until a new sheet's run passes.
 - **Q:** an arm fails B2. That arm is reported and not used for sizing.
 - **A9 (the final-channel pre-fill), reported on its own, beside the slot and batch arms and never merged into C:** the pilot kept 43.8% of generated tokens because gpt-oss writes its analysis channel even at `reasoning_effort` low. A9 records its kept tok/s, its kept tokens per 1,000 generated, and its truncated and markup rates separately. Skipping the analysis channel can change the answers, so A9 changes the corpus plan, and a win means only that production's own sheet may consider it, with an answer check of its own.
-- **H-sampler (diagnostic):** if A8a or A8b wins by ≥ 1.5× with higher GPU utilization, the CPU sampler was the pilot's limit. The server log must show the backend sampler set for A8b's slots, and A8b's sampled answers must differ from A8a's on the smoke, or A8b is read as "not active" and not as a negative. Backend sampling is experimental in `b12000`, so production's sheet must check it before adopting it: on the same prompts at `--parallel 1`, its greedy answers must equal the CPU sampler's.
+- **H-sampler (diagnostic):** if A8a or A8b wins by ≥ 1.5× with higher GPU utilization, the CPU sampler was the pilot's limit. The job writes both checks to `backend-active.txt`: the count of "setting backend sampler" lines in the server log, and whether the `smoke-temp` and `smoke-temp-bs` shards differ. A8b counts only if the count is above 0 and the shards differ; otherwise it is read as "not active", not as a negative. Backend sampling is experimental in `b12000`, so production's sheet must check it before adopting it: on the same prompts at `--parallel 1`, its greedy answers must equal the CPU sampler's.
 
 ## Base artifact
 

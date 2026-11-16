@@ -3,8 +3,8 @@
 A0-base|-np 32 -c 131072|--mode seq --parallel 32
 A4-short-system|-np 32 -c 131072|--mode seq --parallel 32 --system-file /workspace/d41/in398/short-system.txt
 A5-no-tokenize|-np 32 -c 131072|--mode seq --parallel 32 --tokenize 0
-A6-n4|-np 32 -c 131072|--mode n4 --parallel 8
-A7-g-n3|-np 32 -c 131072|--mode g-n3 --parallel 11
+A6-n4|-np 32 -c 131072|--mode n4 --parallel 16
+A7-g-n3|-np 32 -c 131072|--mode g-n3 --parallel 16
 smoke-final|-np 32 -c 131072|--mode final
 A9-final-prefill|-np 32 -c 131072|--mode final --parallel 32
 smoke-temp|-np 32 -c 131072 --samplers temperature|--mode seq
