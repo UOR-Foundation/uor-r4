@@ -14,7 +14,9 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 - **The policy is not serialized.** A restored session starts with it off; the token window is
   restored, the switch is not.
 - **The dense path still refuses.** Only the two FBS step paths slide; the dense path has
-  position-indexed caches whose eviction is not wired.
+  position-indexed caches whose eviction is not wired. The refusal is structural
+  (`can_slide_tokens` is false when `fbs` is `None`) and is not fixture-tested: this crate has no
+  dense artifact.
 - **The Q31 read's own history still grows.** Sliding the token window does not touch
   `Q31ReadHistory`; a model with that read is allowed the policy because its history is separate,
   but its own bound is not addressed.

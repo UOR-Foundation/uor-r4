@@ -43,7 +43,8 @@ schema, a dependency or a GPU run.
 1. A read-free model steps past its context with the policy on; the window holds the last `context`
    ids and two runs agree.
 2. Without the policy, the same model refuses at the bound.
-3. A model with a Hamming read refuses the switch; a dense model does too.
+3. A model with a Hamming read refuses the switch; a dense model is refused structurally by
+   `can_slide_tokens` (this crate has no dense artifact to fixture-test it).
 4. No existing test is weakened; the library suite passes.
 5. `git diff --check`, the harness contract rule, the REPORT check and the exact-head review pass.
 
