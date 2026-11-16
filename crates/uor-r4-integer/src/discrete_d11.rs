@@ -285,8 +285,13 @@ const COMPOSITION_KAPPA: &str =
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DiscreteReadMode {
     Route,
-    Flock { kept: u32 },
-    Relation { kept: u32, sweeps: u32 },
+    Flock {
+        kept: u32,
+    },
+    Relation {
+        kept: u32,
+        sweeps: u32,
+    },
     /// Hard copy read (device spec word `s[8] = 3`): picks the latest earlier
     /// position whose `(p - 1, p)` block codes are nearest the query pair by
     /// XOR + popcount and adds the gated successor blocks.
@@ -1316,16 +1321,15 @@ impl IntegerDiscreteModel {
         let pick_transport = match (read_mode, s.read_position) {
             (DiscreteReadMode::Pick, 3) => Some(PickTransport::Identity),
             (DiscreteReadMode::Pick, _) => {
-                let frames: Vec<u8> = read_section(
-                    "discrete.position_frames",
-                    SectionKind::U32,
-                    blocks * 16,
-                )?
-                .chunks_exact(4)
-                .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-                .map(|f| u8::try_from(f).ok().filter(|&f| f < 64))
-                .collect::<Option<_>>()
-                .ok_or_else(|| invalid("discrete.position_frames contains frame index >= 64"))?;
+                let frames: Vec<u8> =
+                    read_section("discrete.position_frames", SectionKind::U32, blocks * 16)?
+                        .chunks_exact(4)
+                        .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+                        .map(|f| u8::try_from(f).ok().filter(|&f| f < 64))
+                        .collect::<Option<_>>()
+                        .ok_or_else(|| {
+                            invalid("discrete.position_frames contains frame index >= 64")
+                        })?;
                 Some(PickTransport::PrefixHolonomy { frames })
             }
             _ => None,
@@ -2766,7 +2770,11 @@ mod tests {
     #[test]
     fn pick_prefix_holonomy_with_identity_steps_equals_identity_transport() {
         for a in 0..64 {
-            assert_eq!(compose(a, cl06_inverse(a)), usize::from(IDENTITY), "frame {a}");
+            assert_eq!(
+                compose(a, cl06_inverse(a)),
+                usize::from(IDENTITY),
+                "frame {a}"
+            );
         }
         let token_blocks: Vec<Vec<[i32; 8]>> = PICK_TOKENS.iter().map(|t| t.to_vec()).collect();
         let prefix = [0u32, 1, 2, 3, 0, 1];
