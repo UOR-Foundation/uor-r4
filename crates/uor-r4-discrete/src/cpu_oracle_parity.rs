@@ -591,6 +591,8 @@ const STUDENT_ROWS: u32 = 64;
 const STUDENT_READS: [ReadSpec; 2] = [ReadSpec::Route, ReadSpec::Flock { kept: 8 }];
 /// Parameters per progress line.
 const STUDENT_PROGRESS: usize = 64;
+/// Routes and gates per read listed in the student parity (index below this).
+const STUDENT_READ_PARAMETERS: usize = 64;
 
 struct StudentBatch {
     rows: Vec<CpuDiscreteProposalSample>,
@@ -670,7 +672,7 @@ fn student_batch() -> StudentBatch {
     }
 }
 
-/// Every route and gate, and the vector blocks of the batch's distinct target
+/// Routes and gates 0..64, and the vector blocks of the batch's distinct target
 /// tokens. Fixed before any scoring; never chosen by loss.
 fn student_parameters(
     device: &Device,
@@ -684,7 +686,9 @@ fn student_parameters(
         .into_iter()
         .filter(|(parameter, _, index)| match parameter {
             Parameter::VectorBlock(_) => targets.contains(&(index / blocks)),
-            _ => true,
+            // Bounded: the full route and gate inventory one 16-thread launch
+            // at a time ran past 40 minutes on the 4090 (c404-run1).
+            _ => *index < STUDENT_READ_PARAMETERS,
         })
         .collect()
 }
