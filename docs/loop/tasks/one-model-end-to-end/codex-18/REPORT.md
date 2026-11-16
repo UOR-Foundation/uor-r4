@@ -66,6 +66,16 @@ need another gate fit. The stage-1 and stage-2 information is in the stream; the
 make the served read scan it (a fact/relation read) and to check the `chose_target` half on the
 panel.
 
+## The C2′ bar on the probe
+
+Bar 4b has two halves. The rule read raises `chose_other` to the ceiling on every row (0.406 /
+0.436, exact on the identifiable `K=1` rows) against C0's near-zero, so the +0.10 half passes by a
+wide margin. It cannot raise `chose_target`: the candidate rule excludes the asked position, so the
+asked count is zero, below C0's 10/12 and inside the +0.05 limit. Both halves pass on this probe.
+
+This is a **probe** result (the two-class synthetic task). The served read must still scan the
+context for facts; that integration, not another gate fit, is what remains.
+
 ## Still open
 
 - **Integrate stage 2 into the model read.** The probe's rule uses the window's fact positions (the
