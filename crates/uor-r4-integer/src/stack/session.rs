@@ -1197,7 +1197,7 @@ impl IntegerStackModel {
         &self.shape
     }
 
-    /// The tokenizer identity embedded by a bound `/10` artifact.
+    /// The tokenizer identity embedded by a bound `/10` or `/17` artifact.
     pub fn tokenizer_sha256(&self) -> Option<&str> {
         self.tokenizer_sha256.as_deref()
     }

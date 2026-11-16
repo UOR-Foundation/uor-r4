@@ -24,6 +24,8 @@ Lab: codex. Order: [ORDER.md](ORDER.md). Parent: [codex-24](../codex-24/REPORT.m
   `--stack` requirement, and the help line.
 - `crates/uor-r4-integer/tests/context_slide.rs`: `under_the_bound_the_slide_changes_nothing` — the
   tokens and the read's picks are identical with and without the flag until the window fills.
+- The `/17` serve-time tokenizer binding is asserted where `/10`'s was: `require_tokenizer_sha256`
+  accepts the artifact's own sha and refuses another, on the bound-with-read schema too.
 
 ## Measurements
 
@@ -44,6 +46,10 @@ with claude-384's served pair-rows reads (1,505–1,648 tok/s).
 - `cargo test --locked -p uor-r4-integer --features serving-wasm,fbs-synthetic --lib` — 700 passed,
   1 ignored.
 - `cargo test … --test context_slide` — **4 passed**.
+- The corpus reconnaissance: the finished donor corpus (`results/claude/m2-donor-corpus-2026-11-16`)
+  is donor **text** — 457,601 API records and 71,014 vLLM records from gsm8k/numina/oasst2/
+  openthoughts/wildchat, with no logits stored. It is the general model's training data; it is not
+  a multi-fact memory panel, so the protocol's strata still come from a panel, not the corpus.
 - `uor-chat` at the head against the probe artifact, the two runs above.
 
 ## Still open

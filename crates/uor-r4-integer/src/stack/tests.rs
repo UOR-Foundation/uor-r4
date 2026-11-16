@@ -4550,6 +4550,12 @@ fn a_bound_stack_carries_the_native_read_as_the_product_form() {
     );
     let model = IntegerStackModel::parse(&bytes).expect("parse");
     assert_eq!(model.tokenizer_sha256(), Some("b".repeat(64).as_str()));
+    // The product path enforces the binding on `/17` exactly as on `/10`.
+    assert!(model.require_tokenizer_sha256(&"b".repeat(64)).is_ok());
+    assert!(matches!(
+        model.require_tokenizer_sha256(&"c".repeat(64)),
+        Err(StackError::TokenizerBinding { .. })
+    ));
     // The read is served, not merely stored: a stepped session records its trace.
     let mut session = model.session();
     session.set_q31_read_trace(true).expect("trace");
