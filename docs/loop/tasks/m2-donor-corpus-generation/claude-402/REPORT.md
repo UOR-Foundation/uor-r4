@@ -9,7 +9,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
   published figures on 16 Nov, not measurements.
 - **Two pods were paid for and never used.** vast-60895844 (8×B200, $85.91/h) and vast-60895824 (4×B200,
   $43.41/h) were leased at about 07:41Z and deleted at about 07:51Z, before SSH accepted the key and before any
-  file was put on them: about $20 in all. `uor-pod down` refused twice: once for the missing lab flag, and once
+  file was put on them: about $21.55 in all at the stated rates and times. `uor-pod down` refused twice: once for the missing lab flag, and once
   because it could not reach the pods to archive results. The lab confirmed there was nothing to archive and
   deleted them with `--force --confirm-archived`.
 - **The cost estimate is a list-price estimate.** About $800–900 for 1B kept assumes about 1.19B generated (pod 3
@@ -32,7 +32,10 @@ None. This is a record.
 
 ## Checks run at the head
 
-- `loop pr-check --local`: see the PR's check record.
+- `loop pr-check --local`: PASS at 19fe39af1 and at this head (standing advisories: the AGENTS.md size and FILEMAP rows).
+- The fresh-context review of 19fe39af1 returned CHANGES with nine findings, all fixed at this head. They covered
+  the D87 lab conditions an API run cannot meet, the provider moved to the owner's terms, the 8×B200 yes marked
+  superseded, the key wording aligned with §3.13, one-line quotes, and the cost figures explained.
 - `git diff --check` is clean.
 
 ## Skills used
@@ -48,7 +51,7 @@ None. This is a record.
 
 ## Plain summary
 
-Casey chose to stream the rest of the 1B-token donor corpus from DeepSeek's own API, which costs about half as much
-as renting GPUs. The two pods just rented for the fan-out were deleted before any work reached them, and the first
+Casey chose to stream the rest of the 1B-token donor corpus from DeepSeek's own API, which costs about 55–60% of
+renting GPUs at list prices. The two pods just rented for the fan-out were deleted before any work reached them, and the first
 pod keeps generating until the API path is checked. This change writes Casey's words into the decision log and the
 rules change log.
