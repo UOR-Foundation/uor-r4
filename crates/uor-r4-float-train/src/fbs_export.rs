@@ -377,8 +377,11 @@ pub fn q31_read_sidecar(
     if max != 0 && max.checked_shl(shift).is_none_or(|moved| moved > limit) {
         return Err(invalid("the read's payload weight does not fit the FBS scale"));
     }
+    // The FBS read's stream is at `e_x = 16` and its table at Q12, so the payload's gain is
+    // `31 + e_x - e_t - e_w = 35 - e_w`. The replay's stream/table scales are `24`/`32`, so the
+    // gain is not the replay's `31 - e_w`; the picks do not move, the payload does.
     let fbs_e_w = e_w + shift as i32;
-    let gain = 31 - fbs_e_w;
+    let gain = 35 - fbs_e_w;
     if !(0..=31).contains(&gain) {
         return Err(invalid("the FBS payload gain is outside 0..=31"));
     }

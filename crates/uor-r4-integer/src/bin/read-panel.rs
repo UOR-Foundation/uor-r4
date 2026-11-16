@@ -69,6 +69,8 @@ struct Counts {
     relation_k1_other: u64,
     float_agree: u64,
     float_rows: u64,
+    x_rows: u64,
+    x_sign_agree: u64,
 }
 
 fn main() {
@@ -89,6 +91,7 @@ fn run() -> Result<(), String> {
     let other = u32s(&PathBuf::from(format!("{}.other.u32", args.dump.display())))?;
     let bucket = u8s(&PathBuf::from(format!("{}.bucket.u8", args.dump.display())))?;
     let rows = dump.batch * dump.time;
+    let width = dump.read.width();
     if ask.len() != rows || other.len() != rows || bucket.len() != rows {
         return Err(format!(
             "the targets hold {} / {} / {rows} rows",
@@ -110,6 +113,7 @@ fn run() -> Result<(), String> {
     let model = IntegerStackModel::parse(&artifact).map_err(|e| e.to_string())?;
     let mut buckets = vec![Counts::default(); 2];
     let mut all = Counts::default();
+    let mut ratios: Vec<f64> = Vec::new();
     for w in 0..dump.batch {
         let tokens = &dump.ids[w * dump.time..(w + 1) * dump.time];
         let mut session = model.session();
@@ -136,6 +140,20 @@ fn run() -> Result<(), String> {
                 0
             };
             let relation = session.last_relation_pick().map_or(0, |pick| pick as u32);
+            if traced {
+                if let Some(step) = session.q31_read_trace().and_then(|t| t.last()) {
+                    let stream = &dump.stream[row * width..(row + 1) * width];
+                    for (&a, &b) in step.x_in.iter().zip(stream) {
+                        if a != 0 && b != 0 {
+                            all.x_rows += 1;
+                            if (a > 0) == (b > 0) {
+                                all.x_sign_agree += 1;
+                            }
+                            ratios.push(a as f64 / b as f64);
+                        }
+                    }
+                }
+            }
             let c = &mut buckets[b];
             c.scored += 1;
             all.scored += 1;
@@ -175,6 +193,7 @@ fn run() -> Result<(), String> {
         "artifact": args.artifact.display().to_string(),
         "windows": dump.batch,
         "all": counts_json(&all),
+        "x_ratio_median": median(&mut ratios),
         "buckets": buckets.iter().enumerate().map(|(i, c)| serde_json::json!({
             "bucket": i,
             "counts": counts_json(c),
@@ -197,5 +216,15 @@ fn counts_json(c: &Counts) -> serde_json::Value {
         "relation_k1_other": c.relation_k1_other,
         "float_rows": c.float_rows,
         "float_agree": c.float_agree,
+        "x_rows": c.x_rows,
+        "x_sign_agree": c.x_sign_agree,
     })
+}
+
+fn median(values: &mut [f64]) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    values[values.len() / 2]
 }
