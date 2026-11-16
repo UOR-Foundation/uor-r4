@@ -20,13 +20,18 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   is now Q16 fixed-point: counts and sums at `1 << 16`, a 33-entry Q16 cosine table with linear
   interpolation, and `i128` squared distances. No float token remains outside a comment, including
   in the tests.
+- **The first EMA update skipped untouched clusters**, so their counts never decayed and the
+  dead-cluster revival named in the module docs was inert (found by the exact-head review). Every
+  cluster now updates — an untouched one decays — and revival scores every point once and gives the
+  farthest distinct points to the dead clusters, so it is one pass plus a sort rather than one scan
+  per dead cluster.
 - **The fitter is parity at this scale, not a win.** 4 integer e-means epochs vs integer Lloyd 16
-  passes: total squared error 6,533,537,147 vs 6,533,624,246 (0.999x); vs Lloyd at 4 passes:
+  passes: total squared error 6,533,628,331 vs 6,533,624,246 (1.000x); vs Lloyd at 4 passes:
   6,533,687,065 (0.999x). The paper's large-scale advantage is not reproduced at `n = 2,048`,
   `k = 16`, `dim = 8`, which is the ADR's own caveat about adopting its scaling laws.
 - **A pre-existing library test fails on clean `origin/main` too**:
   `tests::apply_calls_are_confined_to_bounded_fixture_and_admitted_transition`
-  (`crates/uor-r4-discrete/src/lib.rs:425`). It is not introduced by this unit.
+  (`crates/uor-r4-discrete/src/lib.rs:426` (425 on `main`)). It is not introduced by this unit.
 - No model or quality claim; no GPU, no float training, no serving change.
 
 ## What changed
@@ -42,16 +47,17 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 
 ## Measurements
 
-- Fitter, synthetic 16 clusters / 2,048 points / 8 dims: e-means 4 epochs **0.999x** Lloyd 16 and
+- Fitter, synthetic 16 clusters / 2,048 points / 8 dims: e-means 4 epochs **1.000x** Lloyd 16 and
   **0.999x** Lloyd 4 (total squared error as above); byte-identical centroids across two runs.
-- A8 fixture (512 tokens, 4 blocks, quota 2): greedy **14,676**, e-means **31,588** weighted
-  cell-L1 (**2.152x**); the e-means table is injective (512 distinct) and occupies all 256 cells at
+- A8 fixture (512 tokens, 4 blocks, quota 2): greedy **14,676**, e-means **31,780** weighted
+  cell-L1 (**2.165x**); the e-means table is injective (512 distinct) and occupies all 256 cells at
   the exact quota; two runs are identical.
 - `cargo test -p uor-r4-discrete --lib`: **358 passed, 1 failed (pre-existing), 1 ignored**.
 
 ## Checks run at the head
 
-- `cargo test --locked -p uor-r4-discrete --lib e_means` — 3 passed.
+- `cargo test --locked -p uor-r4-discrete --lib e_means` — 4 passed (including a direct revival
+  test with a crafted dead count).
 - `cargo test --locked -p uor-r4-discrete --lib` — 358 passed, the pre-existing failure, 1 ignored.
 - `cargo check --locked -p uor-r4-discrete --bin address-cells-codebook` — clean.
 - `cargo clippy --locked --no-deps -p uor-r4-discrete --lib --bin address-cells-codebook` — no

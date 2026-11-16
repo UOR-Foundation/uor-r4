@@ -168,10 +168,9 @@ pub fn fit(
                     batch_sums[code * dim + j] += point[j] as i128;
                 }
             }
+            // Every cluster updates, including one the batch did not touch: its
+            // count decays, which is what makes the revival test reachable.
             for code in 0..k {
-                if batch_counts[code] == 0 {
-                    continue;
-                }
                 counts[code] = ((gamma * counts[code] as i128
                     + alpha * batch_counts[code] as i128 * SCALE as i128)
                     >> 16) as i64;
@@ -229,8 +228,10 @@ pub fn squared_error(points: &[i64], n: usize, dim: usize, centroids: &[i64]) ->
         .sum()
 }
 
-/// Rebuild every cluster whose EMA count fell below a tenth of the mean from
-/// the point farthest from its nearest centroid.
+/// Rebuild every cluster whose EMA count fell below a tenth of the mean from a
+/// farthest point. Each call scores every point once against its nearest centroid
+/// and hands the farthest distinct points to the dead clusters, so the cost is one
+/// pass plus a sort rather than one scan per dead cluster.
 fn revive(
     centroids: &mut [i64],
     counts: &mut [i64],
@@ -241,25 +242,28 @@ fn revive(
     k: usize,
 ) {
     let mean = counts.iter().map(|&count| count as i128).sum::<i128>() / k as i128;
-    for code in 0..k {
-        if counts[code] as i128 >= mean / 10 {
-            continue;
-        }
-        let mut farthest = 0usize;
-        let mut farthest_distance = 0u128;
-        for index in 0..n {
+    let threshold = mean / 10;
+    let dead: Vec<usize> = (0..k)
+        .filter(|&code| (counts[code] as i128) < threshold)
+        .collect();
+    if dead.is_empty() {
+        return;
+    }
+    let mut scored: Vec<(u128, usize)> = (0..n)
+        .map(|index| {
             let point = &points[index * dim..(index + 1) * dim];
             let distance = centroids
                 .chunks_exact(dim)
                 .map(|centroid| distance2(centroid, point))
                 .min()
                 .unwrap_or(0);
-            if distance >= farthest_distance {
-                farthest_distance = distance;
-                farthest = index;
-            }
-        }
-        let source = farthest * dim;
+            (distance, index)
+        })
+        .collect();
+    scored.sort_by(|left, right| right.0.cmp(&left.0).then(left.1.cmp(&right.1)));
+    for (slot, &code) in dead.iter().enumerate() {
+        let (_, index) = scored[slot % n];
+        let source = index * dim;
         centroids[code * dim..(code + 1) * dim].copy_from_slice(&points[source..source + dim]);
         counts[code] = SCALE;
         for j in 0..dim {
@@ -348,6 +352,23 @@ mod tests {
             e,
             "e-means is not deterministic for a seed"
         );
+    }
+
+    #[test]
+    fn revival_rebuilds_a_dead_cluster_from_a_farthest_point() {
+        // The dead cluster sits at the origin; the points are 0, 10 and 20, so the
+        // farthest one is a point, never the stale centroid.
+        let points = vec![0i64, 0, 10, 10, 20, 20];
+        let mut centroids = vec![0i64, 0, 10, 10, 20, 20];
+        let mut counts = vec![SCALE, SCALE, 0];
+        let mut sums: Vec<i64> = centroids.iter().map(|&value| value * SCALE).collect();
+        revive(&mut centroids, &mut counts, &mut sums, &points, 3, 2, 3);
+        assert_eq!(counts[2], SCALE);
+        assert_eq!(sums[4], centroids[4] * SCALE);
+        assert_eq!(sums[5], centroids[5] * SCALE);
+        assert!(points
+            .chunks_exact(2)
+            .any(|point| point == &centroids[4..6]));
     }
 
     #[test]

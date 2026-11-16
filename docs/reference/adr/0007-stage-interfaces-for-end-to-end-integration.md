@@ -148,10 +148,10 @@ nothing.
    `src/native_support.rs`, which states that no Cargo feature re-enables its historical surface.
 2. **e-means is live and parity-tested, in integer arithmetic**, in
    `crates/uor-r4-discrete/src/e_means.rs`: Q16 counts/sums, a Q16 cosine table and `i128`
-   distances; 4 epochs reach within 0.999x of Lloyd at 16 passes in the unit's synthetic test, and
+   distances; 4 epochs reach within 1.000x of Lloyd at 16 passes in the unit's synthetic test, and
    two runs are identical.
 3. **The only live codebook, A8 address cells, is not a k-means fit.** Its placement is greedy and
-   quota-constrained; e-means on the same task measures 2.152x worse weighted cell-L1 on the
+   quota-constrained; e-means on the same task measures 2.165x worse weighted cell-L1 on the
    fixture. That arm is opt-in and must not be promoted on this evidence.
 4. **I3's site therefore needs re-naming** before it can be built: a fitted read-key codebook, or a
    revived site whose reopen condition is met. I3's deferral until D86 step 6 stands.
