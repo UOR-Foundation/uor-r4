@@ -1,6 +1,6 @@
 # ORDER: written-state-count-model, claude-412 (an exact, deterministic CUDA n-gram counter over u16 token streams, the shared primitive of R\* and P1's count base)
 
-Lab: claude. Track: the written-state geometric count model (the PI decision of 16 Nov 2026, P0 item 4 and P1, "the GPU counting kernel"). Base: `origin/main` at `ef1f4a641`.
+Lab: claude. Item: [m4-lawful-likelihood-bpb](../../../../roadmap/items/m4-lawful-likelihood-bpb.md) (R\* is its sealed denominator; the track has no item of its own yet). Track: the written-state geometric count model (the PI decision of 16 Nov 2026, P0 item 4 and P1, "the GPU counting kernel"). Base: `origin/main` at `ef1f4a641`.
 
 ## Why this unit
 
