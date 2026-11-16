@@ -78,6 +78,21 @@ slot, and a missing relation or bucket selects nothing. Integer library: **680 p
 The ranges are the probe's encoding; the `ReadOut` shape is the served contract. The next step is to
 select this read in the session's read path and run the C2′ panel.
 
+## Panel: both seeds, both splits
+
+The rule is state-independent (the stream determines the facts), so the panel is a host count on
+the windows. The `K=1` counts reproduce claude-397's table exactly:
+
+| Split | Seed | `K=1` b1 | `K=1` b2 | All rows b1 / b2 |
+|---|---|---|---|---|
+| held | 1 | **35/35** | **12/12** | 208/512 (0.406) / 223/512 (0.436) |
+| held | 2 | **42/42** | **8/8** | 210/512 (0.410) / 229/512 (0.447) |
+| TRAIN | 1 | **308/308** | **81/81** | 1645/4096 (0.402) / 1766/4096 (0.431) |
+| TRAIN | 2 | **296/296** | **66/66** | 1658/4096 (0.405) / 1748/4096 (0.427) |
+
+The asked scan is 512/512 on both held seeds. On every identifiable row, in both seeds and both
+splits, the rule picks the other fact. The gate fit is 0.125/0.152 on the same rows.
+
 ## The C2′ bar on the probe
 
 Bar 4b has two halves. The rule read raises `chose_other` to the ceiling on every row (0.406 /
