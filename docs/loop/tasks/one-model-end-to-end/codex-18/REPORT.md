@@ -66,6 +66,18 @@ need another gate fit. The stage-1 and stage-2 information is in the stream; the
 make the served read scan it (a fact/relation read) and to check the `chose_target` half on the
 panel.
 
+## Served relation read
+
+`crates/uor-r4-integer/src/stack/relation_read.rs` implements the same rule as a served `ReadOut`.
+`RelationRead::PROBE` scans the context's `K v` facts, matches `Q(k)` to the asked fact, takes the
+distance bucket, excludes the asked fact and the earlier slots' asked facts, and returns
+`ReadOut::first_pick(other_value_pos, value)`. Three finite tests: a `K=1` row picks the only other
+fact (support 49, payload 529), an ambiguous row takes the first candidate and excludes an earlier
+slot, and a missing relation or bucket selects nothing. Integer library: **680 passed**, 1 ignored.
+
+The ranges are the probe's encoding; the `ReadOut` shape is the served contract. The next step is to
+select this read in the session's read path and run the C2′ panel.
+
 ## The C2′ bar on the probe
 
 Bar 4b has two halves. The rule read raises `chose_other` to the ceiling on every row (0.406 /
