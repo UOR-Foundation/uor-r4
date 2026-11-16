@@ -53,3 +53,28 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   through the integer session (the learned read's 0.12; the relation `/15`'s rule).
 - A bound export (contract + tokenizer) for this run.
 - The 1B read is claude's; the discrete read-binding hinge still needs its Flock trainer.
+
+## The panel through the served artifacts
+
+`crates/uor-r4-integer/src/bin/read-panel.rs` steps the held dump's 256 windows through the parsed
+artifact and reads the Q31 read's trace and the relation's pick. Held ext-s1, 1,024 scored rows:
+
+| Artifact | Arm | `chose_other` all | `K=1` other | asked | float parity |
+|---|---|---|---|---|---|
+| `ext-s1.uorlut01` (`/14`) | learned read | 51/1024 (0.050) | **1/47** | 440/1024 (0.43) | **438/1024 (0.428)** |
+| `ext-s1-relation.uorlut01` (`/15`) | relation rule | **431/1024 (0.421)** | **47/47 (1.0)** | 0 | — |
+
+- The relation `/15` passes through the **served integer artifact**: exact on every identifiable
+  row, the all-rows ceiling, the asked fact suppressed.
+- The learned `/14` read reproduces the C2′ negative (the `K=1` other 1/47) and exposes a large
+  **export gap**: its picks agree with the float read on 0.428 of the rows, not the 0.984 the dump's
+  converted gates gave. The FBS trunk's stream at the read depth is not the float replay's stream;
+  the read's gates see different signs.
+- The panel is a host run (34 s per artifact); no GPU.
+
+## Still open
+
+- The `/14` learned read's FBS input parity: the stream at the read depth and the replay's `e_x`
+  differ; until that is aligned, the artifact carries the read but serves a different read.
+- A bound export (contract + tokenizer).
+- The 1B read is claude's; the discrete hinge still needs its Flock trainer.

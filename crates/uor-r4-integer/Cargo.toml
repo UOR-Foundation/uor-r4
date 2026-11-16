@@ -99,3 +99,8 @@ required-features = ["serving-wasm"]
 name = "place-asks"
 path = "src/bin/place-asks.rs"
 required-features = ["serving-wasm"]
+
+[[bin]]
+name = "read-panel"
+path = "src/bin/read-panel.rs"
+required-features = ["serving-wasm"]

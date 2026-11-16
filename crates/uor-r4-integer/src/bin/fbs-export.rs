@@ -86,16 +86,16 @@ use uor_r4_integer::fbs_snapshot::{
 };
 use uor_r4_integer::stack::{
     add_address_uorlut01, add_hamming_ask_uorlut01, add_hamming_place_uorlut01,
-    add_point_key_uorlut01, add_q31_read_uorlut01, build_point_key,
+    add_point_key_uorlut01, add_q31_read_uorlut01, add_relation_uorlut01, build_point_key,
     check_point_key_read_back,
     export_fbs_trunk_uorlut01_with_provenance, point_key_windows, set_hamming_copy_latest_uorlut01,
     set_hamming_copy_longest_uorlut01,
     AskImage, FbsExportProvenance, FbsExportSnaps, FbsTrunkSnapshot, IntegerStackModel,
-    Q31SessionRead, StackContractProvenance, POINT_KEY_BOS, POINT_KEY_WINDOW,
+    Q31SessionRead, StackContractProvenance, StackRelation, POINT_KEY_BOS, POINT_KEY_WINDOW,
 };
 use uor_r4_native_vector::Q31FirstPickRead;
 
-const USAGE: &str = "usage: fbs-export [--raw-gates] [--raw-transition] [--run-config CONFIG_JSON] --stack-contract TOML --stack-contract-semantic-blake3 HEX --tokenizer TOKENIZER_JSON [--context C] [--q31-read SIDE] SNAPSHOT_JSON OUT_PATH\n       fbs-export --legacy-artifact [--raw-gates] [--raw-transition] [--run-config CONFIG_JSON] [--context C] [--address-rows ROWS] SNAPSHOT_JSON OUT_PATH\n       fbs-export --point-key [--legacy-artifact] [--point-vote-k N] ARTIFACT TOKENS_U16 RESPONSE_MASK_U8 OUT_PATH";
+const USAGE: &str = "usage: fbs-export [--raw-gates] [--raw-transition] [--run-config CONFIG_JSON] --stack-contract TOML --stack-contract-semantic-blake3 HEX --tokenizer TOKENIZER_JSON [--context C] [--q31-read SIDE | --relation] SNAPSHOT_JSON OUT_PATH\n       fbs-export --legacy-artifact [--raw-gates] [--raw-transition] [--run-config CONFIG_JSON] [--context C] [--address-rows ROWS] SNAPSHOT_JSON OUT_PATH\n       fbs-export --point-key [--legacy-artifact] [--point-vote-k N] ARTIFACT TOKENS_U16 RESPONSE_MASK_U8 OUT_PATH";
 
 fn check_run_export_contract(config: &str, snaps: FbsExportSnaps) -> Result<(), String> {
     let value: serde_json::Value =
@@ -269,6 +269,7 @@ fn run() -> Result<(), String> {
     // The rows file of a run trained with an address table (claude-366).
     let mut address_rows = None::<String>;
     let mut q31_read = None::<String>;
+    let mut relation = false;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -281,6 +282,8 @@ fn run() -> Result<(), String> {
                         .ok_or_else(|| format!("--address-rows needs a path: {USAGE}"))?,
                 )
             }
+            "--relation" if relation => return Err("--relation given twice".to_owned()),
+            "--relation" => relation = true,
             "--q31-read" if q31_read.is_some() => {
                 return Err("--q31-read given twice".to_owned())
             }
@@ -571,6 +574,9 @@ fn run() -> Result<(), String> {
             .map_err(|e| format!("the address table: {e}"))?,
         None => artifact,
     };
+    if relation && q31_read.is_some() {
+        return Err("--relation and --q31-read are separate reads; give one".to_owned());
+    }
     // The learned vector read as a `/14` sidecar from `fbs-snapshot OUT.q31read`: the read's
     // exact bytes and its layer, added after the trunk's own records.
     let artifact = match q31_read {
@@ -591,6 +597,23 @@ fn run() -> Result<(), String> {
             add_q31_read_uorlut01(&artifact, &Q31SessionRead::new(depth, read))
                 .map_err(|e| format!("the Q31 read: {e}"))?
         }
+    };
+    let artifact = if relation {
+        // The two-class relation rule (`/15`), the probe's encoding: the fact tokens, the query
+        // shift, the two buckets, the header and the hard copy's scale.
+        let record = StackRelation {
+            relations: [16, 32],
+            values: [528, 1_040],
+            query_shift: 16,
+            buckets: [(33, 96), (97, 180)],
+            header: 4,
+            header_last: 51,
+            scale: 16,
+        };
+        add_relation_uorlut01(&artifact, &record)
+            .map_err(|e| format!("the relation read: {e}"))?
+    } else {
+        artifact
     };
     IntegerStackModel::parse(&artifact)
         .map_err(|e| format!("the exported artifact does not parse: {e}"))?;

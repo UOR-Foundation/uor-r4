@@ -87,6 +87,29 @@ impl RelationRead {
         })
     }
 
+    /// The number of consistent other-fact candidates at `query_pos`: the 397 `K`.
+    pub fn candidate_count(
+        &self,
+        tokens: &[u32],
+        query_pos: usize,
+        earlier_asked: &[usize],
+    ) -> Option<usize> {
+        let (asked, bucket) = self.asked(tokens, query_pos)?;
+        let (low, high) = self.buckets[bucket];
+        let facts = self.facts(tokens, query_pos);
+        Some(
+            facts
+                .iter()
+                .filter(|&&p| {
+                    p != asked
+                        && p < query_pos
+                        && (low..=high).contains(&(query_pos - p))
+                        && !earlier_asked.contains(&p)
+                })
+                .count(),
+        )
+    }
+
     /// The asked fact's value position at `query_pos`, or `None` when the token
     /// there is not a query. The session tracks the earlier slots' asks with it.
     pub fn asked_at(&self, tokens: &[u32], query_pos: usize) -> Option<usize> {
