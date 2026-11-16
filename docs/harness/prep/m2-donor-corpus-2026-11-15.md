@@ -2,7 +2,7 @@
 
 Lab: claude. Item: [m2-donor-corpus-generation](../../roadmap/items/m2-donor-corpus-generation.md) (#2848). Order: [claude-400](../../loop/tasks/m2-donor-corpus-generation/claude-400/ORDER.md). Code: branch `claude/claude-400-donor-corpus`, PR #4028. Release cited at dispatch: D87 (§3.10), once PR #4027 is on `main`.
 
-TEST FITNESS: FIT. A fresh-context non-author reviewer passed the 4×H200 NVL amendment (370b0e16b) with three advisories, fixed in the next commit; another passed this sheet in round 4 on c8df04e34 with no blocker, after rounds 1-3 returned NOT FIT (round 1: the guard ended per segment, no restore, unmapped endings; round 2: an empty listing verified, the guard exited with the pod up; round 3: a cut copy kept under its final name). Its six advisories (caps during an unverified final sync, a failed restore left in place, a fail-open emptiness check, a shared staging folder, unchecked log copies, a cumulative unreachable count) and the author's own lease-renewal finding are fixed in the next commit, each with a stub gate that fails on c8df04e34.
+TEST FITNESS: FIT. A fresh-context non-author reviewer passed amendment 2 (the 8×H200 measured hour, 9d5df4086) with no blocker; it ran the offer pins, the 29 guard gates and prep-check, and its six advisories (back-to-back segments under the 15 min grace, a $57.81 price pin, a cheapest-offer recheck before `up`, the NVL bound on R/2, a 07:00Z latest lease, the list of overridden steps) are applied in the next commit. Before that, A fresh-context non-author reviewer passed the 4×H200 NVL amendment (370b0e16b) with three advisories, fixed in the next commit; another passed this sheet in round 4 on c8df04e34 with no blocker, after rounds 1-3 returned NOT FIT (round 1: the guard ended per segment, no restore, unmapped endings; round 2: an empty listing verified, the guard exited with the pod up; round 3: a cut copy kept under its final name). Its six advisories (caps during an unverified final sync, a failed restore left in place, a fail-open emptiness check, a shared staging folder, unchecked log copies, a cumulative unreachable count) and the author's own lease-renewal finding are fixed in the next commit, each with a stub gate that fails on c8df04e34.
 
 ## The question
 
@@ -32,7 +32,7 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 4×H200 po
    - Copies land in a per-sync staging folder: a shard is kept only when its sha256 matches the pod listing, and a log copy replaces the local one only when it is whole. `put` refuses unless the pod reports an empty `out/` (an unreadable answer refuses); it clears a failed restore itself; `pod.sh run` refuses while a restore marker exists. A restore marker that stays with no run for three tries downs the pod (its `out/` holds only laptop copies).
 
    The guard never exits while the pod is up. A final sync that does not verify, or a `down` that fails, is retried every 5 min with an alert, written to stdout, to `local/m2-run/ALERTS` and as a desktop notification. Each segment is followed by `drive.sh wait-segment`, which tells the driver when it ends. Every one of these paths passed a local stub test (29 checks) before the FIT re-check; the gates added in each FIT round fail on the previous round's guard.
-   **Amendment 2 (16 Nov 2026): one 8×H200 for the measured hour only.** For this lease it replaces step 2's machine and step 8; every other step and guard rule stands.
+   **Amendment 2 (16 Nov 2026): one 8×H200 for the measured hour only.** For this lease it replaces step 2's machine, step 6's values, step 8, the Stop rule's one re-lease and the B1 reading; every other step and guard rule stands.
    - **Owner's words.** Casey wrote in claude's chat at 2026-11-16T04:30Z, relayed word for word by the parent session: "approve the $56.85/h host for the one-hour measurement". The lab reads this narrowly:
      - it covers that one host only, Vast offer 60874142 on machine 34325: Iceland, 8×H200 SXM, verified datacenter, listed at $56.842/h before storage, reliability 0.9946, 2,063 GB of RAM, 2.9 TB of disk, 7.85 Gb/s, `bw_nvlink` 478;
      - it covers the measured hour alone, not the 1B run.
@@ -40,13 +40,13 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 4×H200 po
    - **Storage.** Vast adds a disk charge: at `UOR_POD_VAST_DISK_GB=700` the all-in price is $57.80/h. The 700 GB holds the 511 GB of weights, the image, the client build and `out/`.
      - So the lease sets `UOR_POD_MAX_RATE=58` for this lease only.
      - Casey confirmed the disk charge. Asked in claude's chat at about 2026-11-16T04:40Z, "Is the disk charge covered by your approval?", Casey answered, word for word: "Yes, that's fine". The parent session relayed this. It covers offer 60874142 at about $57.80/h all-in with 700 GB of disk, and `UOR_POD_MAX_RATE=58` for this one-hour lease only; a larger disk (1.2 TB) is not covered.
-   - **All labs' pods.** Right before `up`, the driver reads `uor-pod status` (with the adapter) and `vastai show instances`. The lease goes ahead only if no other pod of any lab is running, because any other pod would take the total past $58/h.
+   - **All labs' pods.** Right before `up`, the driver reads `uor-pod status` (with the adapter) and `vastai show instances`. The lease goes ahead only if no other pod of any lab is running, because any other pod would take the total past $58/h. It also re-runs `up`'s offer query (`vastai search offers` with the same filters and `--storage 700`) and goes ahead only if 60874142 is the cheapest match. `up` takes the cheapest matching offer and has no offer-id pin, so if another offer is cheaper, nothing is leased. The lease starts no later than 07:00Z, so that setup and the hour fit inside the 8 h cap below.
    - **Lease command:**
      `UOR_POD_VAST_BIN=~/uor-r4/local/pod-provider-target/debug/uor-r4-pod-provider UOR_POD_VAST_MIN_RELIABILITY=0.985 UOR_POD_MAX_RATE=58 UOR_POD_VAST_DISK_GB=700 UOR_POD_VAST_MIN_INET_MBPS=1000 UOR_POD_IMAGE=vllm/vllm-openai:v0.33.0-x86_64 scripts/pod/uor-pod up --lab claude --session claude-400 --purpose "D87 donor corpus: 8xH200 measured hour (Casey 04:30Z)" --hours 24 --gpu h200 --count 8 --no-bootstrap --owner-approved`
-   - **Right after `up`:** `M2_EXPECT_MACHINE=34325 M2_MAX_DPH=58 drive.sh offer POD` checks:
+   - **Right after `up`:** `M2_EXPECT_MACHINE=34325 M2_MAX_DPH=57.81 drive.sh offer POD` checks:
      - 8 H200s and at least 2,000 GB of RAM, which is 1,000 GB per replica;
      - `bw_nvlink` of at least 400;
-     - that the rented machine is 34325 and its all-in price is at most $58/h;
+     - that the rented machine is 34325 and its all-in price is at most $57.81/h (the approved $57.80);
      - NV# between every pair of the 8 GPUs in the pod's own `nvidia-smi topo -m` (SXM boards bridge through NVSwitch).
 
      On any mismatch the pod goes down at once. Missing fields fail closed. Then `note POD 5780 60874142` runs; it carries pod 1's cents and lease time.
@@ -58,14 +58,14 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 4×H200 po
      - `M2_CAP_CENTS=30000`: $300 across all pods, pod 1's $1 included;
      - `M2_CAP_SECONDS=28800`: 8 h from pod 1's lease at 03:46Z;
      - `M2_GRACE_FIRST=9000`: 2.5 h of setup before the first segment;
-     - `M2_GRACE=900`: once the hour's segment ends, the pod goes down after a verified final sync within about 15 min, not 30.
+     - `M2_GRACE=900`: once the hour's segment ends, the pod goes down after a verified final sync within about 15 min, not 30. The grace counts from every segment's end, not only the hour's. So the two tuning segments and the hour run back to back: each starts as soon as `wait-segment` reports the last one has ended. Any gap that could pass 15 min (an engine restart) is covered by `drive.sh hold POD`, and the hold is cleared before step 7 so that it cannot bill idle time afterwards.
 
      Expected spend: about 1–1.5 h of setup, 16 min of tuning, the hour and the final sync. That is about 2.5–3 h at $57.80/h, or $145–175. The $300 cap is the backstop.
    - **Pod failure:** no re-lease under this approval, which named one host. The shards already off the pod are sealed as they stand.
    - **Reading M (measurement):**
      - The records from tuning and the hour are sealed and verified (B2 and B4 as written; either failing reads I). They are stored as a partial set marked "8×H200 measured hour".
      - The REPORT gives R (the hour's mean kept tokens/s), R per replica (R/2), generated tokens/s, P_yield and the hour's cost.
-     - It gives two projections for 1B: (a) on this host at $57.80/h, P_cost and P_time; (b) under D87's $35/h, one replica at R/2 on a 4×H200 at the cheapest qualifying rate listed at report time, with the rate and its source named, stating whether both bounds ($1,000, 48 h) are met and how many such pods the cap allows.
+     - It gives two projections for 1B: (a) on this host at $57.80/h, P_cost and P_time; (b) under D87's $35/h, one replica at R/2 on a 4×H200 at the cheapest qualifying rate listed at report time, with the rate and its source named, stating whether both bounds ($1,000, 48 h) are met by one pod, and by the N such pods the cap allows. R/2 comes from an SXM board. A 4×H200 NVL, the only kind listed under $35/h so far, has 3.7 TB/s of memory bandwidth against 4.8, so for NVL, R/2 is an upper bound. The bounds in (b) are for the 1B run alone, on new pods; spend so far (pod 1 and this lease) is given beside them, not inside them.
      - B1 is not read. B3 and B5 are recorded. Then the unit stops: Casey's choice comes next.
    - **Pre-run review for the over-cap lease (the lab's, §5.10):**
      1. *Chain:* D87 (PR #4027 on `main`) releases this corpus for M2's distillation item #2848. The measured R is the one number missing from steps 7–8, and every choice left (cap, shape, time bound, fallback) turns on it.
