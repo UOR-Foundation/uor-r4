@@ -7,7 +7,9 @@
 //! binary-icosahedral quaternions, and cross-multiplied rationals. No float, no `exp`.
 //!
 //! This is the spin-1 rung only. Spins `l ≥ 2` (the spherical-harmonic ladder) and the map from
-//! tokens to coefficients are the next unit.
+//! tokens to coefficients are the next unit. The file also carries the planted-symmetry retrieval
+//! probe (codex-4): a hidden five-fold relation, learnt by enumerating the 120 icosians, against
+//! sign-code popcount and local-L1 controls.
 //!
 //! `cargo test -p uor-r4-integer --test sh_spin_probe`
 
@@ -413,4 +415,304 @@ fn the_score_separates_pairs_and_the_rank_weights_use_no_exponent() {
     let normalized: Vec<i128> = weights.iter().map(|w| w * (1 << 31) / total).collect();
     assert!(normalized.iter().all(|w| *w >= 0));
     assert!(normalized.iter().sum::<i128>() <= 1 << 31);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Planted-symmetry retrieval probe (codex-4)
+// ---------------------------------------------------------------------------------------------
+
+/// `r̂⁻¹ · u_q⁻¹ · u_j`, the relation-adjusted relative pose.
+fn relation_pose(r_hat: Unit, qi: Unit, qj: Unit) -> Unit {
+    r_hat.conj().mul(qi.conj()).mul(qj)
+}
+
+/// The score with a learned relation pose `r̂`.
+fn score_with_relation(r_hat: Unit, qi: Unit, qj: Unit, ai: [Rat; 3], aj: [Rat; 3]) -> Rat {
+    dot(ai, rotate(relation_pose(r_hat, qi, qj), aj))
+}
+
+fn cmp_rat(a: Rat, b: Rat) -> std::cmp::Ordering {
+    a.num
+        .mul(Phi { a: b.den, b: 0 })
+        .cmp(&b.num.mul(Phi { a: a.den, b: 0 }))
+}
+
+/// `q = ±1`, the two quaternions that act as the identity rotation.
+fn is_identity_rotation(q: Unit) -> bool {
+    let plus = q.n[0].sub(Phi { a: q.den, b: 0 }).is_zero();
+    let minus = q.n[0].add(Phi { a: q.den, b: 0 }).is_zero();
+    (plus || minus) && q.n[1].is_zero() && q.n[2].is_zero() && q.n[3].is_zero()
+}
+
+/// The order of the **rotation** `q` acts as (the quaternion order may be twice it).
+fn rotation_order(g: Unit) -> usize {
+    let mut power = g;
+    for order in 1..=10 {
+        if is_identity_rotation(power) {
+            return order;
+        }
+        power = power.mul(g);
+    }
+    panic!("no rotation order within 10");
+}
+
+/// Twelve equal-norm integer features, distinct and not fixed by any non-identity power of `r`.
+fn features(r: Unit) -> Vec<[i128; 3]> {
+    let mut out: Vec<[i128; 3]> = Vec::new();
+    'outer: for permutation in [[1i128, 2, 2], [2, 1, 2], [2, 2, 1]] {
+        for signs in 0..8u32 {
+            let sign = |index: usize| if signs & (1 << index) == 0 { 1 } else { -1 };
+            let candidate = [
+                permutation[0] * sign(0),
+                permutation[1] * sign(1),
+                permutation[2] * sign(2),
+            ];
+            let mut power = r;
+            let mut fixed = false;
+            for _ in 1..5 {
+                if rotate(power, candidate.map(Rat::integer)) == candidate.map(Rat::integer) {
+                    fixed = true;
+                    break;
+                }
+                power = power.mul(r);
+            }
+            if fixed || out.contains(&candidate) {
+                continue;
+            }
+            out.push(candidate);
+            if out.len() == 12 {
+                break 'outer;
+            }
+        }
+    }
+    assert_eq!(out.len(), 12, "twelve features");
+    out
+}
+
+struct Token {
+    pose: Unit,
+    feature: [i128; 3],
+    feature_rat: [Rat; 3],
+    id: u32,
+}
+
+/// Twelve features on ten-orbit poses: five rotations of `r`, repeated for each feature.
+fn tokens(r: Unit, poses: &[Unit; 5]) -> Vec<Token> {
+    let feats = features(r);
+    let mut out = Vec::with_capacity(60);
+    for (b, feature) in feats.iter().enumerate() {
+        for (k, pose) in poses.iter().enumerate() {
+            out.push(Token {
+                pose: *pose,
+                feature: *feature,
+                feature_rat: feature.map(Rat::integer),
+                id: (b * 5 + k) as u32,
+            });
+        }
+    }
+    out
+}
+
+fn sign_code(feature: [i128; 3]) -> u32 {
+    (0..3).map(|i| u32::from(feature[i] >= 0) << i).sum()
+}
+
+fn l1(a: [i128; 3], b: [i128; 3]) -> i128 {
+    (0..3).map(|i| (a[i] - b[i]).abs()).sum()
+}
+
+/// Rank of the target under a score, ties to the smaller id. `low` ranks ascending (controls),
+/// `high` ranks descending (the spin score).
+fn target_rank(tokens: &[Token], target_id: u32, score: impl Fn(&Token) -> (i128, Rat)) -> usize {
+    let mut ranked: Vec<(u32, i128, Rat)> = tokens
+        .iter()
+        .map(|candidate| {
+            let (low, high) = score(candidate);
+            (candidate.id, low, high)
+        })
+        .collect();
+    ranked.sort_by(|a, b| {
+        if a.1 != b.1 {
+            return a.1.cmp(&b.1);
+        }
+        cmp_rat(b.2, a.2).then(a.0.cmp(&b.0))
+    });
+    ranked
+        .iter()
+        .position(|(id, _, _)| *id == target_id)
+        .expect("the target is a token")
+}
+
+#[test]
+fn a_planted_five_fold_relation_is_learned_and_beats_the_content_controls() {
+    let group = group_2i();
+    let r = *group
+        .iter()
+        .find(|g| rotation_order(**g) == 5)
+        .expect("2I has rotations of order 5");
+    // Poses are 1, r, r², r³, r⁴, so the successor of index k is index k+1.
+    let poses = [
+        group[0],
+        r,
+        r.mul(r),
+        r.mul(r).mul(r),
+        r.mul(r).mul(r).mul(r),
+    ];
+    let tokens = tokens(r, &poses);
+    assert_eq!(tokens.len(), 60);
+
+    let fit_queries: Vec<usize> = (0..12).map(|b| b * 5).collect();
+    let target_of = |index: usize| -> u32 {
+        let token = &tokens[index];
+        let b = token.id as usize / 5;
+        let k = token.id as usize % 5;
+        (b * 5 + (k + 1) % 5) as u32
+    };
+    let all: Vec<usize> = (0..tokens.len()).collect();
+
+    let precision = |r_hat: Unit, queries: &[usize]| -> f64 {
+        let hits = queries
+            .iter()
+            .filter(|&&index| {
+                let query = &tokens[index];
+                let target = target_of(index);
+                let rank = target_rank(&tokens, target, |candidate| {
+                    let score = score_with_relation(
+                        r_hat,
+                        query.pose,
+                        candidate.pose,
+                        query.feature_rat,
+                        candidate.feature_rat,
+                    );
+                    (0, score)
+                });
+                rank == 0
+            })
+            .count();
+        hits as f64 / queries.len() as f64
+    };
+
+    // Fit by enumerating all 120 icosians: discrete learning, no gradient, no float.
+    let mut best = (0usize, -1.0f64);
+    for (index, candidate) in group.iter().enumerate() {
+        let value = precision(*candidate, &fit_queries);
+        if value > best.1 {
+            best = (index, value);
+        }
+    }
+    let fitted = group[best.0];
+    let test_precision = precision(fitted, &all);
+    let planted_precision = precision(r, &all);
+
+    // The fitted relation must act like the planted one on the fit set, not merely tie on 12 rows.
+    for &index in &fit_queries {
+        let query = &tokens[index];
+        for candidate in &tokens {
+            let a = score_with_relation(
+                fitted,
+                query.pose,
+                candidate.pose,
+                query.feature_rat,
+                candidate.feature_rat,
+            );
+            let b = score_with_relation(
+                r,
+                query.pose,
+                candidate.pose,
+                query.feature_rat,
+                candidate.feature_rat,
+            );
+            assert_eq!(
+                a, b,
+                "the fitted relation differs from the planted on the fit set"
+            );
+        }
+    }
+
+    // The controls read the local feature only, so all five members of an orbit tie.
+    let popcount_precision = {
+        let hits = all
+            .iter()
+            .filter(|&&index| {
+                let query = &tokens[index];
+                let target = target_of(index);
+                let code = sign_code(query.feature);
+                target_rank(&tokens, target, |candidate| {
+                    (
+                        i128::from((code ^ sign_code(candidate.feature)).count_ones()),
+                        Rat::zero(),
+                    )
+                }) == 0
+            })
+            .count();
+        hits as f64 / tokens.len() as f64
+    };
+    let l1_precision = {
+        let hits = all
+            .iter()
+            .filter(|&&index| {
+                let query = &tokens[index];
+                let target = target_of(index);
+                target_rank(&tokens, target, |candidate| {
+                    (l1(query.feature, candidate.feature), Rat::zero())
+                }) == 0
+            })
+            .count();
+        hits as f64 / tokens.len() as f64
+    };
+
+    // A wrong relation that actually differs on the data, for the non-constant control.
+    let first = &tokens[0];
+    let wrong = *group
+        .iter()
+        .find(|candidate| {
+            score_with_relation(
+                **candidate,
+                first.pose,
+                first.pose,
+                first.feature_rat,
+                first.feature_rat,
+            ) != score_with_relation(
+                r,
+                first.pose,
+                first.pose,
+                first.feature_rat,
+                first.feature_rat,
+            )
+        })
+        .expect("a relation that differs on the data");
+    let wrong_precision = precision(wrong, &fit_queries);
+
+    eprintln!(
+        "planted symmetry: fitted r̂ at index {} (planted acts identically), test precision@1 \
+         {:.3} (planted {:.3}); controls popcount {:.3}, L1 {:.3}; wrong r̂ {:.3}",
+        best.0,
+        test_precision,
+        planted_precision,
+        popcount_precision,
+        l1_precision,
+        wrong_precision
+    );
+
+    assert!(
+        test_precision >= 0.9,
+        "the fitted relation did not retrieve"
+    );
+    assert!(
+        test_precision >= popcount_precision + 0.2,
+        "not 0.2 above the popcount control"
+    );
+    assert!(
+        test_precision >= l1_precision + 0.2,
+        "not 0.2 above the L1 control"
+    );
+    assert!(
+        popcount_precision <= 0.3,
+        "the popcount control is not near its floor"
+    );
+    assert!(l1_precision <= 0.3, "the L1 control is not near its floor");
+    assert!(
+        wrong_precision < test_precision,
+        "a wrong relation is not worse"
+    );
 }
