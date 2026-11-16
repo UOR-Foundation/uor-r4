@@ -13,7 +13,7 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   So "attach e-means at the four sites" cannot be done without reviving a parked line.
 - **The only live codebook is not a k-means fit.** A8 address cells (`uor-r4-discrete`, ACTIVE)
   place tokens by a greedy, quota-constrained weighted-L1 rule. e-means on the same task is
-  **2.152x worse** on the fixture's weighted cell-L1 (31,588 vs 14,676). The arm is opt-in and is
+  **2.165x worse** on the fixture's weighted cell-L1 (31,780 vs 14,676). The arm is opt-in and is
   **not promoted**; the default placement is unchanged.
 - **D32 refused the first, float fitter.** The discrete crate is integer-only; the harness's
   `banned-presence` ratchet counted 66 float sites in the new module and failed the PR. The fitter
