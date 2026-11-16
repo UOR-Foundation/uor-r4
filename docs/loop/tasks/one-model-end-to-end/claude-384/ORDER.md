@@ -51,7 +51,7 @@ Every artifact is served on the laptop by `raw-id-replies` at this unit's head, 
 ## Files in scope
 
 - `crates/uor-r4-integer/src/fbs_pair_rows.rs` (new), declared in both crate roots, `src/native_geometry.rs` and `src/serving_root.rs` (corrected at the REPORT: the order named `lib.rs`, which is not the crate's root)
-- `crates/uor-r4-integer/src/stack/pair_rows.rs` (new), `stack/mod.rs`, `stack/format.rs`, `stack/session.rs`, `stack/tests.rs`, `stack/tests/pair_rows.rs` (new)
+- `crates/uor-r4-integer/src/stack/pair_rows.rs` (new), `stack/mod.rs`, `stack/format.rs`, `stack/session.rs`, `stack/tests.rs`, `stack/tests/pair_rows.rs` (new), `stack/q31_read.rs` (after the merge of `main`: its adder refuses pair rows, and one test of the two together)
 - `crates/uor-r4-integer/src/bin/fbs-export.rs`
 - `crates/uor-r4-float-train/src/pair_rows.rs`, `src/fbs_export.rs`, `src/bin/fbs-snapshot.rs`, `src/bin/pair-picks.rs` (new: the trainer's plan for the replay check), `src/bin/pair-positions.rs` (new, added at the review: the per-position replay check)
 - `docs/labs/one-model-end-to-end/instrument/src/bin/raw-id-replies.rs`, and the instrument's `Cargo.lock` (its build adds `uor-r4-native-vector`, a dependency `main` gave the integer crate without refreshing this lockfile)

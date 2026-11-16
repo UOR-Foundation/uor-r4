@@ -23,7 +23,7 @@ This is a reading on panels and in one nine-turn conversation. It is not a miles
 
 - **One shared operator for the picks** (`crates/uor-r4-integer/src/fbs_pair_rows.rs`, new, declared in both integer crate roots). The prime address of a token pair, the dictionary (ascending u32 addresses, checked), the marks (user marker and assistant header ids, refused when one begins the other or the header ends with a beginning of the user marker), the turn scan, `open_picks` (the rows of the open turn's pairs, sorted and unique, or none when no turn is open, the turn has no rows, or the stream ends with a beginning of the user marker after the reply position, where the trainer's reply has already ended), the streaming `PairTracker` the served session feeds token by token, the Q12 rounding (`quantize_q12`, refusing any value outside i16) and the plain-data `PairRowsImage` with its rows file (magic, sizes, order and digest checked). The float trainer's `pair_rows.rs` now calls this module for every pick and every address; it has no picks of its own.
 - **Snapshot** (`fbs-snapshot`). A checkpoint with pair rows is no longer refused. Weighed or boosted rows (claude-373, claude-374) and rows beside address rows are still refused. The rows are rounded to Q12 into `{out}.pair-rows`, with a census line and a note in the snapshot.
-- **Artifact** (`fbs-export --pair-rows ROWS`). The rows file is added as a UORLUT01 table under `lut-stack/12` (`add_pair_rows_uorlut01`), so a reader from before refuses the artifact by schema instead of serving it without its rows. The flag needs the snapshot's note and refuses an address table beside it.
+- **Artifact** (`fbs-export --pair-rows ROWS`). The rows file is added as a UORLUT01 table under `lut-stack/15` (`add_pair_rows_uorlut01`), so a reader from before refuses the artifact by schema instead of serving it without its rows. The flag needs the snapshot's note and refuses an address table beside it. Pair rows are also refused beside any native Q31 record (`q31`, `q31_lanes`, `q31_read`), when either is added and when a header names both; `pair_rows_are_not_served_with_a_q31_read` pins it, and it fails with the rule set aside. The served measurements below were made under `lut-stack/12`, before `main` gave that number to the native Q31 state (codex-1) and took `/13` and `/14` too; the merge moved pair rows to `/15`, and the artifacts were exported again and served again (below).
 - **Served read** (`stack/pair_rows.rs`, `stack/session.rs`). The model loads the rows from the artifact; the session carries a `PairTracker`, reset and restored with the rest of its state. At layer 0, after the Hamilton block and any address rows, before the Hamming read, the bag (the sum of the picked i16 rows, shifted by 4 into the i32 residual at 2^-16) is added at every step whose turn is open with picks. Both the plain and the timed fbs steps do this.
 - **Replay instrument.** `pair-picks` (float crate, new) writes the trainer's plan for each panel prompt from the checkpoint's own dictionary. `pair-positions` (float crate, new) compares the trainer's plan with the served tracker at every position of every panel prompt, from the rows file alone. `raw-id-replies --pair-rows 0|1` names each reply's picks and addresses, counts reply steps whose picks moved, and drops the rows with 0.
 - **Lockfile.** The instrument's `Cargo.lock` gains `uor-r4-native-vector`, which `main` gave the integer crate without refreshing it.
@@ -40,6 +40,7 @@ This is a reading on panels and in one nine-turn conversation. It is not a miles
   - pair-s3 `5f6e95f5c35cc736ba06b0ac231f0dc2f64a961bf79ad4e80e078ca506dbfd7e`, 116,050,880;
   - b-s2 `6ee0efe59c1276715140a4ebf2a10e8efe0813b41a8fb8e2be817e66e9bb2469`, 19,345,344;
   - b-s3 `793a30244e1b53eb63e2b8bbd6a085ff56f1c855a0d553fbb87ae275ad2992e9`, 19,345,344.
+- Those pair artifacts declare `lut-stack/12`. After the merge of `main` (a3c31a227) the four snapshots were exported again with the same flags (`serve3-384.sh`, log `serve-3/`). The b artifacts are byte for byte the ones above. Each pair artifact differs from its `/12` one in one byte, header offset 851, the schema's `2` become `5`: pair-s2 `41c6ff461fce47662917c928ea837679745aec8989d3806ff74d7b97564dc444`, pair-s3 `2a9f8ec2be833a5b0eb4e4ef8687b3f5e64082987f518d21835d64c42d00c38c`. Served again by `raw-id-replies` built at a3c31a227, every reply of the four S-pair reads (4,436), of S-b seed 2 P14 (1,108) and of S-cut seed 2 P14 (1,108) equals serve-2's id for id, and every read exits 0. The numbers below are serve-2's and hold for the `/15` artifacts.
 
 **Panels.** P14 (1,108 rows) and P23 (1,110 rows), claude-374's `samples-p-greedy-memory.json` (`33bdd07a…178d`, `ddccde6f…7d99`), identity hashes `6944401c8b70fac2` and `b40ce94f0ce85fff`, checked by `rows-384.sh` before scoring. Every row served greedy, 48 tokens, `--mark-reply 1`, turn memory as exported, no asks table, no serve-again, no pair experts, `--time-steps 1`, one process at a time.
 
@@ -135,11 +136,12 @@ The check reads equal serve-1's reads id for id (1,108 of 1,108 each); the other
 
 ## Checks run at the head
 
-Run on the laptop at `d3ec2fbc4ebf689577fec6764276156c32c013cd`, the last commit with code (`local/claude/claude-384/gates-head.sh`, log beside it):
+Run on the laptop at `a3c31a22714f2802543df721192914903d559f49`, the merge of `main` and the last commit with code (`local/claude/claude-384/gates-head.sh`, log `gates-merge.log`; the run at `d3ec2fbc4` before the merge is `gates-head.log`):
 
 | Check | Result |
 |---|---|
-| `cargo test -p uor-r4-integer --features serving-wasm --lib -- address pair_rows` | 35 passed |
+| `cargo test -p uor-r4-integer --features serving-wasm --lib -- address pair_rows q31` | 58 passed |
+| `cargo test -p uor-r4-integer --features serving-wasm --lib` (the whole library, after the merge) | 691 passed, 1 ignored |
 | `cargo test -p uor-r4-integer --lib -- pair_rows address` (the default build) | 21 passed |
 | `cargo test -p uor-r4-integer --features serving-wasm --bin fbs-export` | 6 passed |
 | `cargo test -p uor-r4-float-train --lib -- pair_rows fbs_export` | 41 passed |
@@ -154,12 +156,14 @@ Run on the laptop at `d3ec2fbc4ebf689577fec6764276156c32c013cd`, the last commit
 | The replay (above) | every position; 4,436 of 4,436 last positions |
 | Panel identity hashes | P14 `6944401c8b70fac2`, P23 `b40ce94f0ce85fff`, claude-374's |
 | Every serve-2 read's exit | 0 (6 of 6) |
+| Negative gate for the merge's rule: the native Q31 refusals taken out of both adders and the parse | `pair_rows_are_not_served_with_a_q31_read` fails; restored, it passes |
+| The `/15` artifacts served again (`serve-3/`) and the conversation run again (`chat-3/`) | 6,652 of 6,652 replies equal serve-2's id for id, every read exits 0; both pair models' nine replies equal `chat-2/`'s |
 
-Binaries that served serve-2 and the conversation, built at `72229241c7e8f648ac9e5ab2d83f126c945090d2`: `raw-id-replies` `e44fbbc842542e75f4578e067a9b7dba8c8b41a7983c9ecb214bcd51716b39fd`, `uor-chat` `540cd1fa1d3eb7d1013be5776280577ac4fc36aaf8df85dcfd6dbeb20488ec34`. The artifacts were exported by `fbs-export` `5af2cc461ec60b4548843681fc1b13df9bbeb68dda113db1dbb870a097c16ed7`, built at `44a07a527eec6fe12e3f3d3af5b3ea62b0ead58f`; the fix did not touch the export. On `wick`, at `bd66ff21d`: `fbs-snapshot` `e7e99bb3…6d74`, `pair-picks` `95fcb98b…c568c343`. The serve-1 reads used `raw-id-replies` `874139a9…86a6` and `uor-chat` `4e19b04c…6603`, built at `44a07a527`.
+Binaries that served serve-2 and the conversation, built at `72229241c7e8f648ac9e5ab2d83f126c945090d2`: `raw-id-replies` `e44fbbc842542e75f4578e067a9b7dba8c8b41a7983c9ecb214bcd51716b39fd`, `uor-chat` `540cd1fa1d3eb7d1013be5776280577ac4fc36aaf8df85dcfd6dbeb20488ec34`. The artifacts were exported by `fbs-export` `5af2cc461ec60b4548843681fc1b13df9bbeb68dda113db1dbb870a097c16ed7`, built at `44a07a527eec6fe12e3f3d3af5b3ea62b0ead58f`; the fix did not touch the export. On `wick`, at `bd66ff21d`: `fbs-snapshot` `e7e99bb3…6d74`, `pair-picks` `95fcb98b…c568c343`. The serve-1 reads used `raw-id-replies` `874139a9…86a6` and `uor-chat` `4e19b04c…6603`, built at `44a07a527`. serve-3 and the second conversation, after the merge, used binaries built at `a3c31a227`: `raw-id-replies` `62c38b5f1b58490788b4e101585b8357cba34f846133da93baa1de229ea54c61`, `uor-chat` `8f99e4d6629c62aff8fa1bcbf44fdaa582ef217183f6a6bf789516558be348e9`, `fbs-export` `0f7ed7b5cbd0374bb3fc89ebaf37a6d36f4d39c65929071e95ab03375c3f1807`.
 
 ## Skills used
 
-None. The kit is `local/claude/claude-384/`: `snap-384.sh` (the `wick` job), `export-384.sh`, `serve-384.sh` (serve-1), `serve2-384.sh` (serve-2), `replay-384.sh`, `rows-384.sh` with `subst-384.sh` (claude-374's, run names changed), `retime-384.sh`, `chat-384.sh` and `gates-head.sh`.
+None. The kit is `local/claude/claude-384/`: `snap-384.sh` (the `wick` job), `export-384.sh`, `serve-384.sh` (serve-1), `serve2-384.sh` (serve-2), `serve3-384.sh` (the `/15` export and serve-3), `replay-384.sh`, `rows-384.sh` with `subst-384.sh` (claude-374's, run names changed), `retime-384.sh`, `chat-384.sh` and `gates-head.sh`.
 
 ## Still open
 
