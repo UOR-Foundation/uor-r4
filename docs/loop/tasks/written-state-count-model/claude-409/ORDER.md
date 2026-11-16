@@ -1,6 +1,6 @@
 # ORDER: written-state-count-model, claude-409 (decision card: the written-state track, the plan row, and the native-space items S0–S6)
 
-Lab: claude. Track: written-state-count-model (new; no roadmap item file yet, see Still open in the REPORT).
+Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-end-to-end.md). Track: written-state-count-model (no item file of its own yet).
 Base: `origin/main` `ef1f4a641` (claude-408, #4045). Doc-only.
 
 ## Why this unit
@@ -29,7 +29,7 @@ These are a contract for P1–P5. This unit implements none of them, so it is an
 
 - `docs/loop/tasks/written-state-count-model/claude-409/**` (ORDER, NATIVE-SPACE, REPORT);
 - `docs/research/reviews/pi-review-2026-11-16/**`: the ten review files copied byte-for-byte, plus a README index;
-- `docs/integration/DECISIONS.md`: one appended row, the next free D-number;
+- `docs/loop/tasks/written-state-count-model/claude-409/DECISION.md`: the decision card (`docs/integration/DECISIONS.md` is an owner path, so its index row is not written here);
 - `PLAN.md`: one dated owner-directions row, status marks on the two 16 Nov rows, and one table under "Approved sequences".
 
 ## Stop list
@@ -44,7 +44,7 @@ These are a contract for P1–P5. This unit implements none of them, so it is an
 ## Done when
 
 1. ORDER is the first commit on the branch and REPORT the last.
-2. The D-entry, the PLAN rows and the P0–P5 table are in, and the review folder holds the ten copies (byte-identical, checked with `cmp`) and its README.
+2. The decision card, the PLAN rows and the P0–P5 table are in, and the review folder holds the ten copies (byte-identical, checked with `cmp`) and its README.
 3. The secret and email grep over `docs/research/reviews/` has no hits.
 4. `UOR_LAB=claude uor-harness check` shows no new failure against `origin/main`.
 5. `UOR_LAB=claude uor-harness loop pr-check --local` passes, or its output is reported.

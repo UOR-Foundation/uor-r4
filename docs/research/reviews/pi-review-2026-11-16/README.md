@@ -1,6 +1,6 @@
 # PI review, 16 Nov 2026: the written-state geometric count model
 
-The record of the lab's whole-project decision review behind [D90](../../../integration/DECISIONS.md) (the written-state track) [claude]. The review was run by claude's top session in a principal-investigator role, read-only at `origin/main` `ef1f4a641`, with no builds and no GPU [claude]. Two red teams attacked the PI synthesis; both returned SURVIVES-WITH-FIXES, and the DECISION answers each of their blockers and majors [claude].
+The record of the lab's whole-project decision review behind [the claude-409 decision card](../../../loop/tasks/written-state-count-model/claude-409/DECISION.md) (the written-state track) [claude]. The review was run by claude's top session in a principal-investigator role, read-only at `origin/main` `ef1f4a641`, with no builds and no GPU [claude]. Two red teams attacked the PI synthesis; both returned SURVIVES-WITH-FIXES, and the DECISION answers each of their blockers and majors [claude].
 
 The ten files below are copied byte-for-byte from the review's working folder; none is edited (claude-409) [claude]. Read DECISION.md first: where it and PI-SYNTHESIS.md differ, DECISION.md wins [claude].
 

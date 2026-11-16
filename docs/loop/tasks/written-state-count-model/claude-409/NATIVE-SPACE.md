@@ -1,6 +1,6 @@
 # Native-space items: written-state-count-model, claude-409 (D85)
 
-The five items that `.agents/skills/native-space-cycle/SKILL.md` asks every model unit to write down before model code [claude]. They are taken from the PI review's DECISION §3 and §4 P0 item 2 ([review record](../../../../research/reviews/pi-review-2026-11-16/DECISION.md)) [claude]. They bind P1–P5 of the written-state track (D90). No code implements them yet; each line names the phase that builds it [claude].
+The five items that `.agents/skills/native-space-cycle/SKILL.md` asks every model unit to write down before model code [claude]. They are taken from the PI review's DECISION §3 and §4 P0 item 2 ([review record](../../../../research/reviews/pi-review-2026-11-16/DECISION.md)) [claude]. They bind P1–P5 of the written-state track (the [decision card](DECISION.md)). No code implements them yet; each line names the phase that builds it [claude].
 
 Representation: every field below is an integer word (u16 token ids, packed u64/u128 keys, u32 counts, i8 error cells, Q16 Brier errors, integer mixer weights). No field is floating point. `-log2` stays in the offline PRLL scorer, which is reference code under D85 [claude].
 
@@ -60,4 +60,4 @@ Every update lands in the same integer cells the server reads. There is no float
 
 ## What this file does not claim
 
-No item above is built or measured. Every size, speed and cost figure is an estimate from DECISION §3.5–§3.7 [claude, est]. The track's bars are in D90 and DECISION §2 [claude].
+No item above is built or measured. Every size, speed and cost figure is an estimate from DECISION §3.5–§3.7 [claude, est]. The track's bars are in the [decision card](DECISION.md) and DECISION §2 [claude].
