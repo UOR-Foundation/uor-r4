@@ -125,6 +125,15 @@ if [ -d "$OUT/smoke-temp" ] && [ -d "$OUT/smoke-temp-bs" ]; then
     echo "smoke-temp vs smoke-temp-bs: differ" >> "$OUT/backend-active.txt"
   fi
 fi
+# Evidence (not proof) that the trimmed CPU chain samples as the default chain does: the same
+# prompts, seeds and values through the default chain in the earlier smoke job.
+if [ -d "$OUT/smoke-temp" ] && [ -s "$W/tp/smoke/smoke-seq/shard-0000.jsonl" ]; then
+  if cmp -s "$OUT/smoke-temp/shard-0000.jsonl" "$W/tp/smoke/smoke-seq/shard-0000.jsonl"; then
+    echo "smoke-temp vs smoke/smoke-seq (default chain): identical" >> "$OUT/backend-active.txt"
+  else
+    echo "smoke-temp vs smoke/smoke-seq (default chain): differ" >> "$OUT/backend-active.txt"
+  fi
+fi
 
 # The bar's rates use the window: requests and prompts that finished within WINDOW seconds.
 # Rates in thousandths of a token per second; gpu = mean utilization % and peak MiB; slots = mean busy slots.
@@ -134,15 +143,17 @@ echo "== summary"
   for D in "$OUT"/*/; do
     A=$(basename "$D")
     [ -s "$D/metrics.json" ] || continue
-    KW=$(jq '.window.kept_answer_tokens' "$D/metrics.json")
-    TE=$(jq '.tokenize_errors' "$D/metrics.json")
+    KW=$(jq '.window.kept_answer_tokens' "$D/metrics.json" || echo 0)
+    TE=$(jq '.tokenize_errors' "$D/metrics.json" || echo -1)
     if [ -s "$D/count.json" ]; then
-      KW=$(jq '.window_kept_answer_tokens // 0' "$D/count.json")
-      TE=$(jq '.tokenize_errors' "$D/count.json")
+      KW=$(jq '.window_kept_answer_tokens // 0' "$D/count.json" || echo 0)
+      TE=$(jq '.tokenize_errors' "$D/count.json" || echo -1)
     fi
-    GU=$(awk -F", " '{u+=$2; n++} END {if (n) printf "%d", u/n; else printf "-"}' "$OUT/$A.gpu")
+    # Utilization and busy slots average only the samples inside the dispatch window (one per 5 s),
+    # so an arm's drain after the window does not lower them; peak memory reads every sample.
+    GU=$(awk -F", " -v k=$((WINDOW / 5)) 'NR<=k {u+=$2; n++} END {if (n) printf "%d", u/n; else printf "-"}' "$OUT/$A.gpu")
     GM=$(awk -F", " '{if ($1>m) m=$1} END {printf "%d", m}' "$OUT/$A.gpu")
-    BS=$(awk -F", " '{b+=$3; n++} END {if (n) printf "%d", b/n; else printf "-"}' "$OUT/$A.gpu")
+    BS=$(awk -F", " -v k=$((WINDOW / 5)) 'NR<=k {b+=$3; n++} END {if (n) printf "%d", b/n; else printf "-"}' "$OUT/$A.gpu")
     jq -r --argjson kw "$KW" --argjson te "$TE" --arg gu "$GU" --arg gm "$GM" --arg bs "$BS" --arg a "$A" \
       '[$a, .wall_ms, .window.tail_ms, .window.prompts_finished, .window.generated_tokens, $kw,
         (.window.generated_tokens * 1000000 / .window.ms | floor), ($kw * 1000000 / .window.ms | floor),
