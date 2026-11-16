@@ -91,7 +91,7 @@
 //! gains `"turn_memory_dropped": true` and says `"has_turn_memory": false`. With 1, or with no
 //! flag, the replies and the receipt are as before.
 //!
-//! An artifact with pair rows (`lut-stack/12`, claude-384) is served with them, and each reply
+//! An artifact with pair rows (`lut-stack/15`, claude-384) is served with them, and each reply
 //! line gains `pair_rows` and `pair_addresses`: the open turn's picks (row numbers of the
 //! artifact's pair dictionary and their prime products) at the step that chose the reply's first
 //! id, or `null` without picks. The receipt gains `pair_rows` with the row count with picks and

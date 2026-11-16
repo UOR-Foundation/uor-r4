@@ -63,6 +63,8 @@ pub(crate) mod kernels;
 mod memory;
 mod point_key;
 mod prompt_reply;
+mod q31_read;
+mod read_out;
 pub mod q31_serving;
 mod session;
 #[cfg(feature = "serving-wasm")]
@@ -96,14 +98,19 @@ pub use flock::{
 pub use format::{add_address_uorlut01, STACK_FBS_ADDRESS_SCHEMA};
 pub use format::{add_pair_rows_uorlut01, STACK_FBS_PAIR_ROWS_SCHEMA};
 pub use pair_rows::{read_pair_rows_uorlut01, PairMarks, PairRowsImage, StackPairRows, PAIR_ROW_EXP};
+pub use format::{add_q31_read_uorlut01, STACK_FBS_Q31_READ_SCHEMA};
+pub use q31_read::{read_q31_read_uorlut01, Q31ReadStep, Q31SessionRead, StackQ31Read, Q31_READ_TABLE};
+pub use read_out::ReadOut;
 pub use format::{
     add_hamming_ask_uorlut01, add_hamming_place_uorlut01, add_point_key_uorlut01, drop_hamming_carry_uorlut01,
     set_hamming_copy_latest_uorlut01, set_hamming_copy_longest_uorlut01,
     StackMemoryChain, StackPointKey, POINT_KEY_EXP, STACK_FBS_CHAIN_SCHEMA, STACK_FBS_POINT_SCHEMA,
+    StackQ31State, STACK_FBS_Q31_SCHEMA, Q31_STATE_TABLE,
+    StackQ31Lanes, STACK_FBS_Q31_LANES_SCHEMA, Q31_LANES_TABLE,
 };
 pub use format::{
     decode_grid_code, encode_grid_code, export_fbs_trunk_uorlut01, export_fbs_trunk_uorlut01_carry, export_fbs_trunk_uorlut01_chain,
-    export_fbs_trunk_uorlut01_with, export_fbs_trunk_uorlut01_with_provenance, export_float_trunk_uorlut01, inspect_uorlut01, stack_schema_for, FbsExportSnaps,
+    export_fbs_trunk_uorlut01_with, export_fbs_trunk_uorlut01_with_q31, export_fbs_trunk_uorlut01_with_lane_gates, export_fbs_trunk_uorlut01_with_provenance, export_float_trunk_uorlut01, inspect_uorlut01, stack_schema_for, FbsExportSnaps,
     FbsQuatMode, FbsReferenceSnaps, FbsRoutes, FbsTieMargins, FbsTrunkLayer, FbsTrunkSnapshot,
     FbsWriterOutput, Fixed, FloatTrunkLayer, FloatTrunkMixer, FloatTrunkRead, FloatTrunkRecurrence,
     FloatTrunkSnapshot, StackMemory, StackNumerics, StackPointer, StackReadSelect, StackShape,
@@ -136,16 +143,16 @@ pub use prompt_reply::{
     PromptReplySignatureMapping, MAX_PROMPT_REPLY_ENTRIES, MAX_PROMPT_REPLY_PROMPT_TOKENS,
     MAX_PROMPT_REPLY_REPLY_TOKENS, MAX_PROMPT_REPLY_SIDECAR_BYTES, STACK_PROMPT_REPLY_SCHEMA,
 };
-pub use q31_serving::Q31ServingSession;
+pub use q31_serving::{Q31LaneServingSession, Q31ServingSession};
 #[cfg(not(target_arch = "wasm32"))]
 pub use session::verify_step_objdump_zero_mul_zero_float;
 pub use session::{
     sample_mean_sd_t_ci95, student_t_0975, student_t_975, validate_protocol_v3_energy_receipt,
     validate_protocol_v3_energy_receipt_with_mode, verify_step_disassembly_text, FbsImage,
-    FbsLayerImage, FbsMapImage, IntegerStackModel, IntegerStackSession, NativeStep,
-    MemoryMoveState, ProtocolV3ValidationError, SerializedStackLayerState, SerializedStackSession,
-    SnapTraceEntry, StackParameterBreakdown, StackPhaseParameters, StepPhaseTimingNs,
-    CONVOLUTION_WIDTH, STACK_SESSION_SCHEMA,
+    FbsLayerImage, FbsMapImage, IntegerStackModel, IntegerStackSession, MemoryMoveState,
+    NativeQ31Carry, NativeStep, ProtocolV3ValidationError, SerializedStackLayerState,
+    SerializedStackSession, SnapTraceEntry, StackParameterBreakdown, StackPhaseParameters,
+    StepPhaseTimingNs, CONVOLUTION_WIDTH, STACK_SESSION_SCHEMA,
 };
 
 /// SHA-256 of the 120 unit icosians of 2I (the transport snap's roots) as

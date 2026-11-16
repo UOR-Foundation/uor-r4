@@ -10,12 +10,14 @@ use crate::bitcode::popcount_swar;
 use crate::fbs_snapshot::{CodeRole, ForcedCode, HammingTraceHead, HammingTraceRead, HammingTraceWindow};
 
 use core::ops::Range;
+use std::collections::BTreeMap;
 
 use crate::fbs_snapshot::{place_find, place_first, PlaceImage, PlaceState};
 use crate::place_asks::{AsksIndex, PlaceAsks};
 
 use super::format::{Container, StackHamming, HAMMING_WEIGHT_EXP};
 use super::kernels::{stack_div_u64, stack_hamilton, NORM_FINE_EXP, RESIDUAL_EXP};
+use super::read_out::ReadOut;
 use super::session::{stack_rotation, GATE_EPSILON};
 use super::StackError;
 
@@ -406,6 +408,40 @@ impl CopyHeads {
         nearest(self.query_at(tokens, t, h), t, self.kept, |s| self.key_at(tokens, s, h))
     }
 
+    /// The chosen positions and their Q31 margin weights, in the common `ReadOut` shape.
+    pub fn read_out(&self, h: usize, tokens: &[u32]) -> ReadOut {
+        let chosen = self.choose(h, tokens);
+        let weights: Vec<i128> = chosen
+            .iter()
+            .map(|&(_, distance)| {
+                i128::from(copy_weight_q31(self.margins[h], distance))
+            })
+            .collect();
+        ReadOut::selection(&chosen, weights)
+    }
+
+    /// Copy head `h`'s kept positions at the last row of `tokens`, from `index`, which catches up
+    /// to the row. Copy key 1 uses the index; a pair head falls back to the scan.
+    #[allow(dead_code)]
+    pub(crate) fn choose_indexed(
+        &self,
+        h: usize,
+        tokens: &[u32],
+        index: &mut CodeIndex,
+    ) -> Vec<(usize, u32)> {
+        let Some(t) = tokens.len().checked_sub(1) else {
+            return Vec::new();
+        };
+        // A pair head's key joins two tokens, so its buckets would be `vocab²`; it scans. The
+        // fallback is the shipped selection, so a caller that does not check the pair still gets
+        // the right answer.
+        if self.pair[h].is_some() {
+            return self.choose(h, tokens);
+        }
+        index.catch_up(tokens, t, |token| self.code(token, h));
+        index.nearest(self.query_at(tokens, t, h), self.kept)
+    }
+
     /// The positions [`Self::mean`] reads for head `h`, with the codes `force` names in place of
     /// the computed ones (Q5's forced replay, claude-249): the row's query, and each candidate
     /// `s`'s key. The positions are picked by the head's [`CopyRule`], as the served read picks
@@ -437,13 +473,33 @@ impl CopyHeads {
     /// that found a candidate, so a head that found nothing does not dilute one that did. Both
     /// quotients truncate toward zero.
     pub fn mean(&self, tokens: &[u32], table: &[i16]) -> Option<Vec<i128>> {
-        self.mean_at(tokens, table, false)
+        self.mean_at(tokens, table, false, None)
     }
 
     /// [`Self::mean`] at a row the caller names as a reply's `opening` or not (claude-356). Only
-    /// [`CopyRule::LongestAfterOpening`] reads the two differently.
-    pub fn mean_at(&self, tokens: &[u32], table: &[i16], opening: bool) -> Option<Vec<i128>> {
-        self.mean_by(tokens, table, |h| self.choose_ruled(h, tokens, opening))
+    /// [`CopyRule::LongestAfterOpening`] reads the two differently. With `index`, the `Mean` rule
+    /// on a copy key 1 head selects from it; every other rule and a pair head scan.
+    pub fn mean_at(
+        &self,
+        tokens: &[u32],
+        table: &[i16],
+        opening: bool,
+        mut index: Option<&mut HammingIndex>,
+    ) -> Option<Vec<i128>> {
+        let rule = self.rule.at(self.opens(tokens, opening));
+        let mut chosen = Vec::with_capacity(self.copy);
+        for h in 0..self.copy {
+            let row = if rule == CopyRule::Mean && self.pair[h].is_none() {
+                match index.as_deref_mut() {
+                    Some(index) => self.choose_indexed(h, tokens, &mut index.copy[h]),
+                    None => self.choose(h, tokens),
+                }
+            } else {
+                self.choose_ruled(h, tokens, opening)
+            };
+            chosen.push(row);
+        }
+        self.mean_by(tokens, table, |h| chosen[h].clone())
     }
 
     /// [`Self::mean`] over the kept positions `choose` gives each head.
@@ -556,6 +612,79 @@ fn longest_of(query: u64, t: usize, key: impl Fn(usize) -> u64, longer: impl Fn(
     long.or(exact).map(|s| (s, 0)).into_iter().collect()
 }
 
+/// A key code to the ascending positions that carry it, so a read can find its nearest positions
+/// without scanning every earlier token. The read's query changes each row; its **keys** do not, so
+/// the index is over keys and is exact.
+///
+/// `built` is the highest position inserted (positions `1..=built`), which lets a caller catch the
+/// index up to a row by appending what it has not seen. The session wiring consumes it next; until
+/// then the tests exercise it.
+#[allow(dead_code)]
+#[derive(Clone, Debug, Default)]
+pub(crate) struct CodeIndex {
+    buckets: BTreeMap<u64, Vec<u32>>,
+    built: usize,
+}
+
+#[allow(dead_code)]
+impl CodeIndex {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// Forget every position (a reset or a restored session rebuilds from its tokens).
+    pub(crate) fn clear(&mut self) {
+        self.buckets.clear();
+        self.built = 0;
+    }
+
+    fn insert(&mut self, code: u64, position: u32) {
+        self.buckets.entry(code).or_default().push(position);
+    }
+
+    /// Insert the positions the read at row `t` may choose, `1..t`, whose key at position `s` is
+    /// `code(tokens[s - 1])`. A catch-up from `built` appends only what is new.
+    pub(crate) fn catch_up(&mut self, tokens: &[u32], t: usize, code: impl Fn(u32) -> u64) {
+        while self.built + 1 < t {
+            let position = self.built + 1;
+            self.insert(code(tokens[position - 1]), position as u32);
+            self.built = position;
+        }
+    }
+
+    /// The `kept` nearest positions by `(popcount(query XOR code), position)`, the read's tie rule:
+    /// codes walked in ascending distance, and within one distance the first `kept` positions of
+    /// each bucket hold the smallest `kept` positions of the group.
+    pub(crate) fn nearest(&self, query: u64, kept: usize) -> Vec<(usize, u32)> {
+        let mut codes: Vec<(u32, u64)> = self
+            .buckets
+            .keys()
+            .map(|&code| (popcount_swar(query ^ code), code))
+            .collect();
+        codes.sort_unstable();
+        let mut out: Vec<(usize, u32)> = Vec::with_capacity(kept);
+        let mut index = 0;
+        while index < codes.len() && out.len() < kept {
+            let distance = codes[index].0;
+            let mut group: Vec<u32> = Vec::new();
+            while index < codes.len() && codes[index].0 == distance {
+                let bucket = &self.buckets[&codes[index].1];
+                let take = bucket.len().min(kept);
+                group.extend_from_slice(&bucket[..take]);
+                index += 1;
+            }
+            group.sort_unstable();
+            for position in group {
+                if out.len() == kept {
+                    break;
+                }
+                out.push((position as usize, distance));
+            }
+        }
+        out
+    }
+}
+
 /// The `min(kept, t − 1)` positions `1 ≤ s < t` nearest to `query` by `popcount(query XOR key(s))`,
 /// with their distances, in ascending distance and then ascending `s` (the design's tie rule).
 fn nearest(query: u64, t: usize, kept: usize, key: impl Fn(usize) -> u64) -> Vec<(usize, u32)> {
@@ -608,6 +737,69 @@ mod copy_rule_tests {
     }
 
     const FULL: i128 = 1 << 31;
+
+    #[test]
+    fn the_indexed_copy_head_matches_the_scan_on_a_long_stream() {
+        let (heads, _table) = heads(16, CopyRule::Mean);
+        assert!(heads.pair[0].is_none());
+        let tokens: Vec<u32> = (0..4096)
+            .map(|step| ((step * 7 + step / 3) % 4) as u32)
+            .collect();
+        let mut index = super::CodeIndex::new();
+        for t in 1..tokens.len() {
+            let row = &tokens[..=t];
+            let want = heads.choose(0, row);
+            let got = heads.choose_indexed(0, row, &mut index);
+            assert_eq!(got, want, "row {t}");
+        }
+        // A cleared index rebuilds the same answers.
+        index.clear();
+        let row = &tokens[..=2048];
+        assert_eq!(
+            heads.choose_indexed(0, row, &mut index),
+            heads.choose(0, row)
+        );
+    }
+
+    #[test]
+    fn a_pair_head_falls_back_to_the_scan() {
+        let (mut heads, _table) = heads(16, CopyRule::Mean);
+        heads.pair[0] = Some(0xffff_ffff_0000_0000);
+        let tokens: Vec<u32> = (0..256).map(|step| ((step * 5 + 1) % 4) as u32).collect();
+        let mut index = super::CodeIndex::new();
+        for t in 1..tokens.len() {
+            let row = &tokens[..=t];
+            assert_eq!(
+                heads.choose_indexed(0, row, &mut index),
+                heads.choose(0, row),
+                "row {t}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_copy_head_read_out_is_its_choice_with_margin_weights() {
+        let (heads, _table) = heads(2, CopyRule::Mean);
+        let tokens = [0u32, 1, 2, 3];
+        let out = heads.read_out(0, &tokens);
+        let chosen = heads.choose(0, &tokens);
+        assert_eq!(
+            out.support,
+            chosen
+                .iter()
+                .map(|&(position, _)| position as u16)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(out.weights_q31.len(), chosen.len());
+        for (&(_, distance), &weight) in chosen.iter().zip(&out.weights_q31) {
+            assert_eq!(
+                weight,
+                i128::from(super::copy_weight_q31(heads.margins[0], distance))
+            );
+        }
+        assert!(out.payload.is_none());
+        assert_eq!(out.check(), Ok(()));
+    }
 
     #[test]
     fn the_names_round_trip() {
@@ -753,14 +945,14 @@ mod copy_rule_tests {
         for caller in [false, true] {
             assert_eq!(heads.choose_ruled(0, &tokens, caller), vec![(5, 0)]);
             assert_eq!(heads.choose_forced(0, &tokens, &free, caller), vec![(5, 0)]);
-            assert_eq!(heads.mean_at(&tokens, &table, caller), row(2, FULL));
+            assert_eq!(heads.mean_at(&tokens, &table, caller, None), row(2, FULL));
         }
         assert_eq!(heads.mean(&tokens, &table), row(2, FULL));
         heads.marker = Some([3, 1]);
         for caller in [false, true] {
             assert_eq!(heads.choose_ruled(0, &tokens, caller), vec![(2, 0)]);
             assert_eq!(heads.choose_forced(0, &tokens, &free, caller), vec![(2, 0)]);
-            assert_eq!(heads.mean_at(&tokens, &table, caller), row(3, FULL));
+            assert_eq!(heads.mean_at(&tokens, &table, caller, None), row(3, FULL));
         }
     }
 
@@ -775,10 +967,10 @@ mod copy_rule_tests {
         let (longest, _) = heads(16, CopyRule::LongestExact);
         assert_eq!(spared.choose_ruled(0, &tokens, true), vec![(5, 0)]);
         assert_eq!(spared.choose_ruled(0, &tokens, true), latest.choose_ruled(0, &tokens, false));
-        assert_eq!(spared.mean_at(&tokens, &table, true), row(2, FULL));
+        assert_eq!(spared.mean_at(&tokens, &table, true, None), row(2, FULL));
         assert_eq!(spared.choose_ruled(0, &tokens, false), vec![(2, 0)]);
         assert_eq!(spared.choose_ruled(0, &tokens, false), longest.choose_ruled(0, &tokens, false));
-        assert_eq!(spared.mean_at(&tokens, &table, false), row(3, FULL));
+        assert_eq!(spared.mean_at(&tokens, &table, false, None), row(3, FULL));
         // A caller that names no opening reads the longest rule's.
         assert_eq!(spared.mean(&tokens, &table), row(3, FULL));
     }
@@ -790,7 +982,7 @@ mod copy_rule_tests {
         for rule in [CopyRule::Mean, CopyRule::LatestExact, CopyRule::LatestNearest, CopyRule::LongestExact] {
             let (heads, table) = heads(16, rule);
             assert_eq!(heads.choose_ruled(0, &tokens, true), heads.choose_ruled(0, &tokens, false), "{}", rule.name());
-            assert_eq!(heads.mean_at(&tokens, &table, true), heads.mean(&tokens, &table), "{}", rule.name());
+            assert_eq!(heads.mean_at(&tokens, &table, true, None), heads.mean(&tokens, &table), "{}", rule.name());
         }
     }
 
@@ -805,7 +997,7 @@ mod copy_rule_tests {
         assert_eq!(spared.choose_forced(0, &tokens, &free, false), vec![(2, 0)]);
         for opening in [true, false] {
             let replay = spared.mean_by(&tokens, &table, |h| spared.choose_forced(h, &tokens, &free, opening));
-            assert_eq!(replay, spared.mean_at(&tokens, &table, opening), "opening {opening}");
+            assert_eq!(replay, spared.mean_at(&tokens, &table, opening, None), "opening {opening}");
         }
     }
 
@@ -843,7 +1035,7 @@ mod copy_rule_tests {
             CopyRule::LongestAfterOpening,
         ] {
             let (latest, table) = heads(16, rule);
-            assert_eq!(latest.mean_at(&[1, 1], &table, true), None);
+            assert_eq!(latest.mean_at(&[1, 1], &table, true, None), None);
             assert_eq!(latest.mean(&[1], &table), None);
             assert_eq!(latest.mean(&[1, 1], &table), None);
             assert_eq!(latest.mean(&[], &table), None);
@@ -1029,6 +1221,22 @@ impl TypeHeads {
         nearest(query, tokens.len() - 1, self.kept, |s| self.key(tokens[s - 1], j))
     }
 
+    /// Type head `j`'s kept positions from `index`, which catches up to the row.
+    pub(crate) fn choose_indexed(
+        &self,
+        j: usize,
+        query: u64,
+        tokens: &[u32],
+        index: &mut CodeIndex,
+    ) -> Vec<(usize, u32)> {
+        if tokens.is_empty() {
+            return Vec::new();
+        }
+        let t = tokens.len() - 1;
+        index.catch_up(tokens, t, |token| self.key(token, j));
+        index.nearest(query, self.kept)
+    }
+
     /// [`Self::choose`] with each candidate `s`'s key code that `force` names in place of the
     /// computed one (claude-249). A forced query is the caller's `query`.
     fn choose_forced(&self, j: usize, query: u64, tokens: &[u32], force: &HeadForce) -> Vec<(usize, u32)> {
@@ -1043,23 +1251,42 @@ impl TypeHeads {
     /// ([`Self::queries`]) and `payloads` holds `width` values for each position up to the row,
     /// as the copy mean: each head's `Σ w_s · v_s / max(1, #{w_s > 0})`, then the mean over the
     /// heads that found a candidate, both truncating toward zero.
-    pub fn mean(&self, queries: &[u64], tokens: &[u32], payloads: &[i64]) -> Option<Vec<i128>> {
-        self.mean_by(queries, tokens, Brought::Payloads(payloads), None)
+    pub fn mean(
+        &self,
+        queries: &[u64],
+        tokens: &[u32],
+        payloads: &[i64],
+        index: Option<&mut HammingIndex>,
+    ) -> Option<Vec<i128>> {
+        self.mean_by(queries, tokens, Brought::Payloads(payloads), None, index)
     }
 
     /// The ask heads' mean at the last row of `tokens`, at [`COPY_MEAN_EXP`] (claude-353), or
     /// `None` when no ask head kept a candidate inside its margin: [`Self::mean`]'s quotients
     /// over the Q12 `table`'s point of each kept position's own token, as the copy mean's sum
     /// is, for the question codes `queries` ([`Self::ask_queries`]).
-    pub fn ask_mean(&self, queries: &[u64], tokens: &[u32], table: &[i16]) -> Option<Vec<i128>> {
-        self.mean_by(queries, tokens, Brought::Points(table), None)
+    pub fn ask_mean(
+        &self,
+        queries: &[u64],
+        tokens: &[u32],
+        table: &[i16],
+        index: Option<&mut HammingIndex>,
+    ) -> Option<Vec<i128>> {
+        self.mean_by(queries, tokens, Brought::Points(table), None, index)
     }
 
     /// [`Self::mean`] over what `brought` names, with each head `j`'s kept positions from
     /// [`Self::choose_forced`] under `force[j]` when `force` is given, else from [`Self::choose`].
     /// It takes no `choose` closure: its captures were copied through a SIMD register (`fmov`),
     /// which the audit refuses (claude-255).
-    fn mean_by(&self, queries: &[u64], tokens: &[u32], brought: Brought<'_>, force: Option<&[HeadForce]>) -> Option<Vec<i128>> {
+    fn mean_by(
+        &self,
+        queries: &[u64],
+        tokens: &[u32],
+        brought: Brought<'_>,
+        force: Option<&[HeadForce]>,
+        mut index: Option<&mut HammingIndex>,
+    ) -> Option<Vec<i128>> {
         let width = self.width;
         let mut sum = vec![0i128; width];
         let mut found = 0i128;
@@ -1068,7 +1295,10 @@ impl TypeHeads {
             let mut count = 0i128;
             let kept = match force {
                 Some(heads) => self.choose_forced(j, query, tokens, &heads[j]),
-                None => self.choose(j, query, tokens),
+                None => match index.as_deref_mut() {
+                    Some(index) => self.choose_indexed(j, query, tokens, &mut index.types[j]),
+                    None => self.choose(j, query, tokens),
+                },
             };
             for (s, d) in kept {
                 let weight = copy_weight_q31(self.margins[j], d);
@@ -1234,6 +1464,36 @@ struct ServedRead {
     type_weight: Vec<i32>,
 }
 
+/// One read's per-head key indices: a `CodeIndex` per copy head and per type head (the ask heads
+/// share the type heads' keys, so one index serves both). Kept per session, since the positions
+/// are the session's tokens; cleared on reset and restore.
+#[derive(Clone, Debug, Default)]
+pub struct HammingIndex {
+    copy: Vec<CodeIndex>,
+    types: Vec<CodeIndex>,
+}
+
+impl HammingIndex {
+    fn for_read(read: &ServedRead) -> Self {
+        HammingIndex {
+            copy: (0..read.copy.copy).map(|_| CodeIndex::new()).collect(),
+            types: read.types.as_ref().map_or_else(Vec::new, |types| {
+                (0..types.heads - types.copy).map(|_| CodeIndex::new()).collect()
+            }),
+        }
+    }
+
+    /// Forget every position; the next read catches up from the session's tokens.
+    pub(crate) fn clear(&mut self) {
+        for index in &mut self.copy {
+            index.clear();
+        }
+        for index in &mut self.types {
+            index.clear();
+        }
+    }
+}
+
 /// A stack's Hamming reads as the FBS session serves them (claude-194, claude-195): the copy and
 /// type heads of `flock_read_hamming.rs`'s `read`, at the two hooks of the float trunk
 /// (`geometric_stack_native.rs`).
@@ -1289,6 +1549,11 @@ pub(super) fn check_payload_cache(typed: usize, context: usize, width: usize) ->
 }
 
 impl ServedHamming {
+    /// One empty index per read, in read order; the session keeps them and catches them up.
+    pub(crate) fn indexes(&self) -> Vec<HammingIndex> {
+        self.reads.iter().map(HammingIndex::for_read).collect()
+    }
+
     /// The rule the copy heads are served under: the artifact's own unless
     /// [`Self::set_copy_rule`] changed it (claude-345).
     pub(crate) fn copy_rule(&self) -> CopyRule {
@@ -1470,7 +1735,17 @@ impl ServedHamming {
     ///
     /// A read that asks (claude-353) keeps no payload: its heads bring back the table's point of
     /// each kept position's own token, and the mean is at [`COPY_MEAN_EXP`], as the copy mean.
-    fn type_mean(&self, i: usize, point: &[i64], tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], force: Option<&ReadForce>) -> Option<Vec<i128>> {
+    #[allow(clippy::too_many_arguments)]
+    fn type_mean(
+        &self,
+        i: usize,
+        point: &[i64],
+        tokens: &[u32],
+        table: &[i16],
+        payloads: &mut [Vec<i64>],
+        force: Option<&ReadForce>,
+        index: Option<&mut HammingIndex>,
+    ) -> Option<Vec<i128>> {
         let types = self.reads[i].types.as_ref()?;
         let t = tokens.len().checked_sub(1)?;
         let brought = if types.asks() {
@@ -1482,7 +1757,7 @@ impl ServedHamming {
         };
         let mut queries = Self::type_queries(types, point, table, tokens, t);
         let Some(force) = force else {
-            return types.mean_by(&queries, tokens, brought, None);
+            return types.mean_by(&queries, tokens, brought, None, index);
         };
         let heads = &force.heads[self.reads[i].copy.copy..];
         for (query, head) in queries.iter_mut().zip(heads) {
@@ -1490,7 +1765,7 @@ impl ServedHamming {
                 *query = forced;
             }
         }
-        types.mean_by(&queries, tokens, brought, Some(heads))
+        types.mean_by(&queries, tokens, brought, Some(heads), None)
     }
 
     /// Read `i`'s choices at the last row `t` of `tokens`, its type heads asking with the hook's
@@ -1539,7 +1814,7 @@ impl ServedHamming {
     /// [`CopyRule::LongestAfterOpening`] reads.
     #[inline(never)]
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn stream(&self, depth: usize, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], x: &mut [i32], trace: Option<&mut Vec<HammingStepRead>>, force: Option<&[ReadForce]>, opening: bool) {
+    pub(crate) fn stream(&self, depth: usize, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], x: &mut [i32], trace: Option<&mut Vec<HammingStepRead>>, force: Option<&[ReadForce]>, opening: bool, indexes: &mut [HammingIndex]) {
         if depth == self.layers {
             return;
         }
@@ -1553,13 +1828,14 @@ impl ServedHamming {
         }
         let read = &self.reads[i];
         let copy = match force {
-            None => read.copy.mean_at(tokens, table, opening),
+            None => read.copy.mean_at(tokens, table, opening, indexes.get_mut(i)),
             Some(f) => read.copy.mean_by(tokens, table, |h| read.copy.choose_forced(h, tokens, &f.heads[h], opening)),
         };
         let typed = match &read.types {
             Some(types) => {
                 let point: Vec<i64> = x.iter().map(|&v| i64::from(v)).collect();
-                let mean = self.type_mean(i, &point, tokens, table, payloads, force);
+                let mean =
+                    self.type_mean(i, &point, tokens, table, payloads, force, indexes.get_mut(i));
                 // claude-353: an ask mean is at the copy mean's exponent, raised here to the
                 // type term's, exactly. `|y| < 2^46`, so the raised mean is far inside the sum's bound.
                 match (mean, types.asks()) {
@@ -1595,7 +1871,7 @@ impl ServedHamming {
     /// `opening` is as [`Self::stream`]'s.
     #[inline(never)]
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn readout(&self, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], n: &mut [i64], trace: Option<&mut Vec<HammingStepRead>>, force: Option<&[ReadForce]>, offer: Option<usize>, opening: bool) {
+    pub(crate) fn readout(&self, tokens: &[u32], table: &[i16], payloads: &mut [Vec<i64>], n: &mut [i64], trace: Option<&mut Vec<HammingStepRead>>, force: Option<&[ReadForce]>, offer: Option<usize>, opening: bool, indexes: &mut [HammingIndex]) {
         let Some(i) = self.reads.iter().position(|r| r.depth == self.layers) else {
             return;
         };
@@ -1610,10 +1886,10 @@ impl ServedHamming {
                 // A Q12 point at a Q31 weight of 1: `2^COPY_MEAN_EXP`, as a mean's sum is.
                 Some(table[at..at + self.width].iter().map(|&v| i128::from(v) << 31).collect())
             }
-            (None, None) => read.copy.mean_at(tokens, table, opening),
+            (None, None) => read.copy.mean_at(tokens, table, opening, indexes.get_mut(i)),
             (None, Some(f)) => read.copy.mean_by(tokens, table, |h| read.copy.choose_forced(h, tokens, &f.heads[h], opening)),
         };
-        let typed = self.type_mean(i, n, tokens, table, payloads, force);
+        let typed = self.type_mean(i, n, tokens, table, payloads, force, indexes.get_mut(i));
         if copy.is_none() && typed.is_none() {
             return;
         }
@@ -1675,4 +1951,178 @@ thread_local! {
     /// While `Some`, the residual after every layer of each FBS step, its read applied, in order
     /// (claude-194's hook tests). Present in test builds only, and off until a test turns it on.
     pub(super) static LAYER_TRACE: std::cell::RefCell<Option<Vec<Vec<i32>>>> = const { std::cell::RefCell::new(None) };
+}
+#[cfg(test)]
+mod code_index_tests {
+    use super::{nearest, popcount_swar};
+    use std::cell::Cell;
+    use std::collections::BTreeMap;
+
+    /// `key code -> ascending positions`, the exact index the read would keep per head.
+    struct CodeIndex {
+        buckets: BTreeMap<u64, Vec<u32>>,
+        distance_computations: Cell<usize>,
+    }
+
+    impl CodeIndex {
+        fn new() -> Self {
+            CodeIndex {
+                buckets: BTreeMap::new(),
+                distance_computations: Cell::new(0),
+            }
+        }
+
+        fn insert(&mut self, code: u64, position: u32) {
+            self.buckets.entry(code).or_default().push(position);
+        }
+
+        /// The `kept` nearest positions by `(popcount(query XOR code), position)`, the read's tie
+        /// rule. Codes are walked in ascending distance; within one distance, the first `kept`
+        /// positions of each bucket contain the smallest `kept` positions of the group.
+        fn nearest(&self, query: u64, kept: usize) -> Vec<(usize, u32)> {
+            let mut codes: Vec<(u32, u64)> = self
+                .buckets
+                .keys()
+                .map(|&code| (popcount_swar(query ^ code), code))
+                .collect();
+            self.distance_computations
+                .set(self.distance_computations.get() + codes.len());
+            codes.sort_unstable();
+            let mut out: Vec<(usize, u32)> = Vec::with_capacity(kept);
+            let mut index = 0;
+            while index < codes.len() && out.len() < kept {
+                let distance = codes[index].0;
+                let mut group: Vec<u32> = Vec::new();
+                while index < codes.len() && codes[index].0 == distance {
+                    let bucket = &self.buckets[&codes[index].1];
+                    let take = bucket.len().min(kept);
+                    group.extend_from_slice(&bucket[..take]);
+                    index += 1;
+                }
+                group.sort_unstable();
+                for position in group {
+                    if out.len() == kept {
+                        break;
+                    }
+                    out.push((position as usize, distance));
+                }
+            }
+            out
+        }
+    }
+
+    #[test]
+    fn the_index_keeps_the_position_tie_rule() {
+        // Two codes, one at distance 0 and one at distance 1 from the query, with interleaved
+        // positions. The read orders by distance, then by position.
+        let mut index = CodeIndex::new();
+        index.insert(0b0000, 3);
+        index.insert(0b0001, 2);
+        index.insert(0b0000, 1);
+        index.insert(0b0001, 4);
+        let got = index.nearest(0b0000, 4);
+        let want = nearest(0b0000, 5, 4, |s| match s {
+            1 | 3 => 0b0000,
+            2 | 4 => 0b0001,
+            _ => 0,
+        });
+        assert_eq!(got, want);
+        assert_eq!(got, vec![(1, 0), (3, 0), (2, 1), (4, 1)]);
+    }
+
+    #[test]
+    fn the_index_matches_nearest_and_counts_codes_not_positions() {
+        const VOCAB: usize = 256;
+        const LEN: usize = 4096;
+        const KEPT: usize = 16;
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let codes: Vec<u64> = (0..VOCAB).map(|_| next()).collect();
+        let tokens: Vec<u32> = (0..LEN).map(|_| (next() % VOCAB as u64) as u32).collect();
+
+        let mut index = CodeIndex::new();
+        let mut checked = 0usize;
+        let mut positions_total = 0usize;
+        let mut distance_total = 0usize;
+        for t in 1..LEN {
+            // At row `t` the eligible positions are 1 through t-1, whose keys are x_0 through
+            // x_{t-2}.
+            if t >= 2 {
+                index.insert(codes[tokens[t - 2] as usize], (t - 1) as u32);
+            }
+            if t % 16 != 0 {
+                continue;
+            }
+            let query = next();
+            let want = nearest(query, t, KEPT, |s| codes[tokens[s - 1] as usize]);
+            let before = index.distance_computations.get();
+            let got = index.nearest(query, KEPT);
+            let after = index.distance_computations.get();
+            assert_eq!(got, want, "row {t}");
+            checked += 1;
+            distance_total += after - before;
+            positions_total += t - 1;
+        }
+        let average_distance = distance_total as f64 / checked as f64;
+        let average_positions = positions_total as f64 / checked as f64;
+        eprintln!(
+            "code index: {checked} rows, kept {KEPT}; distance computations {average_distance:.1} vs positions {average_positions:.1} ({:.1}x fewer)",
+            average_positions / average_distance
+        );
+        assert!(checked > 200);
+        assert!(
+            average_distance * 8.0 < average_positions,
+            "the index is not examining fewer candidates than positions"
+        );
+    }
+
+    #[test]
+    fn the_index_at_32k_examines_codes_not_positions() {
+        use std::time::Instant;
+        const VOCAB: usize = 256;
+        const LEN: usize = 32768;
+        const KEPT: usize = 16;
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let codes: Vec<u64> = (0..VOCAB).map(|_| next()).collect();
+        let tokens: Vec<u32> = (0..LEN).map(|_| (next() % VOCAB as u64) as u32).collect();
+
+        // Row `t` reads positions `1..t`, whose keys are `x_0..x_{t-2}`.
+        let t = LEN - 1;
+        let mut index = CodeIndex::new();
+        for s in 1..=t - 1 {
+            index.insert(codes[tokens[s - 1] as usize], s as u32);
+        }
+
+        let query = next();
+        let started = Instant::now();
+        let want = nearest(query, t, KEPT, |s| codes[tokens[s - 1] as usize]);
+        let scan = started.elapsed();
+        let before = index.distance_computations.get();
+        let started = Instant::now();
+        let got = index.nearest(query, KEPT);
+        let indexed = started.elapsed();
+        let distance_computations = index.distance_computations.get() - before;
+
+        assert_eq!(got, want, "the indexed read differs from the scan at 32k");
+        let positions = t - 1;
+        let ratio = positions as f64 / distance_computations as f64;
+        eprintln!(
+            "code index at 32k: {distance_computations} distance computations vs {positions} positions ({ratio:.1}x fewer); scan {scan:?}, indexed {indexed:?}"
+        );
+        assert!(
+            ratio > 64.0,
+            "the index examines too many codes at 32k: {distance_computations}"
+        );
+    }
 }

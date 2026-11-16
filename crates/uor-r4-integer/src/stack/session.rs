@@ -34,6 +34,8 @@ use crate::bitcode::{BitCode, BITCODE_LANES};
 use super::address::{address_image, AddressImage};
 use super::pair_rows::{pair_rows_image, PairRowsImage};
 use crate::fbs_pair_rows::PairTracker;
+use super::q31_read::{q31_read_image, Q31ReadStep, ServedQ31Read};
+use uor_r4_native_vector::Q31ReadHistory;
 use super::content_readout::{ContentReadout, CONTENT_CODE_SIGNATURE_BITS};
 use super::flock::{
     flock_select_integer, rank_table_q31, FlockScratch, FlockSelect, MAX_FLOCK_CONTEXT,
@@ -42,9 +44,9 @@ use super::format::{
     Container, Fixed, MatrixView, StackNumerics, StackPointer, StackShape, StackTransportSnap,
     StackTurnMemory,
 };
-use super::hamming::{hamming_image, CopyRule, HammingStepRead, ReadForce, ServedHamming};
-use crate::fbs_snapshot::PlaceState;
-use crate::place_asks::PlaceAsks;
+use super::hamming::{
+    hamming_image, CopyRule, HammingIndex, HammingStepRead, ReadForce, ServedHamming,
+};
 use super::kernels::{
     grid_apply, grid_valid, mul_i128, shift, shift_wide, stack_activation, stack_activation_tables,
     stack_argmax, stack_dequant_row, stack_div_u128, stack_dot, stack_exp_neg, stack_gemv,
@@ -55,10 +57,16 @@ use super::kernels::{
     to_exp_i32, PackedMatrix, ARCOSH_TABLE_LEN, NORM_FINE_EXP, PRODUCT_EXP, RESIDUAL_EXP,
 };
 use super::memory::{memory_image, MemoryAnchors, MemoryMove, ServedTurnMemory};
+use super::q31_serving::{
+    q31_quaternion_admitted, q31_saturate, Q31LaneServingSession, Q31Quaternion,
+    Q31ServingSession, Q31Transport, Q31_MODEL_BYTES,
+};
 use super::StackError;
+use crate::fbs_snapshot::PlaceState;
 use crate::fbs_snapshot::{
     DecisionForceWindow, DecisionHead, DecisionLayer, DecisionMemory, DecisionRead, DecisionStep,
 };
+use crate::place_asks::PlaceAsks;
 
 /// Exponent of the recurrence state.
 const STATE_EXP: i32 = -32;
@@ -348,9 +356,12 @@ struct FbsModel {
     /// The address table's rows (`lut-stack/11`, claude-366), read after each layer's Hamilton
     /// block.
     address: Option<AddressImage>,
-    /// The pair rows (`lut-stack/12`, claude-384): the bag of the open turn's pair rows, added
+    /// The pair rows (`lut-stack/15`, claude-384): the bag of the open turn's pair rows, added
     /// after layer 0's Hamilton block at every reply position.
     pair_rows: Option<PairRowsImage>,
+    /// The native Q31 first-pick read (`lut-stack/14`, claude-390), read after layer `depth - 1`'s
+    /// MLP add.
+    q31_read: Option<ServedQ31Read>,
 }
 
 /// A read-only, zero-copy view of a parsed SpiralCore/FBS model's integers,
@@ -481,6 +492,21 @@ pub struct NativeStep {
     pub query_q12: Vec<i32>,
 }
 
+/// One recurrence lane's raw native-Q31 transition during a served step.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeQ31Carry {
+    /// Recurrence layer, in model order.
+    pub layer: usize,
+    /// Lane within the layer's width.
+    pub lane: usize,
+    /// The four carried words before transport.
+    pub before: Q31Quaternion,
+    /// The shared Q31 Hamilton transition's raw output, before decay and drive.
+    pub transport: Q31Transport,
+    /// The four carried words after decay, transport and drive.
+    pub after: Q31Quaternion,
+}
+
 /// A softmax-free flock rank read: the selection (sink 0, the `window` most
 /// recent positions and the `k` best others) and, for every support size `m`
 /// in `1..=window + k + 2` (the kept positions and NoRead), the normalized Q31
@@ -551,6 +577,9 @@ pub struct IntegerStackModel {
     snapped: bool,
     transport_snap: Option<StackTransportSnap>,
     sha256: String,
+    /// The exact serving identity: the artifact SHA alone, or a composite
+    /// artifact-plus-native-Q31 identity when that state is attached.
+    session_model_sha256: String,
     /// Tokenizer identity carried by a bound `/10` artifact.
     tokenizer_sha256: Option<String>,
     embed: PackedMatrix,
@@ -567,6 +596,12 @@ pub struct IntegerStackModel {
     /// `turn-memory-integer`); `None` on a stack without one, whose steps are the
     /// trunk's alone.
     memory: Option<Box<ServedTurnMemory>>,
+    /// The exact native Q31 model state, when a caller has attached one. It is
+    /// model state, not session state, and changes the real recurrence.
+    native_q31: Option<Q31ServingSession>,
+    /// The exact per-lane native Q31 state (a `/13` artifact): one gate per lane
+    /// and one shared cursor. Exclusive with `native_q31`.
+    native_q31_lanes: Option<Q31LaneServingSession>,
     /// An optional artifact-bound nearest-example content override used by
     /// [`IntegerStackSession::serve_step`], never by the raw step paths.
     content_readout: Option<Box<ContentReadout>>,
@@ -681,10 +716,12 @@ fn fbs_model(artifact: &Container, shape: &StackShape) -> Result<FbsModel, Stack
         )?),
         None => None,
     };
+    let q31_read = q31_read_image(artifact)?.map(|image| ServedQ31Read::new(image, &writer_table));
     Ok(FbsModel {
         hamming,
         address: address_image(artifact)?,
         pair_rows: pair_rows_image(artifact)?,
+        q31_read,
         layers,
         final_gain: codes("final_norm_gain", d)?,
         writer_table,
@@ -756,7 +793,10 @@ impl IntegerStackModel {
         // session, which forms its keys and applies its moves (units 2-3 of
         // `turn-memory-integer`). Dropping it would serve a trunk the float model depends on.
         let memory = match memory_image(&artifact)? {
-            Some(image) => Some(Box::new(ServedTurnMemory::new(image, artifact.memory_chain.as_ref()))),
+            Some(image) => Some(Box::new(ServedTurnMemory::new(
+                image,
+                artifact.memory_chain.as_ref(),
+            ))),
             None => None,
         };
         if artifact.shape.read_binary() && artifact.shape.head_dim() > BITCODE_LANES {
@@ -996,7 +1036,9 @@ impl IntegerStackModel {
         } else {
             None
         };
-        Ok(Self {
+        let q31_state = artifact.q31_state_bytes()?;
+        let q31_lane_state = artifact.q31_lane_state_bytes()?;
+        let mut model = Self {
             head_dim: shape.head_dim(),
             lorentz: shape.lorentz(),
             l2: shape.l2(),
@@ -1004,6 +1046,7 @@ impl IntegerStackModel {
             transport_snap: artifact.transport_snap.clone(),
             shape,
             numerics,
+            session_model_sha256: artifact.sha256.clone(),
             sha256: artifact.sha256,
             tokenizer_sha256,
             embed,
@@ -1012,6 +1055,8 @@ impl IntegerStackModel {
             layers,
             fbs,
             memory,
+            native_q31: None,
+            native_q31_lanes: None,
             content_readout: None,
             content_readout_sha256: None,
             exp_table,
@@ -1023,7 +1068,96 @@ impl IntegerStackModel {
             threads: 1,
             #[cfg(not(target_arch = "wasm32"))]
             pool: None,
-        })
+        };
+        // The artifact's own Q31 state (D85): attach the exact words it carries, with no
+        // side-load. A stack without the section keeps the existing artifact-derived path.
+        if let Some(state) = q31_state {
+            model.attach_native_q31_state(&state)?;
+        }
+        if let Some(state) = q31_lane_state {
+            model.attach_native_q31_lane_state(&state)?;
+        }
+        Ok(model)
+    }
+
+    /// Attach the exact 48-byte native Q31 model state written by training.
+    ///
+    /// The state is parsed without numeric conversion and becomes part of the
+    /// model's real recurrence. Attach it before creating sessions. A model
+    /// without an attached state keeps the existing artifact-derived path.
+    pub fn attach_native_q31_state(&mut self, bytes: &[u8]) -> Result<(), StackError> {
+        if !self.shape.pattern.bytes().any(|kind| kind == b'r') {
+            return Err(StackError::Shape(
+                "native Q31 state needs a model with a recurrence layer",
+            ));
+        }
+        if self.native_q31_lanes.is_some() {
+            return Err(StackError::Shape(
+                "a model holds one native Q31 state; the per-lane state is already attached",
+            ));
+        }
+        let state = Q31ServingSession::from_slice(bytes)?;
+        let mut digest = Sha256::new();
+        digest.update(b"uor-r4.native-q31-serving/1\0");
+        digest.update(self.sha256.as_bytes());
+        digest.update([0]);
+        digest.update(state.to_bytes());
+        self.session_model_sha256 = hex::encode(digest.finalize());
+        self.native_q31 = Some(state);
+        Ok(())
+    }
+
+    /// Attach the exact per-lane native Q31 state written by training (`32K + 16` bytes).
+    ///
+    /// The state is parsed without numeric conversion and becomes the real recurrence's per-lane
+    /// transport: lane `i` advances through gate `i`. Attach it before creating sessions. A model
+    /// holds either this state or the single-gate state, never both.
+    pub fn attach_native_q31_lane_state(&mut self, bytes: &[u8]) -> Result<(), StackError> {
+        if !self.shape.pattern.bytes().any(|kind| kind == b'r') {
+            return Err(StackError::Shape(
+                "native Q31 state needs a model with a recurrence layer",
+            ));
+        }
+        if self.native_q31.is_some() {
+            return Err(StackError::Shape(
+                "a model holds one native Q31 state; the single-gate state is already attached",
+            ));
+        }
+        let state = Q31LaneServingSession::from_slice(bytes)?;
+        if state.lanes() != self.shape.lanes() {
+            return Err(StackError::Shape(
+                "a per-lane Q31 state needs K = width / 4 lanes",
+            ));
+        }
+        let mut digest = Sha256::new();
+        digest.update(b"uor-r4.native-q31-lanes-serving/1\0");
+        digest.update(self.sha256.as_bytes());
+        digest.update([0]);
+        digest.update((state.lanes() as u64).to_le_bytes());
+        digest.update(state.to_bytes());
+        self.session_model_sha256 = hex::encode(digest.finalize());
+        self.native_q31_lanes = Some(state);
+        Ok(())
+    }
+
+    /// The attached native Q31 model handle, if any.
+    pub fn native_q31_state(&self) -> Option<Q31ServingSession> {
+        self.native_q31
+    }
+
+    /// The exact 48 bytes of the attached native Q31 model, if any.
+    pub fn native_q31_state_bytes(&self) -> Option<[u8; Q31_MODEL_BYTES]> {
+        self.native_q31.map(Q31ServingSession::to_bytes)
+    }
+
+    /// The attached per-lane native Q31 handle, if any.
+    pub fn native_q31_lane_state(&self) -> Option<&Q31LaneServingSession> {
+        self.native_q31_lanes.as_ref()
+    }
+
+    /// The exact `32K + 16` bytes of the attached per-lane state, if any.
+    pub fn native_q31_lane_state_bytes(&self) -> Option<Vec<u8>> {
+        self.native_q31_lanes.as_ref().map(Q31LaneServingSession::to_bytes)
     }
 
     /// Threads that a step's weight maps run on. Every thread count computes
@@ -1082,7 +1216,11 @@ impl IntegerStackModel {
     /// evaluator of the view alone would drop the read.
     pub fn fbs_image(&self) -> Option<FbsImage<'_>> {
         let fbs = self.fbs.as_deref()?;
-        if fbs.hamming.is_some() || self.memory.is_some() {
+        if fbs.hamming.is_some()
+            || self.memory.is_some()
+            || self.native_q31.is_some()
+            || self.native_q31_lanes.is_some()
+        {
             return None;
         }
         self.fbs_trunk_image()
@@ -1099,7 +1237,12 @@ impl IntegerStackModel {
     pub fn fbs_trunk_image(&self) -> Option<FbsImage<'_>> {
         let fbs = self.fbs.as_deref()?;
         // claude-384: nor for one with pair rows, added inside layer 0.
-        if fbs.address.is_some() || fbs.pair_rows.is_some() {
+        if fbs.address.is_some()
+            || fbs.pair_rows.is_some()
+            || fbs.q31_read.is_some()
+            || self.native_q31.is_some()
+            || self.native_q31_lanes.is_some()
+        {
             return None;
         }
         let layers = fbs
@@ -1213,7 +1356,12 @@ impl IntegerStackModel {
     /// The counted table [`Self::set_place_asks`] set, as the place register reads it (the same
     /// index object), and the place read's marks it was checked against (claude-367). `None`
     /// with no table set.
-    pub fn place_asks_index(&self) -> Option<(&crate::place_asks::AsksIndex, &crate::fbs_snapshot::PlaceMarks)> {
+    pub fn place_asks_index(
+        &self,
+    ) -> Option<(
+        &crate::place_asks::AsksIndex,
+        &crate::fbs_snapshot::PlaceMarks,
+    )> {
         self.fbs
             .as_ref()
             .and_then(|fbs| fbs.hamming.as_ref())
@@ -1246,7 +1394,7 @@ impl IntegerStackModel {
             .is_some_and(|fbs| fbs.pair_rows.take().is_some())
     }
 
-    /// The pair rows the artifact carries, if any (`uor-r4.lut-stack/12`, claude-384).
+    /// The pair rows the artifact carries, if any (`uor-r4.lut-stack/15`, claude-384).
     pub fn pair_rows(&self) -> Option<&PairRowsImage> {
         self.fbs.as_deref()?.pair_rows.as_ref()
     }
@@ -1587,6 +1735,12 @@ impl IntegerStackModel {
             pointer_at: 0,
             copy_scale_q16: 0,
             tokens: Vec::with_capacity(context),
+            hamming_index: self
+                .fbs
+                .as_ref()
+                .and_then(|f| f.hamming.as_ref())
+                .map_or(Vec::new(), |hamming| hamming.indexes()),
+            hamming_index_on: true,
             hamming_payloads: self
                 .fbs
                 .as_ref()
@@ -1597,6 +1751,10 @@ impl IntegerStackModel {
             spoken: None,
             open_reply_start: false,
             hamming_trace: None,
+            native_q31_trace: None,
+            q31_history: Q31ReadHistory::new(),
+            q31_read_trace: None,
+            q31_read_refused: false,
             decision: None,
             pointer_keys: vec![0; pointer_dim * context],
             pointer_lifts: if pointer_lorentz {
@@ -1733,7 +1891,8 @@ pub struct SerializedStackSession {
     pub schema: String,
     /// Schema version (must be 1).
     pub version: u32,
-    /// SHA-256 of the model artifact this session was created from.
+    /// SHA-256 of the serving model this session was created from: the
+    /// artifact SHA alone, or the composite artifact-plus-native-Q31 identity.
     pub artifact_sha256: String,
     /// Current sequence position (number of tokens ingested / stepped).
     pub position: u64,
@@ -2056,6 +2215,10 @@ pub struct IntegerStackSession<'m> {
     /// For each Hamming read with type heads, the payload of every position stepped so far,
     /// `context * width` (claude-195); empty for a read without them.
     hamming_payloads: Vec<Vec<i64>>,
+    /// One index per Hamming read, caught up from `tokens`; the read selects from it.
+    hamming_index: Vec<HammingIndex>,
+    /// Whether reads use `hamming_index` (a switch for the on/off equality test).
+    hamming_index_on: bool,
     /// The place read's register and the turns it has read (claude-351); idle without a place
     /// read.
     place: PlaceState,
@@ -2070,6 +2233,16 @@ pub struct IntegerStackSession<'m> {
     open_reply_start: bool,
     /// While `Some`, each Hamming read's choices at every step (claude-235's trace).
     hamming_trace: Option<Vec<HammingStepRead>>,
+    /// While `Some`, every recurrence lane's raw native-Q31 transition.
+    native_q31_trace: Option<Vec<NativeQ31Carry>>,
+    /// The native Q31 read's key addresses and ids of this prompt's rows (claude-390); empty
+    /// without a read.
+    q31_history: Q31ReadHistory,
+    /// While `Some`, the native Q31 read's pick and rows at every step.
+    q31_read_trace: Option<Vec<Q31ReadStep>>,
+    /// Set when the native Q31 read refused a step: that step's layer states and read history
+    /// already hold its row, so every later step is refused until [`Self::reset`].
+    q31_read_refused: bool,
     /// While `Some`, Q5's decision trace and its forced set (claude-249).
     decision: Option<Box<DecisionState>>,
     /// The pointer head's keys `[position][dim]` (exponent -16) and Lorentz
@@ -2166,6 +2339,47 @@ impl IntegerStackSession<'_> {
     /// while it is off.
     pub fn take_hamming_trace(&mut self) -> Option<Vec<HammingStepRead>> {
         self.hamming_trace.as_mut().map(std::mem::take)
+    }
+
+    /// Record the native Q31 read's pick, input row and out row at every step from the next step
+    /// on (claude-390), or stop and drop what is recorded. Refused on a model without a read.
+    pub fn set_q31_read_trace(&mut self, on: bool) -> Result<(), StackError> {
+        if on && self.model.fbs.as_deref().is_none_or(|f| f.q31_read.is_none()) {
+            return Err(StackError::Shape("a native Q31 read trace needs a stack with a read"));
+        }
+        self.q31_read_trace = on.then(Vec::new);
+        Ok(())
+    }
+
+    /// The read's steps recorded since the trace was turned on; `None` while it is off.
+    pub fn q31_read_trace(&self) -> Option<&[Q31ReadStep]> {
+        self.q31_read_trace.as_deref()
+    }
+
+    /// Select the Hamming read from its per-head index (the default) or scan every earlier
+    /// position. Two sessions of the same model and stream must serve identically either way; the
+    /// switch exists for that equality test.
+    pub fn set_hamming_index(&mut self, on: bool) {
+        self.hamming_index_on = on;
+    }
+
+    /// Record each real recurrence lane's native-Q31 input, transport and
+    /// post-drive carry from the next step on. Off by default and unavailable
+    /// unless the model has an attached Q31 state.
+    pub fn set_native_q31_trace(&mut self, on: bool) -> Result<(), StackError> {
+        if on && self.model.native_q31.is_none() && self.model.native_q31_lanes.is_none() {
+            return Err(StackError::Shape(
+                "a native Q31 trace needs an attached native Q31 model",
+            ));
+        }
+        self.native_q31_trace = on.then(Vec::new);
+        Ok(())
+    }
+
+    /// The native-Q31 carries recorded since tracing was enabled, in step,
+    /// layer and lane order. Tracing stays enabled and the trace is emptied.
+    pub fn take_native_q31_trace(&mut self) -> Option<Vec<NativeQ31Carry>> {
+        self.native_q31_trace.as_mut().map(std::mem::take)
     }
 
     /// Record every decision of claude-247's five kinds from the next step on, under the forced
@@ -2450,9 +2664,20 @@ impl IntegerStackSession<'_> {
         self.lift_at = 0;
         self.pointer_at = 0;
         self.tokens.clear();
+        for index in &mut self.hamming_index {
+            index.clear();
+        }
         self.place = PlaceState::default();
         self.pair_tracker = PairTracker::new();
         self.spoken = None;
+        if let Some(trace) = &mut self.native_q31_trace {
+            trace.clear();
+        }
+        self.q31_history.clear();
+        self.q31_read_refused = false;
+        if let Some(trace) = &mut self.q31_read_trace {
+            trace.clear();
+        }
         self.pointer_keys.fill(0);
         self.pointer_lifts.fill(0);
         self.b.logits.fill(0);
@@ -2583,7 +2808,7 @@ impl IntegerStackSession<'_> {
         SerializedStackSession {
             schema: STACK_SESSION_SCHEMA.to_string(),
             version: 1,
-            artifact_sha256: self.model.sha256.clone(),
+            artifact_sha256: self.model.session_model_sha256.clone(),
             position: self.position as u64,
             cache_at: self.cache_at as u64,
             lift_at: self.lift_at as u64,
@@ -2617,6 +2842,12 @@ impl IntegerStackSession<'_> {
         // A read's type heads keep each position's payload, which a saved session does not carry
         // (claude-195): restoring would silently differ from continuing, so it is refused.
         let fbs = self.model.fbs.as_deref();
+        // The native Q31 read's history (claude-390) is not saved either.
+        if fbs.is_some_and(|f| f.q31_read.is_some()) {
+            return Err(StackError::Shape(
+                "a session of a native Q31 read cannot be restored yet: its read history is not saved",
+            ));
+        }
         if fbs
             .and_then(|f| f.hamming.as_ref())
             .is_some_and(|h| h.has_type_heads())
@@ -2646,10 +2877,10 @@ impl IntegerStackSession<'_> {
                 saved.version
             )));
         }
-        if saved.artifact_sha256 != self.model.sha256 {
+        if saved.artifact_sha256 != self.model.session_model_sha256 {
             return Err(StackError::Numerics(format!(
-                "session artifact SHA-256 mismatch: session has '{}', model has '{}'",
-                saved.artifact_sha256, self.model.sha256
+                "session serving identity mismatch: session has '{}', model has '{}'",
+                saved.artifact_sha256, self.model.session_model_sha256
             )));
         }
         if saved.content_readout_sha256 != self.model.content_readout_sha256 {
@@ -2874,8 +3105,14 @@ impl IntegerStackSession<'_> {
         self.tokens.extend_from_slice(&saved.tokens);
         // The pair picks are recomputed from the restored stream at the next step (claude-384).
         self.pair_tracker = PairTracker::new();
+        for index in &mut self.hamming_index {
+            index.clear();
+        }
         // No step of the restored session has spoken yet.
         self.spoken = None;
+        if let Some(trace) = &mut self.native_q31_trace {
+            trace.clear();
+        }
 
         // Restore snap trace
         if let Some(ref trace_entries) = saved.snap_trace {
@@ -3080,7 +3317,10 @@ impl IntegerStackSession<'_> {
     /// [`Self::read_step`] that chose no token.
     pub fn last_native_token(&self) -> Option<u32> {
         let chosen = self.b.native_token;
-        self.model.fbs.as_ref().and_then(|_| (chosen != NO_CHOICE).then_some(chosen))
+        self.model
+            .fbs
+            .as_ref()
+            .and_then(|_| (chosen != NO_CHOICE).then_some(chosen))
     }
 
     /// The final Q12 writer query produced by the latest FBS step.
@@ -3112,7 +3352,12 @@ impl IntegerStackSession<'_> {
             self.step(token)?;
             let mut next = self.b.native_token;
             // A row the place read speaks is served that token: the content readout leaves it.
-            if let Some(readout) = self.model.content_readout.as_deref().filter(|_| self.spoken.is_none()) {
+            if let Some(readout) = self
+                .model
+                .content_readout
+                .as_deref()
+                .filter(|_| self.spoken.is_none())
+            {
                 next = readout
                     .select_into(
                         &self.b.query_q12,
@@ -3168,7 +3413,9 @@ impl IntegerStackSession<'_> {
         if self.position >= s.context {
             return Err(StackError::ContextFull { context: s.context });
         }
+        native_q31_step_preflight(model, &self.states, self.b.snap_trace.is_some())?;
         let b = &mut self.b;
+        let native_q31_trace = &mut self.native_q31_trace;
 
         let t_ing = std::time::Instant::now();
         stack_dequant_row(&model.embed, token as usize, &mut b.x);
@@ -3188,7 +3435,17 @@ impl IntegerStackSession<'_> {
             stack_pair_tables(&b.tables[..d], &mut b.pairs);
             let is_recurrence = match (&layer.mixer, state.as_mut()) {
                 (Mixer::Recurrence(r), LayerState::Recurrence { state, history }) => {
-                    stack_recurrence(model, r, state, history, b, norm_exp, false);
+                    stack_recurrence(
+                        model,
+                        r,
+                        state,
+                        history,
+                        b,
+                        norm_exp,
+                        false,
+                        native_q31_trace.as_mut(),
+                        idx,
+                    )?;
                     true
                 }
                 (
@@ -3323,6 +3580,46 @@ fn stack_step_call(call: &mut StepCall<'_, '_>) {
     call.result = stack_step(call.session, call.token, true);
 }
 
+/// A session whose native Q31 read refused a step holds that step's partial rows, so it serves
+/// nothing more until [`IntegerStackSession::reset`].
+fn q31_read_refused_preflight(refused: bool) -> Result<(), StackError> {
+    if refused {
+        return Err(StackError::Shape(
+            "a native Q31 read refused a step: reset the session before it serves again",
+        ));
+    }
+    Ok(())
+}
+
+/// Refuse an incompatible native-Q31 step before it changes tokens or carry history.
+fn native_q31_step_preflight(
+    model: &IntegerStackModel,
+    states: &[Box<LayerState>],
+    snap_trace: bool,
+) -> Result<(), StackError> {
+    if model.native_q31.is_none() && model.native_q31_lanes.is_none() {
+        return Ok(());
+    }
+    if snap_trace {
+        return Err(StackError::Shape(
+            "a native Q31 recurrence uses its carry trace, not the icosian snap trace",
+        ));
+    }
+    for state in states {
+        if let LayerState::Recurrence { state, .. } = state.as_ref() {
+            for lane in state.chunks_exact(4) {
+                let words = [lane[0], lane[1], lane[2], lane[3]];
+                if !q31_quaternion_admitted(words) {
+                    return Err(StackError::Numerics(
+                        "a native Q31 carry lies outside the closed coordinate domain".to_owned(),
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// [`IntegerStackSession::step`]'s work: with `parallel` (on the model's
 /// pool), the rows of the large weight maps are split across its threads.
 #[inline(never)]
@@ -3343,7 +3640,9 @@ fn stack_step(
     if session.position >= s.context {
         return Err(StackError::ContextFull { context: s.context });
     }
+    native_q31_step_preflight(model, &session.states, session.b.snap_trace.is_some())?;
     let b = &mut session.b;
+    let native_q31_trace = &mut session.native_q31_trace;
     stack_dequant_row(&model.embed, token as usize, &mut b.x);
     let last_read_idx = model
         .layers
@@ -3359,9 +3658,17 @@ fn stack_step(
         stack_activation_tables(&b.norm, &mut b.tables[..d]);
         stack_pair_tables(&b.tables[..d], &mut b.pairs);
         match (&layer.mixer, state.as_mut()) {
-            (Mixer::Recurrence(r), LayerState::Recurrence { state, history }) => {
-                stack_recurrence(model, r, state, history, b, norm_exp, parallel)
-            }
+            (Mixer::Recurrence(r), LayerState::Recurrence { state, history }) => stack_recurrence(
+                model,
+                r,
+                state,
+                history,
+                b,
+                norm_exp,
+                parallel,
+                native_q31_trace.as_mut(),
+                idx,
+            )?,
             (
                 Mixer::Read(r),
                 LayerState::Read {
@@ -3781,20 +4088,27 @@ fn stack_step_fbs(
     if session.position >= s.context {
         return Err(StackError::ContextFull { context: s.context });
     }
+    native_q31_step_preflight(model, &session.states, session.b.snap_trace.is_some())?;
+    q31_read_refused_preflight(session.q31_read_refused)?;
     // The Hamming read at this row needs `x_0..=x_t`.
     session.tokens.push(token);
     let opening = session.at_reply_opening();
     // The place read's register moves on this token, before the row's readout (claude-351).
-    let (offer, spoken) = fbs
-        .hamming
-        .as_ref()
-        .map_or((None, None), |h| h.place_advance(&mut session.place, &session.tokens, &fbs.writer_table, session.open_reply_start));
+    let (offer, spoken) = fbs.hamming.as_ref().map_or((None, None), |h| {
+        h.place_advance(
+            &mut session.place,
+            &session.tokens,
+            &fbs.writer_table,
+            session.open_reply_start,
+        )
+    });
     session.spoken = spoken;
     // claude-384: the open turn's pair-row picks at this position, by the shared rule.
     if let Some(pairs) = &fbs.pair_rows {
         session.pair_tracker.push(pairs.dict(), pairs.marks(), &session.tokens);
     }
     let b = &mut session.b;
+    let native_q31_trace = &mut session.native_q31_trace;
     let at = stack_mul_u64(u64::from(token), d as u64) as usize;
     for (x, &t) in b.x.iter_mut().zip(&fbs.writer_table[at..at + d]) {
         *x = to_exp_i32(i64::from(t), Q12_EXP, RESIDUAL_EXP);
@@ -3829,7 +4143,16 @@ fn stack_step_fbs(
         if let Some(decision) = session.decision.as_deref() {
             b.bucket_trace = Some(decision.layer_trace(session.position, l));
         }
-        let act_exp = stack_recurrence_core(model, layer.tables(), state, history, b, false);
+        let act_exp = stack_recurrence_core(
+            model,
+            layer.tables(),
+            state,
+            history,
+            b,
+            false,
+            native_q31_trace.as_mut(),
+            l,
+        )?;
         let buckets = b.bucket_trace.take();
         stack_fbs_gather(&layer.rec_out, &b.act[..d], act_exp, &mut b.proj);
         for (x, p) in b.x.iter_mut().zip(&b.proj) {
@@ -3857,6 +4180,17 @@ fn stack_step_fbs(
                 pairs.add_bag(picks, &mut b.x[..d], &mut b.proj[..d]);
             }
         }
+        // The native Q31 read (claude-390): after layer `depth - 1`'s MLP add, where the float
+        // trunk's vector read sits. A stack with a read has no address table or Hamming read.
+        // A refused read leaves this step's layer rows behind, so the session refuses until reset.
+        if let Some(read) = fbs.q31_read.as_ref().filter(|r| l + 1 == r.depth) {
+            let served =
+                read.serve(&mut session.q31_history, session.q31_read_trace.as_mut(), token, &mut b.x);
+            if let Err(e) = served {
+                session.q31_read_refused = true;
+                return Err(e);
+            }
+        }
         if let Some(hamming) = &fbs.hamming {
             let (trace, force) = match session.decision.as_deref_mut() {
                 Some(decision) => (
@@ -3864,6 +4198,11 @@ fn stack_step_fbs(
                     Some(decision.reads.as_slice()),
                 ),
                 None => (session.hamming_trace.as_mut(), None),
+            };
+            let indexes: &mut [HammingIndex] = if session.hamming_index_on {
+                session.hamming_index.as_mut_slice()
+            } else {
+                &mut []
             };
             hamming.stream(
                 l + 1,
@@ -3874,6 +4213,7 @@ fn stack_step_fbs(
                 trace,
                 force,
                 opening,
+                indexes,
             );
         }
         if let (Some(step), Some(decision), Some(buckets)) =
@@ -3903,6 +4243,11 @@ fn stack_step_fbs(
             ),
             None => (session.hamming_trace.as_mut(), None),
         };
+        let indexes: &mut [HammingIndex] = if session.hamming_index_on {
+            session.hamming_index.as_mut_slice()
+        } else {
+            &mut []
+        };
         hamming.readout(
             &session.tokens,
             &fbs.writer_table,
@@ -3912,6 +4257,7 @@ fn stack_step_fbs(
             force,
             offer,
             opening,
+            indexes,
         );
     }
     if let (Some(step), Some(decision)) = (traced.as_mut(), session.decision.as_deref_mut()) {
@@ -4090,19 +4436,26 @@ fn stack_step_fbs_timed(
     if session.position >= s.context {
         return Err(StackError::ContextFull { context: s.context });
     }
+    native_q31_step_preflight(model, &session.states, session.b.snap_trace.is_some())?;
+    q31_read_refused_preflight(session.q31_read_refused)?;
     session.tokens.push(token);
     let opening = session.at_reply_opening();
     // The place read's register moves on this token, before the row's readout (claude-351).
-    let (offer, spoken) = fbs
-        .hamming
-        .as_ref()
-        .map_or((None, None), |h| h.place_advance(&mut session.place, &session.tokens, &fbs.writer_table, session.open_reply_start));
+    let (offer, spoken) = fbs.hamming.as_ref().map_or((None, None), |h| {
+        h.place_advance(
+            &mut session.place,
+            &session.tokens,
+            &fbs.writer_table,
+            session.open_reply_start,
+        )
+    });
     session.spoken = spoken;
     // claude-384: the open turn's pair-row picks at this position, by the shared rule.
     if let Some(pairs) = &fbs.pair_rows {
         session.pair_tracker.push(pairs.dict(), pairs.marks(), &session.tokens);
     }
     let b = &mut session.b;
+    let native_q31_trace = &mut session.native_q31_trace;
     let at = stack_mul_u64(u64::from(token), d as u64) as usize;
     for (x, &t) in b.x.iter_mut().zip(&fbs.writer_table[at..at + d]) {
         *x = to_exp_i32(i64::from(t), Q12_EXP, RESIDUAL_EXP);
@@ -4129,7 +4482,16 @@ fn stack_step_fbs_timed(
             &mut b.gate_out,
         );
         part(&mut since, ns);
-        let act_exp = stack_recurrence_core(model, layer.tables(), state, history, b, false);
+        let act_exp = stack_recurrence_core(
+            model,
+            layer.tables(),
+            state,
+            history,
+            b,
+            false,
+            native_q31_trace.as_mut(),
+            l,
+        )?;
         part(&mut since, ns);
         stack_fbs_gather(&layer.rec_out, &b.act[..d], act_exp, &mut b.proj);
         for (x, p) in b.x.iter_mut().zip(&b.proj) {
@@ -4161,8 +4523,22 @@ fn stack_step_fbs_timed(
                 pairs.add_bag(picks, &mut b.x[..d], &mut b.proj[..d]);
             }
         }
+        // The native Q31 read, as in `stack_step_fbs`; timed inside the block it follows.
+        if let Some(read) = fbs.q31_read.as_ref().filter(|r| l + 1 == r.depth) {
+            let served =
+                read.serve(&mut session.q31_history, session.q31_read_trace.as_mut(), token, &mut b.x);
+            if let Err(e) = served {
+                session.q31_read_refused = true;
+                return Err(e);
+            }
+        }
         // A Hamming read is timed inside the block it follows, so the stage list is unchanged.
         if let Some(hamming) = &fbs.hamming {
+            let indexes: &mut [HammingIndex] = if session.hamming_index_on {
+                session.hamming_index.as_mut_slice()
+            } else {
+                &mut []
+            };
             hamming.stream(
                 l + 1,
                 &session.tokens,
@@ -4172,6 +4548,7 @@ fn stack_step_fbs_timed(
                 session.hamming_trace.as_mut(),
                 None,
                 opening,
+                indexes,
             );
         }
         lap(&mut since, ns);
@@ -4179,6 +4556,11 @@ fn stack_step_fbs_timed(
     stack_rms_norm_fine(&b.x, n.rms_eps, &mut b.scratch[..d]);
     stack_norm_gain(&mut b.scratch[..d], &fbs.final_gain);
     if let Some(hamming) = &fbs.hamming {
+        let indexes: &mut [HammingIndex] = if session.hamming_index_on {
+            session.hamming_index.as_mut_slice()
+        } else {
+            &mut []
+        };
         hamming.readout(
             &session.tokens,
             &fbs.writer_table,
@@ -4188,6 +4570,7 @@ fn stack_step_fbs_timed(
             None,
             offer,
             opening,
+            indexes,
         );
     }
     // The turn memory's move (units 2-3), after the Hamming readout as in the float trunk: the
@@ -4333,6 +4716,7 @@ impl IntegerStackSession<'_> {
 /// One recurrence step from the normalized state (pair tables built), into
 /// `b.proj`.
 #[inline(never)]
+#[allow(clippy::too_many_arguments)]
 fn stack_recurrence(
     model: &IntegerStackModel,
     r: &Recurrence,
@@ -4341,7 +4725,9 @@ fn stack_recurrence(
     b: &mut Buffers,
     norm_exp: i32,
     parallel: bool,
-) {
+    native_q31_trace: Option<&mut Vec<NativeQ31Carry>>,
+    layer: usize,
+) -> Result<(), StackError> {
     let d = model.shape.width;
     stack_map_pairs2(
         parallel,
@@ -4350,9 +4736,19 @@ fn stack_recurrence(
         (&r.input, &mut b.branches),
         (&r.gates, &mut b.gate_out),
     );
-    let act_exp = stack_recurrence_core(model, r.tables(), state, history, b, parallel);
+    let act_exp = stack_recurrence_core(
+        model,
+        r.tables(),
+        state,
+        history,
+        b,
+        parallel,
+        native_q31_trace,
+        layer,
+    )?;
     stack_activation_tables(&b.act[..d], &mut b.tables[..d]);
     stack_map_nibbles(parallel, &r.out, &b.tables, act_exp, &mut b.proj);
+    Ok(())
 }
 
 /// A recurrence after its input maps, shared by the dense and the FBS step:
@@ -4361,6 +4757,7 @@ fn stack_recurrence(
 /// Adds the gate bias, convolves the drive, advances the lanes, applies the
 /// output gate and requantizes the gated state into `b.act[..width]`;
 /// returns its exponent.
+#[allow(clippy::too_many_arguments)]
 fn stack_recurrence_core(
     model: &IntegerStackModel,
     t: RecurrenceTables<'_>,
@@ -4368,10 +4765,19 @@ fn stack_recurrence_core(
     history: &mut [i32],
     b: &mut Buffers,
     parallel: bool,
-) -> i32 {
+    native_q31_trace: Option<&mut Vec<NativeQ31Carry>>,
+    layer: usize,
+) -> Result<i32, StackError> {
     let (s, n) = (&model.shape, &model.numerics);
     let d = s.width;
     let lanes = s.lanes();
+    if (model.native_q31.is_some() || model.native_q31_lanes.is_some())
+        && b.snap_trace.is_some()
+    {
+        return Err(StackError::Shape(
+            "a native Q31 recurrence uses its carry trace, not the icosian snap trace",
+        ));
+    }
     for (g, bias) in b.gate_out.iter_mut().zip(t.gate_bias) {
         *g = g.saturating_add(*bias);
     }
@@ -4440,16 +4846,46 @@ fn stack_recurrence_core(
             model, held, pushed, decays, rates, offsets, rotations, trace, buckets,
         )
     };
-    let buckets = b.bucket_trace.as_mut();
-    match &mut b.snap_trace {
-        // The opt-in snap trace and Q5's bucket trace record lanes in order, on one thread.
-        Some(trace) => lanes_of(0, state, Some(trace), buckets),
-        None if buckets.is_none() && parallel && lanes >= 2 << LANE_TASK_LOG2 => {
-            split_rows(0, state, LANE_TASK_LOG2 + 2, &|first, held: &mut [i64]| {
-                lanes_of(first, held, None, None)
-            });
+    if let Some(native_q31) = model.native_q31 {
+        stack_native_q31_lanes(
+            model,
+            Some(native_q31),
+            None,
+            state,
+            wide,
+            decays,
+            rates,
+            offsets,
+            b.bucket_trace.as_mut(),
+            native_q31_trace,
+            layer,
+        )?;
+    } else if let Some(native_q31_lanes) = model.native_q31_lanes.as_ref() {
+        stack_native_q31_lanes(
+            model,
+            None,
+            Some(native_q31_lanes),
+            state,
+            wide,
+            decays,
+            rates,
+            offsets,
+            b.bucket_trace.as_mut(),
+            native_q31_trace,
+            layer,
+        )?;
+    } else {
+        let buckets = b.bucket_trace.as_mut();
+        match &mut b.snap_trace {
+            // The opt-in snap trace and Q5's bucket trace record lanes in order, on one thread.
+            Some(trace) => lanes_of(0, state, Some(trace), buckets),
+            None if buckets.is_none() && parallel && lanes >= 2 << LANE_TASK_LOG2 => {
+                split_rows(0, state, LANE_TASK_LOG2 + 2, &|first, held: &mut [i64]| {
+                    lanes_of(first, held, None, None)
+                });
+            }
+            None => lanes_of(0, state, None, buckets),
         }
-        None => lanes_of(0, state, None, buckets),
     }
     if s.rec_geometric() {
         for ((out_lane, h_lane), g_lane) in b.scratch[..d]
@@ -4477,12 +4913,116 @@ fn stack_recurrence_core(
             *o = saturating_product(h, i64::from(g));
         }
     }
-    stack_quantize16(&b.scratch[..d], PRODUCT_EXP, &mut b.act[..d])
+    Ok(stack_quantize16(
+        &b.scratch[..d],
+        PRODUCT_EXP,
+        &mut b.act[..d],
+    ))
 }
 
 /// Lanes of a recurrence task when its lanes are split across threads, as a
 /// power of two (one lane in the unit tests).
 const LANE_TASK_LOG2: u32 = if cfg!(test) { 0 } else { 5 };
+
+/// The served decay and drive weight for one lane. Both readings are Q31.
+fn stack_lane_weights(
+    model: &IntegerStackModel,
+    lane: usize,
+    decay: i32,
+    rates: &[i16],
+    offsets: &[i32],
+    buckets: &mut Option<&mut BucketTrace>,
+) -> (u64, u64) {
+    let (s, n) = (&model.shape, &model.numerics);
+    let (geometric, retention) = (s.rec_geometric(), s.rec_retention());
+    if geometric {
+        let offset = offsets.get(lane).copied().unwrap_or(0);
+        let s_q16 = decay.saturating_add(offset).clamp(0, 1 << 16);
+        let idx = ((s_q16 >> 12) as usize).min(15);
+        let idx = match buckets.as_deref_mut() {
+            Some(buckets) => buckets.decide(lane, s_q16, idx),
+            None => idx,
+        };
+        // The retained reading (claude-226) carries 1 - 2^-(idx+1) where decay carries 2^-(idx+1).
+        if retention {
+            (RETAIN_LAMBDA_Q31[idx], RETAIN_KEEP_Q31[idx])
+        } else {
+            (1u64 << (30 - idx), GEOMETRIC_KEEP_Q31[idx])
+        }
+    } else {
+        let rate = rates.get(lane).copied().unwrap_or(0);
+        let opening = stack_sigmoid_q31(i64::from(decay), &model.exp_table, n.exp_step_log2);
+        let exponent = grid_apply(opening as i64, rate).max(0);
+        let lambda = stack_exp_neg(exponent, GATE_EXP, &model.exp_table, n.exp_step_log2);
+        let complement = (1u64 << 62).saturating_sub(stack_mul_u64(lambda, lambda));
+        let keep = if complement < COMPLEMENT_FLOOR_Q62 {
+            KEEP_FLOOR_Q31
+        } else {
+            stack_isqrt(u128::from(complement)) as u64
+        };
+        (lambda, keep)
+    }
+}
+
+/// The real recurrence's native-Q31 transport. Each lane calls the shipped
+/// serving transition at its gate (one shared gate for a `/12` state, its own
+/// lane gate for a `/13` state); decay and drive then advance the lane by the
+/// ordinary recurrence rule.
+#[inline(never)]
+#[allow(clippy::too_many_arguments)]
+fn stack_native_q31_lanes(
+    model: &IntegerStackModel,
+    native_q31: Option<Q31ServingSession>,
+    native_q31_lanes: Option<&Q31LaneServingSession>,
+    state: &mut [i64],
+    wide: &[i64],
+    decays: &[i32],
+    rates: &[i16],
+    offsets: &[i32],
+    mut buckets: Option<&mut BucketTrace>,
+    mut trace: Option<&mut Vec<NativeQ31Carry>>,
+    layer: usize,
+) -> Result<(), StackError> {
+    for (lane, ((held, pushed), &decay)) in state
+        .chunks_exact_mut(4)
+        .zip(wide.chunks_exact(4))
+        .zip(decays.iter())
+        .enumerate()
+    {
+        let (lambda, keep) = stack_lane_weights(model, lane, decay, rates, offsets, &mut buckets);
+        let before = [held[0], held[1], held[2], held[3]];
+        let transport = match (native_q31, native_q31_lanes) {
+            (Some(state), _) => state.transition(before)?,
+            (None, Some(state)) => state.transition(lane, before)?,
+            (None, None) => {
+                return Err(StackError::Shape(
+                    "a native Q31 lane range needs an attached state",
+                ));
+            }
+        };
+        let mut after = [0i64; 4];
+        for index in 0..4 {
+            // Transport is Q31 and the decay Q31, so their product is Q62 — the exponent the
+            // ordinary recurrence's `stack_hamilton` output is at — and the one shift below takes
+            // the sum back to Q31. Shifting the product here as well would divide the trained
+            // state out of the carry.
+            let decayed = mul_i128(i128::from(transport[index]), i128::from(lambda));
+            let drive = mul_i128(i128::from(keep), i128::from(pushed[index]));
+            after[index] = q31_saturate(shift_wide(decayed + (drive << 16), 31));
+            held[index] = after[index];
+        }
+        if let Some(trace) = trace.as_deref_mut() {
+            trace.push(NativeQ31Carry {
+                layer,
+                lane,
+                before,
+                transport,
+                after,
+            });
+        }
+    }
+    Ok(())
+}
 
 /// The recurrence's per-lane transport: decay, drive weight, transition
 /// quaternion and state update, for the lanes of `state` (four channels
@@ -4504,43 +5044,14 @@ fn stack_lanes(
     mut trace: Option<&mut SnapTrace>,
     mut buckets: Option<&mut BucketTrace>,
 ) {
-    let (s, n) = (&model.shape, &model.numerics);
-    // Read once per layer: both are string compares on the shape.
-    let (geometric, retention) = (s.rec_geometric(), s.rec_retention());
+    let s = &model.shape;
     for (lane, ((held, pushed), &decay)) in state
         .chunks_exact_mut(4)
         .zip(wide.chunks_exact(4))
         .zip(decays.iter())
         .enumerate()
     {
-        // Decay gate, decay and the drive's weight, all Q31.
-        let (lambda, keep) = if geometric {
-            let offset = offsets.get(lane).copied().unwrap_or(0);
-            let s_q16 = decay.saturating_add(offset).clamp(0, 1 << 16);
-            let idx = ((s_q16 >> 12) as usize).min(15);
-            let idx = match buckets.as_deref_mut() {
-                Some(buckets) => buckets.decide(lane, s_q16, idx),
-                None => idx,
-            };
-            // The retained reading (claude-226) carries 1 - 2^-(idx+1) where decay carries 2^-(idx+1).
-            if retention {
-                (RETAIN_LAMBDA_Q31[idx], RETAIN_KEEP_Q31[idx])
-            } else {
-                (1u64 << (30 - idx), GEOMETRIC_KEEP_Q31[idx])
-            }
-        } else {
-            let rate = rates.get(lane).copied().unwrap_or(0);
-            let opening = stack_sigmoid_q31(i64::from(decay), &model.exp_table, n.exp_step_log2);
-            let exponent = grid_apply(opening as i64, rate).max(0);
-            let lambda = stack_exp_neg(exponent, GATE_EXP, &model.exp_table, n.exp_step_log2);
-            let complement = (1u64 << 62).saturating_sub(stack_mul_u64(lambda, lambda));
-            let keep = if complement < COMPLEMENT_FLOOR_Q62 {
-                KEEP_FLOOR_Q31
-            } else {
-                stack_isqrt(u128::from(complement)) as u64
-            };
-            (lambda, keep)
-        };
+        let (lambda, keep) = stack_lane_weights(model, lane, decay, rates, offsets, &mut buckets);
         let transition: [i64; 4] = if s.rotation {
             let at = lane << 2;
             let raw = [
@@ -5766,6 +6277,7 @@ mod fbs_stage_tests {
             hamming: None,
             address: None,
             pair_rows: None,
+            q31_read: None,
         };
         // Rows 0 and 2 both lie 2 from the origin; rows 0 and 1 both lie 2 from (2, 2).
         assert_eq!(stack_whole_table_nearest(&fbs, 3, &[0, 0]), 0);

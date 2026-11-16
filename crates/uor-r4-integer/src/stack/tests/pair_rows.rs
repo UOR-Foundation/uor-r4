@@ -27,7 +27,7 @@ fn drawn_pair_rows(vocab: usize, width: usize) -> stack::PairRowsImage {
 }
 
 /// Pair rows round-trip. A stack without them inspects with no `pair_rows` key and reads no
-/// image. Added, the image read back equals the one written bit for bit, under `lut-stack/12`,
+/// image. Added, the image read back equals the one written bit for bit, under `lut-stack/15`,
 /// every earlier section keeps its bytes, and inspect shows the record.
 #[test]
 fn pair_rows_round_trip_and_inspect() {

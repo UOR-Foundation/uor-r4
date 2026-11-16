@@ -55,7 +55,7 @@
 //! `--pair-rows ROWS` (claude-384) adds the pair rows of a run trained with `--pair-rows`, by the
 //! same rule: `fbs-snapshot` writes `OUT_JSON.pair-rows` and names it under `pair_rows`, the note
 //! and the file come together, and the rows are added last. The artifact is then
-//! `uor-r4.lut-stack/12`, exported with `--legacy-artifact` only. An address table and pair rows
+//! `uor-r4.lut-stack/15`, exported with `--legacy-artifact` only. An address table and pair rows
 //! are not exported together.
 //!
 //! It parses the artifact back before writing it, never replaces or leaves a
@@ -439,7 +439,7 @@ fn run() -> Result<(), String> {
         .map_err(|e| format!("{snapshot}: {e}"))?;
     if pair_rows.is_some() && !legacy_artifact {
         return Err(
-            "pair rows are exported with --legacy-artifact: lut-stack/12 has no stack contract"
+            "pair rows are exported with --legacy-artifact: lut-stack/15 has no stack contract"
                 .to_owned(),
         );
     }
@@ -619,7 +619,7 @@ fn run() -> Result<(), String> {
             .map_err(|e| format!("the address table: {e}"))?,
         None => artifact,
     };
-    // claude-384: the pair rows are added last the same way; the result is `lut-stack/12`.
+    // claude-384: the pair rows are added last the same way; the result is `lut-stack/15`.
     let artifact = match pair_rows {
         Some(image) => add_pair_rows_uorlut01(&artifact, &image)
             .map_err(|e| format!("the pair rows: {e}"))?,

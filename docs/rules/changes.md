@@ -14,6 +14,90 @@ flowchart LR
 
 An entry gives the date, what changed, which charter clauses it touches, and who decided. The owner's own words are recorded verbatim when they are the reason. Old text is never edited or deleted: it moves unchanged to the `archive/` folder, and the live decision index keeps one line saying where each decision went (see the [decision map](decision-map.md)).
 
+## 16 November 2026: D41's production donor is DeepSeek V4.1 Flash, reasoning kept, 1B first (D87)
+
+**Decided by:** the owner (Casey), 16 November 2026, in Claude's chat, recorded at
+`2026-11-16T02:37:46Z` (claude-399). The decision followed the gpt-oss-20b pilot (claude-390),
+which kept 220.7 answer tokens/s on wick, so 1B kept tokens would take about 52 days. The picked answers
+quote the choice they picked; the others are Casey's own words.
+
+To the speed and size question:
+
+> "please do everything above that will reduce our time to accomplish this, including multiple
+> pods to get it done fast... I'd much rather do the large corpus we talked about 100M is far too
+> small to be useful."
+
+To the corpus size: "1B first as suggested above - but I think we should then lowkey do the rest
+of the distilling on the 4090 on wick for as long as it takes. I think a 1B model is at least
+sort of useful". To the caps: "Raise to $35/h, 4 pods (Recommended)". To the wick donor: "if the
+small models cant offer real intelligence close to claude opus4.6 reasoning, then we need to focus
+on a model that can". To "Start the first 1B tokens with DeepSeek V4.1 Flash, reasoning traces
+kept?": "Yes, start it".
+
+**What changed** (the charter's text does not change; §3.10 still says hard targets only):
+
+1. **D86's donor.** The production donor is DeepSeek V4.1 Flash on rented pods, in place of
+   gpt-oss-20b on wick. *The lab's recommendation, not an owner term:* gpt-oss-120b (Apache 2.0)
+   if the measured rate is too slow. The owner did not choose it, so a switch needs the owner's
+   word. The licence (MIT, per the lab) is checked on the model card at pinning.
+2. **D86's scope: the reasoning text is kept.** The donor's reasoning text is kept with its
+   final answer. Both are hard text targets: no logits, probabilities, scores or ranks. (b) stays
+   deferred, and (c) and (d) stay banned.
+3. **The first corpus** is 1B kept tokens.
+4. **§5.4's compute caps, for this corpus run only:** 4 pods and $35/h across all labs, in place of
+   4 pods and $8/h. The run sets `UOR_POD_MAX_RATE=35`, and the caps return to $8/h when the run's
+   pods are down.
+
+**Not decided:** wick's role after the first corpus, and whether a public pretraining corpus is
+used.
+
+## 15 November 2026: D41's donor pass released, on wick, with gpt-oss-20b (D86)
+
+**Decided by:** the owner (Casey), 15 November 2026, in Claude's chat, recorded at
+`2026-11-15T10:53Z` (claude-388). He decided this after a five-architect review of the path to
+one end-to-end served vector model. All five reviews recommended releasing D41's hard-target
+donor pass and keeping weight and logit distillation banned. Each answer below replies to a
+question that quoted its choice.
+
+To "Release D41's one-time donor pass (distill-d1)?":
+
+> "I would say yes release it, but why is it going to cost money? if we are running it locally
+> on wick, wouldn't it be free?"
+
+To "may the donor give up to 4 alternative answers per prompt (still no probabilities or
+scores)?": "Allow up to 4 (Recommended)". To the weight-distillation variants: "Defer (b), ban
+(c)(d) (Recommended)". To "Which donor?": "gpt-oss-20b on wick (Recommended)". To D41 item 3's
+order: "Drop driver math, keep pilot (Recommended)".
+
+**What changed** (the charter's text does not change; §3.10 still says hard targets only):
+
+1. **§3.10 / D41 item 5: the release.** `distill-d1` is released by the owner. The generation
+   unit still needs its own one-page sheet with a non-author FIT (§4.5). It also needs its
+   generation receipt bound at generation (D41 item 2b).
+2. **D41 item 1 and condition (a): the donor and the machine.** The donor is
+   `openai/gpt-oss-20b`, not `openai/gpt-oss-120b`. The 120B model needs about 65 GB and does
+   not fit the owner's 24 GB RTX 4090. It runs on **wick**, the owner's own RTX 4090, instead
+   of a declared `uor-pod` lease. *The lab's conditions, not owner terms:* a pinned revision
+   with the released MXFP4 weights; one offline run in the lab's own container, outside every
+   compiled module of the repository (§3.4); the receipt names the external inference engine
+   and binds wick's GPU identity in place of a pod's.
+3. **D41 item 4: the consumption contract.** The donor may give up to **four** alternative
+   answer texts per prompt. Each is a hard target: donor-chosen tokens stored as integer
+   targets, with no logits, probabilities, scores or ranks stored or consumed.
+4. **D41 item 3: the sequence.** The driver math optimization (occupancy and the BVG-K driver,
+   from the M1 era) no longer gates the donor pass. The measured ~1M-token pilot stays: it runs
+   first, on the same donor, before any production corpus is sized.
+5. **Variants the review named.** (b) a one-time donor embedding-table import, used as a native
+   starting point, is **deferred** (Casey's words: "Defer (b)"). The review recommended deciding
+   it on evidence after the first native end-to-end model; it would need a §3.10 change. (c) fitting the geometric operators to a donor's layers
+   or hidden states, and (d) a donor's logits or distributions as targets, stay **banned**
+   (§3.2, §3.3, §3.10).
+
+D41's other conditions are unchanged: (b) the receipt; (c) the donor never runs in student
+preparation, training, evaluation, serving, grading or any panel; (d) no student-side
+exception; (e) data is an instrument input, not evidence; (f) the exception expires when
+`distill-d1` is sealed.
+
 ## 13 November 2026: one persistent native train/serve state (D85)
 
 <!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
