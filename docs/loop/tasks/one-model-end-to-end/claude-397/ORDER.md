@@ -82,7 +82,7 @@ This is an analysis unit. It changes no state, operator or artifact: it reads sa
 
 ## Done when
 
-1. The function's tests pass on the laptop, including a hand-built window where `K = 1` and one where `K = 3`. One of them fails with the clip set aside.
+1. The function's tests pass on the laptop, including a hand-built window where `K = 1` and one where `K = 3`. One of them fails with the earlier-slot exclusion set aside. (The generator's `q − 2` clip never removes a fact, since every fact sits at `p ≥ 2`, so there is nothing for a test to set aside there. Corrected at build time, before any count.)
 2. Outcome 0 passes at both ext states.
 3. R1 to R3 are in the REPORT, mapped to outcomes in the order above.
 4. `loop pr-check --local` and a fresh-context review at the exact head pass.
