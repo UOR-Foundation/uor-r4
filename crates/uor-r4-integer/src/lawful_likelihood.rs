@@ -524,6 +524,14 @@ mod tests {
             .expect("huge counts are exact");
         assert_exact_sum(&masses);
         assert!(masses.iter().all(|mass| *mass >= 1), "{masses:?}");
+        // Equal counts and equal order-0 weight on indices 1..3: their masses differ by at most
+        // the one rounding unit, and index 0 (order-0 weight u64::MAX) carries the most.
+        let (low, high) = (
+            masses[1..].iter().min().copied().unwrap_or(0),
+            masses[1..].iter().max().copied().unwrap_or(0),
+        );
+        assert!(high - low <= 1, "{masses:?}");
+        assert!(masses[0] > high, "{masses:?}");
         let masses = floor_mixed_masses(
             &[u64::MAX, 0, u64::MAX - 1, 0],
             &[u64::MAX; 4],
@@ -551,7 +559,7 @@ mod tests {
             floor_mixed_masses(&[1], &[1], edge),
             Err(LikelihoodError::ScoreOverflow)
         );
-        // The heaviest weights that fit, on one seen target in 2^13: the floor still holds a
+        // A weight sum just under 2^16, on one seen target in 2^13: the floor still holds a
         // unit for every unseen target.
         let mut counts = vec![0u64; 1 << 13];
         counts[0] = u64::MAX;
@@ -563,6 +571,19 @@ mod tests {
         let masses = floor_mixed_masses(&counts, &counts, heavy).expect("the floor holds");
         assert_exact_sum(&masses);
         assert!(masses.iter().all(|mass| *mass >= 1));
+        // A floor of weight 1 under a count weight of 2^32 on V = 2^17: the floor's share on
+        // the one unseen target rounds away, and the zero mass is refused, not returned.
+        let mut spread = vec![1u64; 1 << 17];
+        spread[0] = 0;
+        let swamped = FloorMixWeights {
+            count: 1 << 32,
+            unigram: 0,
+            floor: 1,
+        };
+        assert_eq!(
+            floor_mixed_masses(&spread, &spread, swamped),
+            Err(LikelihoodError::MassZero)
+        );
         // With no floor, a zero mass is refused rather than returned.
         let no_floor = FloorMixWeights {
             count: 65_000,
