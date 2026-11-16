@@ -64,27 +64,35 @@ fn student_batch_scoring_speed_baseline_against_rows_k() {
 
     let mut mismatches = Vec::new();
     for (kind, coords) in [("VectorBlock", &vector), ("Route", &route)] {
-        // Arm A: the baseline, one coordinate per launch.
-        let mut baseline: Vec<Vec<u64>> = Vec::new();
-        let mut a_samples = Vec::new();
-        for repeat in 0..WARMUP + TIMED {
+        // Arm A: the baseline, one coordinate per launch. One pass only: each
+        // call takes seconds at this size (c406-run1 spent 27 min in a
+        // repeated arm A). The first call is the warm-up and is timed apart;
+        // the per-call median is over the other calls.
+        let mut baseline: Vec<Vec<u64>> = Vec::with_capacity(coords.len());
+        let mut a_calls = Vec::with_capacity(coords.len());
+        let pass = Instant::now();
+        for (i, &p) in coords.iter().enumerate() {
             let clock = Instant::now();
-            let mut words = Vec::with_capacity(coords.len());
-            for &p in coords.iter() {
-                let proposal = device
-                    .propose(&batch, &targets, p)
-                    .expect("baseline propose");
-                words.push(proposal.candidate_losses().expect("losses"));
+            let proposal = device
+                .propose(&batch, &targets, p)
+                .expect("baseline propose");
+            baseline.push(proposal.candidate_losses().expect("losses"));
+            a_calls.push(clock.elapsed().as_micros());
+            if (i + 1) % 8 == 0 {
+                eprintln!(
+                    "  {kind} A baseline: {} of {} coordinates, last call {} us, {} s so far",
+                    i + 1,
+                    coords.len(),
+                    a_calls[i],
+                    pass.elapsed().as_secs()
+                );
             }
-            let us = clock.elapsed().as_micros();
-            if repeat >= WARMUP {
-                a_samples.push(us);
-            }
-            baseline = words;
         }
-        let a_us = median_us(a_samples);
+        eprintln!("{kind} A baseline warm-up call: {} us", a_calls[0]);
+        let a_us =
+            median_us(a_calls[WARMUP.min(a_calls.len() - 1)..].to_vec()) * coords.len() as u128;
         eprintln!(
-            "{kind} A baseline, {} coordinates one per launch: {}",
+            "{kind} A baseline, {} coordinates one per launch (median call x count): {}",
             coords.len(),
             rates(a_us, coords.len(), rows.len())
         );
