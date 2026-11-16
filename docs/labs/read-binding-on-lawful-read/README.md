@@ -92,6 +92,39 @@ To preserve `driver_source_sha256` stability until M1 Stage T (`#2836`) closes (
 
 ---
 
+## 2.4 Correction: the scalar rank key is not exact (2026-11-16, codex)
+
+The `R_b(i) = (rel_b[i] << 3) - d_pos(q_b, i)` key above assumes
+`d_pos ∈ {0, 2, 4, 6, 8}`. It is not: `positioned_root_cost`
+(`crates/uor-r4-discrete/src/discrete.cu:37-40`) sums
+`|query[d] - root[d]|` over eight coordinates, so the distance is an
+unbounded L1, not an eight-valued code. A `+1` relation therefore does not
+dominate the distance: `rel 1, distance 8` gives `R = 0`, tying
+`rel 0, distance 0`, while the read's comparator
+(`discrete.cu:324`) puts the relation first. The scalar gap is not the read
+order, so `m_bind = 2` on it is not a defined margin.
+
+The hinge is now defined on the read's **exact** comparator
+(`rel` desc, `distance` asc, `hamming` asc, `last` desc, `node` asc) and a
+**rank gap**: the best bound leaf and the best competing leaf are ranked
+among the eligible level-0 candidates, and `Δrank = rank_comp - rank_bound`
+is the number of places the bound is ahead. The cost keeps the registered
+`m_bind = 2` (two places ahead) and `W_miss = 4`:
+
+```
+margin = max(0, m_bind - Δrank)
+miss   = 4 if no bound leaf is in top[0..found]
+H_bind = margin + miss
+```
+
+The integer reference and its finite tests are
+`crates/uor-r4-discrete/src/read_binding.rs`. One test records the
+`rel 1, distance 8` tie explicitly; the others cover the margin, the miss,
+the absent span and the permuted sidecar. The pre-registered 4-arm run must
+use this rank-gap margin; `m_bind` and `W_miss` are unchanged.
+
+---
+
 ## 3. Experimental Design & Verification Ladder
 
 ### Step 1: Finite CUDA Qualification (`test_discrete_read_binding_hinge_v1`)
