@@ -217,6 +217,10 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 4×H200 po
      - The probe at `low` kept 77.6% of what it generated, lower than pod 3's 84%, because its two length drops are 2 of only 64 prompts. Bounds for 1B kept are therefore 1.19B to 1.29B output, about $715 to $775, plus about $20 of input.
      - **Watcher:** `docs/labs/m2-donor-corpus/api-watch.sh local/m2-run/api-watch 85000 local/m2-run/api/out local/m2-run/api-b/out`, started before A1.
        - It reads the provider's balance once a minute with `donor-corpus balance`, which reads the key the same way `generate` does. It counts spend as the sum of every fall in the balance, so peak pricing, dropped tokens and re-billed retries are counted, and a top-up never hides spend.
+       - **The balance is the account's, not the corpus's.** Casey has OpenCode on wick using DeepSeek (`deepseek/deepseek-flash`, `deepseek-v4-pro`); if that bills the same account, the watcher counts it as spend too. That can bring the $850 stop forward, but it never lets the run overspend. So the receipt reports two figures:
+         - the balance-based spend, marked as possibly including other use of the account;
+         - the corpus-only cost, computed from our own usage counts at the price list.
+       - Segment budgets are set from our own kept-token counts, never from the balance. A watcher STOP that fires while the corpus-only cost is clearly under $850 is a measurement STOP, not a result about the run, and it is reported as such.
        - At $850 it writes `STOP` into both out folders. It alerts on a segment that ended `refused`, on a balance that rises, and at 5 failed readings in a row. At 10 failed readings in a row it writes `STOP` (fail closed).
        - The balance read at 08:14Z was $1,168.17, so the provider's prepaid balance (402) is the outer stop above the watcher.
        - Stub tests checked:
