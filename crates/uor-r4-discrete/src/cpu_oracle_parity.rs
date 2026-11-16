@@ -589,6 +589,8 @@ const STUDENT_SPEC: Spec = Spec {
 const STUDENT_SEED: u32 = 1;
 const STUDENT_ROWS: u32 = 64;
 const STUDENT_READS: [ReadSpec; 2] = [ReadSpec::Route, ReadSpec::Flock { kept: 8 }];
+/// Parameters per progress line.
+const STUDENT_PROGRESS: usize = 64;
 
 struct StudentBatch {
     rows: Vec<CpuDiscreteProposalSample>,
@@ -734,12 +736,28 @@ fn student_stream_two_steps_agree_at_corpus_scale() {
             }
             let propose_us = clock.elapsed().as_micros();
 
+            eprintln!(
+                "{read:?} step {step}: {} parameters listed; cuda carry+forward {forward_us} us, cuda propose all {propose_us} us",
+                listed.len()
+            );
             let mut r = Reading::default();
             let clock = Instant::now();
             compare_forward(&gpu, &scorer, rows, &mut r);
-            let pick = compare_proposals_over(
-                &gpu, &listed, &scorer, &chooser, rows, rows, false, &mut r,
-            );
+            // In chunks, so a long CPU-oracle pass shows its progress.
+            let mut pick = None;
+            for (chunk, part) in listed.chunks(STUDENT_PROGRESS).enumerate() {
+                let first = compare_proposals_over(
+                    &gpu, part, &scorer, &chooser, rows, rows, false, &mut r,
+                );
+                pick = pick.or(first);
+                eprintln!(
+                    "  {read:?} step {step}: {} of {} parameters compared, {} mismatches, {} s",
+                    (chunk * STUDENT_PROGRESS + part.len()),
+                    listed.len(),
+                    r.mismatches.len(),
+                    clock.elapsed().as_secs()
+                );
+            }
             match pick {
                 Some(pick) => compare_apply(&mut gpu, &bytes, pick, rows, &mut r),
                 None => r
