@@ -3024,8 +3024,14 @@ impl CpuDiscreteProposalApplier {
         let epoch = header["shape"]["epoch"]
             .as_u64()
             .ok_or_else(|| invalid("proposal apply epoch differs"))?;
+        let scorer = CpuDiscreteProposalScorer::from_bytes(bytes)?;
+        if matches!(scorer.model, CpuDiscreteProposalModel::Pick(_)) {
+            return Err(invalid(
+                "the proposal applier does not write a Pick artifact yet (claude-408)",
+            ));
+        }
         Ok(Self {
-            scorer: CpuDiscreteProposalScorer::from_bytes(bytes)?,
+            scorer,
             epoch,
             source_artifact_sha256: uor_r4_discrete::corpus::sha256(bytes),
             source_identity: CpuDiscreteSourceIdentity::from_header(&header)?,
@@ -6384,6 +6390,65 @@ mod tests {
         }
         pick.set_gate(0, -1).unwrap();
         assert_ne!(pick_reads(&pick, &sequences), before);
+    }
+
+    fn pick_samples(sequences: &[&[u32]]) -> Vec<CpuDiscreteProposalSample> {
+        sequences
+            .iter()
+            .flat_map(|s| {
+                (1..=s.len()).map(move |end| CpuDiscreteProposalSample {
+                    prefix: s[..end].to_vec(),
+                    target: (s[0] + 1) % 16,
+                })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn pick_scorer_query_equals_the_oracle_read() {
+        let context = 9u32;
+        let stages = expected_stages(context as usize).unwrap();
+        let (roots, _, frames, sequences) = pick_agreement_inputs();
+        let gates: Vec<i32> = (0..2 * stages).map(|i| [1, -1][i / stages]).collect();
+        for (read_position, section) in [(3u32, None), (1, Some(frames.as_slice()))] {
+            let artifact = serialized_pick_fixture(context, &roots, &gates, read_position, section);
+            let scorer = CpuDiscreteProposalScorer::from_bytes(&artifact).unwrap();
+            let pick = CpuDiscretePick::from_bytes(&artifact).unwrap();
+            for sample in pick_samples(&sequences) {
+                let want: Vec<i32> = pick.read(&sample.prefix).unwrap().into_iter().flatten().collect();
+                assert_eq!(scorer.query(&sample).unwrap(), want, "s14 {read_position} {:?}", sample.prefix);
+            }
+        }
+    }
+
+    #[test]
+    fn pick_scorer_refuses_route_and_scores_gate_and_table() {
+        let context = 9u32;
+        let stages = expected_stages(context as usize).unwrap();
+        let (roots, _, _, sequences) = pick_agreement_inputs();
+        let gates = vec![1i32; 2 * stages];
+        let artifact = serialized_pick_fixture(context, &roots, &gates, 3, None);
+        let scorer = CpuDiscreteProposalScorer::from_bytes(&artifact).unwrap();
+        let rows = pick_samples(&sequences);
+        assert!(scorer.score(CpuDiscreteProposalKind::Route, 0, &rows, 0).is_err());
+        let table = scorer.score(CpuDiscreteProposalKind::Table, 0, &rows, 0).unwrap();
+        assert_eq!(table.losses.len(), 16);
+        let flat = scorer.score(CpuDiscreteProposalKind::Gate, 1, &rows, 0).unwrap();
+        assert!(flat.losses[..3].iter().all(|&w| w == flat.losses[0]), "{:?}", flat.losses);
+        assert!(flat.losses[3..].iter().all(|&w| w == u64::MAX), "lanes past 3 are absent");
+        let moved = scorer.score(CpuDiscreteProposalKind::Gate, 0, &rows, 0).unwrap();
+        assert_eq!(moved.losses.len(), 16);
+        assert_eq!(moved.losses[0], flat.losses[0], "lane 0 is the current model");
+        assert!(moved.losses[1..3].iter().any(|&w| w != moved.losses[0]), "{:?}", moved.losses);
+    }
+
+    #[test]
+    fn pick_applier_refuses() {
+        let context = 9u32;
+        let stages = expected_stages(context as usize).unwrap();
+        let (roots, _, _, _) = pick_agreement_inputs();
+        let artifact = serialized_pick_fixture(context, &roots, &vec![1i32; 2 * stages], 3, None);
+        assert!(CpuDiscreteProposalApplier::from_bytes(&artifact).is_err());
     }
 
     #[test]
