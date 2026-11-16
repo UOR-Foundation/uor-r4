@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pod.sh STEP: the on-pod recipe for claude-400 (D87), run inside the vLLM image on the
-# leased Vast 4xH200 pod. Steps: setup | serve | wait-ready | smoke | run | status.
+# leased Vast pod (4xH200, 8xH200 or 4xB200; sheet amendments 2-3). Steps: setup | serve | wait-ready | smoke | run | status.
 # The engine (vLLM) runs here, outside every compiled module (CHARTER 3.4); the client
 # is the repository's Rust instrument, built here from the copied source.
 set -euo pipefail
@@ -40,20 +40,28 @@ setup)
   echo "setup done"
   ;;
 serve)
-  # One endpoint, one TP4 replica per four GPUs; the recipe's H200 settings,
+  # One endpoint, one replica per TP GPUs (the preset below),
   # no speculative decoding (the recipe marks it for small batches).
-  # TP (default 4, the H200 recipe) and ATTN_CONFIG (the B200 recipe's --attention-config JSON,
-  # sheet amendment 3: TP=2) are the only per-GPU knobs; DP is the GPU count over TP.
-  MAX_SEQS=${MAX_SEQS:-256}
-  TP=${TP:-4}
+  # serve [h200|b200|b200-tp4]: the recipe preset, named on the command line so nothing needs
+  # quoting through ssh (sheet amendment 3). h200: TP4, 256 seqs per replica (the H200 recipe).
+  # b200: vLLM's Blackwell TP recipe, TP2 with its attention config and 128 seqs per replica.
+  # b200-tp4: amendment 3's one fallback restart, TP4 with the same attention config and 256 seqs
+  # (the H200 value, chosen deliberately for one replica). DP is the GPU count over TP.
+  B200_ATTN='{"backend":"FLASHINFER_MLA_SPARSE_DSV41","indexer_kv_dtype":"mxfp4","indexer_sparse_logits":true}'
+  case ${1:-h200} in
+    h200) TP=4; MAX_SEQS=${MAX_SEQS:-256}; ATTN=() ;;
+    b200) TP=2; MAX_SEQS=128; ATTN=(--attention-config "$B200_ATTN") ;;
+    b200-tp4) TP=4; MAX_SEQS=256; ATTN=(--attention-config "$B200_ATTN") ;;
+    *) echo "serve: unknown preset $1"; exit 1 ;;
+  esac
   NG=$(nvidia-smi -L | wc -l); DP=$((NG / TP))
   [ "$DP" -ge 1 ] && [ $((DP * TP)) -eq "$NG" ] || { echo "serve: $NG GPUs is not a multiple of $TP"; exit 1; }
-  echo "serve: $NG GPUs, data-parallel $DP x tensor-parallel $TP, max-num-seqs $MAX_SEQS${ATTN_CONFIG:+, attention $ATTN_CONFIG}"
+  echo "serve: $NG GPUs, data-parallel $DP x tensor-parallel $TP, max-num-seqs $MAX_SEQS${ATTN[1]:+, attention ${ATTN[1]}}"
   nohup env VLLM_ENGINE_READY_TIMEOUT_S=7200 vllm serve "$MODEL_DIR" \
     --served-model-name donor --port $PORT \
     --tokenizer-mode deepseek_v41 \
     --data-parallel-size "$DP" --tensor-parallel-size "$TP" \
-    ${ATTN_CONFIG:+--attention-config "$ATTN_CONFIG"} \
+    ${ATTN[@]+"${ATTN[@]}"} \
     --kv-cache-dtype fp8 \
     --engram-config '{"cpu_offload":true}' \
     --reasoning-parser deepseek_v41 \
