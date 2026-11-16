@@ -65,3 +65,31 @@ pub fn oracle_count(
     assembler.push(&oracle_partition(tokens, order, 0, 4096)?)?;
     Ok(assembler.finish())
 }
+
+/// Plant a +1 on triple `at` and adjust its context record and n1..n4 by hand
+/// to match, so the partition stays self-consistent and the assembler admits
+/// it. A test then shows the triple SHA covers the count field; this is not
+/// a detection path (an inconsistent plant is refused by the assembler).
+pub fn plant_one_count(partition: &mut NgramPartition, at: usize) {
+    let NgramTriple { key, count, .. } = partition.triples[at];
+    partition.triples[at].count = count + 1;
+    if (1..=4).contains(&count) {
+        partition.count_of_counts[count as usize - 1] -= 1;
+    }
+    if count < 4 {
+        partition.count_of_counts[count as usize] += 1;
+    }
+    let h = partition.contexts.iter_mut().find(|h| h.key == key).expect("context");
+    h.total += 1;
+    match count {
+        1 => {
+            h.n1 -= 1;
+            h.n2 += 1;
+        }
+        2 => {
+            h.n2 -= 1;
+            h.n3_plus += 1;
+        }
+        _ => {}
+    }
+}

@@ -4,7 +4,8 @@
 //! hands, in canonical order, to an [`NgramAssembler`].
 
 use crate::ngram_count::{
-    check_tokens, partition_offset, plan_partitions, NgramAssembler, NgramContext,
+    check_tokens, partition_offset, partition_target_bound, plan_partitions, stream_length_bound,
+    NgramAssembler, NgramContext,
     NgramPartition, NgramTriple, PartitionRange, NGRAM_MAX_ORDER, NGRAM_VOCABULARY,
 };
 use crate::{Error, Result};
@@ -87,13 +88,10 @@ pub struct NgramCounter {
 }
 
 impl NgramCounter {
-    /// Validate the stream (12-bit ids, fewer than 2^32 tokens) and upload it.
+    /// Validate the stream (12-bit ids, 1..=2^31 tokens) and upload it.
     pub fn new(ordinal: usize, tokens: &[u16]) -> Result<Self> {
         check_tokens(tokens)?;
-        let n = u32::try_from(tokens.len())
-            .ok()
-            .filter(|&n| n >= 1 && n < u32::MAX)
-            .ok_or_else(|| invalid("n-gram stream needs 1..2^32-1 tokens"))?;
+        let n = stream_length_bound(tokens.len())?;
         let context = CudaContext::new(ordinal).map_err(cuda)?;
         let (major, minor) = context.compute_capability().map_err(cuda)?;
         if TARGET.trim() != format!("sm_{major}{minor}") {
@@ -290,7 +288,7 @@ impl NgramCounter {
         if order > NGRAM_MAX_ORDER || range.lo >= range.hi || range.hi > NGRAM_VOCABULARY {
             return Err(invalid("n-gram partition needs order <= 10 and 0 <= lo < hi <= 4096"));
         }
-        let n = u32::try_from(range.targets).map_err(|_| invalid("partition exceeds u32"))?;
+        let n = partition_target_bound(range)?;
         if n == 0 {
             return Ok(NgramPartition::default());
         }

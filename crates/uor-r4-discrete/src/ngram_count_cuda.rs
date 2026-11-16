@@ -1,11 +1,11 @@
 //! CUDA tests of the exact n-gram counter (claude-412): GPU records equal the
 //! CPU oracle's byte for byte, the SHA does not move across partition budgets
-//! or runs, and a planted single-count change is caught. Run on wick's 4090
+//! or runs, and a consistent planted single-count change moves it. Run on wick's 4090
 //! with `--release` (the ten-million-token oracle is slow in a debug build).
 
 use crate::ngram_count::{NgramAssembler, NgramOrderDigest, NgramTriple};
 use crate::ngram_count_device::NgramCounter;
-use crate::ngram_count_oracle::oracle_count;
+use crate::ngram_count_oracle::{oracle_count, plant_one_count};
 
 /// A deterministic stream: one in four ids uniform over 4,096, the rest over
 /// `narrow` ids, so high orders repeat; `narrow = 0` gives all-uniform ids.
@@ -99,14 +99,16 @@ fn ngram_count_cuda_sha_is_stable_across_budgets_and_runs() {
 }
 
 #[test]
-fn ngram_count_cuda_detects_a_planted_single_count_change() {
+fn ngram_count_cuda_sha_covers_a_planted_single_count_change() {
     let tokens = stream(100_000, 0x412_7, 13);
     let counter = NgramCounter::new(0, &tokens).expect("counter");
     let (want, want_triples, _) = oracle_count(&tokens, 3).expect("oracle");
     let plan = counter.plan(3, u64::MAX).expect("plan");
     let mut partition = counter.count_partition(3, &plan[0]).expect("count");
     let at = partition.triples.len() / 2;
-    partition.triples[at].count += 1;
+    // A consistent plant: the assembler refuses a count whose context record
+    // and n1..n4 do not match; this shows the SHA covers the count field.
+    plant_one_count(&mut partition, at);
     let mut assembler = NgramAssembler::new(3, true).expect("assembler");
     assembler.push(&partition).expect("push");
     let (digest, triples, _) = assembler.finish();

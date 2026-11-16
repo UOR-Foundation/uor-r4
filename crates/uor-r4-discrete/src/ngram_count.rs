@@ -29,10 +29,11 @@ fn invalid(message: impl Into<String>) -> Error {
     Error::Invalid(message.into())
 }
 
-/// The ordered context key of the DECISION, section 3, part 2. By unique factorization the
-/// positional-prime product K_k = prod_{s<=k} q(t_{-s}, s) is one-to-one with
-/// the ordered tuple (t_{-1}..t_{-k}); the stored word is that tuple, 12 bits
-/// per slot. Slot 1 (the latest token) occupies bits 108..120, slot s bits
+/// The ordered context key of the DECISION, section 3, part 2, in its packed-id
+/// form. No prime is computed here: the key is an ordered 12-bit packing of
+/// (order, t_{-1}..t_{-k}), a bijection on (order, ordered context), and so
+/// carries exactly the information of the decision's ordered positional prime
+/// key. Slot 1 (the latest token) occupies bits 108..120, slot s bits
 /// 120-12s..132-12s, and the order k occupies bits 120..128. Unused slots are 0.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PrimeRouteKey(u128);
@@ -80,17 +81,20 @@ impl PrimeRouteKey {
         (self.0 >> 120) as u32
     }
 
-    /// Slot s (1 = latest), 1 <= s <= order.
-    pub fn slot(self, s: u32) -> u16 {
-        ((self.0 >> (120 - 12 * s)) & 0xfff) as u16
+    /// Slot s (1 = latest); None unless 1 <= s <= order (and so s <= 10).
+    pub fn slot(self, s: u32) -> Option<u16> {
+        if s == 0 || s > self.order() || s > NGRAM_MAX_ORDER {
+            return None;
+        }
+        Some(((self.0 >> (120 - 12 * s)) & 0xfff) as u16)
     }
 
     /// The context in stream order (oldest first).
     pub fn context(self) -> Vec<u16> {
-        (1..=self.order()).rev().map(|s| self.slot(s)).collect()
+        (1..=self.order()).rev().filter_map(|s| self.slot(s)).collect()
     }
 
-    /// Back-off K_{k-1} = K_k / q(t_{-k}, k): drop the oldest slot.
+    /// Back-off to order k-1: drop the oldest slot.
     pub fn back_off(self) -> Option<Self> {
         let order = self.order();
         if order == 0 {
@@ -167,9 +171,10 @@ pub struct NgramPartition {
 /// Assembles one order's partitions, in canonical order, into the canonical
 /// streams and their SHA-256. Partitions cover disjoint ascending key ranges,
 /// so the triple stream is their concatenation. A context may straddle a
-/// boundary only when its key is the partition token's prefix (order 0, the
-/// empty context); its records are added, since every field is additive over
-/// disjoint follower sets.
+/// boundary only at order 0 (the empty context); its records are added, since
+/// every field is additive over disjoint follower sets. The context records
+/// and n1..n4 are pure functions of the triples: the assembler derives them
+/// from each partition's triples and refuses a partition whose own differ.
 pub struct NgramAssembler {
     order: u32,
     keep: bool,
@@ -213,20 +218,50 @@ impl NgramAssembler {
         })
     }
 
-    /// Append the next partition. Refuses any break of canonical order.
+    /// Append the next partition. Refuses any break of canonical order and any
+    /// context record or n1..n4 that differs from the one its triples imply.
     pub fn push(&mut self, partition: &NgramPartition) -> Result<()> {
+        let mut last = self.last_triple;
         for triple in &partition.triples {
             if (triple.key >> 120) as u32 != self.order {
                 return Err(invalid("n-gram triple carries another order's key"));
             }
+            if u32::from(triple.next) >= NGRAM_VOCABULARY {
+                return Err(invalid("n-gram triple next token is outside the 12-bit vocabulary"));
+            }
             let at = (triple.key, triple.next);
-            if self.last_triple.is_some_and(|last| last >= at) {
+            if last.is_some_and(|before| before >= at) {
                 return Err(invalid("n-gram triples are not in strictly ascending order"));
             }
             if triple.count == 0 {
                 return Err(invalid("n-gram triple has a zero count"));
             }
-            self.last_triple = Some(at);
+            last = Some(at);
+        }
+        for context in &partition.contexts {
+            if (context.key >> 120) as u32 != self.order {
+                return Err(invalid("n-gram context carries another order's key"));
+            }
+            let parts = u64::from(context.n1) + u64::from(context.n2) + u64::from(context.n3_plus);
+            if u64::from(context.followers) != parts {
+                return Err(invalid("n-gram context followers differ from n1 + n2 + n3+"));
+            }
+        }
+        let (derived_contexts, derived_count_of_counts) = derive_census(&partition.triples);
+        if partition.contexts != derived_contexts {
+            return Err(invalid("n-gram context records differ from the ones the triples imply"));
+        }
+        if partition.count_of_counts != derived_count_of_counts {
+            return Err(invalid("n-gram count-of-counts differ from the ones the triples imply"));
+        }
+        if self.order >= 1 {
+            let seam = self.pending_context.zip(partition.contexts.first());
+            if seam.is_some_and(|(pending, first)| pending.key == first.key) {
+                return Err(invalid("an order >= 1 n-gram context straddles a partition seam"));
+            }
+        }
+        self.last_triple = last;
+        for triple in &partition.triples {
             self.triple_hash.update(triple_bytes(triple));
             self.targets += u64::from(triple.count);
             self.grams += 1;
@@ -285,6 +320,63 @@ impl NgramAssembler {
     }
 }
 
+/// The context records and n1..n4 that a run of canonical triples implies:
+/// one record per run of equal keys.
+fn derive_census(triples: &[NgramTriple]) -> (Vec<NgramContext>, [u64; 4]) {
+    let mut contexts: Vec<NgramContext> = Vec::new();
+    let mut count_of_counts = [0u64; 4];
+    for triple in triples {
+        if (1..=4).contains(&triple.count) {
+            count_of_counts[triple.count as usize - 1] += 1;
+        }
+        if contexts.last().is_none_or(|h| h.key != triple.key) {
+            contexts.push(NgramContext {
+                key: triple.key,
+                total: 0,
+                followers: 0,
+                n1: 0,
+                n2: 0,
+                n3_plus: 0,
+            });
+        }
+        let h = contexts.last_mut().expect("a context was just pushed");
+        h.total += u64::from(triple.count);
+        h.followers += 1;
+        match triple.count {
+            1 => h.n1 += 1,
+            2 => h.n2 += 1,
+            _ => h.n3_plus += 1,
+        }
+    }
+    (contexts, count_of_counts)
+}
+
+/// The kernels' u32 index products (2g for keys, 4c + 3 for context records)
+/// stay below 2^32 while a partition holds at most 2^30 targets.
+pub const NGRAM_MAX_PARTITION_TARGETS: u64 = 1 << 30;
+/// The kernels' grid-stride and tile arithmetic wraps above 2^32 - 65,536
+/// positions; the resident stream is capped well below, at 2^31 tokens.
+pub const NGRAM_MAX_STREAM_TOKENS: u64 = 1 << 31;
+
+/// The target count of a partition the device may count: at most 2^30.
+pub fn partition_target_bound(range: &PartitionRange) -> Result<u32> {
+    if range.targets > NGRAM_MAX_PARTITION_TARGETS {
+        return Err(invalid(format!(
+            "n-gram partition {}..{} holds {} targets, above the 2^30 device bound",
+            range.lo, range.hi, range.targets
+        )));
+    }
+    Ok(range.targets as u32)
+}
+
+/// The length of a stream the device may hold: 1..=2^31 tokens.
+pub fn stream_length_bound(len: usize) -> Result<u32> {
+    if len == 0 || len as u64 > NGRAM_MAX_STREAM_TOKENS {
+        return Err(invalid(format!("n-gram stream needs 1..=2^31 tokens, got {len}")));
+    }
+    Ok(len as u32)
+}
+
 /// One key-range partition: the partition token takes values lo..hi.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PartitionRange {
@@ -332,7 +424,10 @@ pub fn read_uort_tokens(bytes: &[u8]) -> Result<Vec<u16>> {
     }
     let count = u64::from_le_bytes(bytes[8..16].try_into().expect("8 bytes"));
     let payload = &bytes[64..];
-    if payload.len() as u64 != count * 2 {
+    let want = count
+        .checked_mul(2)
+        .ok_or_else(|| invalid(format!("UORT header names {count} tokens, past the u64 byte bound")))?;
+    if payload.len() as u64 != want {
         return Err(invalid(format!(
             "UORT header names {count} tokens but the payload holds {} bytes",
             payload.len()
@@ -358,7 +453,7 @@ pub fn check_tokens(tokens: &[u16]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ngram_count_oracle::{oracle_count, oracle_partition};
+    use crate::ngram_count_oracle::{oracle_count, oracle_partition, plant_one_count};
 
     #[test]
     fn ngram_count_key_round_trip_and_back_off() {
@@ -376,7 +471,10 @@ mod tests {
             }
         }
         let key = PrimeRouteKey::from_context(&[11, 22, 33]).unwrap();
-        assert_eq!((key.slot(1), key.slot(2), key.slot(3)), (33, 22, 11));
+        assert_eq!((key.slot(1), key.slot(2), key.slot(3)), (Some(33), Some(22), Some(11)));
+        assert_eq!((key.slot(0), key.slot(4), key.slot(11)), (None, None, None));
+        let full = PrimeRouteKey::from_context(&[1; 10]).unwrap();
+        assert_eq!((full.slot(10), full.slot(11)), (Some(1), None));
         assert!(PrimeRouteKey::from_context(&[4096]).is_err());
         assert!(PrimeRouteKey::from_context(&[0; 11]).is_err());
         assert!(PrimeRouteKey::from_word(key.word() | 1).is_err());
@@ -497,12 +595,14 @@ mod tests {
         }
     }
 
+    /// A consistent plant (count, context record and n1..n4 adjusted together)
+    /// moves the triple SHA: the SHA covers the count field.
     #[test]
-    fn ngram_count_assembler_refuses_disorder_and_detects_a_planted_count() {
+    fn ngram_count_assembler_refuses_disorder_and_the_sha_covers_a_planted_count() {
         let stream = [1u16, 2, 1, 2, 1, 3, 1, 2];
         let (digest, triples, _) = oracle_count(&stream, 1).unwrap();
         let mut planted = oracle_partition(&stream, 1, 0, 4096).unwrap();
-        planted.triples[1].count += 1;
+        plant_one_count(&mut planted, 1);
         let mut assembler = NgramAssembler::new(1, false).unwrap();
         assembler.push(&planted).unwrap();
         let (planted_digest, ..) = assembler.finish();
@@ -513,5 +613,113 @@ mod tests {
         assert_eq!(triples.len(), 4);
         assert!(check_tokens(&[0, 4095]).is_ok());
         assert!(check_tokens(&[0, 4096]).is_err());
+    }
+
+    fn refusal(order: u32, partitions: &[NgramPartition]) -> String {
+        let mut assembler = NgramAssembler::new(order, false).unwrap();
+        for partition in partitions {
+            if let Err(error) = assembler.push(partition) {
+                return error.to_string();
+            }
+        }
+        panic!("the assembler admitted every partition");
+    }
+
+    const HAND: [u16; 8] = [1, 2, 1, 2, 1, 3, 1, 2];
+
+    #[test]
+    fn ngram_count_assembler_refuses_a_planted_count_of_counts() {
+        let mut partition = oracle_partition(&HAND, 1, 0, 4096).unwrap();
+        partition.count_of_counts[0] += 1;
+        assert!(refusal(1, &[partition]).contains("count-of-counts differ"));
+    }
+
+    #[test]
+    fn ngram_count_assembler_refuses_a_corrupted_context_n1() {
+        let mut partition = oracle_partition(&HAND, 1, 0, 4096).unwrap();
+        // Context [1]: followers 2 = n1 1 + n3+ 1. Move one follower from n3+
+        // to n1, so followers = n1 + n2 + n3+ still holds and only the
+        // derivation from the triples can see it.
+        assert_eq!((partition.contexts[0].n1, partition.contexts[0].n3_plus), (1, 1));
+        partition.contexts[0].n1 += 1;
+        partition.contexts[0].n3_plus -= 1;
+        assert!(refusal(1, &[partition]).contains("context records differ"));
+    }
+
+    #[test]
+    fn ngram_count_assembler_admits_unmodified_oracle_partitions() {
+        for order in 0..=3 {
+            for (lo, hi) in [(0, 4096), (0, 2), (2, 4096)] {
+                let partition = oracle_partition(&HAND, order, lo, hi).unwrap();
+                NgramAssembler::new(order, false).unwrap().push(&partition).unwrap();
+            }
+        }
+    }
+
+    /// Two partitions whose triples ascend, each self-consistent, that share an
+    /// order-1 context across their seam.
+    #[test]
+    fn ngram_count_assembler_refuses_an_order_one_context_across_a_seam() {
+        let key = PrimeRouteKey::from_context(&[7]).unwrap().word();
+        let half = |next: u16| NgramPartition {
+            triples: vec![NgramTriple { key, next, count: 1 }],
+            contexts: vec![NgramContext { key, total: 1, followers: 1, n1: 1, n2: 0, n3_plus: 0 }],
+            count_of_counts: [1, 0, 0, 0],
+        };
+        assert!(refusal(1, &[half(1), half(2)]).contains("straddles a partition seam"));
+        // Order 0's empty context may straddle.
+        let empty = PrimeRouteKey::from_context(&[]).unwrap().word();
+        let mut assembler = NgramAssembler::new(0, true).unwrap();
+        for next in [1u16, 2] {
+            let mut part = half(next);
+            part.triples[0].key = empty;
+            part.contexts[0].key = empty;
+            assembler.push(&part).unwrap();
+        }
+        let (digest, _, contexts) = assembler.finish();
+        assert_eq!((digest.contexts, contexts[0].followers, contexts[0].total), (1, 2, 2));
+    }
+
+    #[test]
+    fn ngram_count_assembler_refuses_a_next_token_outside_the_vocabulary() {
+        let mut partition = oracle_partition(&HAND, 1, 0, 4096).unwrap();
+        let last = partition.triples.len() - 1;
+        partition.triples[last].next = 4096;
+        assert!(refusal(1, &[partition]).contains("next token is outside"));
+    }
+
+    #[test]
+    fn ngram_count_assembler_refuses_a_context_of_another_order() {
+        let mut partition = oracle_partition(&HAND, 1, 0, 4096).unwrap();
+        partition.contexts[0].key ^= 3u128 << 120;
+        assert!(refusal(1, &[partition]).contains("context carries another order"));
+    }
+
+    #[test]
+    fn ngram_count_assembler_refuses_followers_unequal_to_their_parts() {
+        let mut partition = oracle_partition(&HAND, 1, 0, 4096).unwrap();
+        partition.contexts[0].followers += 1;
+        assert!(refusal(1, &[partition]).contains("followers differ from n1 + n2 + n3+"));
+    }
+
+    #[test]
+    fn ngram_count_uort_header_overflow_is_an_error() {
+        let mut bytes = vec![0u8; 64];
+        bytes[..4].copy_from_slice(b"UORT");
+        bytes[8..16].copy_from_slice(&(1u64 << 63).to_le_bytes());
+        assert!(read_uort_tokens(&bytes).is_err());
+        bytes[8..16].copy_from_slice(&1u64.to_le_bytes());
+        bytes.extend_from_slice(&7u16.to_le_bytes());
+        assert_eq!(read_uort_tokens(&bytes).unwrap(), vec![7]);
+    }
+
+    #[test]
+    fn ngram_count_device_bounds_refuse_past_the_u32_index_range() {
+        let range = |targets| PartitionRange { lo: 0, hi: 1, targets };
+        assert_eq!(partition_target_bound(&range(1 << 30)).unwrap(), 1 << 30);
+        assert!(partition_target_bound(&range((1 << 30) + 1)).is_err());
+        assert_eq!(stream_length_bound(1 << 31).unwrap(), 1 << 31);
+        assert!(stream_length_bound((1 << 31) + 1).is_err());
+        assert!(stream_length_bound(0).is_err());
     }
 }
