@@ -22,6 +22,11 @@ their source; anything marked **hypothesis** is untested. Nothing here overrides
 - **The trunk's read input is the residual stream**, whose integer signs agree with the float replay
   0.887 of the time at e_x = 16 against 24 (codex-20). The read retrained on that stream recovers
   0.86/0.89, so the loss is the input's separation, not the read family.
+- **The served address has 670× less margin than the float replay.** The same read, the same 1,024
+  scored rows: mean margin **479,134,037** on the float dump against **714,606** on the served FBS
+  stream (codex-26). No row ties, so the picks agree — what collapses is the entropy, exactly the
+  literature's leading indicator. With claude-390's residual at 2^18.5 against gates at 2^31, this
+  is the input-separation defect measured directly.
 - **The copy read carries recall when it is allowed to.** Arm r (copy read latest-exact, turn memory
   leaving copied keys alone, a memory line): exact matched pairs **0.749 / 0.759 / 0.782** at three
   seeds (claude-345). Arm rt (three-key turn memory): E 0.71, script general 10/10, but **55 panel
@@ -75,6 +80,45 @@ Each item is a unit with its own ORDER/REPORT and its own gate. Sizes are honest
 ### The run
 
 13. **I6: the training run** — claude's pipeline. See §6.
+
+## 2b. The owner's directives of 16 Nov (binding)
+
+1. **Decision 10**: try the discrete trunk with the same read before deciding; it should be faster and
+   cheaper without losing capability.
+2. **Decision 11**: go with the exact-table recommendation; **re-explore the zeta and Hopf routers
+   regardless** — the zeta ring is the complex discrete C2 ring carrying the routed zeros; the UOR
+   rings are `Z/256Z` and may carry context. The archive's negatives must be audited, not trusted.
+3. **Decision 12**: fix the read as recommended (write + margins + spiky pick), and **build the
+   transport quantities into the read's key** — the transport is the SpiralCore FBS.
+4. **Build what the literature says for both SDM/Hamming and absolute-position keys**, and **build
+   the exact slot memory**.
+5. **Every falsifier must be inspected against the data and the mechanism** before it is used — past
+   falsifiers were invalid for the capability under test.
+6. Agents are dedicated to the **first reply token**; every change must keep the downstream
+   (serving, artifacts, compatibility) working.
+7. 20.3 h for the full 1B is acceptable; work in the order below.
+
+## 2c. Units added by the directives
+
+14. **The planted phase-ring probe** (zeta re-evaluation §3): ring address, the bijection control,
+    cosine, gcd; bar Δ ≥ 0.10 at δ = 1. Host, sub-second.
+15. **`PhaseQ29` modular closure**: make `wrapping_add` an exponent add (today it round-trips through
+    f64), with a closure test.
+16. **The C2 ring as a carrier**: the phase accumulator as `[u8; 8]` (four complex pairs); the UOR
+    ring's `neg`/`bnot` as a signed ring buffer's involutions.
+17. **The first-reply-token trace**: the Hamming trace at the first reply position on the p seals —
+    does any head keep the asked value's first token, the competing one, or neither, at what weight?
+    **$0, minutes, and it kills two of the three arms before any GPU.**
+18. **The ask-head arm**: the ask query joined over a **relative-offset bigram** of the question
+    (`with_carry`, served `asked_point`), trained on the relation episodes; falsifier on held-out
+    values.
+19. **The slot arm**: the place read as the slot key with **latest-wins** (DeltaNet's read-then-
+    overwrite), which also explains and must fix arm rt's "47 → 40".
+20. **The SDM/Hamming + absolute-position key build** (literature): a Hamming shortlist keyed on
+    **relative offsets** with an exact verify, beside an **absolute-position** key as the control
+    that the records say fails for 128 < t < 256.
+21. **The transport-key harvest**: the per-token transport quaternion (and optionally the decay
+    bucket and Hamilton gate) appended to the read's address, measured on the existing dumps.
 
 ## 3. Decision 10 — which path, measured on one corpus
 
@@ -290,6 +334,12 @@ near-ties differ on 1.0–1.6% of rows, claude-354), and the C2′ choice (the g
 | 7 | Report mapping (§2.5) | codex | the verdict |
 | 8 | Compression (§2.3) | codex | the product budget |
 | 9 | Hamming adapter (§2.9) | codex | the seam paying for itself |
+| 10 | First-reply-token trace (§2c.17) | codex | **decides the arms; $0** |
+| 11 | Ask-head + slot arms (§2c.18–19) | codex | the capability |
+| 12 | SDM/absolute-position keys (§2c.20) | codex | the key family |
+| 13 | Transport-key harvest (§2c.21) | codex | the read's input |
+| 14 | Phase-ring probe + `PhaseQ29` (§2c.14–15) | codex | the owner's claim, fairly |
+| 15 | Discrete trial (§3) | codex | decision 10 |
 
 Items 1–5 are code and can run beside claude's pipeline. Item 6 is the run. Item 7 closes the
 verdict. Item 8 is the only research item that could change what ships.
@@ -310,3 +360,8 @@ Hopfield (2008.02217) · Lisman & Idiart theta-gamma (1995) · RPE vs APE induct
 - If a training run on the memory curriculum cannot beat arm r at three seeds inside a day, the
   bottleneck is data or the corpus, not the optimizer — stop and re-read claude-326's assessment.
 - If the discrete trunk with the same read matches arm r's recall, switch paths on cost.
+- **No falsifier is used until it is inspected against the data and the mechanism.** For each one:
+  does the training corpus contain the capability's structure, does the test's arm differ from its
+  control in the named way, and can a control pass it by an unrelated route (occupancy, injectivity,
+  copying TRAIN replies)? The five archive negatives in the zeta record are the template: three of
+  them could not have tested what they were cited for.
