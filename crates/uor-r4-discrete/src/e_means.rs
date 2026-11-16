@@ -355,20 +355,31 @@ mod tests {
     }
 
     #[test]
-    fn revival_rebuilds_a_dead_cluster_from_a_farthest_point() {
-        // The dead cluster sits at the origin; the points are 0, 10 and 20, so the
-        // farthest one is a point, never the stale centroid.
-        let points = vec![0i64, 0, 10, 10, 20, 20];
-        let mut centroids = vec![0i64, 0, 10, 10, 20, 20];
-        let mut counts = vec![SCALE, SCALE, 0];
+    fn revival_rebuilds_dead_clusters_from_distinct_farthest_points() {
+        // Two dead clusters share the stale centroid (0,0); the points are 0, 10
+        // and 40, so the farthest is 40. Scoring once and handing out distinct
+        // points separates the two revivals; a scan per dead cluster would give
+        // both the same point.
+        let points = vec![0i64, 0, 10, 10, 40, 40];
+        let mut centroids = vec![0i64, 0, 10, 10, 0, 0];
+        let mut counts = vec![0, SCALE, 0];
         let mut sums: Vec<i64> = centroids.iter().map(|&value| value * SCALE).collect();
         revive(&mut centroids, &mut counts, &mut sums, &points, 3, 2, 3);
+        assert_eq!(counts[0], SCALE);
         assert_eq!(counts[2], SCALE);
-        assert_eq!(sums[4], centroids[4] * SCALE);
-        assert_eq!(sums[5], centroids[5] * SCALE);
-        assert!(points
-            .chunks_exact(2)
-            .any(|point| point == &centroids[4..6]));
+        assert_eq!(&centroids[0..2], &[40, 40]);
+        for code in [0usize, 2] {
+            assert_eq!(sums[code * 2], centroids[code * 2] * SCALE);
+            assert_eq!(sums[code * 2 + 1], centroids[code * 2 + 1] * SCALE);
+            assert!(points
+                .chunks_exact(2)
+                .any(|point| point == &centroids[code * 2..code * 2 + 2]));
+        }
+        assert_ne!(
+            &centroids[0..2],
+            &centroids[4..6],
+            "dead clusters must revive to distinct points"
+        );
     }
 
     #[test]

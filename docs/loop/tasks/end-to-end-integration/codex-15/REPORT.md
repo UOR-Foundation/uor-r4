@@ -52,13 +52,13 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 - A8 fixture (512 tokens, 4 blocks, quota 2): greedy **14,676**, e-means **31,780** weighted
   cell-L1 (**2.165x**); the e-means table is injective (512 distinct) and occupies all 256 cells at
   the exact quota; two runs are identical.
-- `cargo test -p uor-r4-discrete --lib`: **358 passed, 1 failed (pre-existing), 1 ignored**.
+- `cargo test -p uor-r4-discrete --lib`: **359 passed, 1 failed (pre-existing), 1 ignored**.
 
 ## Checks run at the head
 
 - `cargo test --locked -p uor-r4-discrete --lib e_means` — 4 passed (including a direct revival
   test with a crafted dead count).
-- `cargo test --locked -p uor-r4-discrete --lib` — 358 passed, the pre-existing failure, 1 ignored.
+- `cargo test --locked -p uor-r4-discrete --lib` — 359 passed, the pre-existing failure, 1 ignored.
 - `cargo check --locked -p uor-r4-discrete --bin address-cells-codebook` — clean.
 - `cargo clippy --locked --no-deps -p uor-r4-discrete --lib --bin address-cells-codebook` — no
   warning in the changed lines.
