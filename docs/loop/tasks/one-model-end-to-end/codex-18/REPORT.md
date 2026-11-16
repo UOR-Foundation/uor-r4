@@ -33,15 +33,33 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 - **Same-row fit, other-fact target.** 512 steps: 64/512, 78/512. 2,048 steps: identical, 435
   accepted steps, loss unchanged.
 
+## The rule read, with the real asked pick
+
+`crates/uor-r4-float-train/src/bin/recall-rule-read.rs` takes the **saved A-ext asked pick** (the
+native read's stage 1) and applies the 397 candidate rule at stage 2: among the window's facts in the
+query's distance bucket, excluding the picked asked position and the earlier slots' picks, take the
+consistent candidate. On held ext-s1, 256 windows, 1,024 rows:
+
+| Bucket | `K=1` rows | rule hits | all rows | stage-1 asked right |
+|---|---|---|---|---|
+| 0 | 36 | **33 (0.917)** | 206/512 (0.402) | 500/512 |
+| 1 | 11 | **10 (0.909)** | 221/512 (0.432) | 498/512 |
+
+The `K=1` counts differ by one from claude-397's 35/12 because the rule uses the **native pick** as
+the asked, not the true label; the all-rows rate is at the uniform ceiling, as expected on the
+ambiguous rows.
+
 ## What it means
 
 claude-397's open question is answered **negatively under the shipped update**: one fixed set of
-L1-nearest gates does not express the other-fact choice on these queries. The C2′ failure is the
-read family, not the data and not regularization. The next mechanism must condition the read on the
-rule (the asked fact's bucket, excluding the asked and earlier slots), for example a two-stage read:
-find the asked fact (the current read does this at 0.98), then select the other fact in that bucket
-from the stream. The `ReadOut` support/payload interface can carry the second stage; a deterministic
-bucket-local scan is the first candidate, not another gate fit.
+L1-nearest gates does not express the other-fact choice on these queries (0.125/0.152 even on the
+rows it trains on). The C2′ failure is the read family, not the data and not regularization.
+
+The **two-stage rule read** is the mechanism that does express it: the asked read (already 0.98)
+plus a deterministic stage-2 rule reaches **~0.92 on the identifiable `K=1` rows** and the ceiling on
+the ambiguous ones. That is the `chose_other` half of C2′ by a wide margin over the +0.10 bar, and it
+does not need another gate fit. The next unit integrates stage 2 into the model read and checks the
+`chose_target` half on the panel.
 
 ## Still open
 
