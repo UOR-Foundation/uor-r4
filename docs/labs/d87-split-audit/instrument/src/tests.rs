@@ -378,6 +378,27 @@ fn a_span_repeated_in_one_train_record_counts_once() {
     assert_eq!(v["record_least_multiplicity_histogram"], want);
 }
 
+/// A DEV-test record holding a copied span (one TRAIN record) and a stock span (three) is
+/// copied-contaminated, and counts in the record histogram under its least multiplicity.
+#[test]
+fn a_record_with_a_copied_and_a_stock_span_is_copied() {
+    let d = Dir::new("class-mixed");
+    let sp = Splitter::new(Config { dev_tune: (0, 1), dev_test: (1, 2), ..Config::default() }).unwrap();
+    let a = letters(b"abcdefghijklmnopqrstuvwxyz", 7, 3, 50);
+    let b = letters(b"ABCDEFGHIJKLMNOPQRSTUVWXYZ", 11, 5, 50);
+    let trn = |id: &str, stem: &str, ans: String| rec(id, &[&prompt_in(&sp, stem, '.', Split::Train)], &[("", &ans)]);
+    let dm = rec("dm", &[&prompt_in(&sp, "devm", '?', Split::DevTest)], &[("", &format!("<{a}> then <{b}>"))]);
+    let s0 = vec![dm, trn("ta", "trna", format!("train a [{a}] side")), trn("tb1", "trnb one", format!("first [{b}] one"))];
+    let s1 = vec![trn("tb2", "trnb two", format!("second [{b}] two")), trn("tb3", "trnb three", format!("third [{b}] three"))];
+    let shards = [d.shard("s0.jsonl", &s0), d.shard("s1.jsonl", &s1)];
+    let p = plan(&sp, &shards, 2).unwrap();
+    let (_, x) = audit_classify(&p, &coder(), 2, 12, 10).unwrap();
+    let (v, _) = x.classify.unwrap();
+    assert_eq!((&v["contaminated"], &v["copied_contaminated"]), (&json!(1), &json!(1)), "{v:#}");
+    let want = json!({"1": 1, "2": 0, "3-9": 0, "10-99": 0, ">=100": 0});
+    assert_eq!(v["record_least_multiplicity_histogram"], want);
+}
+
 #[test]
 fn multiplicity_does_not_depend_on_thread_count() {
     let one = class_fixture(1);
