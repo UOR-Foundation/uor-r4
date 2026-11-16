@@ -73,7 +73,8 @@ Size: about 180 lines of source and tests, and the ORDER/REPORT.
 
 - `solution-integrity`: refused the false common input and made the result the seam; the adapters are
   tested against the shipped functions, not against a restatement.
-- `scope-guard`: one module and two small adapters; `serve` and `choose` untouched.
+- `scope-guard`: one module and two small adapters; `choose` untouched, and `serve` now consumes
+  `read_out`.
 - `test-freeze`: adds tests inside existing files and changes no existing test; the commit carries a
   `TEST-CHANGE:` line.
 
