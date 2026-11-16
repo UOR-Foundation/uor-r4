@@ -103,6 +103,24 @@ asked count is zero, below C0's 10/12 and inside the +0.05 limit. Both halves pa
 This is a **probe** result (the two-class synthetic task). The served read must still scan the
 context for facts; that integration, not another gate fit, is what remains.
 
+## The approved control
+
+The owner approved replacing the `chose_target` half with the fact asked in the previous slot,
+whose relation is in the stream. Host count on the existing windows:
+
+| Split | Seed | Rule finds the previous fact | A-ext asked pick on it |
+|---|---|---|---|
+| held | 1 | **768/768** | 3/768 (0.004) |
+| held | 2 | **768/768** | no picks saved |
+| TRAIN | 1 | **6144/6144** | no picks saved |
+| TRAIN | 2 | **6144/6144** | no picks saved |
+
+The salience read picks the current asked fact, so it finds the previous fact 0.4% of the time;
+the rule finds it every time. The control separates target-following from salience, which the old
+half could not. The other-fact rule stays exact on `K=1` in the same runs. Sheet:
+`docs/harness/prep/one-model-end-to-end-c2-prime-control-2026-11-16.md`; the GPU arm is NOT RUN
+pending a sheet addendum and a non-author FIT.
+
 ## Still open
 
 - **Integrate stage 2 into the model read.** The probe's rule uses the window's fact positions (the

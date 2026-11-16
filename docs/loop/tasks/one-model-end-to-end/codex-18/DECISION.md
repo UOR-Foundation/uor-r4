@@ -1,6 +1,6 @@
 # Decision card: C2′'s `chose_target` half
 
-Status: **open**. Owner: Casey. This proposes a control change, which §5.1 reserves; it changes no
+Status: **approved** (2026-11-16). Owner: Casey. This proposes a control change, which §5.1 reserves; it changes no
 bar until approved.
 
 ## Question
@@ -38,6 +38,22 @@ non-author FIT (claude-398).
 
 Keep bar 4b and record its `chose_target` half as an instrument fault in the 397 REPORT; the
 `chose_other` half and the rule-read result stand.
+
+## Host count (approved control)
+
+`recall-rule-read` on the existing windows, target = the previous slot's asked fact:
+
+| Split | Seed | Rule finds it | A-ext asked pick on it |
+|---|---|---|---|
+| held | 1 | **768/768** | 3/768 |
+| held | 2 | **768/768** | no picks saved |
+| TRAIN | 1 | **6144/6144** | no picks saved |
+| TRAIN | 2 | **6144/6144** | no picks saved |
+
+The current other-fact rule remains exact on `K=1` in the same runs. The target is determined by the
+stream, and the salience read does not follow it (0.004), so the control separates the two. Sheet:
+`docs/harness/prep/one-model-end-to-end-c2-prime-control-2026-11-16.md`. The GPU arm stays NOT RUN
+pending a sheet addendum and a non-author FIT.
 
 ## Recommendation
 

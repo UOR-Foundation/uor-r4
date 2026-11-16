@@ -74,6 +74,14 @@ fn u32s(path: &Path) -> Result<Vec<u32>, String> {
 }
 
 #[derive(Clone, Default)]
+struct Previous {
+    rows: u64,
+    scan_found: u64,
+    asked_pick: u64,
+    picks_seen: u64,
+}
+
+#[derive(Clone, Default)]
 struct Bucket {
     rows: u64,
     k1_rows: u64,
@@ -113,6 +121,7 @@ fn run() -> Result<(), String> {
         None => None,
     };
     let mut buckets = vec![Bucket::default(); RECALL_QUERY_BUCKETS.len()];
+    let mut previous = Previous::default();
     for w in 0..args.windows {
         let (window, queries) = recall_query_window(seed, w as u64, CONTEXT, args.header)
             .map_err(|e| format!("window {w}: {e}"))?;
@@ -161,6 +170,24 @@ fn run() -> Result<(), String> {
             if candidates.is_empty() {
                 continue;
             }
+            if let Some(prev) = queries.iter().find(|e| e.slot + 1 == q.slot) {
+                let prev_relation = ids[prev.query_pos].checked_sub(RECALL_QUERY_SHIFT);
+                let prev_fact = prev_relation.and_then(|relation| {
+                    facts
+                        .iter()
+                        .copied()
+                        .find(|&p| ids[p - 1] == relation && p < prev.query_pos)
+                });
+                previous.rows += 1;
+                previous.scan_found += u64::from(prev_fact == Some(prev.ask_value_pos));
+                if let Some(picks) = &picks {
+                    let pick = picks[w * CONTEXT + q.scored_offset] as usize;
+                    if pick != 0 {
+                        previous.picks_seen += 1;
+                        previous.asked_pick += u64::from(pick == prev.ask_value_pos);
+                    }
+                }
+            }
             let b = &mut buckets[bucket];
             b.rows += 1;
             b.asked_scan_right += u64::from(asked == q.ask_value_pos);
@@ -184,6 +211,12 @@ fn run() -> Result<(), String> {
         "seed": args.seed,
         "held": args.held,
         "windows": args.windows,
+        "previous": {
+            "rows": previous.rows,
+            "scan_found": previous.scan_found,
+            "asked_pick": previous.asked_pick,
+            "picks_seen": previous.picks_seen,
+        },
         "buckets": buckets.iter().enumerate().map(|(i, b)| serde_json::json!({
             "bucket": i,
             "rows": b.rows,
