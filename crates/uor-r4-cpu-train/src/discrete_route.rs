@@ -1228,6 +1228,23 @@ impl CpuDiscretePick {
         self.level_gates.iter().map(Vec::len).sum()
     }
 
+    /// Gate `block * levels + level`, the index `set_gate` takes (claude-408).
+    pub fn gate(&self, index: usize) -> Option<i32> {
+        let levels = self.level_gates.first()?.len();
+        if levels == 0 {
+            return None;
+        }
+        self.level_gates.get(index / levels)?.get(index % levels).copied()
+    }
+
+    fn block_count(&self) -> usize {
+        self.level_gates.len()
+    }
+
+    fn stage_count(&self) -> usize {
+        self.level_gates.first().map_or(0, Vec::len)
+    }
+
     /// Sets gate `block * levels + level` to a trit in -1..=1.
     pub fn set_gate(&mut self, index: usize, value: i32) -> Result<()> {
         if !(-1..=1).contains(&value) {
@@ -1372,6 +1389,7 @@ pub enum CpuDiscreteProposalMode {
     Route,
     Flock,
     Relation,
+    Pick,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1439,6 +1457,15 @@ impl CpuDiscreteProposalChooser {
                     relation.routes,
                     relation.token_blocks,
                     gate_count + RELATION_EDGE_TYPES * stages,
+                )
+            }
+            Some("pick") => {
+                let pick = CpuDiscretePick::from_bytes(bytes)?;
+                (
+                    CpuDiscreteProposalMode::Pick,
+                    Vec::new(),
+                    pick.token_blocks,
+                    gate_count,
                 )
             }
             _ => return Err(invalid("proposal chooser read mode differs")),
@@ -1605,6 +1632,14 @@ impl CpuDiscreteProposalChooser {
                     active.blocks * active.stages + relation_gates,
                 )
             }
+            CpuDiscreteProposalModel::Pick(pick) => (
+                CpuDiscreteProposalMode::Pick,
+                pick.block_count(),
+                pick.stage_count(),
+                Vec::new(),
+                pick.token_blocks.clone(),
+                pick.gate_count(),
+            ),
         };
         let mut move_actions = [0u8; 16];
         for (candidate, action) in move_actions.iter_mut().enumerate() {
@@ -1711,6 +1746,7 @@ impl std::error::Error for CpuDiscreteScoreError {}
 enum CpuDiscreteProposalModel {
     Route(CpuDiscreteRoute),
     Active(ActiveLeafModel),
+    Pick(CpuDiscretePick),
 }
 
 #[derive(Clone)]
@@ -1768,6 +1804,7 @@ impl CpuDiscreteProposalScorer {
                 bytes,
                 ActiveLeafKind::Relation,
             )?),
+            Some("pick") => CpuDiscreteProposalModel::Pick(CpuDiscretePick::from_bytes(bytes)?),
             _ => return Err(invalid("proposal scorer read mode differs")),
         };
         let kept_cells = usize::try_from(shape["kept_cells"].as_u64().unwrap_or(0))
@@ -2138,6 +2175,9 @@ impl CpuDiscreteProposalScorer {
             (CpuDiscreteProposalModel::Active(_), CpuDiscreteProposalKind::Route) => {
                 Err(invalid("Route proposal requires Route mode"))
             }
+            (CpuDiscreteProposalModel::Pick(_), CpuDiscreteProposalKind::Route) => {
+                Err(invalid("Route proposal refused in Pick mode (claude-408)"))
+            }
             (CpuDiscreteProposalModel::Route(model), CpuDiscreteProposalKind::Route)
                 if index >= model.blocks * model.stages =>
             {
@@ -2158,7 +2198,8 @@ impl CpuDiscreteProposalScorer {
     fn proposal_refusal_status(&self, kind: CpuDiscreteProposalKind) -> u32 {
         match (&self.model, kind) {
             (CpuDiscreteProposalModel::Route(_), CpuDiscreteProposalKind::Gate)
-            | (CpuDiscreteProposalModel::Active(_), CpuDiscreteProposalKind::Route) => 9,
+            | (CpuDiscreteProposalModel::Active(_), CpuDiscreteProposalKind::Route)
+            | (CpuDiscreteProposalModel::Pick(_), CpuDiscreteProposalKind::Route) => 9,
             _ => 4,
         }
     }
@@ -2219,6 +2260,12 @@ impl CpuDiscreteProposalScorer {
                     relation_gates[level][edge] = sibling_gate(current, candidate)?;
                 }
             }
+            (CpuDiscreteProposalModel::Pick(pick), CpuDiscreteProposalKind::Gate) => {
+                let current = pick
+                    .gate(index)
+                    .ok_or_else(|| invalid("Pick gate proposal outside inventory (claude-408)"))?;
+                pick.set_gate(index, sibling_gate(current, candidate)?)?;
+            }
             (model, CpuDiscreteProposalKind::Table) => {
                 let blocks = model.blocks();
                 let token = index / blocks;
@@ -2239,6 +2286,7 @@ impl CpuDiscreteProposalScorer {
         match model {
             CpuDiscreteProposalModel::Route(route) => route.read(prefix),
             CpuDiscreteProposalModel::Active(active) => active.read(prefix),
+            CpuDiscreteProposalModel::Pick(pick) => Ok(pick.read(prefix)?.into_iter().flatten().collect()),
         }
     }
 
@@ -2259,6 +2307,20 @@ impl CpuDiscreteProposalScorer {
                 ))
             }
             CpuDiscreteProposalModel::Active(active) => active.read_traced(prefix, Some(trace)),
+            CpuDiscreteProposalModel::Pick(pick) => {
+                let traced = pick.read_traced(prefix)?;
+                let width = 4 + pick.stage_count() * 28;
+                for (block, gates) in pick.level_gates.iter().enumerate() {
+                    let start = trace.len();
+                    trace.push(traced.pick.map_or(u32::MAX, |pick| pick as u32));
+                    trace.push(traced.distance.unwrap_or(u32::MAX));
+                    trace.push(traced.ties);
+                    trace.push((gates[0] + 1) as u32);
+                    trace.push(traced.output_roots.get(block).map_or(u32::MAX, |root| *root as u32));
+                    trace.resize(start + width.max(5), u32::MAX);
+                }
+                Ok((traced.blocks.into_iter().flatten().collect(), None, None))
+            }
         }
     }
 
@@ -2266,6 +2328,7 @@ impl CpuDiscreteProposalScorer {
         match model {
             CpuDiscreteProposalModel::Route(route) => &route.token_blocks,
             CpuDiscreteProposalModel::Active(active) => &active.token_blocks,
+            CpuDiscreteProposalModel::Pick(pick) => &pick.token_blocks,
         }
     }
 }
@@ -2340,6 +2403,9 @@ impl CpuDiscreteTrunkReader {
         let token_blocks = match &model {
             CpuDiscreteProposalModel::Route(model) => &model.token_blocks,
             CpuDiscreteProposalModel::Active(model) => &model.token_blocks,
+            CpuDiscreteProposalModel::Pick(_) => {
+                return Err(invalid("trunk reader refuses Pick (claude-408)"))
+            }
         };
         let mut codebook_roots = Vec::with_capacity(token_blocks.len());
         let mut codebook_coords = Vec::with_capacity(token_blocks.len());
@@ -2647,6 +2713,7 @@ impl CpuDiscreteTrunkReader {
         match model {
             CpuDiscreteProposalModel::Route(route) => route.read(prefix),
             CpuDiscreteProposalModel::Active(active) => active.read(prefix),
+            CpuDiscreteProposalModel::Pick(_) => Err(invalid("trunk reader refuses Pick (claude-408)")),
         }
     }
 }
@@ -3201,7 +3268,7 @@ impl CpuDiscreteProposalApplier {
             .as_array()
             .ok_or_else(|| invalid("discrete artifact tables differ"))?
             .clone();
-        let model = CpuDiscreteModelState::from_scorer(&self.scorer);
+        let model = CpuDiscreteModelState::from_scorer(&self.scorer)?;
         let table = flattened_token_table(&self.scorer);
         let cells = token_cells(&self.scorer);
         let (routes, gates) = flattened_read_state(&self.scorer)?;
@@ -3258,7 +3325,7 @@ impl CpuDiscreteProposalApplier {
         validate_layout(&artifact, &parsed_header)?;
         let reparsed = CpuDiscreteProposalScorer::from_bytes(&artifact)?;
         if canonical_json_sha256(&model)?
-            != canonical_json_sha256(&CpuDiscreteModelState::from_scorer(&reparsed))?
+            != canonical_json_sha256(&CpuDiscreteModelState::from_scorer(&reparsed)?)?
         {
             return Err(invalid(
                 "CPU discrete artifact writeback changed the model state",
@@ -3391,6 +3458,7 @@ impl CpuDiscreteSchedule {
         let vectors = (model.token_blocks().len() * model.blocks()) as u64;
         let reads = match model {
             CpuDiscreteProposalModel::Route(route) => (route.blocks * route.stages) as u64,
+            CpuDiscreteProposalModel::Pick(pick) => pick.gate_count() as u64,
             CpuDiscreteProposalModel::Active(active) => {
                 let relation = match active.mode {
                     ActiveLeafMode::Flock => 0,
@@ -3410,6 +3478,7 @@ impl CpuDiscreteSchedule {
                 let base_gates = match model {
                     CpuDiscreteProposalModel::Route(route) => route.blocks * route.stages,
                     CpuDiscreteProposalModel::Active(active) => active.blocks * active.stages,
+                    CpuDiscreteProposalModel::Pick(pick) => pick.gate_count(),
                 };
                 vectors + base_gates as u64
             }
@@ -3607,8 +3676,8 @@ fn objective_name(objective: CpuDiscreteObjective) -> &'static str {
 }
 
 impl CpuDiscreteModelState {
-    fn from_scorer(scorer: &CpuDiscreteProposalScorer) -> Self {
-        match &scorer.model {
+    fn from_scorer(scorer: &CpuDiscreteProposalScorer) -> Result<Self> {
+        Ok(match &scorer.model {
             CpuDiscreteProposalModel::Route(route) => Self::Route {
                 context: route.context,
                 kept_cells: scorer.kept_cells,
@@ -3641,7 +3710,10 @@ impl CpuDiscreteModelState {
                     relation_gates: relation_gates.clone(),
                 },
             },
-        }
+            CpuDiscreteProposalModel::Pick(_) => {
+                return Err(invalid("proposal applier refuses Pick (claude-408)"))
+            }
+        })
     }
 
     fn restore(&self) -> Result<(CpuDiscreteProposalModel, usize, CpuDiscreteObjective)> {
@@ -3874,7 +3946,7 @@ impl CpuDiscreteCheckpointDriver {
                 "CPU model epoch differs from source epoch plus accepted updates",
             ));
         }
-        let model = CpuDiscreteModelState::from_scorer(&self.applier.scorer);
+        let model = CpuDiscreteModelState::from_scorer(&self.applier.scorer)?;
         self.lineage.source_identity.validate_model(&model)?;
         let chooser = CpuDiscreteChooserState::from_chooser(&self.applier.scorer.chooser);
         let lineage_sha256 = canonical_json_sha256(&self.lineage)?;
@@ -4049,6 +4121,7 @@ impl CpuDiscreteCheckpointDriver {
             let kind = match model {
                 CpuDiscreteProposalModel::Route(_) => CpuDiscreteProposalKind::Route,
                 CpuDiscreteProposalModel::Active(_) => CpuDiscreteProposalKind::Gate,
+                CpuDiscreteProposalModel::Pick(_) => CpuDiscreteProposalKind::Gate,
             };
             (kind, o_read, self.lineage.schedule.dimensions(model).1)
         } else {
@@ -4118,6 +4191,7 @@ impl CpuDiscreteProposalModel {
         match self {
             Self::Route(route) => route.blocks,
             Self::Active(active) => active.blocks,
+            Self::Pick(pick) => pick.block_count(),
         }
     }
 
@@ -4125,6 +4199,7 @@ impl CpuDiscreteProposalModel {
         match self {
             Self::Route(route) => &route.token_blocks,
             Self::Active(active) => &active.token_blocks,
+            Self::Pick(pick) => &pick.token_blocks,
         }
     }
 
@@ -4132,6 +4207,7 @@ impl CpuDiscreteProposalModel {
         match self {
             Self::Route(route) => &mut route.token_blocks,
             Self::Active(active) => &mut active.token_blocks,
+            Self::Pick(pick) => &mut pick.token_blocks,
         }
     }
 }
@@ -4428,6 +4504,9 @@ fn token_cells(scorer: &CpuDiscreteProposalScorer) -> Vec<u32> {
 
 fn flattened_read_state(scorer: &CpuDiscreteProposalScorer) -> Result<(Vec<u32>, Vec<i32>)> {
     match &scorer.model {
+        CpuDiscreteProposalModel::Pick(_) => Err(invalid(
+            "flattened read state refuses Pick (claude-408)",
+        )),
         CpuDiscreteProposalModel::Route(route) => Ok((
             route.routes.iter().flatten().copied().collect(),
             vec![0; route.blocks * route.stages],
