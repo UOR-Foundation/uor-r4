@@ -109,9 +109,13 @@ Each item is a unit with its own ORDER/REPORT and its own gate. Sizes are honest
     f64), with a closure test.
 16. **The C2 ring as a carrier**: the phase accumulator as `[u8; 8]` (four complex pairs); the UOR
     ring's `neg`/`bnot` as a signed ring buffer's involutions.
-17. **The first-reply-token trace**: the Hamming trace at the first reply position on the p seals —
-    does any head keep the asked value's first token, the competing one, or neither, at what weight?
-    **$0, minutes, and it kills two of the three arms before any GPU.**
+17. **The first-reply-token trace — RUN (codex-27).** On a reachable `/10`, the first reply token is
+    a **format bigram** (`':' → ' The'`) stamped by the copy heads at full weight; the depth-2 ask
+    head does keep the assert position (0.261, 6th of 16) but **no readout-depth head does**; the
+    value arrives four rows later from the memory line via the copy chain. So the query path exists
+    and is reachable, and the failure is the **readout-depth key and its weight**, not the absence of
+    a query. The narrow targets are units 18 (relative-offset ask key) and 19 (slot/place key that
+    speaks the value at the reply's first row, latest-wins).
 18. **The ask-head arm**: the ask query joined over a **relative-offset bigram** of the question
     (`with_carry`, served `asked_point`), trained on the relation episodes; falsifier on held-out
     values.
