@@ -197,7 +197,7 @@ pub(crate) fn compare_proposals(
 
 /// `compare_proposals` over a parameter list fixed by the caller.
 #[allow(clippy::too_many_arguments)]
-fn compare_proposals_over(
+pub(crate) fn compare_proposals_over(
     device: &Device,
     listed: &[(Parameter, CpuDiscreteProposalKind, usize)],
     scorer: &CpuDiscreteProposalScorer,
@@ -684,7 +684,7 @@ pub(crate) fn student_batch_rows(rows: u32) -> StudentBatch {
 
 /// Routes and gates 0..16, and the vector blocks of the batch's first eight
 /// distinct target tokens (by id). Fixed before any scoring; never chosen by loss.
-fn student_parameters(
+pub(crate) fn student_parameters(
     device: &Device,
     read: ReadSpec,
     rows: &[CpuDiscreteProposalSample],

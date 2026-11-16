@@ -6436,6 +6436,10 @@ mod tests {
         let flat = scorer.score(CpuDiscreteProposalKind::Gate, 1, &rows, 0).unwrap();
         assert!(flat.losses[..3].iter().all(|&w| w == flat.losses[0]), "{:?}", flat.losses);
         assert!(flat.losses[3..].iter().all(|&w| w == u64::MAX), "lanes past 3 are absent");
+        // A gate above level 0 changes no read, so the chooser keeps lane 0.
+        let chooser = CpuDiscreteProposalChooser::from_bytes(&artifact).unwrap();
+        let words: [u64; 16] = flat.losses.clone().try_into().unwrap();
+        assert_eq!(chooser.choose(CpuDiscreteProposalKind::Gate, 1, &words, 0).unwrap().lane, 0);
         let moved = scorer.score(CpuDiscreteProposalKind::Gate, 0, &rows, 0).unwrap();
         assert_eq!(moved.losses.len(), 16);
         assert_eq!(moved.losses[0], flat.losses[0], "lane 0 is the current model");

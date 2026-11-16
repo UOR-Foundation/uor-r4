@@ -536,8 +536,8 @@ impl BucketWriterEngine {
         batch: &CarriedBatch,
         targets: &[u32],
     ) -> Result<Evaluation> {
-        let epoch = model.admit_batch(batch, targets)?;
         refuse_pick(model)?;
+        let epoch = model.admit_batch(batch, targets)?;
         let targets_gpu = model.stream.clone_htod(targets).map_err(cuda)?;
         let spec = model.gpu_spec(batch.rows)?;
         let mut top8 = model

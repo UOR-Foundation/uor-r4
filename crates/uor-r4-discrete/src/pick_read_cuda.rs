@@ -486,6 +486,60 @@ fn cuda_pick_read_matches_cpu_oracle_on_the_student_batch() {
         );
         assert!(mismatches.is_empty(), "word {word}: {:#?}", &mismatches[..mismatches.len().min(8)]);
         assert_eq!(rows, 64);
+        assert!(moved, "word {word}: the Pick read left every student row as its query");
+
+        // Loss words and choices against the CPU scorer and chooser, from the
+        // same exported bytes, over claude-404's fixed student parameter list.
+        use crate::cpu_oracle_parity::{
+            compare_forward, compare_proposals_over, student_parameters, Reading,
+        };
+        use uor_r4_cpu_train::{
+            CpuDiscreteProposalChooser, CpuDiscreteProposalKind, CpuDiscreteProposalSample,
+            CpuDiscreteProposalScorer,
+        };
+        let bytes = crate::d11_export::export_d11(&snapshot).expect("export");
+        let scorer = CpuDiscreteProposalScorer::from_bytes(&bytes).expect("cpu scorer");
+        let chooser = CpuDiscreteProposalChooser::from_bytes(&bytes).expect("cpu chooser");
+        let listed = student_parameters(&device, ReadSpec::Pick, &student.rows);
+        let mut r = Reading::default();
+        compare_forward(&device, &scorer, &student.rows, &mut r);
+        compare_proposals_over(
+            &device, &listed, &scorer, &chooser, &student.rows, &student.rows, false, &mut r,
+        );
+        eprintln!(
+            "student word {word}: {} parameters, {} forward words, {} loss words, {} choices, {} refusals both sides, {} mismatches",
+            listed.len(),
+            r.forward_words,
+            r.loss_words,
+            r.choices,
+            r.refusals,
+            r.mismatches.len()
+        );
+        assert!(r.mismatches.is_empty(), "word {word}: {:#?}", &r.mismatches[..r.mismatches.len().min(8)]);
+        assert!(r.forward_words > 0 && r.loss_words == 16 * r.choices && r.choices > 0);
+        // Planted negative: the CPU scores the same Gate parameters on targets
+        // shifted by one; the loss words must differ somewhere.
+        let shifted: Vec<CpuDiscreteProposalSample> = student
+            .rows
+            .iter()
+            .map(|s| CpuDiscreteProposalSample {
+                prefix: s.prefix.clone(),
+                target: (s.target + 1) % STUDENT_SPEC.vocabulary,
+            })
+            .collect();
+        let gates: Vec<_> = listed
+            .iter()
+            .copied()
+            .filter(|(_, kind, _)| *kind == CpuDiscreteProposalKind::Gate)
+            .collect();
+        let mut planted = Reading::default();
+        compare_proposals_over(
+            &device, &gates, &scorer, &chooser, &student.rows, &shifted, false, &mut planted,
+        );
+        assert!(
+            planted.mismatches.iter().any(|m| m.starts_with("losses")),
+            "word {word}: shifted targets left every Gate loss word equal"
+        );
     }
 }
 
