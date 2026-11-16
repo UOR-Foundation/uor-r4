@@ -25,7 +25,9 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 
 ## Measurements
 
-Run on wick's RTX 4090 (driver 595.99.02, nvcc 12.8 V12.8.93, `UOR_NVCC_ARCH=compute_89`), job c406-run2, 16 Nov 2026 [claude]. `nvidia-smi --query-compute-apps` listed no other process before or after.
+Run on wick's RTX 4090 (driver 595.99.02, nvcc 12.8 V12.8.93, `UOR_NVCC_ARCH=compute_89`, built `rowsk.ptx` sha256 `3b61c193…b5f0`, `discrete.ptx` `2df7b47b…b7a9`), job c406-run2, 16 Nov 2026 [claude]. `nvidia-smi --query-compute-apps` listed no other process before or after.
+
+The ORDER's base was claude-404's branch. After claude-404 merged (#4040, `59703aa99`), these commits were moved onto `origin/main` as they were. `git diff` of `crates/uor-r4-discrete` against the tested branch is empty, so the code here is the code that ran.
 
 The stream was claude-404's student stream: `tokens.u16` sha256 `a16a4412…3238` (15,471,412 tokens), `response_mask.u8` sha256 `25b9090d…a7c1`, 13,559,938 eligible targets. The batch starts at eligible target 6,779,969: 64 rows, 12,288 window tokens.
 
