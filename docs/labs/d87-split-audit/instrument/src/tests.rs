@@ -41,7 +41,10 @@ fn rec(id: &str, users: &[&str], turns: &[(&str, &str)]) -> String {
 struct Dir(PathBuf);
 impl Dir {
     fn new(name: &str) -> Self {
-        let d = std::env::temp_dir().join(format!("d87-split-test-{}-{name}", std::process::id()));
+        // A counter too: two tests may build the same fixture at once.
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let d = std::env::temp_dir().join(format!("d87-split-test-{}-{name}-{n}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         Dir(d)
@@ -195,4 +198,98 @@ fn packing_is_exact() {
     let w = pack(&base);
     let back: Vec<u32> = (0..13).map(|i| (w[i / 5] >> (12 * (i % 5)) & 0xfff) as u32).collect();
     assert_eq!(back, base);
+    assert_eq!(unpack(&w), base);
+}
+
+/// `len` letters from a fixed stride walk over `alphabet`.
+fn letters(alphabet: &[u8], stride: usize, start: usize, len: usize) -> String {
+    (0..len).map(|i| alphabet[(start + i * stride) % alphabet.len()] as char).collect()
+}
+
+/// Two DEV-test records: `da` holds a 50-token answer span that TRAIN holds, `db` a 49-token
+/// one. The brackets around each span differ between DEV and TRAIN, so no span is longer.
+fn span_fixture() -> (Value, Extras) {
+    let d = Dir::new("span");
+    let sp = Splitter::new(Config { dev_tune: (0, 1), dev_test: (1, 2), ..Config::default() }).unwrap();
+    let s50 = letters(b"abcdefghijklmnopqrstuvwxyz", 7, 3, 50);
+    let s49 = letters(b"ABCDEFGHIJKLMNOPQRSTUVWXYZ", 11, 5, 49);
+    let lines = vec![
+        rec("da", &[&prompt_in(&sp, "deva", '?', Split::DevTest)], &[("", &format!("<{s50}>"))]),
+        rec("db", &[&prompt_in(&sp, "devb", '?', Split::DevTest)], &[("", &format!("({s49})"))]),
+        rec("ta", &[&prompt_in(&sp, "trna", '.', Split::Train)], &[("", &format!("train [{s50}] side"))]),
+        rec("tb", &[&prompt_in(&sp, "trnb", '.', Split::Train)], &[(&format!("{{{s49}}}"), "ok")]),
+    ];
+    let p = plan(&sp, &[d.shard("s.jsonl", &lines)], 2).unwrap();
+    audit_full(&p, &coder(), 2, 12).unwrap()
+}
+
+#[test]
+fn planted_50_token_span_contaminates_exactly_one_record() {
+    let (a, x) = span_fixture();
+    let by = &a["contamination"]["by_span"];
+    assert_eq!(a["contamination"]["dev_test_records"], 2);
+    assert_eq!(by["50"]["contaminated"], 1, "{a:#}");
+    assert_eq!(x.contaminated[1], ["da"]);
+    assert_eq!(a["gate"]["contaminated"], json!([1, 2]));
+    assert_eq!(a["gate"]["verdict"], "FAIL");
+    assert_eq!((by["100"]["contaminated"].as_u64(), by["100"]["records_with_a_span"].as_u64()), (Some(0), Some(0)));
+}
+
+#[test]
+fn a_49_token_span_is_not_contamination_at_50() {
+    let (a, x) = span_fixture();
+    assert!(!x.contaminated[1].contains(&"db".to_string()));
+    // The 49-token span is real: at n = 32 both records hold one.
+    assert_eq!(x.contaminated[0], ["da", "db"]);
+    assert_eq!(a["contamination"]["by_span"]["32"]["contaminated"], 2);
+    // Both answers are mostly TRAIN 13-grams.
+    assert_eq!(a["answer_13gram_records"]["records"], json!([2, 2]));
+}
+
+#[test]
+fn novel_targets_leave_out_the_planted_gram() {
+    let (clean, _) = census(false);
+    let (plant, _) = census(true);
+    let (c, p) = (&clean["novel_targets"]["all"], &plant["novel_targets"]["all"]);
+    assert_eq!(c["novel"], c["with_13_context"]);
+    assert_eq!(p["novel"].as_u64().unwrap() + 1, p["with_13_context"].as_u64().unwrap());
+    let t = p["targets"].as_u64().unwrap();
+    assert_eq!(p["with_13_context"].as_u64().unwrap() + p["short_context"].as_u64().unwrap(), t);
+    assert_eq!(plant["answer_13gram_records"]["records"], json!([0, 1]));
+}
+
+#[test]
+fn template_key_merges_numbers() {
+    assert_eq!(template_key("What is 12+7?"), "what is # #");
+    assert_eq!(template_key("What is 12+7?"), template_key("what is 3+5 ?"));
+    let tpl = Splitter::new(Config { group: Group::Template, ..Config::default() }).unwrap();
+    let prm = Splitter::new(Config::default()).unwrap();
+    assert_eq!(tpl.split_of("What is 12+7?").0, tpl.split_of("what is 3+5 ?").0);
+    assert_ne!(prm.split_of("What is 12+7?").0, prm.split_of("what is 3+5 ?").0);
+    // The group survives the summary; the prompt group writes no field.
+    assert_eq!(Splitter::from_config_json(&tpl.config_json()).unwrap().cfg, tpl.cfg);
+    assert!(prm.config_json().get("group").is_none());
+}
+
+#[test]
+fn template_resplit_is_deterministic() {
+    let d = Dir::new("tpl");
+    let sp = Splitter::new(Config { group: Group::Template, ..Config::default() }).unwrap();
+    let words = ["a", "b", "c"];
+    let lines: Vec<String> = (0..120)
+        .map(|i| rec(&format!("q{i}"), &[&format!("What is {i}+{}?", i * 3 + 1)], &[("", &format!("it is {}", i * 4 + 1))]))
+        .chain((0..120).map(|i| rec(&format!("w{i}"), &[&format!("word {} question", words[i % 3].repeat(i + 1))], &[("", "fine")])))
+        .collect();
+    let (x, y) = (d.shard("a.jsonl", &lines[..100]), d.shard("b.jsonl", &lines[100..]));
+    let (o1, o2) = (d.0.join("o1"), d.0.join("o2"));
+    let t1 = plan(&sp, &[x.clone(), y.clone()], 1).unwrap().write(&o1).unwrap();
+    let t2 = plan(&sp, &[y.clone(), x.clone()], 3).unwrap().write(&o2).unwrap();
+    assert_eq!(t1, t2);
+    for f in ["train.ids", "dev-tune.ids", "dev-test.ids"] {
+        assert_eq!(std::fs::read(o1.join(f)).unwrap(), std::fs::read(o2.join(f)).unwrap());
+    }
+    let k = kept(&plan(&sp, &[x, y], 2).unwrap());
+    let s0 = k["q0"];
+    assert!((0..120).all(|i| k[&format!("q{i}")] == s0), "one template, one split");
+    assert_eq!(serde_json::from_str::<Value>(&t1).unwrap()["prompts"], 121);
 }

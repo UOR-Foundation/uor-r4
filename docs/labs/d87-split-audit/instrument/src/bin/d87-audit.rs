@@ -3,13 +3,15 @@
 //!
 //! Re-derives the split from `<split>/split-summary.json`'s config over the same shards and
 //! refuses unless it reproduces that summary byte for byte; then tokenizes every kept record
-//! with student-ingest and writes `<out>/audit-summary.json`: the exact 13-gram TRAIN/DEV
-//! overlap census, the P0(d) gate verdict and the per-split target counts.
+//! with student-ingest and writes `<out>/audit-summary.json`: the long-span contamination gate
+//! (n = 32, 50, 100; the gate reads 50), the exact 13-gram TRAIN/DEV overlap census as a
+//! diagnostic, the novel-target counts and the per-split target counts. Beside it,
+//! `prompt-templates.tsv` (decoded corpus text) and `contaminated-ids.tsv`, never committed.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use d87_split_audit::{audit, plan, Splitter};
+use d87_split_audit::{audit_full, plan, Splitter, SPANS};
 use m2_student_corpus_ingest::{hex, Coder};
 use sha2::{Digest, Sha256};
 
@@ -45,7 +47,22 @@ fn run() -> Result<(), String> {
     }
     let json = std::fs::read(&tok).map_err(|e| format!("{}: {e}", tok.display()))?;
     let coder = Coder::new(&json)?;
-    let mut a = audit(&p, &coder, threads, bloom)?;
+    let (mut a, extras) = audit_full(&p, &coder, threads, bloom)?;
+    std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
+    // Text and ids stay beside the summary, never inside it: the summary is the committed file.
+    let mut tsv = String::from("dev_test_prompt_positions\ttext\n");
+    for (c, ids) in &extras.templates {
+        let text = String::from_utf8_lossy(&coder.tok.decode_bytes(ids)).replace('\\', "\\\\").replace('\n', "\\n").replace('\t', "\\t");
+        tsv.push_str(&format!("{c}\t{text}\n"));
+    }
+    std::fs::write(out.join("prompt-templates.tsv"), tsv).map_err(|e| e.to_string())?;
+    let mut ids = String::new();
+    for (n, list) in SPANS.iter().zip(&extras.contaminated) {
+        for id in list {
+            ids.push_str(&format!("{n}\t{id}\n"));
+        }
+    }
+    std::fs::write(out.join("contaminated-ids.tsv"), ids).map_err(|e| e.to_string())?;
     a["tokenizer_sha256"] = hex(&Sha256::digest(&json)).into();
     a["split_summary_sha256"] = hex(&Sha256::digest(text.as_bytes())).into();
     std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
