@@ -9,7 +9,7 @@ pub mod prompts;
 
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -224,8 +224,6 @@ pub struct Request {
     pub extra: Option<Value>,
 }
 
-/// The chat-completion body (JSON integers only); `extra` top-level keys override. In
-/// `openai` mode the body has no `seed` and no `chat_template_kwargs`.
 /// Refuses an `--extra-body` that could ask the server for a score: any key, at any depth, whose
 /// name contains `logprob`, `score` or `rank` (hard text only; no logits, probabilities, scores
 /// or ranks are requested).
@@ -248,6 +246,8 @@ pub fn check_extra_body(v: &Value) -> Res<()> {
     }
 }
 
+/// The chat-completion body (JSON integers only); `extra` top-level keys override. In
+/// `openai` mode the body has no `seed` and no `chat_template_kwargs`.
 pub fn request_body(r: &Request, messages: &Value, seed: u32) -> Value {
     let mut b = match r.api {
         Api::Vllm => json!({"model": r.model_name, "messages": messages,
@@ -694,16 +694,30 @@ fn resume(dir: &Path) -> Res<(HashSet<String>, Totals, u64)> {
         let b = read(&dp)?;
         let lines = complete_lines(&b);
         let mut kept_bytes = 0;
+        // An `http` drop is the server's refusal, not the prompt's: a later segment retries it
+        // once. A second `http` drop of the same id makes it done, so prompts a server always
+        // refuses cannot fill every resume's first requests and trip the refused stop.
+        let mut http_seen: HashMap<String, u32> = HashMap::new();
+        // Each id counts once in the drop totals, and not at all if a shard kept it later.
+        let mut counted: HashSet<String> = HashSet::new();
         for l in &lines {
             kept_bytes += l.len() + 1;
             let v = line_json(l).ok_or("dropped.jsonl: bad line")?;
-            // An `http` drop is the server's refusal, not the prompt's: a later segment retries it.
-            if v["reason"].as_str() != Some("http") {
-                done.insert(v["id"].as_str().unwrap_or("").to_string());
+            let id = v["id"].as_str().unwrap_or("").to_string();
+            let reason = v["reason"].as_str().unwrap_or("");
+            let kept_later = done.contains(&id) && !counted.contains(&id);
+            if reason == "http" {
+                let n = http_seen.entry(id.clone()).or_default();
+                *n += 1;
+                if *n >= 2 {
+                    done.insert(id.clone());
+                }
+            } else {
+                done.insert(id.clone());
             }
-            *t.dropped
-                .entry(v["reason"].as_str().unwrap_or("").into())
-                .or_default() += 1;
+            if !kept_later && counted.insert(id) {
+                *t.dropped.entry(reason.into()).or_default() += 1;
+            }
         }
         if kept_bytes != b.len() {
             write(&dp, &b[..kept_bytes])?;
@@ -1394,14 +1408,33 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("dropped.jsonl"),
-            "{\"id\":\"a\",\"reason\":\"http\"}\n{\"id\":\"b\",\"reason\":\"length\"}\n",
+            concat!(
+                "{\"id\":\"a\",\"reason\":\"http\"}\n",
+                "{\"id\":\"b\",\"reason\":\"length\"}\n",
+                "{\"id\":\"c\",\"reason\":\"http\"}\n",
+                "{\"id\":\"c\",\"reason\":\"http\"}\n",
+                "{\"id\":\"d\",\"reason\":\"http\"}\n",
+                "{\"id\":\"d\",\"reason\":\"empty\"}\n",
+            ),
         )
         .unwrap();
         let (done, t, _) = resume(&dir).unwrap();
         std::fs::remove_dir_all(&dir).unwrap();
         assert!(!done.contains("a"), "an http drop must be retried");
         assert!(done.contains("b"), "a length drop stays done");
-        assert_eq!(t.dropped.values().sum::<u64>(), 2);
+        assert!(
+            done.contains("c"),
+            "a second http drop of one id makes it done"
+        );
+        assert!(
+            done.contains("d"),
+            "an http drop retried into a content drop is done"
+        );
+        // Each id counts once, under its first reason.
+        assert_eq!(t.dropped.get("http"), Some(&3));
+        assert_eq!(t.dropped.get("length"), Some(&1));
+        assert_eq!(t.dropped.get("empty"), None);
+        assert_eq!(t.dropped.values().sum::<u64>(), 4);
     }
 
     #[test]
