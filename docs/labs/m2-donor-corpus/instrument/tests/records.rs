@@ -1,5 +1,23 @@
-use m2_donor_corpus::{check_record, parse_reply, request_body, Api, Request};
+use m2_donor_corpus::{check_extra_body, check_record, parse_reply, request_body, Api, Request};
 use serde_json::json;
+
+#[test]
+fn extra_body_refuses_score_keys_at_any_depth() {
+    assert!(
+        check_extra_body(&json!({"thinking": {"type": "enabled"}, "reasoning_effort": "low"}))
+            .is_ok()
+    );
+    for bad in [
+        json!({"logprobs": true}),
+        json!({"top_logprobs": 20}),
+        json!({"prompt_logprobs": 1}),
+        json!({"x": {"LogProbs": true}}),
+        json!({"x": [{"return_score": true}]}),
+        json!({"rank": 1}),
+    ] {
+        assert!(check_extra_body(&bad).is_err(), "{bad} passed");
+    }
+}
 
 fn single() -> serde_json::Value {
     json!({"id": "p0", "kind": "single", "source": "s",

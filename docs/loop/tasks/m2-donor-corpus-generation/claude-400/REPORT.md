@@ -11,6 +11,9 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Sheet: [`docs/harness/prep/m2-donor-co
 - **[claude] Instrument negative: one straggler held A3 open 37 minutes.** A3 reached its budget at about 11:19Z; one request stayed in flight from 11:20 to 11:57Z, retrying, with no kept tokens added. A per-request wall-time cap is the fix; it cost time, not money.
 - **[claude] The 4,096-token count was not done.** The instrument has no `count` command. The ORDER asks for it only "if that is feasible"; it is left open below.
 - **[claude] Two operational slips, caught before any harm.** (1) The first HF and wick copy jobs used `set -- $pair` under zsh, which does not word-split, so both failed on a path named "out part-0" and copied nothing; they were stopped and rerun with explicit arguments. (2) Pod 3's guard downed the pod after its 1,200 s no-run grace, about 30 minutes after the STOP; that grace is pod time the corpus did not use (about $21 at $43.41/h).
+- **[claude] The API receipt first missed two of D89's fields.** D89 asks the API receipt to name the endpoint, the model-version string, the request dates and the off-peak window; the first seal of the API set had the endpoint and the window but not `DeepSeek-V4.1-Flash-1017` or the request dates. `model-api.json` was corrected and the set resealed from a decompressed copy: the root, records and every other receipt field are unchanged (checked with `diff` outside `.model`), and the new `receipt.json`, its `.zst` and the manifest replaced the old ones in the HF store and on wick, each checked again.
+- **[claude] The exact-head review (four slices) found real gaps in the client and the guard, none of which touched this corpus.** Fixed in this PR, each with a check: `--extra-body` could have asked for log-probabilities (it is now refused for any key containing `logprob`, `score` or `rank`, at any depth; this run's extra body held only `thinking` and `reasoning_effort`); a server's `http` refusal was a permanent drop on resume (it is now retried; this corpus has no `http` drops); the guard could die with the pod up if a log write failed under `set -e` (`log`, `alert` and the seen-marker can no longer fail); the spend watcher read a balance with a thousands comma wrongly and wrote no alert when a STOP could not be written (both fixed; it also refuses a missing out dir at start). The rest is listed under Still open.
+- **[claude] Two-turn records are about 6.7% of the API set (30,719 of 457,601), not about 10% overall.** The bank's 10% two-turn draw applies only to WildChat and OASST2 prompts, as the sheet says.
 - **[claude] Earlier pods** (pod 1 had no NVLink and was downed at once, about $0.52; pod 2 never reached SSH and was deleted by `up`, about $11) produced no data. Both are in the shared notes and the sheet's amendments.
 - **[claude] The ORDER's stop list says "Nothing on wick".** The corpus backup on wick's `plexpool/uor-r4-corpus` dataset follows Casey's later instruction relayed by the parent session (quoted below); nothing was written to wick's root disk and no other process there was touched.
 
@@ -24,7 +27,9 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Sheet: [`docs/harness/prep/m2-donor-co
 
 Casey's words for the API path, relayed by the parent session (verbatim): "ok sure keep the pod up i guess since it wins until 5am est... i will reload the deepseek api key, please go ahead and build that and begin (also be conscious of wick's hard drive space and the hard drive space on this local laptop as well) wick has tons of other hard drive space but it may be slower so please be smart about what you are doing"; and "I already have deepseek installed on wick through opencode". The provider's terms are quoted in the sheet's amendment 6.
 
-**The corpus: 1,009,576,044 kept tokens in 528,615 records**, counted in the donor's own tokenizer (the server's usage counts).
+**The corpus: 1,009,576,044 kept tokens in 528,615 records**, counted in the donor's own tokenizer (the server's usage counts). It is the roadmap item's corpus: D87 is "D41's production donor pass" and sets this first sealed corpus at 1B kept tokens, and D89 sets its means. It was generated once under D41's conditions as D87 and D89 amend them (hard text only, (b) deferred, (c) and (d) banned), hashed (two Merkle roots) and recorded here; no student training hold is released by it.
+
+Kept counts come from the counts files (one line per kept record). Generated counts come from each set's `metrics.json`, which adds the dropped requests' completions (the counts files hold kept records only).
 
 | Part | Engine | Records | Kept tokens | Generated | Dropped | Merkle root |
 |---|---|---|---|---|---|---|
@@ -47,7 +52,8 @@ Casey's words for the API path, relayed by the parent session (verbatim): "ok su
 
 ## Checks run at the head
 
-- **Instrument tests:** `CARGO_TARGET_DIR=local/m2-instr-target CARGO_INCREMENTAL=0 ~/.cargo/bin/cargo test` in `docs/labs/m2-donor-corpus/instrument/`: 26 passed, 0 failed, 1 ignored (lib 15, e2e 8, records 3).
+- **Instrument tests:** `CARGO_TARGET_DIR=local/m2-instr-target CARGO_INCREMENTAL=0 ~/.cargo/bin/cargo test` in `docs/labs/m2-donor-corpus/instrument/`: 28 passed, 0 failed, 1 ignored (lib 16, e2e 8, records 4). Negative gates for the two review fixes: with the `http` retry disabled, `resume_retries_http_drops_only` fails; with the score-key check disabled, `extra_body_refuses_score_keys_at_any_depth` fails; both pass restored.
+- **Scripts:** `bash -n` and `shellcheck` on `drive.sh` and `api-watch.sh` (one intentional SC2016 info). `api-watch.sh` against a stub balance of `"1,167.50"`: unreadable, alert at 5, STOP at 10; against a missing out dir: exit 2 at start.
 - **Seal and verify** (`donor-corpus seal`, then `verify --prompts local/m2-run/bank.jsonl`, the full bank): part 0 and the API set each `verified: true` with the roots above. A sealed copy of the API set after A2 verified too (117,148 records, root `517da6c0…`) before pod 3 was stopped.
 - **HF readback:** `uor-store get results/claude/m2-donor-corpus-2026-11-16/{part-0,api-a}/` into a scratch folder; every file's sha256 matched the manifest (81 and 457 files); after decompression `verify` gave `verified: true` with the same roots, records and kept tokens. The scratch folder was deleted.
 - **Wick copy:** `rsync -a --partial` to `/mnt/plexpool/uor-r4-corpus/m2-donor-corpus-2026-11-16/{part-0,api-a}/`, then `sha256sum -c` run on wick against the manifests: all 81 and 457 files OK.
@@ -56,12 +62,17 @@ Casey's words for the API path, relayed by the parent session (verbatim): "ok su
 
 ## Skills used
 
-None were invoked as skills. The `native-space-cycle` SKILL was read and does not apply (an inventory-class unit, as the ORDER says).
+None were invoked as skills. The exact-head review ran as four fresh-context reviewers (client core, prompt bank, scripts, claims against evidence). The `native-space-cycle` SKILL was read and does not apply (an inventory-class unit, as the ORDER says).
 
 ## Still open
 
 - The 4,096-token count of the corpus (ORDER "Done when" 1, "if that is feasible"): needs a `count` command. A follow-up, not tracked yet.
 - The two instrument negatives above (live `errors` field; no per-request wall-time cap), for any later run of this client.
+- Review findings not fixed here, for the next run of this client or guard (no pod is up and none is planned under this unit):
+  - **A decision for the top session:** once a hard stop reaches `finish` and the final sync keeps failing on a reachable pod, the guard keeps the pod up with no upper bound (by design: never down before a verified sync). A second cap that downs the pod and lists the mismatching files would bound it.
+  - A worker error does not stop other workers, and can leave a mismatched shard pair under final names; a STOP file left from an earlier segment is checked only after the first dispatch; `verify` does not compare `source` with the bank or check `dropped.jsonl` ids; no test pins the budget stop or the STOP file.
+  - The guard's periodic syncs swallow failures without an alert; `watch` exits with the pod up when `lease.env` is missing; `pod_down` appends the down time to whatever `lease.env` is current; `spent-cents` restarts at 0 if that file is truncated.
+  - The panel guard matches whole strings and sentences only and folds ASCII case only (no Unicode normalization, no substring match); it skips panel files of other extensions; `fetch-sources.sh` does not fail when a glob matches nothing (the bank build catches it later).
 - Laptop swap stood at 11.8 GB during the run, mostly Antigravity's `language_server` (7.7 GB); free disk fell from 21 to 12 GiB at its lowest. That is the owner's call.
 
 ## Plain summary

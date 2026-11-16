@@ -226,6 +226,28 @@ pub struct Request {
 
 /// The chat-completion body (JSON integers only); `extra` top-level keys override. In
 /// `openai` mode the body has no `seed` and no `chat_template_kwargs`.
+/// Refuses an `--extra-body` that could ask the server for a score: any key, at any depth, whose
+/// name contains `logprob`, `score` or `rank` (hard text only; no logits, probabilities, scores
+/// or ranks are requested).
+pub fn check_extra_body(v: &Value) -> Res<()> {
+    match v {
+        Value::Object(o) => {
+            for (k, x) in o {
+                let l = k.to_ascii_lowercase();
+                if ["logprob", "score", "rank"].iter().any(|b| l.contains(b)) {
+                    return Err(format!(
+                        "--extra-body: key {k} could request a score; refused"
+                    ));
+                }
+                check_extra_body(x)?;
+            }
+            Ok(())
+        }
+        Value::Array(a) => a.iter().try_for_each(check_extra_body),
+        _ => Ok(()),
+    }
+}
+
 pub fn request_body(r: &Request, messages: &Value, seed: u32) -> Value {
     let mut b = match r.api {
         Api::Vllm => json!({"model": r.model_name, "messages": messages,
@@ -675,7 +697,10 @@ fn resume(dir: &Path) -> Res<(HashSet<String>, Totals, u64)> {
         for l in &lines {
             kept_bytes += l.len() + 1;
             let v = line_json(l).ok_or("dropped.jsonl: bad line")?;
-            done.insert(v["id"].as_str().unwrap_or("").to_string());
+            // An `http` drop is the server's refusal, not the prompt's: a later segment retries it.
+            if v["reason"].as_str() != Some("http") {
+                done.insert(v["id"].as_str().unwrap_or("").to_string());
+            }
             *t.dropped
                 .entry(v["reason"].as_str().unwrap_or("").into())
                 .or_default() += 1;
@@ -1011,6 +1036,7 @@ pub fn cmd_generate(m: &Args) -> Res<Value> {
             if !v.is_object() {
                 return Err("--extra-body must hold a JSON object".into());
             }
+            check_extra_body(&v)?;
             Some(v)
         }
     };
@@ -1359,6 +1385,23 @@ mod tests {
     fn seeds_wrap_at_two_to_the_32() {
         assert_eq!(turn_seed(20261116, 3, 1), 20261123);
         assert_eq!(turn_seed(0xffff_ffff, 0, 1), 0);
+    }
+
+    #[test]
+    fn resume_retries_http_drops_only() {
+        let dir = std::env::temp_dir().join(format!("m2-resume-http-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("dropped.jsonl"),
+            "{\"id\":\"a\",\"reason\":\"http\"}\n{\"id\":\"b\",\"reason\":\"length\"}\n",
+        )
+        .unwrap();
+        let (done, t, _) = resume(&dir).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(!done.contains("a"), "an http drop must be retried");
+        assert!(done.contains("b"), "a length drop stays done");
+        assert_eq!(t.dropped.values().sum::<u64>(), 2);
     }
 
     #[test]

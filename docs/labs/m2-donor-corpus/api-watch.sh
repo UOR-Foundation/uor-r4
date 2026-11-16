@@ -31,6 +31,7 @@ balance_cents() {
   v=$("$BIN" balance --server "$SERVER" --api-key-file "$KEY" 2>/dev/null \
     | jq -r '.balance_infos[] | select(.currency == "USD") | .total_balance' 2>/dev/null) || return 0
   case $v in
+    *,*) return 0 ;;
     *.[0-9][0-9]) v=${v%.*}${v##*.} ;;
     *.[0-9]) v=${v%.*}${v##*.}0 ;;
     *[!0-9]*|'') return 0 ;;
@@ -41,8 +42,13 @@ balance_cents() {
 
 stop_all() {
   local d
-  for d in "$@"; do [ -e "$d/STOP" ] || { touch "$d/STOP" && alert "$WHY: STOP written to $d"; }; done
+  for d in "$@"; do
+    [ -e "$d/STOP" ] && continue
+    if touch "$d/STOP"; then alert "$WHY: STOP written to $d"; else alert "$WHY: could NOT write STOP to $d"; fi
+  done
 }
+
+for d in "$@"; do [ -d "$d" ] || { echo "api-watch: OUT_DIR $d is not a directory"; exit 2; }; done
 
 fails=0
 while [ ! -e "$STATE/WATCH-END" ]; do

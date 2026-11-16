@@ -44,10 +44,12 @@ POLL=${M2_POLL:-60}
 LOGS='rate.jsonl segments.jsonl dropped.jsonl metrics.json'
 step=${1:?usage: drive.sh note|put|machine|sync|hold|wait-segment|watch|pod POD ...}; POD=${2:?POD}; shift 2
 ssh_pod() { "$UP" ssh "$POD" "$@"; }
-log() { echo "$(date -u +%FT%TZ) $*"; }
+# log and alert never fail: under set -e a failed write (a full disk) must not kill the guard
+# while the pod is up.
+log() { echo "$(date -u +%FT%TZ) $*" || true; }
 alert() {
   log "ALERT: $*"
-  mkdir -p "$LOCAL"; echo "$(date -u +%FT%TZ) $POD $*" >> "$LOCAL/ALERTS"
+  { mkdir -p "$LOCAL" && echo "$(date -u +%FT%TZ) $POD $*" >> "$LOCAL/ALERTS"; } 2>/dev/null || true
   command -v osascript >/dev/null && osascript -e "display notification \"$POD: $*\" with title \"claude-400 guard\"" >/dev/null 2>&1 || true
 }
 
@@ -313,7 +315,7 @@ watch)
       finish "hard stop"
     fi
     case $s in
-    ALIVE) seen=1; touch "$seenf"; idle=0; unreach=0; do_sync || true ;;
+    ALIVE) seen=1; touch "$seenf" || true; idle=0; unreach=0; do_sync || true ;;
     HOLD) idle=0; unreach=0; do_sync || true ;;
     DEAD)
       unreach=0; do_sync || true
