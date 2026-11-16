@@ -3,7 +3,7 @@
 //!   d41-pilot prompts  --seed S --count N --panels DIR --out FILE
 //!   d41-pilot generate --server URL --prompts FILE --out DIR --budget TOKENS --instrument-commit SHA
 //!                      [--parallel P] [--seed S] [--max-tokens M] [--shard-records R] [--max-seconds T]
-//!                      [--mode seq|n4|g-n3] [--tokenize 0|1] [--system-file FILE]
+//!                      [--mode seq|n4|g-n3|final] [--tokenize 0|1] [--system-file FILE]
 //!   d41-pilot count    --server URL --dir DIR
 //!   d41-pilot seal     --dir DIR --model FILE --machine FILE --engine FILE
 //!   d41-pilot verify   --dir DIR
@@ -194,7 +194,14 @@ enum Mode {
     N4,
     /// One greedy request, then one request with `n` = 3 sampled at temperature 1.
     GreedyN3,
+    /// The pilot's four requests, sent raw to `/completion` with the assistant turn
+    /// pre-filled up to the final channel, so the analysis channel is skipped.
+    Final,
 }
+
+/// The pre-fill `final` mode appends to the rendered prompt, which ends at the assistant turn.
+const FINAL_PREFILL: &str = "<|channel|>final<|message|>";
+const ASSISTANT_START: &str = "<|start|>assistant";
 
 impl Mode {
     fn parse(s: &str) -> Res<Mode> {
@@ -202,7 +209,8 @@ impl Mode {
             "seq" => Ok(Mode::Seq),
             "n4" => Ok(Mode::N4),
             "g-n3" => Ok(Mode::GreedyN3),
-            other => Err(format!("--mode {other}: expected seq, n4 or g-n3")),
+            "final" => Ok(Mode::Final),
+            other => Err(format!("--mode {other}: expected seq, n4, g-n3 or final")),
         }
     }
     fn name(self) -> &'static str {
@@ -210,6 +218,7 @@ impl Mode {
             Mode::Seq => "seq",
             Mode::N4 => "n4",
             Mode::GreedyN3 => "g-n3",
+            Mode::Final => "final",
         }
     }
     /// The requests for prompt index `idx`: (temperature, n, seed offset from base + 4*idx).
@@ -217,7 +226,7 @@ impl Mode {
     /// the same seed per answer as `seq`, and `n4` the same seeds with alt 0 sampled.
     fn plan(self) -> &'static [(u64, u64, u64)] {
         match self {
-            Mode::Seq => &[(0, 1, 0), (1, 1, 1), (1, 1, 2), (1, 1, 3)],
+            Mode::Seq | Mode::Final => &[(0, 1, 0), (1, 1, 1), (1, 1, 2), (1, 1, 3)],
             Mode::N4 => &[(1, 4, 0)],
             Mode::GreedyN3 => &[(0, 1, 0), (1, 3, 1)],
         }
@@ -268,6 +277,56 @@ fn ask(
         answers,
         completion_tokens: v["usage"]["completion_tokens"].as_u64().unwrap_or(0),
         prompt_tokens: v["usage"]["prompt_tokens"].as_u64().unwrap_or(0),
+        millis,
+    })
+}
+
+/// The engine's own rendering of the chat prompt (the same body `ask` sends), with the
+/// assistant turn pre-filled up to the final channel.
+fn render_final(agent: &ureq::Agent, server: &str, messages: &Value) -> Res<String> {
+    let body = json!({"model": "donor", "messages": messages,
+        "chat_template_kwargs": {"reasoning_effort": "low"}});
+    let v = post(agent, &format!("{server}/apply-template"), &body)?;
+    let prompt = v["prompt"]
+        .as_str()
+        .ok_or("apply-template: no prompt string")?;
+    if !prompt.ends_with(ASSISTANT_START) {
+        return Err(
+            "apply-template: the rendered prompt does not end at the assistant turn".into(),
+        );
+    }
+    Ok(format!("{prompt}{FINAL_PREFILL}"))
+}
+
+/// One raw `/completion` request on a pre-filled prompt, with the same sampling values as `ask`.
+/// An answer is finished when the engine stopped on an end-of-generation token or a stop word.
+fn ask_raw(
+    agent: &ureq::Agent,
+    server: &str,
+    prompt: &str,
+    temperature: u64,
+    seed: u32,
+    max_tokens: u64,
+) -> Res<Reply> {
+    let body = json!({"prompt": prompt, "n_predict": max_tokens,
+        "temperature": temperature, "top_p": 1, "top_k": 0, "min_p": 0, "seed": seed,
+        "cache_prompt": true, "stream": false});
+    let t = Instant::now();
+    let v = post(agent, &format!("{server}/completion"), &body)?;
+    let millis = t.elapsed().as_millis() as u64;
+    let content = v["content"].as_str().unwrap_or("").to_string();
+    let stop = v["stop_type"].as_str().unwrap_or("none");
+    let truncated = stop != "eos" && stop != "word";
+    let markup = has_markup(&content);
+    let keep = !truncated && !markup && !content.trim().is_empty();
+    Ok(Reply {
+        answers: vec![Answer {
+            text: keep.then_some(content),
+            truncated,
+            markup,
+        }],
+        completion_tokens: v["tokens_predicted"].as_u64().unwrap_or(0),
+        prompt_tokens: v["tokens_evaluated"].as_u64().unwrap_or(0),
         millis,
     })
 }
@@ -388,9 +447,25 @@ fn cmd_generate(m: &BTreeMap<String, String>) -> Res<()> {
                 };
                 let mut texts = Vec::new();
                 let mut failed = None;
+                // `final` mode: render the prompt once, then pre-fill the final channel.
+                let raw = if mode == Mode::Final {
+                    match render_final(&agent, &server, &messages) {
+                        Ok(r) => Some(r),
+                        Err(e) => {
+                            errors.lock().unwrap_or_else(|e| e.into_inner()).push(format!("{idx}: {e}"));
+                            continue;
+                        }
+                    }
+                } else {
+                    None
+                };
                 for &(temperature, n, off) in mode.plan() {
                     let s = (seed.wrapping_add(idx as u64 * 4 + off) & 0xFFFF_FFFF) as u32;
-                    match ask(&agent, &server, &messages, temperature, n, s, max_tokens) {
+                    let reply = match &raw {
+                        Some(prompt) => ask_raw(&agent, &server, prompt, temperature, s, max_tokens),
+                        None => ask(&agent, &server, &messages, temperature, n, s, max_tokens),
+                    };
+                    match reply {
                         Ok(r) => {
                             generated.fetch_add(r.completion_tokens, Ordering::SeqCst);
                             let mut t = tally.lock().unwrap_or_else(|e| e.into_inner());
@@ -748,12 +823,13 @@ mod tests {
 
     #[test]
     fn every_mode_asks_four_answers_with_the_pilot_seeds() {
-        for mode in [Mode::Seq, Mode::N4, Mode::GreedyN3] {
+        for mode in [Mode::Seq, Mode::N4, Mode::GreedyN3, Mode::Final] {
             let seeds: Vec<u64> = per_answer(mode).iter().map(|a| a.1).collect();
             assert_eq!(seeds, vec![0, 1, 2, 3], "{}", mode.name());
         }
         // g-n3 keeps the pilot's plan answer for answer; n4 samples alt 0.
         assert_eq!(per_answer(Mode::GreedyN3), per_answer(Mode::Seq));
+        assert_eq!(per_answer(Mode::Final), per_answer(Mode::Seq));
         assert_eq!(per_answer(Mode::N4)[0], (1, 0));
         assert!(Mode::parse("n5").is_err());
     }

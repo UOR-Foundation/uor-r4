@@ -13,7 +13,7 @@ The pilot's server log suggests a cause. With 32 slots busy, a decode step took 
 ## Steps
 
 1. **Smoke** (instrument check, not corpus): `wick-throughput.sh throughput/arms-smoke.txt smoke <commit>` runs the head `generate` on the set's first 4 prompts at `--parallel 1`, once per mode (`seq`, `n4`, `g-n3`), once with `--tokenize 0` then `count`, once with the short system message, and once with `--backend-sampling`. Each smoke must keep ≥ 3 records, with 0 markup answers, 0 errors and 16 answers returned. This is the first time the head client's integer sampling request reaches `llama-server`. **Done at `9d7c62536`: all six passed** (16 answers each, 0 markup, 0 errors, 0 tokenize errors; `count` gave 514 kept tokens for the `--tokenize 0` smoke). Two more smokes run inside the probe job, before A8a and A8b, with the trimmed chain on the CPU and on the GPU.
-2. **Probe** (`throughput/arms-probe.txt`): one job, ten timed arms and A0's repeat. Each is a 300 s dispatch window from the start of the pilot's prompt set, and the prompts in flight then finish. A0 runs first and again last, so its spread is measured. Every arm uses `--max-tokens 1024`, seed 20261115 and the pilot's sampling values.
+2. **Probe** (`throughput/arms-probe.txt`): one job, eleven timed arms and A0's repeat. Each is a 300 s dispatch window from the start of the pilot's prompt set, and the prompts in flight then finish. A0 runs first and again last, so its spread is measured. Every arm uses `--max-tokens 1024`, seed 20261115 and the pilot's sampling values.
 
    | Arm | Server (`llama-server -ngl 99 -fa on --jinja` plus) | Client | Lever |
    |---|---|---|---|
@@ -25,6 +25,7 @@ The pilot's server log suggests a cause. With 32 slots busy, a decode step took 
    | A5 | A0's | `seq`, 32, `--tokenize 0`, then `count` | no per-answer `/tokenize` |
    | A6 | A0's | `n4`, 8 | four answers in one request (all sampled) |
    | A7 | A0's | `g-n3`, 11 | one greedy request, then `n` = 3 (the pilot's seed rule) |
+   | A9 | A0's | `final`, 32 | the analysis channel skipped: `/apply-template` renders the prompt, the client checks it ends at `<\|start\|>assistant`, appends `<\|channel\|>final<\|message\|>` and sends the pilot's four requests raw to `/completion` (a smoke, `smoke-final`, runs first) |
    | A8a | A0's plus `--samplers temperature` | `seq`, 32 | the same distribution through a shorter CPU chain (diagnostic) |
    | A8b | A0's plus `--samplers temperature --backend-sampling` | `seq`, 32 | the same chain on the GPU (diagnostic) |
 
@@ -44,9 +45,10 @@ The probe is a measurement. Its bar decides which numbers may size production.
 **Recorded, with no bar:** generated and kept tokens/s, kept tokens per 1,000 generated, request p50/p95, prompts dispatched, mean GPU utilization and peak memory.
 
 **Reading map** (fixed before the run):
-- **P:** B1–B3 hold. The REPORT sizes production as hours = 100,000,000 / (kept tok/s) / 3,600, from the best arm that passes B2. It gives two numbers: the best arm that keeps the corpus plan (the pilot's system message, one greedy and three sampled answers), and the best arm overall. A6 has no greedy answer and A4 changes the prompt, so either one changes the plan, and production's own sheet would have to adopt that change.
+- **P:** B1–B3 hold. The REPORT sizes production as hours = 100,000,000 / (kept tok/s) / 3,600, from the best arm that passes B2. It gives two numbers: the best arm that keeps the corpus plan (the pilot's system message, one greedy and three sampled answers), and the best arm overall. A6 has no greedy answer, A4 changes the prompt and A9 skips the analysis channel, so each changes the plan, and production's own sheet would have to adopt that change.
 - **I (instrument):** B1 or B3 fails. The client or the window is repaired. No number sizes production until a new sheet's run passes.
 - **Q:** an arm fails B2. That arm is reported and not used for sizing.
+- **A9 (the final-channel pre-fill), reported on its own, beside the slot and batch arms and never merged into C:** the pilot kept 43.8% of generated tokens because gpt-oss writes its analysis channel even at `reasoning_effort` low. A9 records its kept tok/s, its kept tokens per 1,000 generated, and its truncated and markup rates separately. Skipping the analysis channel can change the answers, so A9 changes the corpus plan, and a win means only that production's own sheet may consider it, with an answer check of its own.
 - **H-sampler (diagnostic):** if A8a or A8b wins by ≥ 1.5× with higher GPU utilization, the CPU sampler was the pilot's limit. The server log must show the backend sampler set for A8b's slots, and A8b's sampled answers must differ from A8a's on the smoke, or A8b is read as "not active" and not as a negative. Backend sampling is experimental in `b12000`, so production's sheet must check it before adopting it: on the same prompts at `--parallel 1`, its greedy answers must equal the CPU sampler's.
 
 ## Base artifact
@@ -70,7 +72,7 @@ The probe is a measurement. Its bar decides which numbers may size production.
 
 ## Cost
 
-Wick is the owner's own GPU, so there is no rental cost (D86). The probe job takes about 11 × 5.5 minutes plus 7 server loads, about 70 minutes; the combined job about 15 minutes. No pod, and nothing near the §5.4 caps. `wick.sh gpu` is read before each job, and the job runs only if the GPU is free of other users' work.
+Wick is the owner's own GPU, so there is no rental cost (D86). The probe job takes about 12 × 5.5 minutes plus 7 server loads, about 75 minutes; the combined job about 15 minutes. No pod, and nothing near the §5.4 caps. `wick.sh gpu` is read before each job, and the job runs only if the GPU is free of other users' work.
 
 ## Stop rule
 
