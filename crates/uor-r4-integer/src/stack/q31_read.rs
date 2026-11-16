@@ -15,6 +15,7 @@ use sha2::{Digest, Sha256};
 use uor_r4_native_vector::{Q31FirstPickRead, Q31ReadHistory};
 
 use super::format::Container;
+use super::read_out::ReadOut;
 use super::{StackError, StackShape};
 
 /// The table that holds the read's bytes, as little-endian u32 words, the last zero-padded.
@@ -171,6 +172,29 @@ impl ServedQ31Read {
             read: image.read,
             table: writer_table.iter().map(|&v| i64::from(v)).collect(),
         }
+    }
+
+    /// The read's common result at this row: the picked position (1-based, 0 for none) and the row
+    /// it writes. Mutates `history` exactly as [`Self::serve`] does; `x` is not written. The stage
+    /// wiring consumes it; until then the tests exercise it.
+    #[allow(dead_code)]
+    pub fn read_out(
+        &self,
+        history: &mut Q31ReadHistory,
+        token: u32,
+        x: &[i32],
+    ) -> Result<ReadOut, StackError> {
+        let x_in: Vec<i64> = x.iter().map(|&v| i64::from(v)).collect();
+        let (pick, out) = self
+            .read
+            .step(history, &x_in, token, &self.table)
+            .map_err(|e| StackError::Numerics(format!("q31.read: {e}")))?;
+        if out.iter().any(|&w| i32::try_from(w).is_err()) {
+            return Err(StackError::Numerics(
+                "q31.read: an out word of +2^31 does not fit the residual".to_owned(),
+            ));
+        }
+        Ok(ReadOut::first_pick(pick, out))
     }
 
     /// Read into `x` at this row: `x` widened, stepped, and written back. Refuses an out word that
@@ -658,6 +682,47 @@ mod tests {
             .map(|&t| session.step_native(t).expect("step"))
             .collect();
         assert_eq!(first, again);
+    }
+
+    #[test]
+    fn the_read_out_is_the_served_step() {
+        let plain = plain_trunk();
+        let container = Container::parse(&plain).expect("parse");
+        let table = container
+            .table_i16("writer.table")
+            .expect("the writer table");
+        let read = drawn_read(11, 32, 0);
+        let served = ServedQ31Read::new(Q31SessionRead::new(1, read), &table);
+        let rows = [words(31, 32, 1 << 20), words(32, 32, 1 << 20)];
+        let mut by_read = Q31ReadHistory::new();
+        let mut by_serve = Q31ReadHistory::new();
+        for (token, row) in [5u32, 9u32].iter().zip(rows.iter()) {
+            let x: Vec<i32> = row.iter().map(|&v| v as i32).collect();
+            let out = served
+                .read_out(&mut by_read, *token, &x)
+                .expect("the common result");
+            assert_eq!(out.check(), Ok(()));
+            let mut written = x.clone();
+            served
+                .serve(&mut by_serve, None, *token, &mut written)
+                .expect("the served step");
+            assert_eq!(
+                out.payload.expect("a row"),
+                written.iter().map(|&v| i64::from(v)).collect::<Vec<_>>()
+            );
+            assert_eq!(out.support.len(), usize::from(!out.support.is_empty()));
+        }
+        // The histories are equivalent if a further row produces the same result.
+        let x: Vec<i32> = words(33, 32, 1 << 20).iter().map(|&v| v as i32).collect();
+        let by_read_out = served.read_out(&mut by_read, 17, &x).expect("read_out");
+        let mut written = x.clone();
+        served
+            .serve(&mut by_serve, None, 17, &mut written)
+            .expect("serve");
+        assert_eq!(
+            by_read_out.payload.expect("a row"),
+            written.iter().map(|&v| i64::from(v)).collect::<Vec<_>>()
+        );
     }
 
     #[test]
