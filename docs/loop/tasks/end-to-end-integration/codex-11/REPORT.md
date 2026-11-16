@@ -57,7 +57,8 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 ## Skills used
 
 - `solution-integrity`: the timing is a whole-session measurement with a parity check, and the
-  read-free policy was rejected on its actual cost and prevalence rather than built for symmetry.
+  read-free policy was rejected on its actual cost and the data-structure change it needs, not on a
+  claim that the case is absent.
 - `scope-guard`: one test file; no source change.
 - `test-freeze`: a new file; no existing test changed.
 
