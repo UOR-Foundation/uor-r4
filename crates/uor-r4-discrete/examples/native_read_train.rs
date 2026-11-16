@@ -127,8 +127,13 @@ fn read_file(path: &str) -> Result<Vec<u8>> {
     std::fs::read(path).map_err(|e| invalid(format!("reading {path}: {e}")))
 }
 
+/// Writes a new file; an existing one is refused, never written over (a replay must not
+/// replace the read or picks it is compared with).
 fn write_file(path: &str, bytes: &[u8]) -> Result<()> {
-    std::fs::write(path, bytes).map_err(|e| invalid(format!("writing {path}: {e}")))
+    use std::io::Write;
+    std::fs::File::create_new(path)
+        .and_then(|mut f| f.write_all(bytes))
+        .map_err(|e| invalid(format!("writing {path}: {e}")))
 }
 
 /// Little-endian u32 words, one per row of a dump of `rows` rows.
@@ -345,6 +350,18 @@ fn run(args: &Args) -> Result<()> {
     }
     if eval.dump.read.width() != width || eval.dump.time != time {
         return Err(invalid("the eval dump's width or time differs".into()));
+    }
+    if eval.dump.read.to_bytes() != train.dump.read.to_bytes() {
+        return Err(invalid(
+            "the eval dump's read differs from the train dump's: not the same state".into(),
+        ));
+    }
+    for path in [&args.save_read, &args.save_picks] {
+        if std::path::Path::new(path).exists() {
+            return Err(invalid(format!(
+                "{path} exists; the trainer never writes over one"
+            )));
+        }
     }
     let backend = backend(args.host)?;
     let mut read = start_read(&args.start, &train.dump)?;
@@ -586,6 +603,31 @@ mod tests {
         let saved = std::fs::read(&args.save_read).unwrap();
         assert_eq!(saved, dump(4).read.to_bytes());
         assert!(run(&args).is_err(), "an existing readings file is refused");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// claude-395 review: a run never writes over a saved read or picks file (a replay with a
+    /// new readings file but the compared run's paths is refused before it trains), and an
+    /// eval dump from another state (another read) is refused.
+    #[test]
+    fn saved_files_and_other_states_are_refused() {
+        let dir = scratch("saved");
+        let mut args = host_args(&dir, 4, "a");
+        run(&args).unwrap();
+        let read = std::fs::read(&args.save_read).unwrap();
+        args.out_jsonl = dir.join("again.jsonl").to_string_lossy().into_owned();
+        assert!(matches!(run(&args), Err(Error::Invalid(m)) if m.contains("never writes over")));
+        assert!(
+            !std::path::Path::new(&args.out_jsonl).exists(),
+            "refused before it trains"
+        );
+        assert_eq!(read, std::fs::read(&args.save_read).unwrap());
+        let other = host_args(&dir, 4, "b");
+        let mut eval = dump(2);
+        let gates = vec![[1 << 31, 0, 0, 0]; 4];
+        eval.read = Q31FirstPickRead::new(gates.clone(), gates, vec![1; 16], 4).unwrap();
+        std::fs::write(&other.eval_dump, eval.to_bytes().unwrap()).unwrap();
+        assert!(matches!(run(&other), Err(Error::Invalid(m)) if m.contains("not the same state")));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -21,6 +21,10 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 - **Shift 4 never accepts at ext-s1.** The loss stays at 267,327,455,773 for all 512 steps. Shift 8 is that state's chosen shift. Outcome 5 needs no accepted step at every shift, so it does not hold.
 - **The 4k states decode badly.** Even where the native pick improves, the ×16 hard copy answers right on at most 35 of 512 rows: the trunk's decode at 4,096 steps does not carry the copy. A-4k is descriptive, as the sheet says.
 - **A-4k is not monotone.** At 4k-s1, shift 4 peaks at 347/364 (step 128) and ends at 276/282 (step 512). The strict-drop accept is per batch, so held-out counts can fall while each step lowers its own batch's loss.
+- **The shift was chosen on the last batch's loss, not the full train split's.** The trainer's `train_loss` is the loss of the step's own 64-window batch (the exact-head review's finding 2), and the sheet says "final train loss".
+  - At the ext states the choice is the same on the full split: the chosen shift also has the highest train `chose_target` (ext-s1: s8 4,004/4,018 against s12 3,547/3,576 and s4 73/79; ext-s2: s4 4,091/4,095 against s8 3,989/3,994). So the bar's reading stands.
+  - At the 4k states the full split would choose **shift 8**: 2,861/2,889 against s4's 2,292/2,325 at 4k-s1, and 2,922/2,916 against 2,732/2,706 at 4k-s2. A-4k is descriptive. At shift 8 its gain over C1 is +0.209/+0.271 (4k-s1) and +0.225/+0.232 (4k-s2).
+- For C2 and C2′, the train split's `chose_target` counts the run's own targets (random rows, or the other fact), not the asked fact. The C2′ train `chose_other` above is therefore the same count. Bar 4 reads only the held-out split, where the asked and other files are always separate.
 - The gain shift stays at the dump's `g = 0`. It enters neither the hinge nor the picks, and `R_ask` comes from the float hard copy at ×16, so nothing read here depends on it. The sheet's `g = 4` is not written into the saved reads.
 
 ## What changed
@@ -41,6 +45,8 @@ Three tools, each with laptop tests, built with CUDA and tested on wick (RTX 409
    The pre-run review added `--start dump` (the dump's own converted gates, for C1 and C3) and a readings file that is never written over.
 3. **The injected-pick decode.** `recall-payload-probe --native-picks FILE` uses `vector_reads::with_injected_first_picks`: in every pass with the read, Flock's first ranked column is replaced by the native picks. The hard copy then adds `w ⊙` that pick's next-token row, decoded by the float trunk (diagnostic code, D85). The forward refuses a count other than its rows, a pick that is not earlier, and running without the hard copy. A CUDA test pins the added row.
 
+The exact-head review of the trainer added two refusals after the run, in a later commit than the binary that ran. A saved read or picks file is never written over, and the paths are checked before training. An eval dump whose read differs from the train dump's is refused, because it is not the same state. Job B gave every run new paths and paired each state with itself, so no reading changes.
+
 The pre-run review (fresh context, §5.10) returned GO WITH FIXES. The target convention checks out against `RecallQuery` and the read's `ids[s + 1]` copy. The two fixes are in commit `f05f35a8a`, and I read the part it left unread (`bucket_counts`) myself.
 
 ## Measurements
@@ -60,7 +66,7 @@ The pre-run review (fresh context, §5.10) returned GO WITH FIXES. The target co
 - Host equals device on the first two steps of every run, and no train target was refused.
 - The replay of A-ext s1 is byte-identical: read `b05b544a…`, picks and readings file.
 
-**The bar at step 512, held-out, 512 rows a bucket.** Shifts are chosen by final train loss: ext-s1 8, ext-s2 4, 4k-s1 4, 4k-s2 4.
+**The bar at step 512, held-out, 512 rows a bucket.** Shifts were chosen by the last batch's train loss (see the first section): ext-s1 8, ext-s2 4, 4k-s1 4, 4k-s2 4.
 
 | Bar | ext-s1 (shift 8) | ext-s2 (shift 4) |
 |---|---|---|
@@ -109,7 +115,7 @@ The dumps stay on wick under `/workspace/out/c395/`, with their sha256 in `SHA25
 - **Laptop:**
   - `uor-r4-float-train` lib: `recall_row_targets_*` (3), `native_picks_read_one_per_row`, `the_payload_scale_and_probe_restore_what_they_found`, 5 passed;
   - `recall-payload-probe` bin: 5 passed;
-  - `native_read_train`: 4 passed.
+  - `native_read_train`: 5 passed. The new `saved_files_and_other_states_are_refused` fails with each refusal set aside in turn (at its "never writes over" and "not the same state" assertions), and passes again with both restored.
   - `git diff --check` is clean, and the added lines have no banned word and no line starting with `.0`.
 - **wick**, binaries `recall-payload-probe` `a4bcfd75…` and `native_read_train` `a539d65e…`:
   - the trainer's 4 tests;
