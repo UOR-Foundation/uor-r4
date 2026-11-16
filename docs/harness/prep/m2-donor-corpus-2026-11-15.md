@@ -20,14 +20,20 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 8×H200 po
      - gsm8k 1,079.
    - **Dropped by the panel guard:** 20,169 in all (wildchat 11,004, numina 7,895, openthoughts 1,259, oasst2 10, gsm8k 1). The guard matches sentence by sentence, so it errs toward dropping.
    - **Dropped as duplicates:** 6,393 of gsm8k's 7,473 duplicate NuminaMath-1.5's GSM8K problems. Dedup runs across sources.
-2. **Lease** after D87 is on `main`: one Vast 8×H200 verified datacenter offer at ≤ $35/h, with all labs' running pods counted. The lease uses `UOR_POD_MAX_RATE=35 UOR_POD_VAST_DISK_GB=1200 UOR_POD_VAST_MIN_INET_MBPS=1000 UOR_POD_IMAGE=vllm/vllm-openai:v0.33.0-x86_64 scripts/pod/uor-pod up --gpu h200 --count 8 --no-bootstrap --owner-approved` (the owner approval is D87). The pod has ≥ 1 TB of RAM for two Engram host-table copies. A completion watcher is armed in the same command that launches the run (L-004).
-3. **Setup** (`docs/labs/m2-donor-corpus/pod.sh setup`): download `deepseek-ai/DeepSeek-V4.1-Flash-1017` at revision `08c8657f02291e11b6f6b63e0e16014f8e748518` (MIT, not gated, about 511 GB in 48 shards). Check every LFS file against Hugging Face's sha256. Build the client on the pod at the receipt's instrument commit.
+2. **Lease** after D87 is on `main`: one Vast 8×H200 verified datacenter offer at ≤ $35/h, with all labs' running pods counted. The lease uses `UOR_POD_MAX_RATE=35 UOR_POD_VAST_DISK_GB=1200 UOR_POD_VAST_MIN_INET_MBPS=1000 UOR_POD_IMAGE=vllm/vllm-openai:v0.33.0-x86_64 scripts/pod/uor-pod up --gpu h200 --count 8 --no-bootstrap --owner-approved` (the owner approval is D87). The pod has ≥ 1 TB of RAM for two Engram host-table copies. As soon as `up` returns, `drive.sh note POD RATE_CENTS OFFER` records the lease time and rate. The guard `drive.sh watch POD` is then started at once (L-004). The guard outlives segments and enforces the hard stops itself:
+   - Every 10 min it syncs. It retries an SSH probe three times before believing a state.
+   - At $1,100 spent or 60 h since the lease, it writes `STOP`, waits for the run, and downs the pod after a verified final sync.
+   - Once no run has been alive for 30 min (3 h before the first segment, which covers setup), it downs the pod after a verified final sync.
+   - After 30 min unreachable, it downs the pod; the last verified sync holds the shards.
+
+   It exits only after `down`, or on a final-sync mismatch, which keeps the pod so nothing unique is lost and signals the driver. Each segment is followed by `drive.sh wait-segment`, which tells the driver when it ends. This path was exercised against a local stub before the FIT re-check.
+3. **Setup** (`docs/labs/m2-donor-corpus/pod.sh setup`): download `deepseek-ai/DeepSeek-V4.1-Flash-1017` at revision `08c8657f02291e11b6f6b63e0e16014f8e748518` (MIT, not gated, about 511 GB in 48 shards). Check every LFS file against Hugging Face's sha256. Build the client on the pod at the receipt's instrument commit. Then `drive.sh machine POD` writes `machine.json` from the lease (offer, rate, lease time) and the pod's `gpus.csv`, `host-mem.txt` and vLLM version, and pushes it to the pod. `model.json` and `engine.json` are written on the laptop before `put` and hold the pins of Base artifact.
 4. **Serve:** one vLLM server, `--data-parallel-size 2 --tensor-parallel-size 4`, with the recipe's H200 settings: `--tokenizer-mode deepseek_v41`, `--kv-cache-dtype fp8`, `--engram-config '{"cpu_offload":true}'`, `--reasoning-parser deepseek_v41`, `--language-model-only`, no speculative decoding (the recipe marks it for small batches), `--max-num-seqs 256 --max-num-batched-tokens 8192`.
-5. **Smoke** (instrument check, not corpus): `generate --limit 32 --parallel 8` into `smoke/`. It checks that `reasoning` and `answer` arrive in separate fields with no markup, that two-turn prompts run, and that `seal`/`verify` pass on the smoke directory. The smoke output is never part of the corpus.
+5. **Smoke** (instrument check, not corpus): `generate --limit 32 --parallel 8` into `smoke/`. It checks that `reasoning` and `answer` arrive in separate fields with no markup, that two-turn prompts run, and that `seal`/`verify` pass on the smoke directory. Smoke refuses to start if `model.json`, `machine.json` or `engine.json` is missing. It fails unless the recorded segment shows effort 50, max_tokens 16,384, base seed 20261116 and model name `donor`; temperature 1 and top-p 1 are fixed in the request body. The smoke output is never part of the corpus.
 6. **Tuning, at most 20 minutes:** client `--parallel` 256, then 512, each for 8 minutes from the start of the bank. The setting with the higher kept tokens per minute over its last 5 minutes is kept. These records stay in the corpus, because they are the bank's first prompts at the same sampling.
 7. **The measured hour:** 60 minutes at the kept setting, read from `rate.jsonl` (kept tokens in donor tokens per minute). The projection is P_cost = spent + (1B − kept) / R / 3600 × rate_per_h, and P_time = elapsed + (1B − kept) / R / 3600, where R is the hour's mean kept tokens/s. Because the bank is globally shuffled, the hour also gives the bank's yield, P_yield = (kept tokens / prompts dispatched) × 692,364. The yield is recorded and reported, with no stop on it. If P_yield < 1B, the run continues until the bank runs out (an S reading), and a top-up bank from WildChat's other 43 files is a new sheet.
-8. **Continue or switch:** if P_cost ≤ $1,000 and P_time ≤ 48 h, the run continues to the 1B kept-token budget. Otherwise the DeepSeek run stops, its shards are copied off, sealed and verified as a separate partial set, the pod goes `down`, and the unit reports P_cost, P_time, R and the fallback recommendation below as its result. The parent session puts the choice to Casey; nothing more is leased under this sheet until Casey answers.
-9. **Offload:** every 10 minutes, finished shards and their counts files are copied off the pod to the laptop and checked by sha256. That copy is the watcher's main job. `down` comes only after the last copy is verified.
+8. **Continue or stop:** if P_cost ≤ $1,000 and P_time ≤ 48 h, the run continues to the 1B kept-token budget. Otherwise the DeepSeek run stops, its shards are copied off, sealed and verified as a separate partial set, the pod goes `down`, and the unit reports P_cost, P_time, R and the fallback recommendation below as its result. The parent session puts the choice to Casey; nothing more is leased under this sheet until Casey answers.
+9. **Offload:** every 10 minutes, finished shards and their counts files are copied off the pod to the laptop and checked by sha256. That copy is the guard's main job. A final sync also checks the rate, segment, dropped and metrics logs by sha256, and `down` comes only after it is verified.
 10. **Seal and verify:** `seal` writes `receipt.json` (shard sha256s and Merkle root, the bank's sha256, the counts, rate and segment logs, the instrument commits, model, engine image and digest, GPUs). `verify` runs on the laptop, and again after a fetch back from the HF store (`results/claude/m2-donor-corpus-2026-11-16/`).
 11. **Project tokenizer:** kept texts are counted in the 4,096-token tokenizer (sha256 `d36d3e87…`) on the laptop, if its encoder runs at that scale. This is a count only, with no bar.
 
@@ -48,7 +54,15 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 8×H200 po
 - **F (over bound):** the measured hour projects > $1,000 or > 48 h. The pod goes down, the DeepSeek partial set is sealed, stored and marked partial, and the unit reports the numbers and its fallback recommendation for Casey's choice. No donor switch happens under this sheet.
 - **I (instrument):** B2 or B4 fails. The instrument is repaired, and nothing is used until a re-verify passes.
 - **Q (quality):** only B3 fails. The corpus is sealed and stored with the failure named. Use waits on the cause.
-- **S (short):** B1 fails because of the hard stop or the money bound. The partial corpus is sealed and stored. The REPORT gives the cause and the measured numbers.
+- **S (short):** B1 fails for any of these reasons:
+  - a hard stop or the money bound;
+  - the bank running out;
+  - a second server stop;
+  - a second pod failure.
+
+  The partial corpus is sealed and stored, and the REPORT gives the cause and the measured numbers.
+- **Server stop:** a segment ending with `stopped_by: "server"` (vLLM down or hung for 30 min, three times) is not yet a reading. `serve` is restarted once and a new segment resumes. A second server stop reads as S, with the vLLM log named.
+- **Several bars fail together:** I wins over everything, then S, and Q is named alongside. Example: B1 and B3 read as S, with the B3 failure also named. F (over bound) is checked at the measured hour, before any of these can arise.
 
 ## Base artifact
 
@@ -77,7 +91,7 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 8×H200 po
 
 ## Cost
 
-- **DeepSeek path:** $34.25/h was quoted on 15 Nov. At R kept tokens/s, 1B takes 277,778 / R hours. The $1,000 bound with about 1.5 h of setup (~$51) needs R ≥ about 10,000. The 48 h bound needs R ≥ about 5,800.
+- **DeepSeek path:** $34.25/h was quoted on 15 Nov. At R kept tokens/s, 1B takes 277,778 / R hours. Both bounds are on one basis: about 1.5 h of setup produces nothing, while tuning and the measured hour produce corpus records. The $1,000 bound leaves $949 for 27.7 h of generation, so it needs R ≥ about 10,030. The 48 h bound leaves 46.5 h, so it needs R ≥ about 5,970. Step 8's P_cost and P_time govern; these figures are a guide only.
 - **Unmeasured guess:** 10–30 h and $340–1,030. Weights download at about 1 GB/s; setup is estimated at 1–1.5 h.
 - **Fallback recommendation (not run here):** about 5–10 h on 2×B200 at about $25/h, if the published per-B200 rate holds. That is a hypothesis, given to Casey with the measured hour if F applies.
 - **F path cost:** setup plus the measured hour, about 2.5–3 h at $34.25/h (about $85–105).
@@ -86,10 +100,11 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 8×H200 po
 ## Stop rule
 
 - Dispatch stops at 1B kept tokens, and the prompts in flight finish.
-- After the measured hour, the switch rule of step 8 applies.
+- After the measured hour, step 8's continue-or-stop rule applies.
+- The guard enforces the $1,100 and 60 h hard stops itself.
 - Hard stops are reported as S:
   - dollars spent reach $1,100;
   - wall time from lease reaches 60 h;
   - the bank runs out before 1B, in which case the REPORT gives the kept total, and a top-up bank is a new sheet.
-- **Pod failure:** shards are already off the pod. One re-lease is allowed under this sheet. `generate` resumes from the finished shards, and the cost bounds count both pods.
+- **Pod failure:** shards are already off the pod. One re-lease is allowed under this sheet. `drive.sh put` restores every finished file of the laptop's `out/` to the new pod: shards, counts, dropped, rate and segment logs. It checks each one by sha256 readback and refuses a pod whose `out/` is not empty. `generate` then resumes from those files, so no prompt id is generated twice. The cost bounds count both pods: the guard's spending runs from a new `note`, and the REPORT adds the first pod's. A second pod failure reads as S.
 - One production pass only (D41 (f)). The corpus is not regenerated under this sheet.

@@ -27,8 +27,12 @@ setup)
   HF_XET_HIGH_PERFORMANCE=1 hf download "$MODEL_REPO" --revision "$MODEL_REV" --local-dir "$MODEL_DIR" >/dev/null
   curl -sf "https://huggingface.co/api/models/$MODEL_REPO/tree/$MODEL_REV?recursive=true" |
     jq -r '.[] | select(.lfs) | "\(.lfs.oid)  \(.path)"' > "$W/donor-lfs.sha256"
-  (cd "$MODEL_DIR" && xargs -P 16 -I{} sh -c 'echo "{}" | sha256sum -c --quiet' < "$W/donor-lfs.sha256") \
-    && echo "donor LFS sha256: all $(wc -l < "$W/donor-lfs.sha256") OK"
+  # 16 parallel checkers; every line that is not "OK" is printed, and any one fails setup.
+  rm -f "$W"/lfs-part.*
+  split -n l/16 "$W/donor-lfs.sha256" "$W/lfs-part."
+  (cd "$MODEL_DIR" && for p in "$W"/lfs-part.??; do sha256sum -c "$p" > "$p.out" 2>&1 & done; wait) || true
+  if grep -h -v ': OK$' "$W"/lfs-part.*.out; then echo "donor LFS sha256 check FAILED (lines above)"; exit 1; fi
+  echo "donor LFS sha256: all $(cat "$W"/lfs-part.*.out | grep -c ': OK$') of $(wc -l < "$W/donor-lfs.sha256") OK"
   nvidia-smi --query-gpu=index,name,uuid,driver_version,memory.total --format=csv,noheader > "$W/gpus.csv"
   free -g | head -2 > "$W/host-mem.txt"; df -h /workspace | tail -1 >> "$W/host-mem.txt"
   vllm --version > "$W/vllm-version.txt" 2>&1
@@ -62,12 +66,18 @@ wait-ready)
   ;;
 smoke)
   COMMIT=${1:?smoke needs the instrument commit}
+  for f in model machine engine; do [ -s "$W/$f.json" ] || { echo "missing $W/$f.json"; exit 1; }; done
   head -32 "$W/bank.jsonl" > "$W/smoke-bank.jsonl"
   rm -rf "$W/smoke"
   "$BIN" generate --server "$SERVER" --prompts "$W/smoke-bank.jsonl" --out "$W/smoke" \
     --budget 100000000 --parallel 8 --limit 32 --instrument-commit "$COMMIT" ${EXTRA:+--extra-body "$EXTRA"}
   "$BIN" seal --dir "$W/smoke" --prompts "$W/smoke-bank.jsonl" --model "$W/model.json" --machine "$W/machine.json" --engine "$W/engine.json"
   "$BIN" verify --dir "$W/smoke" --prompts "$W/smoke-bank.jsonl"
+  # The sheet's sampling, as recorded (temperature 1 and top_p 1 are fixed in request_body).
+  jq -e 'select(.effort == 50 and .max_tokens == 16384 and .base_seed == 20261116 and .model_name == "donor")' \
+    "$W/smoke/segments.jsonl" > /dev/null || { echo "smoke: recorded sampling differs from the sheet"; exit 1; }
+  jq -c '{records: .records, kept_tokens, empty_reasoning_turns, dropped_by_reason}' "$W/smoke/metrics.json"
+  echo "smoke OK"
   ;;
 run)
   # run COMMIT PARALLEL MAX_SECONDS: one segment of the corpus run, detached; resumes.
