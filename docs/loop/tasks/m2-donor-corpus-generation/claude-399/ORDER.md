@@ -9,7 +9,7 @@ The gpt-oss-20b pilot (claude-390) kept 220.7 answer tokens/s on wick, so 1B kep
 
 ## Owner approval
 
-Casey, 16 Nov 2026, in claude's chat. Each answer replies to a question that quoted its choice:
+Casey, 16 Nov 2026, in claude's chat. The picked answers quote the choice they picked; the others are Casey's own words:
 - "please do everything above that will reduce our time to accomplish this, including multiple pods to get it done fast... I'd much rather do the large corpus we talked about 100M is far too small to be useful."
 - "gpt-oss-120b on B200s (Recommended)"; "1B first as suggested above - but I think we should then lowkey do the rest of the distilling on the 4090 on wick for as long as it takes. I think a 1B model is at least sort of useful"; "Raise to $35/h, 4 pods (Recommended)".
 - On the wick donor: "what is the best model that will run on wick?", "I want to get to like an opus4.6 level of intelligence... what model is closest to that?", and "if the small models cant offer real intelligence close to claude opus4.6 reasoning, then we need to focus on a model that can".

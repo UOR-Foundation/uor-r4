@@ -18,8 +18,8 @@ An entry gives the date, what changed, which charter clauses it touches, and who
 
 **Decided by:** the owner (Casey), 16 November 2026, in Claude's chat, recorded at
 `2026-11-16T02:37:46Z` (claude-399). The decision followed the gpt-oss-20b pilot (claude-390),
-which kept 220.7 answer tokens/s on wick, so 1B kept tokens would take about 52 days. Each answer
-below replies to a question that quoted its choice.
+which kept 220.7 answer tokens/s on wick, so 1B kept tokens would take about 52 days. The picked answers
+quote the choice they picked; the others are Casey's own words.
 
 To the speed and size question:
 
@@ -36,14 +36,15 @@ kept?": "Yes, start it".
 
 **What changed** (the charter's text does not change; §3.10 still says hard targets only):
 
-1. **D86's donor.** The production donor is DeepSeek V4.1 Flash (MIT) on rented pods, in place
-   of gpt-oss-20b on wick. gpt-oss-120b (Apache 2.0) is the fallback if the measured rate is too
-   slow.
+1. **D86's donor.** The production donor is DeepSeek V4.1 Flash on rented pods, in place of
+   gpt-oss-20b on wick. *The lab's recommendation, not an owner term:* gpt-oss-120b (Apache 2.0)
+   if the measured rate is too slow. The owner did not choose it, so a switch needs the owner's
+   word. The licence (MIT, per the lab) is checked on the model card at pinning.
 2. **D86's scope: the reasoning text is kept.** The donor's reasoning text is kept with its
    final answer. Both are hard text targets: no logits, probabilities, scores or ranks. (b) stays
    deferred, and (c) and (d) stay banned.
 3. **The first corpus** is 1B kept tokens.
-4. **§3's compute caps, for this corpus run only:** 4 pods and $35/h across all labs, in place of
+4. **§5.4's compute caps, for this corpus run only:** 4 pods and $35/h across all labs, in place of
    4 pods and $8/h. The run sets `UOR_POD_MAX_RATE=35`, and the caps return to $8/h when the run's
    pods are down.
 

@@ -5,12 +5,14 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 ## What did not work, first
 
 - **No corpus was generated.** This unit records a decision only. Nothing has been measured on DeepSeek V4.1 Flash for this workload. The rates and costs quoted in the chat come from published benchmarks, not from runs of this project.
+- **The ORDER came after the work.** The D87 edits landed in `fc1ce2a4e`, before the ORDER commit `9f306e767`, which breaks the loop's "ORDER before work" convention. The ORDER's text matches what was done.
+- **The first draft widened the decision** (found by the exact-head review). It recorded gpt-oss-120b as an owner-chosen fallback, called DeepSeek "the strongest openly licensed teacher" inside the owner's terms, and put the caps in §3 instead of §5.4. Now the fallback is the lab's recommendation, and switching to it needs the owner's word.
 - **The run caps are an owner term with no tool enforcement of "this run only".** The pod tool reads `UOR_POD_MAX_RATE`, so the production unit sets it to 35 for that run alone. Nothing stops a later session from setting it; D87's text is the only limit.
 
 ## What changed
 
 - **D87** in `docs/integration/DECISIONS.md`:
-  - the donor is DeepSeek V4.1 Flash (MIT), with gpt-oss-120b as the fallback;
+  - the donor is DeepSeek V4.1 Flash (the lab recommends gpt-oss-120b as a fallback, which needs the owner's word);
   - the reasoning text is kept with the answer, both as hard text targets;
   - the first corpus is 1B kept tokens;
   - the caps are 4 pods and $35/h for that run only.
@@ -23,7 +25,7 @@ None. This is a record.
 
 ## Checks run at the head
 
-- `loop pr-check --local`, at the head of this PR.
+- `loop pr-check --local`: PASS at this head. It gives two advisory notes: the commit-order note above, and the standing AGENTS.md and FILEMAP size warnings.
 - `git diff --check` is clean.
 
 ## Skills used
