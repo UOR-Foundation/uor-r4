@@ -3,6 +3,18 @@
 use super::*;
 use std::collections::BTreeSet;
 
+/// The split side of a prompt (destructured, not `.1`, which the D32 lexer reads as a float).
+fn side(sp: &Splitter, first_user: &str) -> Split {
+    let (_, split) = sp.split_of(first_user);
+    split
+}
+
+/// The split key of a prompt.
+fn key(sp: &Splitter, first_user: &str) -> [u8; 32] {
+    let (digest, _) = sp.split_of(first_user);
+    digest
+}
+
 /// GPT-2's byte-to-character table, as the tokenizer uses it.
 fn byte_char(b: u8) -> char {
     let printable = |x: u8| (33..=126).contains(&x) || (161..=172).contains(&x) || x >= 174;
@@ -122,7 +134,7 @@ fn split_is_deterministic() {
     assert_eq!(h1, h2);
     // A different key moves prompts: the hash really depends on the assignment.
     let other = Splitter::new(Config { key: "other".into(), ..Config::default() }).unwrap();
-    let moved = (0..300).filter(|i| sp.split_of(&format!("question {i}")).1 != other.split_of(&format!("question {i}")).1).count();
+    let moved = (0..300).filter(|i| side(&sp, &format!("question {i}")) != side(&other, &format!("question {i}"))).count();
     assert!(moved > 0);
 }
 
@@ -149,7 +161,7 @@ fn planted_duplicates_are_removed() {
 
 /// A prompt text `"{stem} {n}{end}"` that lands in `want`.
 fn prompt_in(sp: &Splitter, stem: &str, end: char, want: Split) -> String {
-    (0..).map(|n| format!("{stem} {n}{end}")).find(|t| sp.split_of(t).1 == want).unwrap()
+    (0..).map(|n| format!("{stem} {n}{end}")).find(|t| side(sp, t) == want).unwrap()
 }
 
 fn census(plant: bool) -> (Value, u64) {
@@ -264,8 +276,8 @@ fn template_key_merges_numbers() {
     assert_eq!(template_key("What is 12+7?"), template_key("what is 3+5 ?"));
     let tpl = Splitter::new(Config { group: Group::Template, ..Config::default() }).unwrap();
     let prm = Splitter::new(Config::default()).unwrap();
-    assert_eq!(tpl.split_of("What is 12+7?").0, tpl.split_of("what is 3+5 ?").0);
-    assert_ne!(prm.split_of("What is 12+7?").0, prm.split_of("what is 3+5 ?").0);
+    assert_eq!(key(&tpl, "What is 12+7?"), key(&tpl, "what is 3+5 ?"));
+    assert_ne!(key(&prm, "What is 12+7?"), key(&prm, "what is 3+5 ?"));
     // The group survives the summary; the prompt group writes no field.
     assert_eq!(Splitter::from_config_json(&tpl.config_json()).unwrap().cfg, tpl.cfg);
     assert!(prm.config_json().get("group").is_none());

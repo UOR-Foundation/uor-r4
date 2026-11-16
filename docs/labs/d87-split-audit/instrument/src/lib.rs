@@ -587,7 +587,7 @@ impl SpanSet {
                 continue;
             }
             let mut i = self.uniq.partition_point(|u| u.0 < h);
-            while i < self.uniq.len() && self.uniq[i].0 == h {
+            while self.uniq.get(i).is_some_and(|entry| entry.0 == h) {
                 let (_, r, s) = self.uniq[i];
                 if !self.is_hit(i) && dev[r as usize].tokens[s as usize..s as usize + n] == train[e - n..e] {
                     self.hit[i / 64].fetch_or(1 << (i % 64), Ordering::Relaxed);
