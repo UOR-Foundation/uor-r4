@@ -15,6 +15,11 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   `decode` (bad content tag, truncation, trailing bytes) and a payload of the wrong length is
   refused by `restore_state`.
 - `rustfmt` wrapped one pre-existing line in `tests/type_head_restore.rs`; no logic changed.
+- **The full `serving-wasm` suite did not compile on the parent.** codex-14 added
+  `hamming_payloads` to `SerializedStackSession` but missed
+  `tests/session_codec_interop_fixture.rs`, so `cargo test --features serving-wasm --no-run` failed
+  with `E0063` before this unit's own tests ran. The fixture now sets the field empty; its pinned
+  `UR4SESS1` bytes and sha256 still match.
 - **The claim was refused** because codex-15 (PR #4033) holds the item in the merge queue.
 - No model or quality claim.
 
@@ -25,6 +30,8 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   read; decode accepts the three magics and refuses a bad content tag.
 - `crates/uor-r4-integer/tests/type_head_restore.rs`: a type-head session saved, encoded, decoded,
   restored and continued with identical tokens.
+- `crates/uor-r4-integer/tests/session_codec_interop_fixture.rs`: the missing
+  `hamming_payloads: Vec::new()` restores the object-store interop control that codex-14 broke.
 - Three unit tests: payload round-trip, payloads plus content, and the old magic for a payload-free
   session.
 
@@ -39,6 +46,10 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 - `cargo test --locked -p uor-r4-integer --features serving-wasm --lib session_codec` — 9 passed.
 - `cargo test --locked -p uor-r4-integer --features serving-wasm,fbs-synthetic --test
   type_head_restore` — 3 passed.
+- `cargo test --locked -p uor-r4-integer --features serving-wasm --test
+  session_codec_interop_fixture` — 2 passed (the pinned bytes and sha256 are unchanged).
+- `cargo test --locked -p uor-r4-integer --features serving-wasm,fbs-synthetic --no-run` — clean;
+  the whole suite now compiles.
 - `cargo test --locked -p uor-r4-integer --features serving-wasm,fbs-synthetic --lib` — 677
   passed, 1 ignored.
 - `cargo clippy --locked --no-deps -p uor-r4-integer --features serving-wasm,fbs-synthetic --lib
@@ -59,6 +70,8 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 
 - Place, turn-memory and native Q31 read restore keep their refusals.
 - The `UORMEM01` envelope's own version is still 1; it embeds the codec bytes unchanged.
+- codex-14's field addition left this fixture broken on `main`; codex-16 repairs it, but the full
+  suite is not part of the per-PR gate, so another added field can repeat the break.
 - I3 still needs a genuine live k-means site; the exact read index is not one (the index is exact
   over the 64-bit sign code under the read's own popcount metric).
 

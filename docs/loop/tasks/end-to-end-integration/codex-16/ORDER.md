@@ -32,6 +32,8 @@ the unit adds no dependency and does not change `Cargo.lock`.
 - `crates/uor-r4-integer/src/session_codec.rs`
 - `crates/uor-r4-integer/tests/type_head_restore.rs` (one test; rustfmt also wraps one pre-existing
   line in this file)
+- `crates/uor-r4-integer/tests/session_codec_interop_fixture.rs` (one missing field inherited from
+  codex-14; the pinned `UR4SESS1` bytes are unchanged)
 - `docs/loop/tasks/end-to-end-integration/codex-16/**`
 
 Out of scope: the JSON snapshot, the `UORMEM01` envelope version, place/turn-memory/Q31 restore, and
