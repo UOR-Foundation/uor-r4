@@ -382,6 +382,70 @@ fn cuda_pick_matches_the_served_d11_artifact() {
     assert_eq!(compared, 2 * 33);
 }
 
+/// The trit a Gate candidate lane moves to (`gate_value` in `discrete.cu`).
+fn sibling(current: i32, candidate: usize) -> i32 {
+    if candidate == 0 {
+        return current;
+    }
+    [0, -1, 1]
+        .into_iter()
+        .filter(|&v| v != current)
+        .nth(candidate - 1)
+        .expect("lane 1 or 2")
+}
+
+/// G10: Gate-kind scoring through the Pick read. For each level-0 gate and
+/// each live lane 0..3, the CUDA counterfactual loss word equals the summed
+/// forward loss of a model loaded with that gate actually moved, at both
+/// transports; a non-level-0 gate's three lanes all equal the current loss.
+#[test]
+#[ignore = "requires a CUDA GPU"]
+fn cuda_pick_gate_counterfactuals_equal_the_moved_models_forward_loss() {
+    let prefixes = every_prefix();
+    let windows: Vec<Vec<Identity>> = prefixes.iter().map(|p| identities(p)).collect();
+    let targets: Vec<u32> = prefixes.iter().map(|p| (p[0] + 1) % 16).collect();
+    let mut lanes_compared = 0;
+    let mut moved = false;
+    for mode in [PositionMode::IdentityControlV1, PositionMode::PrefixHolonomyV1] {
+        let gates0 = [1, -1];
+        let config = PositionConfig::new(mode, patterned_steps(SPEC.blocks));
+        let (device, snapshot) =
+            pick_device(SPEC, config.clone(), &gates0, Some(&distinct_roots));
+        let stages = snapshot.gates.len() / SPEC.blocks as usize;
+        let batch = device.carry_windows(&windows).expect("carry");
+        let loss_of = |gates: &[i32]| -> u64 {
+            let mut moved_snapshot = snapshot.clone();
+            moved_snapshot.gates = gates.to_vec();
+            let moved_device = Device::from_snapshot(moved_snapshot, 0).expect("moved model");
+            let batch = moved_device.carry_windows(&windows).expect("carry");
+            moved_device
+                .forward(&batch, &targets)
+                .expect("forward")
+                .losses
+                .iter()
+                .sum()
+        };
+        let current = loss_of(&snapshot.gates);
+        for index in [0, stages, 1] {
+            let losses = device
+                .propose(&batch, &targets, crate::Parameter::Gate(index as u32))
+                .expect("gate proposal")
+                .candidate_losses()
+                .expect("losses");
+            for lane in 0..3 {
+                let mut gates = snapshot.gates.clone();
+                gates[index] = sibling(gates[index], lane);
+                let want = if index % stages == 0 { loss_of(&gates) } else { current };
+                assert_eq!(losses[lane], want, "{mode:?} gate {index} lane {lane}");
+                moved |= want != current;
+                lanes_compared += 1;
+            }
+        }
+    }
+    assert_eq!(lanes_compared, 2 * 3 * 3);
+    assert!(moved, "no level-0 gate move changed the loss");
+}
+
 /// G6: the bucket writer carries no Pick read, so it refuses a Pick model.
 #[test]
 #[ignore = "requires a CUDA GPU"]
