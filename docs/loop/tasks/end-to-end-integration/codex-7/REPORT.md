@@ -16,13 +16,23 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   Hamming adapter covers `CopyHeads` with the margin weights.
 - **The served Q31 read now consumes the result.** `serve` calls `read_out`, writes its payload and
   traces its pick; the existing `apply`/trace tests are the bit-identical check. No other caller
-  changed, and no output moved.
+  changed, and no output moved. `choose` is untouched.
+- **The result matches the ADR's types and order.** `payload` is `Vec<i128>` (the ADR's type, and
+  the crate's accumulator width); `support` is the read's own deterministic order — for a selection,
+  ascending `(distance, position)`, which is what `choose` returns. It is not re-sorted, because the
+  read's rank order is part of its answer.
+- **The `read_out`-vs-`serve` test is no longer two independent implementations**, since `serve` now
+  calls `read_out`. The independent bit-identity is the shipped `apply`/trace test, which compares
+  the stepped read to the batch operator; the adapter test's remaining value is the payload/row
+  equality on three successive rows.
 - **`first_pick` maps the pick to a one-position support** (`pick - 1`), with the row as `payload`;
   a consumer must read the payload, not weights. A future consumer that expects weights from every
   read would be wrong; `ReadOut::check` refuses a result with both.
 - **Positions are `u16`**, which holds a context up to 65,536; a larger context would need `u32`
   and a new result version.
-- No session wiring, no behaviour change, no model or quality claim.
+- **No session wiring and no output change;** `serve` now consumes `read_out` (same step, same
+  `+2^31` refusal, same written row), checked by the shipped `apply`/trace parity test. No model or
+  quality claim.
 
 ## What changed
 
@@ -30,7 +40,8 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   `check`, and four unit tests.
 - `crates/uor-r4-integer/src/stack/mod.rs`: `mod read_out;` and `pub use read_out::ReadOut;`.
 - `crates/uor-r4-integer/src/stack/q31_read.rs`: `ServedQ31Read::read_out` (the pick and the row),
-  `serve` now consumes it, and a test that its written row equals `serve`'s over three rows.
+  `serve` now consumes it, and a test that its written row equals `serve`'s over three rows
+  (payload at `i128`, the ADR's type).
 - `ReadOut::pick()`: the 1-based pick or 0, so a consumer can recover the operator's pick without
   knowing the support convention.
 - `crates/uor-r4-integer/src/stack/hamming.rs`: `CopyHeads::read_out` (choice plus margin weights)

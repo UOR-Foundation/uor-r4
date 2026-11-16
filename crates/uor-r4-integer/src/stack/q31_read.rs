@@ -192,7 +192,10 @@ impl ServedQ31Read {
                 "q31.read: an out word of +2^31 does not fit the residual".to_owned(),
             ));
         }
-        Ok(ReadOut::first_pick(pick, out))
+        Ok(ReadOut::first_pick(
+            pick,
+            out.iter().map(|&word| i128::from(word)).collect(),
+        ))
     }
 
     /// Read into `x` at this row: `x` widened, stepped, and written back. Refuses an out word that
@@ -212,14 +215,14 @@ impl ServedQ31Read {
             .payload
             .as_deref()
             .expect("a first-pick read writes a row");
-        for (x, &w) in x.iter_mut().zip(payload) {
-            *x = w as i32;
+        for (x, &word) in x.iter_mut().zip(payload) {
+            *x = i32::try_from(word).expect("read_out admitted every out word as i32");
         }
         if let Some(trace) = trace {
             trace.push(Q31ReadStep {
                 pick: result.pick(),
                 x_in,
-                out: payload.to_vec(),
+                out: payload.iter().map(|&word| word as i64).collect(),
             });
         }
         Ok(())
@@ -707,7 +710,7 @@ mod tests {
                 .expect("the served step");
             assert_eq!(
                 out.payload.expect("a row"),
-                written.iter().map(|&v| i64::from(v)).collect::<Vec<_>>()
+                written.iter().map(|&v| i128::from(v)).collect::<Vec<_>>()
             );
             assert_eq!(out.support.len(), usize::from(!out.support.is_empty()));
         }
@@ -720,7 +723,7 @@ mod tests {
             .expect("serve");
         assert_eq!(
             by_read_out.payload.expect("a row"),
-            written.iter().map(|&v| i64::from(v)).collect::<Vec<_>>()
+            written.iter().map(|&v| i128::from(v)).collect::<Vec<_>>()
         );
     }
 

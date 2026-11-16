@@ -32,6 +32,9 @@ adapters with tests, no dependency and no `Cargo.lock` change.
   `x` not written) and refused on an out word of `+2^31`.
 - `CopyHeads::read_out`: the chosen positions and their Q31 margin weights, exactly `choose` plus
   `copy_weight_q31`.
+- `ServedQ31Read::serve` consumes `read_out`: it writes the result's payload and traces its pick.
+  This is a production-code change with **no output change**; the shipped `apply`/trace parity test
+  is the check.
 - Tests: the Q31 result equals the served step's written row over two rows and a third; the Hamming
   result equals `choose` and the margin weights; the `ReadOut` invariants.
 
@@ -43,20 +46,21 @@ adapters with tests, no dependency and no `Cargo.lock` change.
 - `crates/uor-r4-integer/src/stack/hamming.rs` (adapter and test)
 - `docs/loop/tasks/end-to-end-integration/codex-7/**`
 
-Out of scope: session wiring, a `select` trait over both reads, type/ask/flock/route/relation
-adapters, any behavior change, a schema, a dependency or a GPU run.
+Out of scope: session wiring (the session still calls `serve`), a `select` trait over both reads,
+type/ask/flock/route/relation adapters, any output change, a schema, a dependency or a GPU run.
 
 ## Done when
 
 1. `ReadOut` is public from the stack module and its invariant holds for both constructors.
 2. The Q31 adapter reproduces the served step; the Hamming adapter reproduces the choice and
    weights; both tests pass.
-3. No existing test or production arithmetic changes; the library suite still passes.
+3. No existing test changes; the served output is bit-identical and `serve` now consumes `read_out`;
+   the library suite still passes.
 4. `git diff --check`, the harness contract rule, the REPORT check and the exact-head review pass.
 
 ## Cancel
 
-Stop if the two reads cannot share a result without loss, or if the adapters need a change to
-`serve`/`choose`. Do not invent a common input.
+Stop if the two reads cannot share a result without loss, if the adapters need a change to `choose`,
+or if making `serve` consume `read_out` moves any output. Do not invent a common input.
 
 STOP and report when done.

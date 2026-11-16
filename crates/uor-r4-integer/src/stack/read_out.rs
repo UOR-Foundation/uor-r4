@@ -19,12 +19,12 @@ pub struct ReadOut {
     /// The Q31 weights parallel to `support`; empty for a row-writing read.
     pub weights_q31: Vec<i128>,
     /// The row a row-writing read contributes; empty weights accompany it.
-    pub payload: Option<Vec<i64>>,
+    pub payload: Option<Vec<i128>>,
 }
 
 impl ReadOut {
     /// One position and the row the read writes there (the native Q31 first-pick read).
-    pub fn first_pick(pick: u32, payload: Vec<i64>) -> Self {
+    pub fn first_pick(pick: u32, payload: Vec<i128>) -> Self {
         let support = if pick == 0 {
             Vec::new()
         } else {
