@@ -162,6 +162,40 @@ fn census(dir: &Path) -> (Vec<String>, Vec<String>, u64) {
     (kept, dropped, kept_tokens)
 }
 
+/// A server that stays down stops the segment with every prompt left undone, never dropped.
+#[test]
+fn server_down_stops_without_dropping() {
+    let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("e2e-server-down");
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let dir = root.join("run");
+    let bank = root.join("bank.jsonl");
+    fs::write(
+        &bank,
+        (0..4).map(|i| bank_line(i) + "\n").collect::<String>(),
+    )
+    .unwrap();
+    // A port that was bound and released: nothing listens on it.
+    let addr = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .unwrap()
+        .local_addr()
+        .unwrap();
+    let seg = cmd_generate(&args(&[
+        ("server", format!("http://{addr}")),
+        ("prompts", bank.display().to_string()),
+        ("out", dir.display().to_string()),
+        ("budget", "1000000".into()),
+        ("instrument-commit", "testcommit".into()),
+        ("parallel", "2".into()),
+        ("server-wait-seconds", "1".into()),
+    ]))
+    .unwrap();
+    assert_eq!(seg["stopped_by"], "server");
+    let (kept, dropped, _) = census(&dir);
+    assert!(kept.is_empty(), "{kept:?}");
+    assert!(dropped.is_empty(), "a down server dropped {dropped:?}");
+}
+
 #[test]
 fn generate_resume_seal_verify_end_to_end() {
     let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("e2e-donor-corpus");

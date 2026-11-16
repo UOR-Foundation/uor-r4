@@ -670,10 +670,22 @@ enum Outcome {
         reason: &'static str,
         generated: u64,
     },
+    /// The server stayed down: the prompt is left undone (not dropped) for a later resume.
+    Abandoned,
+}
+
+/// Why a request failed after its retries.
+enum Fail {
+    /// The server refused this request (a 4xx other than 429): drop the prompt.
+    Prompt,
+    /// Connection error, 5xx, 429 or an unreadable body: the server, not the prompt.
+    Server,
 }
 
 struct Run<'a> {
     url: String,
+    health: String,
+    server_wait: Duration,
     req: Request,
     bank: &'a [BankItem],
     done: &'a HashSet<String>,
@@ -697,7 +709,7 @@ impl Run<'_> {
         self.stop.store(true, Ordering::SeqCst);
     }
 
-    fn post(&self, agent: &ureq::Agent, body: &Value) -> Option<Value> {
+    fn post(&self, agent: &ureq::Agent, body: &Value) -> Result<Value, Fail> {
         for attempt in 0..4u64 {
             if attempt > 0 {
                 std::thread::sleep(Duration::from_secs(2 * attempt));
@@ -707,14 +719,39 @@ impl Run<'_> {
                 Ok(mut r) => match r.body_mut().read_json::<Value>() {
                     Ok(v) => {
                         self.ms.lock().unwrap().push(t.elapsed().as_millis() as u64);
-                        return Some(v);
+                        return Ok(v);
                     }
                     Err(_) => self.errors.fetch_add(1, Ordering::SeqCst),
                 },
+                Err(ureq::Error::StatusCode(c)) if (400..500).contains(&c) && c != 429 => {
+                    self.errors.fetch_add(1, Ordering::SeqCst);
+                    return Err(Fail::Prompt);
+                }
                 Err(_) => self.errors.fetch_add(1, Ordering::SeqCst),
             };
         }
-        None
+        Err(Fail::Server)
+    }
+
+    /// Polls `/v1/models` every 10 s until it answers, the wait runs out or the run stops.
+    fn wait_healthy(&self) -> bool {
+        let agent: ureq::Agent = ureq::Agent::config_builder()
+            .timeout_global(Some(Duration::from_secs(10)))
+            .build()
+            .into();
+        let start = Instant::now();
+        loop {
+            if self.stop.load(Ordering::SeqCst) {
+                return false;
+            }
+            if agent.get(&self.health).call().is_ok() {
+                return true;
+            }
+            if start.elapsed() >= self.server_wait {
+                return false;
+            }
+            std::thread::sleep(Duration::from_secs(10).min(self.server_wait));
+        }
     }
 
     fn prompt(&self, agent: &ureq::Agent, i: usize) -> Outcome {
@@ -726,11 +763,19 @@ impl Run<'_> {
             msgs.push(user.clone());
             let seed = turn_seed(self.req.base_seed, i as u64, t as u64);
             let body = request_body(&self.req, &Value::Array(msgs.clone()), seed);
-            let Some(v) = self.post(agent, &body) else {
-                return Outcome::Dropped {
-                    reason: "http",
-                    generated,
-                };
+            let mut waits = 0;
+            let v = loop {
+                match self.post(agent, &body) {
+                    Ok(v) => break v,
+                    Err(Fail::Prompt) => {
+                        return Outcome::Dropped {
+                            reason: "http",
+                            generated,
+                        }
+                    }
+                    Err(Fail::Server) if waits < 3 && self.wait_healthy() => waits += 1,
+                    Err(Fail::Server) => return Outcome::Abandoned,
+                }
             };
             let r = parse_reply(&v);
             generated += r.completion_tokens;
@@ -797,6 +842,7 @@ impl Run<'_> {
                 Outcome::Dropped { reason, generated } => {
                     out.drop_prompt(&self.bank[i].id, reason, generated)?
                 }
+                Outcome::Abandoned => self.set_stop("server"),
             }
             if out.t.kept >= self.budget {
                 self.set_stop("budget");
@@ -872,6 +918,8 @@ pub fn cmd_generate(m: &Args) -> Res<Value> {
     let (done, totals, next_shard) = resume(&dir)?;
     let run = Run {
         url: format!("{server}/v1/chat/completions"),
+        health: format!("{server}/v1/models"),
+        server_wait: Duration::from_secs(num(m, "server-wait-seconds", Some(1800))?),
         req: req.clone(),
         bank: &bank,
         done: &done,
