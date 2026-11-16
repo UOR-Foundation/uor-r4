@@ -1140,13 +1140,19 @@ impl IntegerStackModel {
         Ok(())
     }
 
-    /// Whether this model's reads ignore token positions, so a full context may drop its oldest
-    /// token: no Hamming read (and therefore no place read) and no turn memory. The recurrence and
-    /// the native Q31 state carry the history; the token vector is only a read's window.
+    /// Whether this model may drop its oldest token at the context bound: every reader that
+    /// scans the context must see the *window*.
+    ///
+    /// The recurrence and the native Q31 state carry the history; the token vector is a read's
+    /// window. A Hamming read (and the place read with it) and the turn memory name absolute token
+    /// positions, and the pointer head's key cache is indexed by position, so none of them may
+    /// slide. The native Q31 read may: its history is dropped with the window
+    /// (`Q31ReadHistory::drop_head`), so it can only pick a live row.
     pub fn can_slide_tokens(&self) -> bool {
         self.fbs
             .as_ref()
             .is_some_and(|fbs| fbs.hamming.is_none())
+            && self.pointer.is_none()
             && self.memory.is_none()
     }
 
@@ -2494,8 +2500,23 @@ impl IntegerStackSession<'_> {
                 "a context slide needs a model whose reads do not use token positions",
             ));
         }
+        if on && self.copy_scale_q16 != 0 {
+            return Err(StackError::Shape(
+                "a context slide cannot carry a copy boost indexed by absolute row",
+            ));
+        }
         self.context_slide = on;
         Ok(())
+    }
+
+    /// The native Q31 read's live window length, `0` without a read.
+    pub fn q31_read_history_len(&self) -> usize {
+        self.q31_history.len()
+    }
+
+    /// The native Q31 read's live window ids, oldest first, `&[]` without a read.
+    pub fn q31_read_window(&self) -> &[u32] {
+        self.q31_history.ids()
     }
 
     /// Select the Hamming read from its per-head index (the default) or scan every earlier
@@ -4237,6 +4258,9 @@ fn stack_step_fbs(
     // The Hamming read at this row needs `x_0..=x_t`.
     if session.position >= s.context && session.tokens.len() >= s.context {
         session.tokens.remove(0);
+        // The read's window is the token window: drop the same row so the read cannot pick a
+        // position the served window no longer holds.
+        session.q31_history.drop_head(1);
     }
     session.tokens.push(token);
     let opening = session.at_reply_opening();
@@ -4579,6 +4603,9 @@ fn stack_step_fbs_timed(
     q31_read_refused_preflight(session.q31_read_refused)?;
     if session.position >= s.context && session.tokens.len() >= s.context {
         session.tokens.remove(0);
+        // The read's window is the token window: drop the same row so the read cannot pick a
+        // position the served window no longer holds.
+        session.q31_history.drop_head(1);
     }
     session.tokens.push(token);
     let opening = session.at_reply_opening();

@@ -160,6 +160,22 @@ impl Q31ReadHistory {
         self.ids.is_empty()
     }
 
+    /// Forget the oldest `rows` rows, so the next step is row `len()` of the live window.
+    ///
+    /// This is the context slide's half for a read: the read keeps scanning, but only over the
+    /// rows the served window holds. A read's keys are addressed by row, so the head is dropped,
+    /// never overwritten.
+    pub fn drop_head(&mut self, rows: usize) {
+        let rows = rows.min(self.ids.len());
+        self.keys.drain(..rows);
+        self.ids.drain(..rows);
+    }
+
+    /// The live window's token ids, oldest first.
+    pub fn ids(&self) -> &[u32] {
+        &self.ids
+    }
+
     /// Forget every row: the next step is row 0 of a new sequence.
     pub fn clear(&mut self) {
         self.keys.clear();

@@ -16,6 +16,12 @@ close, and each is buildable without a training run.
 The fourth gap — the `Context` ring, I2 — is a design unit with a witness-pair gate; it is ordered
 here, not built. The fifth — the protocol run — needs a run that carries a contract and a tokenizer.
 
+**Addendum (same day).** The ring was taken in this unit after all (its probe is merged, so it was a
+promotion, not a design): `context_ring.rs` carries the bounded ring, the settlement gate and both
+gates. The served read's half of the slide followed: `Q31ReadHistory::drop_head` and the step
+kernels' trim, so a read-bearing model may slide with the read's window equal to the served
+window.
+
 ## Design
 
 1. **The seam.** `ReadMechanism`, `Query`, `ContextView` and `Read::select(&Query, &mut

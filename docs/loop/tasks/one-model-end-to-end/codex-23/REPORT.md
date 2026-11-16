@@ -43,6 +43,11 @@ Lab: codex. Order: [ORDER.md](ORDER.md). Parent: [codex-22](../codex-22/REPORT.m
   at a supplied clock. `compare_on` restricts the reading to the scored rows.
 - **The renumber**: `STACK_FBS_RELATION_SCHEMA` is `"uor-r4.lut-stack/16"`; `/15` is free for
   claude-384's pair rows.
+- **The read half of the slide**: `Q31ReadHistory::drop_head(rows)` and `ids()`, called by both
+  step kernels where the token window drops its head, so the read scans exactly the served window;
+  `q31_read_history_len()` and `q31_read_window()` expose it. `can_slide_tokens` now also refuses a
+  pointer head, and `set_context_slide` refuses a session with a copy boost, because both index
+  absolute rows — the slide's real unsoundness is the position-indexed readers, not the read.
 - **The `Context` ring** (`context_ring.rs`): the probe's bounded ring and settlement gate promoted
   into the library — `ContextSpan`, a mergeable `TopK`, `ContextRing::push(span, settled)` that
   refuses an unsettled eviction and leaves the ring unchanged, `settle`, `sum`, `top`, `live`. The
@@ -63,6 +68,9 @@ Lab: codex. Order: [ORDER.md](ORDER.md). Parent: [codex-22](../codex-22/REPORT.m
 - The ring: the fold read and the top-3 selection read equal full history across 40 spans and four
   wraps; an unsettled eviction is refused with the blocking position and leaves the ring unchanged;
   the stub's join is order-independent.
+- The slide with the read (`tests/context_slide.rs`, 3 passed): 16 steps at context 8, the read's
+  window equals the token window at every step, every pick is a live row, the run repeats exactly,
+  and a copy-boosted session refuses the policy.
 - `/17`: a bound export gains the read, the tokenizer sha and the contract source survive, the
   session steps and records a read trace, and a `/17` header whose binding is stripped is refused.
 - The `/16` relation artifact re-reads and serves: **47/47** on `K=1`, 431/1,024 rows, sha256
@@ -72,6 +80,9 @@ Lab: codex. Order: [ORDER.md](ORDER.md). Parent: [codex-22](../codex-22/REPORT.m
 
 - `cargo test --locked -p uor-r4-integer --features serving-wasm,fbs-synthetic --lib` — **700
   passed**, 1 ignored (two seam, two adapter, one bound form, five ledger, four context ring).
+- `cargo test --locked -p uor-r4-integer --features serving-wasm,fbs-synthetic` (all targets) — green
+  except six **pre-existing** `adversarial_challenger_m1_token_boundary` tests that read a
+  `tokenizer.json` and a bundle this checkout does not carry.
 - `cargo test --locked -p uor-r4-native-vector` — 48 passed.
 - `cargo test --locked -p uor-r4-discrete --features cuda --lib` — 374 passed, 8 ignored.
 - `fbs-export --legacy-artifact … --relation` then `read-panel` — the `/16` artifact above.
