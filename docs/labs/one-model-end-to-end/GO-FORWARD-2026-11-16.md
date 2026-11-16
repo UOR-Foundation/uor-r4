@@ -31,9 +31,12 @@ their source; anything marked **hypothesis** is untested. Nothing here overrides
   leaving copied keys alone, a memory line): exact matched pairs **0.749 / 0.759 / 0.782** at three
   seeds (claude-345). Arm rt (three-key turn memory): E 0.71, script general 10/10, but **55 panel
   replies wrong, 33 of them after a copied value or a changed number** — "47" served as "40".
-- **The published discrete artifacts failed both fixed multi-turn memory anchors** (item, 2 Nov),
-  and the discrete M1 model is the one that closed all six M1 bars (DEV 7,002/7,001, Fresh V2
-  7,215/7,228, p-f 7,850/7,872 at two seeds; 10,876/10,566 tok/s on an M1; artifact 86.5 MB).
+- **The 2 Nov anchor failure was an FBS artifact, not a discrete one.** The item's baseline ran the
+  `dual-c131` artifacts, which are `uor-r4.lut-stack/5` FBS transports with **no read record**. The
+  discrete 19-table model has **never been scored on a memory panel**, because no in-tree binary
+  serves text from a `.d11`. Correcting this changes decision 10 (below). The discrete M1 model did
+  close all six M1 bars (DEV 7,002/7,001, Fresh V2 7,215/7,228, p-f 7,850/7,872 at two seeds;
+  10,876/10,566 tok/s on an M1; artifact 86.5 MB).
 
 ## 2. The plan (13 items)
 
@@ -122,23 +125,33 @@ Each item is a unit with its own ORDER/REPORT and its own gate. Sizes are honest
 
 ## 3. Decision 10 — which path, measured on one corpus
 
-| Axis | FBS trunk + read (this line) | Discrete D11 (M1 line) |
+| Axis | FBS trunk + read | Discrete D11 (M1 line) |
 |---|---|---|
-| Memory capability | **arm r 0.749/0.759/0.782** matched-pair recall, 3 seeds | anchors failed (item, 2 Nov) |
+| Memory capability | **arm r 0.749/0.759/0.782** on a matched-pair panel, 3 seeds; **no anchor pass** | **never scored on a memory panel** (no binary serves text from `.d11`) |
+| The 2 Nov anchors | failed on `/5`, an FBS artifact **with no read** | not run |
 | M1 bars | not closed | **all six, two seeds** |
-| Decode rate (M1) | 1,567–1,636 tok/s (p recipe) | **10,876 / 10,566 tok/s** |
-| Prefill (M1) | 4,309–4,499 tok/s with the read | not recorded here |
+| Decode (same host, x86 9950X, 64 steps) | **1,607 tok/s** with Hamming + turn memory (`/10`); 6,082–6,283 readless (`/5`) | **14,043–14,231 tok/s** (8.8× the `/10`, 2.3× the `/5`) |
 | Artifact | 19.3 MB (116 MB with pair rows) | 86.5 MB |
-| Training cost | **~0.20 s/step at 16,384 steps ≈ 55 min on a 4090** | far larger (19 tables, K16/A8 doses) |
+| Training cost | 0.300 s/step, 16,384 steps ≈ 1.4 h on a 4090 | far larger (19 tables, K16/A8 doses) |
 
-**Decision (recommendation).** Capability decides: the FBS trunk with the copy read and the turn
-memory leaving copied keys alone is the only configuration that has shown held-out memory recall,
-and it is also the cheapest to train and the smaller artifact. The discrete path's advantage is
-decode speed (about 7×) on a task it has already passed. ADR-0007 already puts both under D11
-integer serving, so this is not a fork in the runtime — it is a choice of trunk and read.
+**Decision (recommendation, corrected).** The discrete path is **8.8× faster** and much cheaper at
+serve time, and the item's anchor failure does **not** count against it — that was an FBS artifact
+without a read. But the discrete trunk **cannot be compared on the same read today**, structurally:
+its schema admits no read record, its read is a 16-bit orbit-root code over a 32-int trunk vector
+(not a width-256 residual), and the Q31/Hamming adders both refuse a non-stack container at
+`Container::parse`. The FBS+read line is the only one with memory-panel evidence (arm r 0.749–0.782),
+and it has never passed the anchor either. So the choice is not settled by capability; it is settled
+by **reachability of capability**.
 
-**What would change it:** a measurement that the discrete trunk, given the same read, reaches the
-same recall. That is one run at M1's shape and it is cheap; it has never been tried.
+**The cheapest decisive step** (no GPU, ~1 unit): score the discrete 19-table model's own read
+(`query_read_table`) on a chained panel with `queries.json`, using the panel's pick scoring ported to
+`IntegerDiscreteModel`. That answers "does the discrete read choose the asked value at all?" — the
+missing capability number — and it does not need the schema. If it passes, the discrete is the path
+on cost alone; if it does not, the FBS+read stays. A `q31_read` over the trunk vector (schema
+`/2`) is the ~3-unit follow-up if the discrete wins.
+
+**What would change the verdict:** the discrete read's panel number, or one `q31_read` record on the
+discrete schema. Both are specified above.
 
 ## 4. Decision 11 — what "memory" is
 
@@ -335,6 +348,7 @@ near-ties differ on 1.0–1.6% of rows, claude-354), and the C2′ choice (the g
 | 8 | Compression (§2.3) | codex | the product budget |
 | 9 | Hamming adapter (§2.9) | codex | the seam paying for itself |
 | 10 | First-reply-token trace (§2c.17) | codex | **decides the arms; $0** |
+| 10b | The discrete read's panel score (§3) | codex | decision 10, no GPU |
 | 11 | Ask-head + slot arms (§2c.18–19) | codex | the capability |
 | 12 | SDM/absolute-position keys (§2c.20) | codex | the key family |
 | 13 | Transport-key harvest (§2c.21) | codex | the read's input |
