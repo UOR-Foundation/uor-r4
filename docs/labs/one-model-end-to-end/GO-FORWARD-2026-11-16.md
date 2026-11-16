@@ -116,9 +116,12 @@ Each item is a unit with its own ORDER/REPORT and its own gate. Sizes are honest
     and is reachable, and the failure is the **readout-depth key and its weight**, not the absence of
     a query. The narrow targets are units 18 (relative-offset ask key) and 19 (slot/place key that
     speaks the value at the reply's first row, latest-wins).
-18. **The ask-head arm**: the ask query joined over a **relative-offset bigram** of the question
-    (`with_carry`, served `asked_point`), trained on the relation episodes; falsifier on held-out
-    values.
+18. **The ask-head arm — the mechanism is already built (codex-28).** `with_carry`
+    (`--hamming-carry-question H`) is the relative-offset question key, exported as `carry_rows` +
+    `hamming.d*.carry` and applied by the served `AskImage`; it has **never been in the recipe**,
+    which uses the place read instead, and the two are exclusive. The arm is the recipe with
+    `--hamming-ask 1 --hamming-carry-question 2` and no place, gated by codex-27's trace and scored on
+    bare-value anchors with no line and held-out values.
 19. **The slot arm**: the place read as the slot key with **latest-wins** (DeltaNet's read-then-
     overwrite), which also explains and must fix arm rt's "47 → 40".
 20. **The SDM/Hamming + absolute-position key build** (literature): a Hamming shortlist keyed on
