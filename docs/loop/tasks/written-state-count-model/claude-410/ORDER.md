@@ -1,6 +1,6 @@
 # ORDER: written-state-count-model, claude-410 (a full-support floor for PRLL: count, order-0 and uniform experts mixed into strictly positive Q48 masses)
 
-Lab: claude. Item: written-state-count-model.
+Lab: claude. Item: [m4-lawful-likelihood-bpb](../../../../roadmap/items/m4-lawful-likelihood-bpb.md) (track: written-state-count-model, no item of its own yet).
 Base: `origin/main` `ef1f4a641`.
 
 ## Why this unit
