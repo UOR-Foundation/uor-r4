@@ -14,6 +14,37 @@ flowchart LR
 
 An entry gives the date, what changed, which charter clauses it touches, and who decided. The owner's own words are recorded verbatim when they are the reason. Old text is never edited or deleted: it moves unchanged to the `archive/` folder, and the live decision index keeps one line saying where each decision went (see the [decision map](decision-map.md)).
 
+## 16 November 2026: the rest of D87's corpus is streamed from the DeepSeek API (D89)
+
+**Decided by:** the owner (Casey), 16 November 2026, in claude's chat (claude-402). The lab had leased a 4×B200
+and an 8×B200 for the fan-out. It then reported that DeepSeek's own API lists V4.1 Flash at $0.60 per 1M output
+tokens off-peak, so about $800–900 for 1B kept, against about $1,480 for the rented run. Casey's words,
+verbatim:
+
+- Asked about one 8×B200 at about $85/h in place of two 4×B200 pods: "ok i mean yeah go for it just get it done
+  please as quickly and cheaply as possible"
+- "i can just stream deepseek from api..."
+- To the lab's recommendation (down the two new pods, keep pod 3 generating while an API path is built and
+  checked, then finish over the API off-peak): "go with your recommendation"
+- "btw 1 million tokens from openai costs .25c so ive done like 10b before for like 200bucks"
+
+**What changed:**
+
+- **D87's means of generation (the owner's term):** stream the donor from the API ("i can just stream deepseek
+  from api"), as the lab recommended, instead of a rented fan-out. D87's donor, reasoning rule, hard-text-target
+  rule and 1B size stand.
+- **The lab's reading, not owner terms:** the two new pods (vast-60895844, vast-60895824) were deleted before
+  any file reached them. Pod 3 (vast-60886842) keeps generating until the API path passes its checks, then it
+  is downed. D88's pod caps stay as written, though nothing now uses them.
+- **The lab's conditions and means, not owner terms:**
+  - The provider stays DeepSeek (`deepseek-flash`). Its Open Platform Terms §4.2 allow "training other models
+    (such as model distillation)". OpenAI's Services Agreement §3.3(e) bars using Output to develop competing
+    models, so OpenAI's lower price is not used.
+  - Requests run off-peak only.
+  - The seed is recorded as absent (not replayable).
+  - The key is read from an environment variable, never printed.
+  - The production sheet's amendment and its non-author FIT come before the first API request.
+
 ## 16 November 2026: D87's corpus run may use 4 pods at $43.41/h (D88)
 
 **Decided by:** the owner (Casey), 16 November 2026, in claude's chat (claude-401). Under D87's $35/h no
