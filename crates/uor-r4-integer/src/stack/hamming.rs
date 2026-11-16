@@ -421,7 +421,7 @@ impl CopyHeads {
     }
 
     /// Copy head `h`'s kept positions at the last row of `tokens`, from `index`, which catches up
-    /// to the row. Copy key 1 only; a pair head still scans.
+    /// to the row. Copy key 1 uses the index; a pair head falls back to the scan.
     #[allow(dead_code)]
     pub(crate) fn choose_indexed(
         &self,
@@ -432,7 +432,12 @@ impl CopyHeads {
         let Some(t) = tokens.len().checked_sub(1) else {
             return Vec::new();
         };
-        debug_assert!(self.pair[h].is_none(), "a pair head still scans");
+        // A pair head's key joins two tokens, so its buckets would be `vocab²`; it scans. The
+        // fallback is the shipped selection, so a caller that does not check the pair still gets
+        // the right answer.
+        if self.pair[h].is_some() {
+            return self.choose(h, tokens);
+        }
         index.catch_up(tokens, t, |token| self.code(token, h));
         index.nearest(self.query_at(tokens, t, h), self.kept)
     }
@@ -734,6 +739,22 @@ mod copy_rule_tests {
             heads.choose_indexed(0, row, &mut index),
             heads.choose(0, row)
         );
+    }
+
+    #[test]
+    fn a_pair_head_falls_back_to_the_scan() {
+        let (mut heads, _table) = heads(16, CopyRule::Mean);
+        heads.pair[0] = Some(0xffff_ffff_0000_0000);
+        let tokens: Vec<u32> = (0..256).map(|step| ((step * 5 + 1) % 4) as u32).collect();
+        let mut index = super::CodeIndex::new();
+        for t in 1..tokens.len() {
+            let row = &tokens[..=t];
+            assert_eq!(
+                heads.choose_indexed(0, row, &mut index),
+                heads.choose(0, row),
+                "row {t}"
+            );
+        }
     }
 
     #[test]

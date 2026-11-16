@@ -11,12 +11,15 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   `choose_indexed` are `pub(crate)` with `#[allow(dead_code)]`; the next unit passes the index into
   `mean_at`/`stream`/`readout` and the session state. This unit makes that plumbing safe by proving
   the offsets and the tie rule first.
-- **Copy key 1 only.** A pair head (`pair[h].is_some()`) still scans, and the type/ask heads are not
-  indexed. The debug assertion in `choose_indexed` records the limit.
+- **Copy key 1 only.** A pair head (`pair[h].is_some()`) falls back to the shipped scan inside
+  `choose_indexed`, so a caller that does not check the pair still gets the right answer; the
+  type/ask heads are not indexed.
 - **The index stores positions** (`O(t)`), so it saves work, not memory; the token vector already
   holds them. `clear` is not yet called by a reset or a restore; the wiring unit must call it.
-- `cargo fmt` rewrote the whole pre-existing `hamming.rs` (it is not format-clean on `main`); the
-  file was reverted and only the formatted 114 lines inserted.
+- `cargo fmt` would rewrite the whole pre-existing `hamming.rs`; the file was reverted and only the
+  formatted lines inserted, so the committed diff is purely additive. At this head
+  `cargo fmt --check` does not flag the file, and standalone `rustfmt` flags only pre-existing
+  lines.
 - No behavior change, no model or quality claim, and no timing here (codex-8 measured 32k).
 
 ## What changed
@@ -30,16 +33,17 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 
 ## Measurements
 
-- 4,096-row fixture stream (4-code vocabulary, `kept = 16`): the indexed selection equals `choose`
-  at every row.
+- 4,096-token fixture stream (4-code vocabulary, `kept = 16`): the indexed selection equals
+  `choose` at every non-trivial row, 1..4,095 (row 0 is empty on both sides).
 - A cleared index rebuilds the same answers at row 2,048.
-- Hamming suite: **36 passed**.
+- A pair head falls back to the scan and matches `choose` at every row of a 256-token stream.
+- Hamming suite: **37 passed**.
 - Exactness at 256 codes and 32k is codex-8's measurement; this unit keeps the same `nearest`.
 
 ## Checks run at the head
 
 - `cargo test --locked -p uor-r4-integer --features serving-wasm the_indexed_copy_head` — 1 passed.
-- `cargo test --locked -p uor-r4-integer --features serving-wasm hamming` — 36 passed.
+- `cargo test --locked -p uor-r4-integer --features serving-wasm hamming` — 37 passed.
 - `rustfmt --check` — the added 114 lines are clean (the file's pre-existing diffs remain, below the
   new code).
 - `cargo clippy --locked --no-deps -p uor-r4-integer --features serving-wasm --lib --tests` — no
