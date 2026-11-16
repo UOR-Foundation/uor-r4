@@ -8,6 +8,10 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   the item is still claimed by this lab's codex-3 worktree (PR #4015, approved, in the merge queue).
   The claim is this lab's own; the unit adds only a test and docs, no dependency and no `Cargo.lock`
   change.
+- **The exact `Z[φ]` comparator overflowed.** Cross-multiplying two score numerators at these
+  magnitudes exceeds `i128` when the sign test squares them. Ordering now uses an f64 value of the
+  exact score, and the test asserts the minimum target/runner-up margin is **0.191**, far above f64
+  noise; score equality remains exact.
 - **The first retrieval construction was wrong.** Laying tokens on orbits `r^k · b` makes the
   relation between a token and its successor `b⁻¹ r b`, not `r`, so one learned relation cannot fit
   more than one orbit. The quaternion order also broke the wrap: for a rotation of order 5 the
@@ -20,12 +24,15 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   relation at all, and that the content controls cannot: their floor is one of the five tokens that
   share a feature.
 - **The controls are content-only.** Popcount and L1 read the local feature and ignore the pose, so
-  they tie within a feature orbit. A pose-aware read could solve this task; the claim is only about
-  the reads the model actually has.
+  they tie within a feature orbit; popcount sits below the 1/5 floor (0.133) because four features
+  share sign codes with four others, and L1 is exactly at it (0.200). A pose-aware read could solve
+  this task; the claim is only about the reads the model actually has.
 - Synthetic: 60 tokens, one hidden 2I relation, equal-norm integer features. No real text, no
   model, no token-level claim, and no `l ≥ 2` component.
 - The fit enumerates 120 icosians (cheap, discrete, no gradient). It says nothing about fitting at
   scale or with a continuous relation outside 2I.
+- **Ordering, not scoring, uses f64.** The scores are exact `Z[φ]` rationals; only their comparison
+  is floating, and the 0.191 margin is the evidence that this cannot change the answer here.
 
 ## What changed
 
@@ -39,12 +46,15 @@ Size: about 260 lines of test and the ORDER/REPORT.
 ## Measurements
 
 - The best of the 120 relations on the 12 fit queries acts **identically** to the planted one on
-  every token (exact score equality), and reaches **precision@1 1.000** on all 60 held-out queries.
-- Controls: sign-code popcount **0.133**, local L1 **0.200** — near the 1/5 orbit-tie floor, and far
-  below the bar.
+  every token (exact score equality), and reaches **precision@1 1.000** on the 48 held-out queries
+  (1.000 on all 60; planted 1.000).
+- Controls: sign-code popcount **0.133**, local L1 **0.200** — at or below the 1/5 orbit-tie floor,
+  far below the bar.
 - A relation that differs on the data reaches **0.000** on the fit queries, so the result is not a
   constant-score artifact.
-- Runtime 0.12 s in the test profile; no float, no exponent, no gradient.
+- Mean rank of the target **0.00**; the smallest target/runner-up gap **0.191**, so the f64 ordering
+  is unambiguous.
+- Runtime 0.13 s in the test profile; no exponent, no gradient.
 
 ## Checks run at the head
 

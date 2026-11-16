@@ -431,10 +431,19 @@ fn score_with_relation(r_hat: Unit, qi: Unit, qj: Unit, ai: [Rat; 3], aj: [Rat; 
     dot(ai, rotate(relation_pose(r_hat, qi, qj), aj))
 }
 
+/// The real value of a score, for **ordering only**. The scores themselves are exact (`Phi` over a
+/// power-of-two denominator); their cross-multiplied comparison overflows `i128` at these
+/// magnitudes, so ordering uses f64 and the test asserts a minimum target/runner-up gap.
+fn rat_value(r: Rat) -> f64 {
+    (r.num.a as f64 + r.num.b as f64 * PHI) / r.den as f64
+}
+
+const PHI: f64 = 1.618_033_988_749_895;
+
 fn cmp_rat(a: Rat, b: Rat) -> std::cmp::Ordering {
-    a.num
-        .mul(Phi { a: b.den, b: 0 })
-        .cmp(&b.num.mul(Phi { a: a.den, b: 0 }))
+    rat_value(a)
+        .partial_cmp(&rat_value(b))
+        .expect("finite scores")
 }
 
 /// `q = ±1`, the two quaternions that act as the identity rotation.
@@ -470,7 +479,8 @@ fn features(r: Unit) -> Vec<[i128; 3]> {
             let mut power = r;
             let mut fixed = false;
             for _ in 1..5 {
-                if rotate(power, candidate.map(Rat::integer)) == candidate.map(Rat::integer) {
+                let rotated = rotate(power, candidate.map(Rat::integer));
+                if (0..3).all(|i| rotated[i].same(Rat::integer(candidate[i]))) {
                     fixed = true;
                     break;
                 }
@@ -550,18 +560,20 @@ fn a_planted_five_fold_relation_is_learned_and_beats_the_content_controls() {
         .iter()
         .find(|g| rotation_order(**g) == 5)
         .expect("2I has rotations of order 5");
-    // Poses are 1, r, r², r³, r⁴, so the successor of index k is index k+1.
-    let poses = [
-        group[0],
-        r,
-        r.mul(r),
-        r.mul(r).mul(r),
-        r.mul(r).mul(r).mul(r),
-    ];
+    // Poses are +1, r, r², r³, r⁴, so the successor of index k is index k+1. (`group[0]` is the
+    // quaternion -1, which is the same rotation; the explicit +1 keeps the comment literal.)
+    let one = Unit {
+        n: [Phi { a: 2, b: 0 }, PHI_ZERO, PHI_ZERO, PHI_ZERO],
+        den: 2,
+    };
+    let poses = [one, r, r.mul(r), r.mul(r).mul(r), r.mul(r).mul(r).mul(r)];
     let tokens = tokens(r, &poses);
     assert_eq!(tokens.len(), 60);
 
     let fit_queries: Vec<usize> = (0..12).map(|b| b * 5).collect();
+    let held_out: Vec<usize> = (0..tokens.len())
+        .filter(|index| !fit_queries.contains(index))
+        .collect();
     let target_of = |index: usize| -> u32 {
         let token = &tokens[index];
         let b = token.id as usize / 5;
@@ -601,7 +613,8 @@ fn a_planted_five_fold_relation_is_learned_and_beats_the_content_controls() {
         }
     }
     let fitted = group[best.0];
-    let test_precision = precision(fitted, &all);
+    let test_precision = precision(fitted, &held_out);
+    let all_precision = precision(fitted, &all);
     let planted_precision = precision(r, &all);
 
     // The fitted relation must act like the planted one on the fit set, not merely tie on 12 rows.
@@ -683,20 +696,77 @@ fn a_planted_five_fold_relation_is_learned_and_beats_the_content_controls() {
         .expect("a relation that differs on the data");
     let wrong_precision = precision(wrong, &fit_queries);
 
+    // Mean rank of the target over all 60 queries, under the fitted relation.
+    let mean_rank = {
+        let total: usize = all
+            .iter()
+            .map(|&index| {
+                let query = &tokens[index];
+                let target = target_of(index);
+                target_rank(&tokens, target, |candidate| {
+                    (
+                        0,
+                        score_with_relation(
+                            fitted,
+                            query.pose,
+                            candidate.pose,
+                            query.feature_rat,
+                            candidate.feature_rat,
+                        ),
+                    )
+                })
+            })
+            .sum();
+        total as f64 / all.len() as f64
+    };
+
+    // The ordering is by f64 over exact scores; this is the margin over the runner-up.
+    let min_gap = all
+        .iter()
+        .map(|&index| {
+            let query = &tokens[index];
+            let target = target_of(index);
+            let score_of = |candidate: &Token| {
+                rat_value(score_with_relation(
+                    fitted,
+                    query.pose,
+                    candidate.pose,
+                    query.feature_rat,
+                    candidate.feature_rat,
+                ))
+            };
+            let target_score = tokens
+                .iter()
+                .find(|candidate| candidate.id == target)
+                .map(score_of)
+                .expect("the target");
+            let runner_up = tokens
+                .iter()
+                .filter(|candidate| candidate.id != target)
+                .map(score_of)
+                .fold(f64::NEG_INFINITY, f64::max);
+            target_score - runner_up
+        })
+        .fold(f64::INFINITY, f64::min);
+
     eprintln!(
-        "planted symmetry: fitted r̂ at index {} (planted acts identically), test precision@1 \
-         {:.3} (planted {:.3}); controls popcount {:.3}, L1 {:.3}; wrong r̂ {:.3}",
+        "planted symmetry: fitted r̂ at index {} (planted acts identically); held-out precision@1 \
+         {:.3}, all 60 {:.3}, planted {:.3}; controls popcount {:.3}, L1 {:.3}; wrong r̂ {:.3}; \
+         mean rank {:.2}; min target/runner-up gap {:.3}",
         best.0,
         test_precision,
+        all_precision,
         planted_precision,
         popcount_precision,
         l1_precision,
-        wrong_precision
+        wrong_precision,
+        mean_rank,
+        min_gap
     );
 
     assert!(
         test_precision >= 0.9,
-        "the fitted relation did not retrieve"
+        "the fitted relation did not retrieve on held-out queries"
     );
     assert!(
         test_precision >= popcount_precision + 0.2,
@@ -715,4 +785,6 @@ fn a_planted_five_fold_relation_is_learned_and_beats_the_content_controls() {
         wrong_precision < test_precision,
         "a wrong relation is not worse"
     );
+    assert!(mean_rank < 1.0, "the target is not near the top on average");
+    assert!(min_gap > 1e-6, "the ordering margin is within f64 noise");
 }
