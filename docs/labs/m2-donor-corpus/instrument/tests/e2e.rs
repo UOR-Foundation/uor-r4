@@ -85,7 +85,7 @@ fn serve(stream: TcpStream, mock: Arc<Mock>) {
             "{}".to_string()
         };
         mock.seen.lock().unwrap().push((head, body));
-        let proto = concat!("HTTP/1", ".1");
+        let proto = concat!("HTTP/1", ".", "1");
         let msg = format!(
             "{proto} {code} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{out}",
             out.len()
