@@ -4,7 +4,7 @@
 # The engine (vLLM) runs here, outside every compiled module (CHARTER 3.4); the client
 # is the repository's Rust instrument, built here from the copied source.
 set -euo pipefail
-W=/workspace/m2
+W=${M2_POD_W:-/workspace/m2}
 MODEL_REPO=deepseek-ai/DeepSeek-V4.1-Flash-1017
 MODEL_REV=08c8657f02291e11b6f6b63e0e16014f8e748518
 MODEL_DIR=$W/donor
@@ -86,6 +86,8 @@ run)
   # run COMMIT PARALLEL MAX_SECONDS: one segment of the corpus run, detached; resumes.
   COMMIT=${1:?}; PAR=${2:?}; SECS=${3:?}
   mkdir -p "$W/out"
+  # A restore from the laptop is incomplete: the guard does not sync during one, so refuse to run.
+  [ ! -e "$W/out/.restoring" ] || { echo "run: $W/out/.restoring exists (restore incomplete): run drive.sh put again"; exit 1; }
   nohup "$BIN" generate --server "$SERVER" --prompts "$W/bank.jsonl" --out "$W/out" \
     --budget 1000000000 --parallel "$PAR" --max-seconds "$SECS" --instrument-commit "$COMMIT" \
     ${EXTRA:+--extra-body "$EXTRA"} > "$W/run-$(date -u +%Y%m%dT%H%M%SZ).log" 2>&1 < /dev/null &

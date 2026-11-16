@@ -79,9 +79,10 @@ do_sync() {
     esac
   done <<< "$list"
   # Copies land in .incoming/ and move into out/ only once their sha256 matches the listing, so a
-  # stream cut mid-file never leaves a file under its final name.
-  local inc="$LOCAL/out/.incoming" copyfail=0
-  rm -rf "$inc"; mkdir -p "$inc"
+  # stream cut mid-file never leaves a file under its final name. Each sync has its own staging
+  # folder, so overlapping syncs (guard, wait-segment, by hand) never swap each other's files.
+  local inc copyfail=0
+  inc=$(mktemp -d "$LOCAL/out/.incoming.XXXXXX")
   if [ ${#need[@]} -gt 0 ]; then
     ssh_pod "cd $W/out && tar cf - ${need[*]}" | tar xf - -C "$inc" || { log "sync: copy failed"; copyfail=1; }
   fi
@@ -93,9 +94,20 @@ do_sync() {
       log "not verified, not kept: $name"; bad=1
     fi
   done
+  # Between final syncs the logs are still growing, so no listed sum fits them: each copy replaces the
+  # local one only when it is whole (a .jsonl ends in a newline, metrics.json parses).
+  if [ "$final" != final ]; then
+    ssh_pod "cd $W/out && tar cf - $LOGS 2>/dev/null || true" | tar xf - -C "$inc" 2>/dev/null || true
+    for name in $LOGS; do
+      [ -s "$inc/$name" ] || continue
+      case $name in
+      *.jsonl) [ -z "$(tail -c 1 "$inc/$name")" ] || { log "log copy cut short, old kept: $name"; continue; } ;;
+      *.json) jq -e . "$inc/$name" > /dev/null 2>&1 || { log "log copy unreadable, old kept: $name"; continue; } ;;
+      esac
+      mv -f "$inc/$name" "$LOCAL/out/$name"
+    done
+  fi
   rm -rf "$inc"
-  # Between final syncs the logs are still growing: copied each time, checked only by a final sync.
-  [ "$final" = final ] || { ssh_pod "cd $W/out && tar cf - $LOGS 2>/dev/null || true" | tar xf - -C "$LOCAL/out" 2>/dev/null || true; }
   [ "$copyfail" = 1 ] && return 2
   log "synced${final:+ ($final)} $(echo "$list" | grep -c . || true) files (${#need[@]} copied), mismatches=$bad; $(tail -1 "$LOCAL/out/rate.jsonl" 2>/dev/null || true)"
   return $bad
@@ -117,10 +129,25 @@ stop_run() {
   fi
 }
 
-# A verified final sync, then down. It never returns while the pod is up.
+# Keep the uor-pod lease live (leases last at most 24 h), so the reaper never takes the pod during a
+# GPU-idle stretch such as an engine restart. A failure is alerted and retried on the next pass.
+RENEW_EVERY=${M2_RENEW_EVERY:-3600}; last_renew=0
+renew_lease() {
+  local now; now=$(date +%s)
+  [ $((now - last_renew)) -ge "$RENEW_EVERY" ] || return 0
+  if "$UP" renew "$POD" --lab claude --session claude-400 --hours 24 > /dev/null 2>&1; then last_renew=$now
+  else alert "lease renew failed; retrying next pass"; fi
+}
+
+# A verified final sync, then down. It never returns while the pod is up. Two bounded exits skip
+# the final sync: the pod unreachable for UNREACH_MAX in a row (the last verified sync holds the
+# shards), and a restore marker that stays with no run (out/ then holds only laptop copies, since
+# pod.sh run refuses to start while .restoring exists). Codes 1 and 2 on a reachable pod keep it up
+# with an alert every RETRY, past the caps: the sheet's stop rules name this state.
 finish() {
-  local why=$1 rc unreach=0
+  local why=$1 rc unreach=0 stale=0
   while :; do
+    renew_lease
     rc=0; do_sync final || rc=$?
     if [ "$rc" = 0 ]; then
       log "final sync verified ($why); down"
@@ -132,8 +159,15 @@ finish() {
         alert "unreachable ${unreach}s during finish: down without a final sync (the last verified sync holds the shards)"
         if pod_down; then exit 3; fi
       fi
+    elif [ "$rc" = 3 ] && [ "$(probe)" != ALIVE ]; then
+      unreach=0; stale=$((stale + 1))
+      if [ "$stale" -ge 3 ]; then
+        alert "restore marker stayed with no run ($stale tries): out/ holds only laptop copies; down"
+        if pod_down; then exit 4; fi
+      fi
     else
-      alert "final sync not verified (code $rc, $why); pod kept up; retrying every ${RETRY}s"
+      unreach=0
+      alert "final sync not verified (code $rc, $why); pod kept up past the caps; retrying every ${RETRY}s"
     fi
     sleep "$RETRY"
   done
@@ -158,7 +192,15 @@ note)
   cat "$LOCAL/lease.env"
   ;;
 put)
-  if [ -n "$(ssh_pod "ls -A $W/out 2>/dev/null | head -1")" ]; then echo "pod $W/out is not empty: refusing" >&2; exit 1; fi
+  # The pod says EMPTY, RESTORING (an earlier put failed: out/ holds only laptop copies) or NONEMPTY;
+  # anything else (an SSH failure) refuses, so put never runs blind against a pod with real work.
+  st=$(ssh_pod "if [ -z \"\$(ls -A $W/out 2>/dev/null)\" ]; then echo EMPTY; elif [ -e $W/out/.restoring ]; then echo RESTORING; else echo NONEMPTY; fi" 2>/dev/null | tail -1 || true)
+  case $st in
+  EMPTY) ;;
+  RESTORING) echo "pod $W/out holds a failed restore: clearing it" >&2; ssh_pod "rm -rf $W/out" ;;
+  NONEMPTY) echo "pod $W/out is not empty: refusing" >&2; exit 1 ;;
+  *) echo "could not read pod $W/out (got '$st'): refusing" >&2; exit 1 ;;
+  esac
   T=$(mktemp -d "${TMPDIR:-/tmp}/m2put.XXXX")
   mkdir -p "$T/instrument"
   cp -R "$HERE/instrument/Cargo.toml" "$HERE/instrument/Cargo.lock" "$HERE/instrument/src" "$T/instrument/"
@@ -223,6 +265,7 @@ watch)
   idle=0; unreach=0
   while :; do
     now=$(date +%s); el=$((now - first)); spent=$((prior + (now - M2_LEASE_EPOCH) * M2_RATE_CENTS / 3600))
+    renew_lease
     s=$(probe)
     log "state=$s elapsed=${el}s spent_cents=$spent idle=${idle}s"
     if [ "$spent" -ge "$CAP_CENTS" ] || [ "$el" -ge "$CAP_SECONDS" ]; then
