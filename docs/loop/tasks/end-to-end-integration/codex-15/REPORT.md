@@ -85,5 +85,5 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 ## Plain summary
 
 The e-means fitter now exists as live code and passes its parity gate, but the only live codebook
-places tokens by a greedy quota rule, where e-means is 2.15x worse. The arm is opt-in and unpromoted,
+places tokens by a greedy quota rule, where e-means is 2.17x worse. The arm is opt-in and unpromoted,
 the default is unchanged, and ADR-0007 now records that its four named fit sites are uncompiled.
