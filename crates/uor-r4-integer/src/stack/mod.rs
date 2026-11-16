@@ -63,6 +63,7 @@ mod memory;
 mod point_key;
 mod prompt_reply;
 mod q31_read;
+mod context_ring;
 mod read_ledger;
 mod read_out;
 mod read_stage;
@@ -103,6 +104,7 @@ pub use format::{
     STACK_FBS_BOUND_READ_SCHEMA, STACK_FBS_Q31_READ_SCHEMA, STACK_FBS_RELATION_SCHEMA,
 };
 pub use q31_read::{read_q31_read_uorlut01, Q31ReadStep, Q31SessionRead, StackQ31Read, Q31_READ_TABLE};
+pub use context_ring::{ContextRing, ContextSpan, TopK};
 pub use read_ledger::ReadLedger;
 pub use read_out::ReadOut;
 pub use read_stage::{ContextView, Query, Read, ReadMechanism};

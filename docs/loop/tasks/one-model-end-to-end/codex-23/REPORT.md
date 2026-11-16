@@ -43,6 +43,11 @@ Lab: codex. Order: [ORDER.md](ORDER.md). Parent: [codex-22](../codex-22/REPORT.m
   at a supplied clock. `compare_on` restricts the reading to the scored rows.
 - **The renumber**: `STACK_FBS_RELATION_SCHEMA` is `"uor-r4.lut-stack/16"`; `/15` is free for
   claude-384's pair rows.
+- **The `Context` ring** (`context_ring.rs`): the probe's bounded ring and settlement gate promoted
+  into the library — `ContextSpan`, a mergeable `TopK`, `ContextRing::push(span, settled)` that
+  refuses an unsettled eviction and leaves the ring unchanged, `settle`, `sum`, `top`, `live`. The
+  probe stays independent on purpose: a gate that shared its code with the implementation would
+  only prove itself.
 
 ## Measurements
 
@@ -55,6 +60,9 @@ Lab: codex. Order: [ORDER.md](ORDER.md). Parent: [codex-22](../codex-22/REPORT.m
 `read-panel` numbers exactly, so the instrument and the panel agree.
 
 - The seam: the adapter matches the served read on every row of the fixture.
+- The ring: the fold read and the top-3 selection read equal full history across 40 spans and four
+  wraps; an unsettled eviction is refused with the blocking position and leaves the ring unchanged;
+  the stub's join is order-independent.
 - `/17`: a bound export gains the read, the tokenizer sha and the contract source survive, the
   session steps and records a read trace, and a `/17` header whose binding is stripped is refused.
 - The `/16` relation artifact re-reads and serves: **47/47** on `K=1`, 431/1,024 rows, sha256
@@ -62,16 +70,18 @@ Lab: codex. Order: [ORDER.md](ORDER.md). Parent: [codex-22](../codex-22/REPORT.m
 
 ## Checks run at the head
 
-- `cargo test --locked -p uor-r4-integer --features serving-wasm,fbs-synthetic --lib` — **696
-  passed**, 1 ignored (5 new: two seam, two adapters, one bound form, five ledger).
+- `cargo test --locked -p uor-r4-integer --features serving-wasm,fbs-synthetic --lib` — **700
+  passed**, 1 ignored (two seam, two adapter, one bound form, five ledger, four context ring).
 - `cargo test --locked -p uor-r4-native-vector` — 48 passed.
 - `cargo test --locked -p uor-r4-discrete --features cuda --lib` — 374 passed, 8 ignored.
 - `fbs-export --legacy-artifact … --relation` then `read-panel` — the `/16` artifact above.
 
 ## Still open, in order
 
-1. **`Context` ring (I2)** — the one stage with no implementation; it needs the witness pair and the
-   settled stub's serving meaning, so it is a design unit, not a knob.
+1. **`Context` ring's serving half (I2)** — the ring, the stub and both gates are in the library
+   (`context_ring.rs`); what remains is a served read consuming the stub, and the first-pick read's
+   sketch sufficiency is *not* the static one proved here, because it ranks against the current
+   query. That is the unit to order, and it should not claim I2 closed before it runs.
 2. **A contract for `/17`** — a `conformance/stack/*.toml` that names the read section and its
    mechanism, and `stack_contract`/`stack_audit` recognising the schema.
 3. **The protocol run** (`one-model-end-to-end`) — a run with contract, tokenizer and read; the
