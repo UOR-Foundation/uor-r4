@@ -15260,7 +15260,7 @@ pub fn write_recall_row_targets(dump: &std::path::Path, targets: &RecallRowTarge
 /// read captured ([`crate::vector_reads::capturing_replay`]) and split into windows of the sheet's
 /// context, with the held-out query rows marked. Every forward must be one Flock read of all its
 /// rows, under one read state.
-fn native_replay_pass(
+pub(crate) fn native_replay_pass(
     model: &StackModel,
     held: &[(CausalWindow, Vec<RecallQuery>)],
     seed: u64,

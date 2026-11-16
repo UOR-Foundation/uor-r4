@@ -33,7 +33,9 @@ use crate::geometric_stack::{
     Gate, QuaternionWeights, RecGates, RotationGroup, StackArch, StackConfig, StackModel,
     RMS_EPSILON,
 };
+use crate::hamilton_sheet::SHEET_CONTEXT;
 use crate::native_vector_writer::WriterSpec;
+use uor_r4_native_vector::Q31FirstPickRead;
 use crate::{invalid, Result};
 
 /// The six projections of one recurrence layer, in [`FbsTrunkLayer`] order.
@@ -321,6 +323,71 @@ const CHECKPOINT_ACCOUNTED: [&str; 5] = [
     "turn_memory_reply.safetensors",
     "hamming_read.safetensors",
 ];
+
+/// The checkpoint's learned vector read as the integer `/14` first-pick read, at the FBS
+/// stream/table scale: the replay's gates and weights, with the payload moved from the replay's
+/// `e_w` to the FBS read's `e_w = 31 - gain`.
+///
+/// The FBS artifact's stream and table are Q12, so the read's payload is at `31 - gain`; with the
+/// read's largest weight below `2^-2`, `e_w = 29` and `gain = 2`. The picks are scale-free (the
+/// address is a sign), so the move changes only the payload's scale. `None` for a checkpoint with
+/// no vector read.
+pub fn q31_read_sidecar(
+    model: &StackModel,
+    seed: u64,
+) -> Result<Option<(usize, Q31FirstPickRead)>> {
+    let Some(read) = crate::vector_reads::vector_read() else {
+        return Ok(None);
+    };
+    let depth = read.depth();
+    let held: Vec<_> = (0..128)
+        .map(|i| {
+            crate::in_space_long::recall_query_window(seed, i as u64, SHEET_CONTEXT, 4)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let (state, windows) = crate::in_space_long::native_replay_pass(model, &held, seed)?;
+    let (summary, dump) = crate::native_replay::replay_with_dump(&state, &windows)?;
+    let Some(dump) = dump else {
+        return Err(invalid("the native replay refused the learned read"));
+    };
+    let e_w = summary
+        .run
+        .as_ref()
+        .ok_or_else(|| invalid("the native replay made no run"))?
+        .scales
+        .e_w;
+    // The FBS artifact's stream and table are Q12, so the payload's scale is `31 - gain`. The
+    // gain follows the read's own largest weight: the smallest `g` with `max |w| * 2^-g <= 1`.
+    let max = dump
+        .read
+        .weights()
+        .iter()
+        .map(|weight| weight.unsigned_abs())
+        .max()
+        .unwrap_or(0);
+    let limit = 1u64 << 31;
+    let mut shift = 0u32;
+    while shift < 31
+        && max
+            .checked_shl(shift + 1)
+            .is_some_and(|moved| moved <= limit)
+    {
+        shift += 1;
+    }
+    if max != 0 && max.checked_shl(shift).is_none_or(|moved| moved > limit) {
+        return Err(invalid("the read's payload weight does not fit the FBS scale"));
+    }
+    let fbs_e_w = e_w + shift as i32;
+    let gain = 31 - fbs_e_w;
+    if !(0..=31).contains(&gain) {
+        return Err(invalid("the FBS payload gain is outside 0..=31"));
+    }
+    let read = dump
+        .read
+        .rescale_payload(shift, gain as u32)
+        .map_err(|e| invalid(e.to_string()))?;
+    Ok(Some((depth, read)))
+}
 
 /// Refuse a checkpoint directory that holds a read the export does not carry, naming every one,
 /// so the export never serves the trunk without it (claude-198). A reply table without its

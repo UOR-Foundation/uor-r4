@@ -104,9 +104,11 @@ use uor_r4_float_train::fbs_export::{
     check_checkpoint_reads, check_checkpoint_reads_carrying, check_readout_reads,
     fbs_float_readout, fbs_float_readout_on, fbs_float_readout_served, fbs_float_readout_served_on,
     fbs_hamming_snapshot_with_ask, fbs_memory_snapshot, fbs_trunk_snapshot,
+    q31_read_sidecar,
     round_hamming_as_exported, round_tables_as_exported, run_rate_reading, write_rounded_copy,
     CHECKPOINT_ADDRESS, READOUT_SEQUENCES,
 };
+use uor_r4_float_train::vector_reads::{set_vector_read, VectorRead};
 use uor_r4_float_train::flock_read_hamming::{
     set_hamming_reads, set_hamming_tie_rule, set_hamming_trace, take_hamming_trace, HammingReads,
     HAMMING_DEPTHS, HAMMING_KEPT,
@@ -725,12 +727,18 @@ fn main() -> Result<()> {
     // Every read the checkpoint holds is carried, or the export is refused (claude-198), before
     // the GPU is opened. The address memory (claude-366) is carried in a rows file beside the
     // snapshot, written below.
-    check_checkpoint_reads_carrying(dir, &[CHECKPOINT_ADDRESS])?;
+    // The learned vector read (claude-20x) is carried in a `.q31read` file beside the snapshot,
+    // written below; the export refuses a checkpoint with a read it would drop.
+    check_checkpoint_reads_carrying(dir, &[CHECKPOINT_ADDRESS, "vector_read.safetensors"])?;
     check_readout_reads(dir, readouts.len())?;
     // The run's rate reading (integer-retention-rates, claude-226), from its `config.json` two
     // levels above `models/step-N`. The snapshot carries it, and the float readouts below are
     // taken under it, as the run trained and scored.
     let config = run_config(dir)?;
+    let seed = serde_json::from_str::<serde_json::Value>(&config)
+        .ok()
+        .and_then(|value| value["seed"].as_u64())
+        .ok_or_else(|| FloatTrainError::Invalid("the run config has no seed".to_owned()))?;
     let retain = run_rate_reading(&config)?;
     // And its readout (integer-nearest-readout, claude-231): a cell or nearest objective decodes
     // as the whole table's nearest token.
@@ -738,6 +746,9 @@ fn main() -> Result<()> {
     set_retention_rates(retain);
     let device = Device::new_cuda(0)?;
     let model = StackModel::load(dir, &device)?;
+    // The learned read is a process-global; the checkpoint's saved read must be set before the
+    // capture that converts it.
+    set_vector_read(VectorRead::load(dir, &device)?);
     let mut snapshot = fbs_trunk_snapshot(&model)?;
     snapshot.memory = TurnMemory::load(dir, &device)?
         .map(|memory| fbs_memory_snapshot(&memory, SHEET_CONTEXT))
@@ -797,6 +808,12 @@ fn main() -> Result<()> {
             )));
         }
         write(&format!("{out}.address-rows"), &address.to_bytes())?;
+    }
+    // The learned vector read as the integer `/14` first-pick read, at the FBS stream/table
+    // scale; the snapshot alone does not carry it.
+    if let Some((depth, read)) = q31_read_sidecar(&model, seed)? {
+        let side = serde_json::json!({"depth": depth, "read": hex::encode(read.to_bytes())});
+        write(&format!("{out}.q31read"), &serde_json::to_vec(&side)?)?;
     }
     write(out, &json)?;
     // The readouts are the float model with its Hamming reads (claude-200): `StackModel::hidden`
