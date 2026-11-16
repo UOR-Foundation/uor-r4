@@ -26,13 +26,13 @@ D87 (Casey, 16 Nov 2026, recorded `2026-11-16T02:37:46Z`): "gpt-oss-120b on B200
    - `count` counts kept tokens in the project's 4,096-token tokenizer.
 2. **Prompt bank:** about 600k–900k prompts, mostly single-turn with about 10% two-turn exchanges. Every assistant turn is the teacher's own. The sources and their licences are registered in the sheet. Only user turns are taken from outside data.
 3. **Smoke** on the leased pod: 32 prompts through the head `generate` before the timed hour.
-4. **One measured hour** on one pod. Projected cost and time for 1B kept tokens are taken from that hour plus the setup time already spent. If the projection is over $1,000 or over 48 h, the run switches to D87's fallback, gpt-oss-120b, on its own sheet amendment.
+4. **One measured hour** on one pod. Projected cost and time for 1B kept tokens are taken from that hour plus the setup time already spent. If the projection is over $1,000 or over 48 h, the unit does not switch donors: the pod is stopped, the measured hour is saved and sealed as a partial set, and the unit reports the numbers with its fallback recommendation (gpt-oss-120b on B200s) for the parent session to put to Casey. Casey chose DeepSeek V4.1 Flash and chose no fallback (parent correction from the exact-head review of #4027, head 6751be0bd).
 5. **Run to 1B kept tokens.** The rate cap is `UOR_POD_MAX_RATE=35` for this run only. A completion watcher is armed. Shards are copied off the pod continuously and before `down`.
 6. **Seal:** the receipt, upload to the HF store, readback verify, the REPORT (negatives first), and a `data-tokenizer` notebook row.
 
 ## Owner terms and lab conditions (D87), and how each is met
 
-- **Teacher:** DeepSeek V4.1 Flash, MIT, pinned to an exact checkpoint, licence read on the card. Fallback: gpt-oss-120b (Apache 2.0).
+- **Teacher:** DeepSeek V4.1 Flash, MIT, pinned to an exact checkpoint, licence read on the card. Recommended fallback, not an owner term: gpt-oss-120b (Apache 2.0).
 - **Hard text only:** records hold `reasoning` and `answer` strings and nothing else. No logits, probabilities, scores or ranks are requested or stored. `verify` rejects any other key. (b) stays deferred; (c) and (d) stay banned.
 - **Outside every compiled module (§3.4):** the engine runs on the pod. The instrument is an HTTP client.
 - **Caps:** 4 pods and $35/h across all labs, for this run only. Other labs' pods are counted at lease time.

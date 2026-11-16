@@ -6,7 +6,7 @@ TEST FITNESS: PENDING - a fresh-context non-author round runs on this sheet befo
 
 ## The question
 
-At what measured rate and cost does DeepSeek V4.1 Flash on one rented 8×H200 pod produce hard reasoning-plus-answer texts? If the rate fits D87's bounds, the unit produces and seals 1B kept tokens from it. If it does not, D87's fallback (gpt-oss-120b) produces them instead, under the branch registered below.
+At what measured rate and cost does DeepSeek V4.1 Flash on one rented 8×H200 pod produce hard reasoning-plus-answer texts? If the rate fits D87's bounds, the unit produces and seals 1B kept tokens from it. If it does not, the unit stops the pod and reports the measured numbers with a fallback recommendation; it does not switch donors itself, because Casey chose DeepSeek V4.1 Flash and chose no fallback.
 
 ## Steps
 
@@ -17,12 +17,12 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 8×H200 po
 5. **Smoke** (instrument check, not corpus): `generate --limit 32 --parallel 8` into `smoke/`. It checks that `reasoning` and `answer` arrive in separate fields with no markup, that two-turn prompts run, and that `seal`/`verify` pass on the smoke directory. The smoke output is never part of the corpus.
 6. **Tuning, at most 20 minutes:** client `--parallel` 256, then 512, each for 8 minutes from the start of the bank. The setting with the higher kept tokens per minute over its last 5 minutes is kept. These records stay in the corpus, because they are the bank's first prompts at the same sampling.
 7. **The measured hour:** 60 minutes at the kept setting, read from `rate.jsonl` (kept tokens in donor tokens per minute). The projection is P_cost = spent + (1B − kept) / R / 3600 × rate_per_h, and P_time = elapsed + (1B − kept) / R / 3600, where R is the hour's mean kept tokens/s.
-8. **Continue or switch:** if P_cost ≤ $1,000 and P_time ≤ 48 h, the run continues to the 1B kept-token budget. Otherwise the DeepSeek run stops, its shards are saved and kept as a separate sealed partial set, and the fallback branch runs.
+8. **Continue or switch:** if P_cost ≤ $1,000 and P_time ≤ 48 h, the run continues to the 1B kept-token budget. Otherwise the DeepSeek run stops, its shards are copied off, sealed and verified as a separate partial set, the pod goes `down`, and the unit reports P_cost, P_time, R and the fallback recommendation below as its result. The parent session puts the choice to Casey; nothing more is leased under this sheet until Casey answers.
 9. **Offload:** every 10 minutes, finished shards and their counts files are copied off the pod to the laptop and checked by sha256. That copy is the watcher's main job. `down` comes only after the last copy is verified.
 10. **Seal and verify:** `seal` writes `receipt.json` (shard sha256s and Merkle root, the bank's sha256, the counts, rate and segment logs, the instrument commits, model, engine image and digest, GPUs). `verify` runs on the laptop, and again after a fetch back from the HF store (`results/claude/m2-donor-corpus-2026-11-16/`).
 11. **Project tokenizer:** kept texts are counted in the 4,096-token tokenizer (sha256 `d36d3e87…`) on the laptop, if its encoder runs at that scale. This is a count only, with no bar.
 
-**Fallback branch, registered now:** `openai/gpt-oss-120b` at revision `b5c939de8f754692c1647ca79fbf85e8c1e70f8a` (Apache-2.0, not gated), on the cheapest verified B200 offer that fits the cap (2×B200 was $24.79/h on 15 Nov). It uses the same vLLM image, client, bank (continuing after the DeepSeek prompts), sampling and stop rules. Reasoning comes from the analysis channel through vLLM's gpt-oss reasoning parser, with `reasoning_effort` "medium" passed through `--extra-body`. The same smoke, measured hour and bounds apply. The REPORT records why the switch happened.
+**Fallback recommendation (the lab's, not an owner term; it does not run under this sheet):** `openai/gpt-oss-120b` at revision `b5c939de8f754692c1647ca79fbf85e8c1e70f8a` (Apache-2.0, not gated), on the cheapest verified B200 offer that fits the cap (2×B200 was $24.79/h on 15 Nov). It would use the same vLLM image, client, bank (continuing after the DeepSeek prompts), sampling and stop rules, with reasoning from the analysis channel through vLLM's gpt-oss reasoning parser and `reasoning_effort` "medium" passed through `--extra-body`. If Casey chooses it, it runs under a sheet amendment with its own FIT, smoke, measured hour and bounds.
 
 ## Bar
 
@@ -36,7 +36,7 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 8×H200 po
 
 **Reading map** (fixed before the run):
 - **P:** B1–B5 hold. The corpus is sealed and stored. The REPORT gives tok/s, wall time and dollars.
-- **F (fallback):** the measured hour projects > $1,000 or > 48 h. The fallback branch runs, and its own P/I/Q/S reading applies. The DeepSeek partial set is stored, marked partial, and is not mixed into the 1B corpus.
+- **F (over bound):** the measured hour projects > $1,000 or > 48 h. The pod goes down, the DeepSeek partial set is sealed, stored and marked partial, and the unit reports the numbers and its fallback recommendation for Casey's choice. No donor switch happens under this sheet.
 - **I (instrument):** B2 or B4 fails. The instrument is repaired, and nothing is used until a re-verify passes.
 - **Q (quality):** only B3 fails. The corpus is sealed and stored with the failure named. Use waits on the cause.
 - **S (short):** B1 fails because of the hard stop or the money bound. The partial corpus is sealed and stored. The REPORT gives the cause and the measured numbers.
@@ -70,7 +70,8 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 8×H200 po
 
 - **DeepSeek path:** $34.25/h was quoted on 15 Nov. At R kept tokens/s, 1B takes 277,778 / R hours. The $1,000 bound with about 1.5 h of setup (~$51) needs R ≥ about 10,000. The 48 h bound needs R ≥ about 5,800.
 - **Unmeasured guess:** 10–30 h and $340–1,030. Weights download at about 1 GB/s; setup is estimated at 1–1.5 h.
-- **Fallback:** about 5–10 h on 2×B200 at about $25/h, if the published per-B200 rate holds. That is a hypothesis.
+- **Fallback recommendation (not run here):** about 5–10 h on 2×B200 at about $25/h, if the published per-B200 rate holds. That is a hypothesis, given to Casey with the measured hour if F applies.
+- **F path cost:** setup plus the measured hour, about 2.5–3 h at $34.25/h (about $85–105).
 - **Caps:** at $34.25/h this run alone nearly fills the $35/h cap, so it is one pod, not four, and no other lab can lease meanwhile. Other labs' pods are counted at lease time, and the run waits if they would breach the cap.
 
 ## Stop rule
