@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pod.sh STEP: the on-pod recipe for claude-400 (D87), run inside the vLLM image on the
-# leased Vast pod (4xH200, 8xH200 or 4xB200; sheet amendments 2-3). Steps: setup | serve | wait-ready | smoke | run | status.
+# leased Vast pod (4xH200, 8xH200 or 4xB200; sheet amendments 2-4). Steps: setup | serve | unserve | wait-ready | smoke | run | status.
 # The engine (vLLM) runs here, outside every compiled module (CHARTER 3.4); the client
 # is the repository's Rust instrument, built here from the copied source.
 set -euo pipefail
@@ -13,7 +13,7 @@ SERVER=http://127.0.0.1:$PORT
 BIN=$W/instrument/target/release/donor-corpus
 mkdir -p "$W"
 
-step=${1:?usage: pod.sh setup|serve|wait-ready|smoke|run|status}
+step=${1:?usage: pod.sh setup|serve|unserve|wait-ready|smoke|run|status}
 shift
 case $step in
 setup)
@@ -59,6 +59,12 @@ serve)
     b200-tp4) TP=4; MAX_SEQS=256; ATTN=(--attention-config "$B200_ATTN") ;;
     *) echo "serve: unknown preset $1"; exit 1 ;;
   esac
+  # serve PRESET SEQS (amendment 4): the sequences per replica for a tuning segment, a plain
+  # positive integer, so that nothing is quoted through ssh.
+  if [ -n "${2:-}" ]; then
+    case $2 in *[!0-9]*|0*) echo "serve: sequences per replica must be a positive integer, got $2"; exit 1 ;; esac
+    MAX_SEQS=$2
+  fi
   NG=$(nvidia-smi -L | wc -l); DP=$((NG / TP))
   [ "$DP" -ge 1 ] && [ $((DP * TP)) -eq "$NG" ] || { echo "serve: $NG GPUs is not a multiple of $TP"; exit 1; }
   echo "serve: $NG GPUs, data-parallel $DP x tensor-parallel $TP, max-num-seqs $MAX_SEQS${ATTN[1]:+, attention ${ATTN[1]}}"
@@ -76,6 +82,23 @@ serve)
     > "$W/vllm.log" 2>&1 < /dev/null &
   echo $! > "$W/vllm.pid"
   echo "vllm pid $(cat "$W/vllm.pid"), log $W/vllm.log"
+  ;;
+unserve)
+  # Stop this pod's vLLM for a serve restart (amendment 4 tuning), by pid only: the server's pid,
+  # then any GPU compute process left (on this rented pod only our own vLLM workers use the GPUs).
+  pid=$(cat "$W/vllm.pid")
+  kill -TERM "$pid" 2>/dev/null || true
+  for _ in $(seq 1 36); do kill -0 "$pid" 2>/dev/null || break; sleep 5; done
+  for sig in TERM KILL; do
+    left=$(nvidia-smi --query-compute-apps=pid --format=csv,noheader | tr -d ' ' || true)
+    [ -z "$left" ] && break
+    echo "unserve: GPU processes left ($(echo "$left" | tr '\n' ' ')): SIG$sig by pid"
+    for p in $left; do kill -"$sig" "$p" 2>/dev/null || true; done
+    sleep 30
+  done
+  used=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | sort -n | tail -1)
+  [ "$used" -lt 2048 ] || { echo "unserve: a GPU still holds $used MiB"; exit 1; }
+  echo "unserve: vllm stopped, every GPU under 2 GiB"
   ;;
 wait-ready)
   for _ in $(seq 1 720); do
@@ -102,12 +125,25 @@ smoke)
   ;;
 run)
   # run COMMIT PARALLEL MAX_SECONDS: one segment of the corpus run, detached; resumes.
-  COMMIT=${1:?}; PAR=${2:?}; SECS=${3:?}
+  # run COMMIT PARALLEL MAX_SECONDS PART (amendment 4): PART 0-3 is one quarter of the bank, lines
+  # [PART*Q, (PART+1)*Q) with Q = 173,091, so no prompt is generated on two pods. Its base seed is
+  # 20261116 + 2*PART*Q, so turn_seed(base, i, t) = base + 2i + t gives each prompt the seed of its
+  # index in the full bank. Its budget is a quarter of 1B. Without PART: the full bank and 1B.
+  COMMIT=${1:?}; PAR=${2:?}; SECS=${3:?}; PART=${4:-}
+  BANK=$W/bank.jsonl; SEED=20261116; BUDGET=1000000000
+  if [ -n "$PART" ]; then
+    case $PART in 0|1|2|3) ;; *) echo "run: PART must be 0, 1, 2 or 3, got $PART"; exit 1 ;; esac
+    Q=173091
+    [ "$(wc -l < "$W/bank.jsonl")" -eq $((4 * Q)) ] || { echo "run: the bank is not $((4 * Q)) lines"; exit 1; }
+    BANK=$W/bank-part-$PART.jsonl; SEED=$((20261116 + 2 * PART * Q)); BUDGET=250000000
+    sed -n "$((PART * Q + 1)),$(((PART + 1) * Q))p" "$W/bank.jsonl" > "$BANK.tmp" && mv "$BANK.tmp" "$BANK"
+    [ "$(wc -l < "$BANK")" -eq "$Q" ] || { echo "run: $BANK is not $Q lines"; exit 1; }
+  fi
   mkdir -p "$W/out"
   # A restore from the laptop is incomplete: the guard does not sync during one, so refuse to run.
   [ ! -e "$W/out/.restoring" ] || { echo "run: $W/out/.restoring exists (restore incomplete): run drive.sh put again"; exit 1; }
-  nohup "$BIN" generate --server "$SERVER" --prompts "$W/bank.jsonl" --out "$W/out" \
-    --budget 1000000000 --parallel "$PAR" --max-seconds "$SECS" --instrument-commit "$COMMIT" \
+  nohup "$BIN" generate --server "$SERVER" --prompts "$BANK" --out "$W/out" --seed "$SEED" \
+    --budget "$BUDGET" --parallel "$PAR" --max-seconds "$SECS" --instrument-commit "$COMMIT" \
     ${EXTRA:+--extra-body "$EXTRA"} > "$W/run-$(date -u +%Y%m%dT%H%M%SZ).log" 2>&1 < /dev/null &
   echo $! > "$W/run.pid"
   echo "run pid $(cat "$W/run.pid")"

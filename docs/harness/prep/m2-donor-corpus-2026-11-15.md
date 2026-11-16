@@ -91,6 +91,43 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 4×H200 po
    - **Reading M:** as in amendment 2, with R per replica = R / DP.
      - Projection (b) is one TP2 replica on a 2×B200 at the cheapest verified datacenter rate listed at report time (the 2×B200 is Blackwell's per-replica shape, and was $24.79/h on 15 Nov), plus the N such pods the $35/h cap allows. The 2×B200 must have at least 250 GB of RAM for one Engram copy. If none is listed at report time, the REPORT says so and uses the 15 Nov $24.79/h figure, with its date.
      - If the run fell back to TP4, (b) is a 4×B200 at its rate, which is over $35/h; the REPORT says so.
+
+   **Amendment 4 (16 Nov 2026): the full 1B on up to four 4×B200 pods.** In claude's chat at about 2026-11-16T06:50Z Casey wrote, word for word: "approve 4 pods at $43.41/h for the full 1B - make sure you do everything possible to make these run as quickly as possible for as cheap as possible because 1270$ sped is ridiculous". The parent session relayed it and reads it as: up to 4 pods, each at no more than $43.41/h all-in ($173.64/h in all), for the full 1B. It records this as D88 on `main` in its own PR. The measured hour still runs and is read as M; the REPORT gives R over the hour and over its last 50 minutes. The run then continues to 1B. Everything in amendments 2 and 3 applies except what follows. Leases are run from the parent session, because this session's permission check refuses `up`. They use this sheet's commands, the machine and price pin, and the `offer`, `note` and guard steps.
+   - **Overrides:**
+     - amendment 2's measured-hour-only scope and its step 8;
+     - the Stop rule's $1,100 and 60 h stops and its one re-lease, replaced by the per-pod caps below;
+     - the Cost section's "fan-out is not part of this sheet".
+   - **Hosts:** Vast verified datacenter 4×B200, reliability ≥ 0.985, at no more than $43.41/h all-in with 700 GB.
+     - Each lease uses `UOR_POD_MAX_RATE=44 ... --hours 24 --purpose "D87 donor corpus: full 1B, part K (Casey 06:50Z)" --gpu b200 --count 4`. Then `M2_EXPECT_MACHINE=<the machine up rented> M2_MAX_DPH=43.42 drive.sh offer POD` runs amendment 3's checks.
+     - At most 4 pods, pod 3 included; all labs' pods count against the 4-pod cap at lease time. At 06:50Z one more machine qualified: 137780 (offer 58523928).
+     - An 8×B200 ($85.01/h) is not taken under this amendment; it needs Casey's word.
+     - Interruptible (bid) pricing is not used: `uor-pod` has no bid path, and none is built here.
+   - **Cost per kept token is the target.** Tuning on pod 3 starts right after the measured hour, under `drive.sh hold`, with segments back to back. Each segment is 8 min and is read over its last 5 minutes, as in step 6. The reading to beat is segment A's: 256 in flight, 2,840,610 kept tokens.
+     1. `pod.sh unserve`, then `serve b200 512` (512 sequences per replica), `wait-ready`, and a run at `--parallel 1024`. KV room: each replica's cache holds 43.6M tokens, and 512 × about 17k is about 8.7M.
+     2. If step 1 beats the reading by at least 5%, repeat with `serve b200 1024` and `--parallel 2048`.
+     3. Only if step 1 does not beat it: TP4 (`serve b200-tp4 512`, `--parallel 512`). TP4 halves the replica count, so it can only win where TP2 cannot use more sequences.
+     4. Production runs at the setting with the best reading. If that is not the one being served, one more restart. Each restart costs about 14 min of engine start (06:11–06:25Z on pod 3), about $10. New pods serve at the chosen setting from the start.
+   - **Wasted tokens:** across segments A and B, 5,557 records were kept and 125 dropped (121 for length, 4 empty). Length-dropped records hold about 16% of the generated tokens. A tighter `max_tokens` loses more kept text than it saves:
+     - at 12,288 it cuts 64 kept records (902k kept tokens) to save about 496k generated;
+     - at 8,192 it cuts 182 kept records (2.07M) to save about 991k.
+
+     So `max_tokens` stays at 16,384. Prefix caching is already on (`enable_prefix_caching=True` in the engine log).
+   - **Bank split:** `pod.sh run COMMIT PAR SECS PART`, with PART 0–3. Q = 173,091, a quarter of the bank.
+     - Each part is bank lines PART×Q + 1 to (PART+1)×Q, with base seed 20261116 + 2×PART×Q, so every prompt keeps the seed of its full-bank index.
+     - The budget is 250M kept tokens per part. Parts are disjoint, so no prompt is generated twice.
+     - Pod 3 is part 0. It dispatches in bank order and had dispatched 5,682 prompts by 06:53Z (about 16k an hour at 256 in flight), all below index Q.
+     - Yield so far is about 1,875 kept tokens per dispatched prompt (10.65M over 5,682), about 325M per part. A part that runs out first stops at its total, and the REPORT gives it. Any shortfall from 1B is the Stop rule's top-up bank, a new sheet.
+   - **Local folders:** pod 3 keeps `local/m2-run/`. Pod K's folder is `local/m2-run/part-K/` (`M2_LOCAL`): its own lease, guard state and `out/`, plus copies of `bank.jsonl`, its manifest, `model.json` and `engine.json`. Shard names repeat across pods, so folders are never shared.
+   - **New pods** run `put`, `setup`, `machine`, `serve` at the chosen setting, `wait-ready`, then production. The smoke is not repeated: the image, instrument commit and attention config are the ones pod 3's smoke proved. `verify` against the full bank runs on each part's first synced shard.
+   - **Production:** one segment per pod, `run COMMIT <best PAR> 57600 PART`. It stops at the part's budget. The guard then makes its final verified sync and downs the pod after the 15 min grace.
+   - **Guard per pod:** `M2_CAP_CENTS=45000 M2_CAP_SECONDS=57600 M2_GRACE=900 M2_GRACE_FIRST=9000`.
+     - Pod 3's guard is restarted with these caps before amendment 2's 11:47Z stop. The parent stopped and restarted it before, by pid, and does so again.
+     - Pod 3's caps count from the first lease (03:47Z) and include pod 1's cents, so it stops by 19:47Z or $450. Pod 2's ~$11 is outside the guard and is added by hand in the REPORT.
+     - A new pod's caps count from its own lease.
+     - One re-lease per part, through `put`'s restore into a new pod.
+     - The caps are a backstop: $1,800 at most over 4 pods. The projection after tuning governs, and the REPORT gives it.
+   - **Seal:** one sealed set per part, each verified against the full `bank.jsonl`. `verify` checks records by id, so the full bank holds for every part. Each set is stored at `results/claude/m2-donor-corpus-2026-11-16/part-K/` and read back. The REPORT lists the four roots and the summed kept tokens. Each set's `engine.json` names every serve setting it ran with and the UTC from which each applied.
+   - **Expected:** if tuning gains nothing, one pod at about 9.5k kept tokens/s needs about 29 h for 1B, about $1,270. Four pods cut the wall time to about a quarter, for about $20 more setup per new pod. Each doubling of R halves the cost.
 3. **Setup** (`docs/labs/m2-donor-corpus/pod.sh setup`): download `deepseek-ai/DeepSeek-V4.1-Flash-1017` at revision `08c8657f02291e11b6f6b63e0e16014f8e748518` (MIT, not gated, about 511 GB in 48 shards). Check every LFS file against Hugging Face's sha256. Build the client on the pod at the receipt's instrument commit. Then `drive.sh machine POD` writes `machine.json` from the lease (offer, rate, lease time) and the pod's `gpus.csv`, `host-mem.txt` and vLLM version, and pushes it to the pod. `model.json` and `engine.json` are written on the laptop before `put` and hold the pins of Base artifact.
 4. **Serve:** one vLLM server, `--tensor-parallel-size 4` with `--data-parallel-size` set to the GPU count over 4 (1 on a 4×H200; `pod.sh serve` refuses a count that is not a multiple of TP, which is 4 unless a preset of amendment 3 sets it), with the recipe's H200 settings: `--tokenizer-mode deepseek_v41`, `--kv-cache-dtype fp8`, `--engram-config '{"cpu_offload":true}'`, `--reasoning-parser deepseek_v41`, `--language-model-only`, no speculative decoding (the recipe marks it for small batches), `--max-num-seqs 256 --max-num-batched-tokens 8192`.
 5. **Smoke** (instrument check, not corpus): `generate --limit 32 --parallel 8` into `smoke/`. It checks that `reasoning` and `answer` arrive in separate fields with no markup, that two-turn prompts run, and that `seal`/`verify` pass on the smoke directory. Smoke refuses to start if `model.json`, `machine.json` or `engine.json` is missing. It fails unless the recorded segment shows effort 50, max_tokens 16,384, base seed 20261116 and model name `donor`; temperature 1 and top-p 1 are fixed in the request body. The smoke output is never part of the corpus.
