@@ -63,9 +63,12 @@ does not need another gate fit. The next unit integrates stage 2 into the model 
 
 ## Still open
 
-- The two-stage rule read, and its finite test on the same dump.
+- **Integrate stage 2 into the model read.** The probe's rule uses the window's fact positions (the
+  generator's stream), so a served read needs a fact/relation scan over the context before the
+  candidate rule. The `ReadOut` support/payload interface is the place; that is the next unit.
+- The `chose_target` half on the C2′ panel, with stage 2 active.
 - The 395/397 bars and the production panel.
-- Whether a global gate search would move the ceiling; not this mechanism.
+- Whether a global gate search would move the gate ceiling; not this mechanism.
 
 ## Plain summary
 
