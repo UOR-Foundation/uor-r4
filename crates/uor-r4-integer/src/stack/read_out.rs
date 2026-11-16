@@ -54,6 +54,14 @@ impl ReadOut {
         }
     }
 
+    /// The 1-based pick of a row-writing read, or 0 when it chose none.
+    pub fn pick(&self) -> u32 {
+        self.support
+            .first()
+            .map(|position| u32::from(*position) + 1)
+            .unwrap_or(0)
+    }
+
     /// The invariant a consumer may rely on. `Ok` for every value this module builds; a hand-built
     /// value with mismatched lengths or both a payload and weights is refused.
     pub fn check(&self) -> Result<(), &'static str> {
@@ -75,12 +83,14 @@ mod tests {
     fn a_first_pick_is_one_position_and_a_row() {
         let out = ReadOut::first_pick(3, vec![7, 8]);
         assert_eq!(out.support, vec![2]);
+        assert_eq!(out.pick(), 3);
         assert!(out.weights_q31.is_empty());
         assert_eq!(out.payload.as_deref(), Some(&[7, 8][..]));
         assert_eq!(out.check(), Ok(()));
 
         let none = ReadOut::first_pick(0, vec![1]);
         assert!(none.support.is_empty());
+        assert_eq!(none.pick(), 0);
         assert_eq!(none.check(), Ok(()));
     }
 

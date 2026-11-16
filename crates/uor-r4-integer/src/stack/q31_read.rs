@@ -175,9 +175,7 @@ impl ServedQ31Read {
     }
 
     /// The read's common result at this row: the picked position (1-based, 0 for none) and the row
-    /// it writes. Mutates `history` exactly as [`Self::serve`] does; `x` is not written. The stage
-    /// wiring consumes it; until then the tests exercise it.
-    #[allow(dead_code)]
+    /// it writes. Mutates `history` exactly as [`Self::serve`] does; `x` is not written.
     pub fn read_out(
         &self,
         history: &mut Q31ReadHistory,
@@ -208,20 +206,21 @@ impl ServedQ31Read {
         x: &mut [i32],
     ) -> Result<(), StackError> {
         let x_in: Vec<i64> = x.iter().map(|&v| i64::from(v)).collect();
-        let (pick, out) = self
-            .read
-            .step(history, &x_in, token, &self.table)
-            .map_err(|e| StackError::Numerics(format!("q31.read: {e}")))?;
-        if out.iter().any(|&w| i32::try_from(w).is_err()) {
-            return Err(StackError::Numerics(
-                "q31.read: an out word of +2^31 does not fit the residual".to_owned(),
-            ));
-        }
-        for (x, &w) in x.iter_mut().zip(&out) {
+        // The served read consumes the common result: the pick and the row it writes.
+        let result = self.read_out(history, token, x)?;
+        let payload = result
+            .payload
+            .as_deref()
+            .expect("a first-pick read writes a row");
+        for (x, &w) in x.iter_mut().zip(payload) {
             *x = w as i32;
         }
         if let Some(trace) = trace {
-            trace.push(Q31ReadStep { pick, x_in, out });
+            trace.push(Q31ReadStep {
+                pick: result.pick(),
+                x_in,
+                out: payload.to_vec(),
+            });
         }
         Ok(())
     }

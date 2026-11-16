@@ -14,9 +14,9 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   a claim that the wording was met in full.
 - **Only the copy head is adapted.** The type and ask heads, flock, route and relation are not; the
   Hamming adapter covers `CopyHeads` with the margin weights.
-- **The Q31 adapter duplicates `serve`'s step and fit check.** `serve` is unchanged; the duplication
-  is what makes the adapter's equality test meaningful. The method carries `#[allow(dead_code)]`
-  until a stage wires it.
+- **The served Q31 read now consumes the result.** `serve` calls `read_out`, writes its payload and
+  traces its pick; the existing `apply`/trace tests are the bit-identical check. No other caller
+  changed, and no output moved.
 - **`first_pick` maps the pick to a one-position support** (`pick - 1`), with the row as `payload`;
   a consumer must read the payload, not weights. A future consumer that expects weights from every
   read would be wrong; `ReadOut::check` refuses a result with both.
@@ -29,8 +29,10 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 - `crates/uor-r4-integer/src/stack/read_out.rs` (new): `ReadOut` with `first_pick`, `selection`,
   `check`, and four unit tests.
 - `crates/uor-r4-integer/src/stack/mod.rs`: `mod read_out;` and `pub use read_out::ReadOut;`.
-- `crates/uor-r4-integer/src/stack/q31_read.rs`: `ServedQ31Read::read_out` (the pick and the row,
-  stepped as `serve` does) and a test that its written row equals `serve`'s over three rows.
+- `crates/uor-r4-integer/src/stack/q31_read.rs`: `ServedQ31Read::read_out` (the pick and the row),
+  `serve` now consumes it, and a test that its written row equals `serve`'s over three rows.
+- `ReadOut::pick()`: the 1-based pick or 0, so a consumer can recover the operator's pick without
+  knowing the support convention.
 - `crates/uor-r4-integer/src/stack/hamming.rs`: `CopyHeads::read_out` (choice plus margin weights)
   and a test against `choose` and `copy_weight_q31`.
 
@@ -43,7 +45,8 @@ Size: about 180 lines of source and tests, and the ORDER/REPORT.
   histories behave identically on the third.
 - Hamming parity: `support` equals `choose`'s positions and every weight equals
   `copy_weight_q31(margin, distance)`.
-- Library: **671 passed**, 1 ignored.
+- Library: **671 passed**, 1 ignored; the 9 Q31-read tests include the `apply`/trace parity that
+  now runs through `read_out`.
 
 ## Checks run at the head
 
