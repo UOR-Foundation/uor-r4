@@ -5925,6 +5925,143 @@ mod tests {
         }
     }
 
+    /// A Pick D11 container in the serving loader's format: two blocks per
+    /// token, `read_position` 1 or 3, and for 1 the `discrete.position_frames`
+    /// section (frame index per block and root).
+    fn serialized_pick_fixture(
+        context: u32,
+        roots: &[[u8; 2]],
+        gates: &[i32],
+        read_position: u32,
+        frames: Option<&[u32]>,
+    ) -> Vec<u8> {
+        let stages = expected_stages(context as usize).unwrap() as u32;
+        assert_eq!(gates.len(), 2 * stages as usize);
+        let mut table = Vec::new();
+        let mut cells = Vec::new();
+        for blocks in roots {
+            for &root in blocks {
+                table.extend_from_slice(&orbit_root_coords(root).unwrap());
+            }
+            cells.push(u32::from(blocks[0] << 4 | blocks[1]));
+        }
+        let routes = vec![0u32; 2 * stages as usize];
+        let mut blob = Vec::new();
+        let table_span = append(&mut blob, &ints_i32(&table));
+        let cells_span = append(&mut blob, &ints_u32(&cells));
+        let routes_span = append(&mut blob, &ints_u32(&routes));
+        let gates_span = append(&mut blob, &ints_i32(gates));
+        let mut tables = vec![
+            json!({"name":"discrete.table","kind":"i32","len":table.len(),"span":table_span}),
+            json!({"name":"discrete.cells","kind":"u32","len":cells.len(),"span":cells_span}),
+            json!({"name":"discrete.routes","kind":"u32","len":routes.len(),"span":routes_span}),
+            json!({"name":"discrete.gates","kind":"i32","len":gates.len(),"span":gates_span}),
+        ];
+        if let Some(frames) = frames {
+            let frames_span = append(&mut blob, &ints_u32(frames));
+            tables.push(json!({"name":"discrete.position_frames","kind":"u32","len":frames.len(),"span":frames_span}));
+        }
+        let header = json!({
+            "schema": "uor-r4.lut-discrete/1",
+            "shape": {
+                "vocabulary": roots.len(), "blocks": 2, "context": context,
+                "kept_cells": 2, "stages": stages, "read_mode": "pick",
+                "read_kept": 0, "read_sweeps": 0, "read_position": read_position,
+                "objective_policy": "nearest_address_margin_v1",
+                "read_initialization": "active_leaf_v1", "seed": 7, "epoch": 0
+            },
+            "matrices": [],
+            "tables": tables,
+            "source": {
+                "snapshot_schema":"uor-r4.discrete-spiralcore-fbs/2",
+                "snapshot_sha256":"00".repeat(32),
+                "operator_kappa":"blake3:a0ea3a10dd10c5f4856b0d881d33d94c3293bad0e68bd07a47918e2bb82c819b",
+                "composition_kappa":"blake3:f2986c8e68dcb30a9cb511a42547179a87b66ef212a87b728765d03e70e640b0",
+                "kernel_sha256":"11".repeat(32),
+                "source_sha256":"22".repeat(32),
+                "geometry_sha256":"33".repeat(32)
+            }
+        });
+        let header = serde_json::to_vec(&header).unwrap();
+        let mut out = Vec::new();
+        out.extend_from_slice(b"UORLUT01");
+        out.extend_from_slice(&(header.len() as u64).to_le_bytes());
+        out.extend_from_slice(&header);
+        out.resize(out.len().div_ceil(64) * 64, 0);
+        out.extend_from_slice(&blob);
+        out
+    }
+
+    /// The CPU oracle's Pick read and the serving reader agree word for word,
+    /// through the serving loader, on every prefix of fixtures with repeated
+    /// pairs, ties and both transports.
+    #[test]
+    fn pick_oracle_matches_integer_discrete_model_on_every_prefix() {
+        let context = 9u32;
+        let stages = expected_stages(context as usize).unwrap();
+        let roots: Vec<[u8; 2]> = (0..16u8).map(|i| [i, (i * 3 + 1) % 16]).collect();
+        let token_blocks: Vec<Vec<[i32; 8]>> = roots
+            .iter()
+            .map(|r| r.iter().map(|&x| orbit_root_coords(x).unwrap()).collect())
+            .collect();
+        let frames: Vec<u32> = (0..32u32).map(|i| i % 63 + 1).collect();
+        let sequences: [&[u32]; 4] = [
+            &[0, 1, 2, 3, 4, 5, 1, 2, 9],
+            &[7, 7, 7, 7, 7, 7, 7],
+            &[3, 8, 3, 8, 3, 8, 15, 3, 8],
+            &[12, 0, 5, 12, 0, 5, 12, 0],
+        ];
+        let mut compared = 0;
+        let mut picked_rows_changed = false;
+        for gates0 in [[1, 1], [1, -1], [0, 0], [-1, 1]] {
+            let mut gates = vec![0i32; 2 * stages];
+            gates[0] = gates0[0];
+            gates[stages] = gates0[1];
+            for (read_position, section, transport) in [
+                (3u32, None, CpuDiscretePickTransport::Identity),
+                (
+                    1,
+                    Some(frames.as_slice()),
+                    CpuDiscretePickTransport::PrefixHolonomy {
+                        frames: frames.iter().map(|&f| f as u8).collect(),
+                    },
+                ),
+            ] {
+                let artifact =
+                    serialized_pick_fixture(context, &roots, &gates, read_position, section);
+                let served = IntegerDiscreteModel::from_bytes(&artifact).unwrap();
+                let cpu = CpuDiscretePick::from_parts(
+                    token_blocks.clone(),
+                    gates0.to_vec(),
+                    transport,
+                    cl06_finite_composition_table().unwrap(),
+                )
+                .unwrap();
+                for sequence in sequences {
+                    for end in 1..=sequence.len() {
+                        let prefix = &sequence[..end];
+                        let cpu_words: Vec<i32> =
+                            cpu.read(prefix).unwrap().into_iter().flatten().collect();
+                        let served_words = served.evaluate_prefix(prefix).unwrap().read_vector;
+                        assert_eq!(
+                            cpu_words, served_words,
+                            "gates {gates0:?} s14 {read_position} prefix {prefix:?}"
+                        );
+                        let query: Vec<i32> = token_blocks[prefix[end - 1] as usize]
+                            .iter()
+                            .flatten()
+                            .copied()
+                            .collect();
+                        picked_rows_changed |= cpu_words != query;
+                        compared += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(compared, 4 * 2 * (9 + 7 + 9 + 8));
+        assert!(picked_rows_changed, "no row's read moved off the query");
+    }
+
     #[test]
     fn flock_zero_gate_fallback_and_gate_trits_are_distinct() {
         let roots = [[1, 0], [0, 0], [0, 0]];

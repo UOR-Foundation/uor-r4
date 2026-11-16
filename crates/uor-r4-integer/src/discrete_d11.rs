@@ -1164,7 +1164,14 @@ impl IntegerDiscreteModel {
             return Err(invalid("unsupported discrete read initialization"));
         }
 
-        if (!is_trunk && header.tables.len() != 4)
+        // A Pick read with prefix holonomy carries one more table, its step
+        // frames (`discrete.position_frames`); every other artifact is unchanged.
+        let plain_tables = if matches!(read_mode, DiscreteReadMode::Pick) && s.read_position == 1 {
+            5
+        } else {
+            4
+        };
+        if (!is_trunk && header.tables.len() != plain_tables)
             || (is_trunk && (header.tables.len() != 19 || s.blocks != 4))
         {
             return Err(invalid(
