@@ -56,3 +56,46 @@ gcd):
 
 `cargo run --release --offline --bin phase-ring-probe` (the instrument crate, no GPU). Deterministic
 by seeded LCG; the table above is one run and repeats.
+
+## The zeta phase code: what more zeros buy, and what they do not
+
+Owner, 16 Nov: "the problem with the prime pool is we are only using 2k … we have 50 million zeta
+zeros we can use in the repo." The repository holds **512** zeros
+(`crates/uor-r4-core/src/zeta_zeros.rs`, 48.8 KB, Odlyzko); the `riemann-lean` JSONs are fetch
+receipts (30 zeros each) naming the 100k and 2M tables. 50M would be a fetch (LMFDB/Odlyzko) and a
+pinned table of about 400 MB at f64, 200 MB at u32, or 100 MB at 16 bits a zero.
+
+The probe measures the two things a wider phase code changes, on `k` primes, the code being
+`θ_j(p) = γ_j·ln p` quantized to a byte per channel:
+
+| channels | distinct codes (k = 2,000) | phase(p+2) finds p (k = 2,000) | distinct (k = 8,000) | locality (k = 8,000) |
+|---|---|---|---|---|
+| 1 | 256 (0.128) | 0.098 | 256 (0.032) | 0.026 |
+| 2 | 1,589 (0.795) | 0.511 | 3,445 (0.431) | 0.307 |
+| 4 | 1,845 (0.923) | 0.649 | 5,149 (0.644) | 0.473 |
+| 8 | 1,974 (0.987) | 0.721 | 6,789 (0.849) | 0.620 |
+| 16 | **2,000 (1.000)** | 0.753 | 7,707 (0.963) | 0.720 |
+
+**What the zeros buy: resolution, exactly as the owner says.** One byte resolves `1/256` of a turn,
+a factor `e^{2π/256} ≈ 1.0247` in `p`, so one channel is a 256-bucket logarithm. Sixteen
+incommensurate channels fingerprint `ln p` finely enough that **every one of 2,000 primes has a
+distinct code**, and 8,000 primes reach 96 %; more channels extend that without bound. Fifty
+million channels make capacity a non-issue.
+
+**What they do not buy: proximity of meaning.** The code is a *smooth function of `ln p`*, so the
+nearest code is the numerically nearest prime (`phase(p+2)` finds `p` on 72–75 % of rows). Near
+codes mean near **magnitudes**, not related meanings: two words with the same meaning and unrelated
+primes get unrelated codes, and no number of zeros changes which word lands where. The missing piece
+is the **assignment rule** — word → prime/code — and the archive's quota/uniqueness passes make
+codes *unique*, not *meaningful*.
+
+**The gcd correction.** The pool was not too small: `2k` primes for `k` entities is exactly enough
+**if each prime belongs to one entity**. The probe drew two primes per entity *with replacement*
+from a pool of `2k`, so primes were reused — 1.0 other entity sharing a factor at pool `2k`, 3.8 at
+`k/2` — and that is why the exact rate was 0.62 and 0.23. Assign, do not draw, and gcd is exact at
+any pool size. Zeros are irrelevant to that axis.
+
+**Ordered next:** the assignment experiment. Give each word a code by a *content* feature (or learn
+the map from the token table into the phase space), then measure paraphrase retrieval with the two
+falsifiers the literature demands: the **value swap** (permute values; unchanged accuracy means
+nothing reads the pairing) and the **oracle-key headroom** (gold code versus derived code).

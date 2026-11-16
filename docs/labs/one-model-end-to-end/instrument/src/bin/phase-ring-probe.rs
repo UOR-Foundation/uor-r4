@@ -180,6 +180,58 @@ fn gcd_arm(k: usize, pool: usize, seed: u64) -> (u64, f64) {
     (ok, shared_total as f64 / k as f64)
 }
 
+
+/// The first sixteen zeta zeros, from `crates/uor-r4-core/src/zeta_zeros.rs` (Odlyzko's table).
+const ZEROS: [f64; 16] = [
+    14.134725142, 21.022039639, 25.010857580, 30.424876126,
+    32.935061588, 37.586178159, 40.918719012, 43.327073281,
+    48.005150881, 49.773832478, 52.970321478, 56.446247697,
+    59.347044003, 60.831778525, 65.112544048, 67.079810529,
+];
+
+/// One prime's phase vector over `channels` zeros, quantized to a byte per channel.
+fn phase_code(p: u64, channels: usize) -> Vec<u8> {
+    (0..channels)
+        .map(|k| {
+            let angle = ZEROS[k] * (p as f64).ln();
+            let turns = angle / std::f64::consts::TAU;
+            (turns.rem_euclid(1.0) * 256.0).floor() as u8
+        })
+        .collect()
+}
+
+/// Circular distance between two phase codes, summed over channels.
+fn code_distance(a: &[u8], b: &[u8]) -> u32 {
+    a.iter().zip(b).map(|(&x, &y)| u32::from(ring_step(x, y))).sum()
+}
+
+/// The zeta phase code at `channels` channels: two numbers, honestly measured.
+///
+/// (a) **Resolution**: how many of `k` primes share a code with another. The phase is
+///     `θ_k(p) = γ_k ln p`; one byte resolves `1/256` of a turn, i.e. a factor `e^{2π/256} ≈ 1.0247`
+///     in `p` per channel. One channel therefore buckets primes by magnitude; `J` incommensurate
+///     channels fingerprint `ln p` far more finely.
+/// (b) **Locality**: does the code of `p + 2` land on `p`'s own code, i.e. is closeness *magnitude*
+///     or *meaning*? A smooth `ln p` code makes numerically adjacent primes near; it says nothing
+///     about two words with the same meaning and unrelated primes.
+fn zeta_resolution(k: usize, channels: usize) -> (usize, u64) {
+    let pool = primes(k + 1);
+    let codes: Vec<Vec<u8>> = pool[..k].iter().map(|&p| phase_code(p, channels)).collect();
+    let distinct: std::collections::BTreeSet<&Vec<u8>> = codes.iter().collect();
+    // Locality: the nearest code to phase(p+2) is p's own.
+    let mut local = 0u64;
+    for (i, &p) in pool[..k].iter().enumerate() {
+        let q = phase_code(p + 2, channels);
+        let (mut best, mut best_d) = (usize::MAX, u32::MAX);
+        for (j, c) in codes.iter().enumerate() {
+            let d = code_distance(c, &q);
+            if d <= best_d { best_d = d; best = j; }
+        }
+        local += u64::from(best == i);
+    }
+    (distinct.len(), local)
+}
+
 fn main() {
     println!("phase-ring-probe: planted ring vs a fixed-bijection control, and a prime-gcd arm");
     println!("(the bijection keeps occupancy and injectivity identical; only ring adjacency is destroyed)");
@@ -193,6 +245,18 @@ fn main() {
                 ring as f64 / k as f64,
                 bij as f64 / k as f64,
                 (ring as f64 - bij as f64) / k as f64,
+            );
+        }
+    }
+    println!();
+    println!("zeta phase code: resolution (distinct codes of K primes) and locality (phase(p+2) finds p):");
+    for k in [2_000usize, 8_000] {
+        for channels in [1usize, 2, 4, 8, 16] {
+            let (distinct, local) = zeta_resolution(k, channels);
+            println!(
+                "K={k:5} channels={channels:2}  distinct codes {distinct:5}/{k} ({:.4})  phase(p+2) finds p {local:5}/{k} ({:.3})",
+                distinct as f64 / k as f64,
+                local as f64 / k as f64,
             );
         }
     }
