@@ -320,9 +320,9 @@ pub fn decode(bytes: &[u8]) -> Result<SerializedStackSession, String> {
         copy_scale_q16,
         logits,
         tokens,
-        // The compact codec does not carry a type-head read's per-position payloads; a session
-        // with them is refused at encode, and a decoded session has none (restore refuses a
-        // type-head model without them).
+        // The compact codec does not carry a type-head read's per-position payloads: `encode`
+        // drops them (it is infallible by signature), a decoded session has none, and `restore`
+        // refuses a type-head model without them.
         hamming_payloads: Vec::new(),
         snap_trace,
         pointer_keys,

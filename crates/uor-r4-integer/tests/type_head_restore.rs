@@ -66,3 +66,57 @@ fn a_restored_type_head_session_continues_exactly() {
         "a type-head session without its payloads must be refused"
     );
 }
+
+#[test]
+fn a_type_head_session_saves_and_restores_through_a_file_at_production_shape() {
+    // The payloads are `context * width` i64 a read: a shape with width 256 and context 192 makes
+    // the JSON large enough to exercise the file-size bound that the in-memory test cannot.
+    let shape = FbsSynth {
+        vocab: 256,
+        d: 256,
+        mlp: 256,
+        layers: 2,
+        context: 1024,
+        kept: 2,
+        ..FBS_SYNTH_SMALL
+    };
+    let mut snap = synthetic_fbs_trunk_with(20_261_610, shape);
+    snap.hamming = Some(synthetic_hamming(
+        snap.width,
+        snap.layers.len(),
+        4,
+        20_261_611,
+    ));
+    let bytes = export_fbs_trunk_uorlut01(&snap).expect("export a production-shape trunk");
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+
+    let ids: Vec<u32> = (0..8).map(|step| (step * 17 + 3) % 256).collect();
+    let mut original = model.session();
+    for &id in &ids[..4] {
+        original.step_native(id).expect("prefix step");
+    }
+
+    let path = std::env::temp_dir().join(format!(
+        "uor-type-head-{}-{}.json",
+        std::process::id(),
+        line!()
+    ));
+    original.save_session_to_file(&path).expect("save the session file");
+    let size = std::fs::metadata(&path).expect("metadata").len();
+    assert!(size > 1_000_000, "the payloads make the file large: {size}");
+
+    let restored_model = IntegerStackModel::parse(&bytes).expect("parse again");
+    let mut restored = restored_model.session();
+    restored
+        .restore_session_from_file(&path)
+        .expect("the file restores within its bound");
+    for (step, &id) in ids[4..].iter().enumerate() {
+        assert_eq!(
+            original.step_native(id).expect("continued step"),
+            restored.step_native(id).expect("restored step"),
+            "step {}",
+            step + 4
+        );
+    }
+    std::fs::remove_file(&path).ok();
+}

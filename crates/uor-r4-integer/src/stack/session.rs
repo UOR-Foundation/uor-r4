@@ -2291,12 +2291,23 @@ pub(super) fn max_serialized_session_bytes(model: &IntegerStackModel) -> u64 {
     } else {
         0
     };
+    // A Hamming read's per-position payloads: `context * width` i64 for each read with type heads.
+    let payload_bytes = model
+        .fbs
+        .as_ref()
+        .and_then(|f| f.hamming.as_ref())
+        .map_or(0, |h| {
+            (h.payload_cache_elements(s.context) as u64)
+                .checked_mul(24)
+                .unwrap_or(u64::MAX / 4)
+        });
     let margin = 131072u64; // 128 KiB for schema, metadata keys, and formatting punctuation
 
     layer_bytes
         .checked_add(logits_bytes)
         .and_then(|acc| acc.checked_add(tokens_bytes))
         .and_then(|acc| acc.checked_add(trace_bytes))
+        .and_then(|acc| acc.checked_add(payload_bytes))
         .and_then(|acc| acc.checked_add(margin))
         .unwrap_or(100 * 1024 * 1024)
 }
