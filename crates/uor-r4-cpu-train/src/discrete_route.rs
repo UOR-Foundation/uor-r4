@@ -1053,7 +1053,8 @@ pub enum CpuDiscretePickTransport {
 #[derive(Clone)]
 pub struct CpuDiscretePick {
     token_blocks: Vec<Vec<[i32; 8]>>,
-    gates0: Vec<i32>,
+    /// `[block][level]` gate trits; the read uses level 0 only.
+    level_gates: Vec<Vec<i32>>,
     transport: CpuDiscretePickTransport,
     composition: Cl06FiniteCompositionTable,
 }
@@ -1116,10 +1117,130 @@ impl CpuDiscretePick {
         }
         Ok(Self {
             token_blocks,
-            gates0,
+            level_gates: gates0.into_iter().map(|gate| vec![gate]).collect(),
             transport,
             composition,
         })
+    }
+
+    /// Reads a served Pick D11 artifact (`uor-r4.lut-discrete/1`, read mode
+    /// `pick`) with every `blocks x stages` gate trit; `read_position` 3 is
+    /// identity transport and 1 is prefix holonomy over
+    /// `discrete.position_frames`.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let header = header(bytes)?;
+        if header["schema"].as_str() != Some(DISCRETE_SCHEMA) {
+            return Err(invalid(format!("Pick CPU read requires {DISCRETE_SCHEMA}")));
+        }
+        let shape = &header["shape"];
+        if shape["read_mode"].as_str() != Some("pick")
+            || !matches!(
+                shape["read_initialization"].as_str(),
+                Some("active_leaf_v1" | "zero_gates_v1")
+            )
+        {
+            return Err(invalid("Pick CPU read refuses a non-Pick artifact"));
+        }
+        let field = |name: &str| {
+            usize::try_from(shape[name].as_u64().unwrap_or(u64::MAX))
+                .map_err(|_| invalid(format!("Pick shape {name}")))
+        };
+        let vocab = field("vocabulary")?;
+        let blocks = field("blocks")?;
+        let context = field("context")?;
+        let stages = field("stages")?;
+        let kept_cells = field("kept_cells")?;
+        let read_position = field("read_position")?;
+        if !(2..=8192).contains(&vocab)
+            || !(2..=16).contains(&blocks)
+            || !(1..=243).contains(&context)
+            || !(1..=16).contains(&kept_cells)
+            || kept_cells > vocab
+            || field("read_kept")? != 0
+            || field("read_sweeps")? != 0
+            || expected_stages(context) != Some(stages)
+            || !matches!(
+                shape["objective_policy"].as_str(),
+                Some("nearest_address_margin_v1" | "occupied_cell_rank_hinge_v1")
+            )
+        {
+            return Err(invalid("Pick shape differs"));
+        }
+        if !matches!(read_position, 1 | 3) {
+            return Err(invalid(
+                "Pick read admits only position transport 1 (prefix holonomy) or 3 (identity)",
+            ));
+        }
+        if header["matrices"]
+            .as_array()
+            .is_none_or(|matrices| !matrices.is_empty())
+        {
+            return Err(invalid("Pick artifact requires an empty matrices array"));
+        }
+        let source = &header["source"];
+        if source["snapshot_schema"].as_str() != Some(FLOCK_SNAPSHOT_SCHEMA)
+            || source["operator_kappa"].as_str() != Some(FLOCK_OPERATOR_KAPPA)
+            || source["composition_kappa"].as_str() != Some(FLOCK_COMPOSITION_KAPPA)
+        {
+            return Err(invalid("Pick artifact source geometry differs"));
+        }
+        validate_header_padding(bytes)?;
+        let expected_tables = if read_position == 1 { 5 } else { 4 };
+        if header["tables"].as_array().map(Vec::len) != Some(expected_tables) {
+            return Err(invalid(format!(
+                "Pick artifact with read_position {read_position} requires {expected_tables} tables"
+            )));
+        }
+        let table = section_i32(bytes, &header, "discrete.table", vocab * blocks * 8, "i32")?;
+        let cells = section_u32(bytes, &header, "discrete.cells", vocab, "u32")?;
+        section_u32(bytes, &header, "discrete.routes", blocks * stages, "u32")?;
+        let gates = section_i32(bytes, &header, "discrete.gates", blocks * stages, "i32")?;
+        if gates.iter().any(|gate| !(-1..=1).contains(gate)) {
+            return Err(invalid("Pick gate trit outside -1..=1"));
+        }
+        let transport = if read_position == 1 {
+            let frames =
+                section_u32(bytes, &header, "discrete.position_frames", blocks * 16, "u32")?;
+            if frames.iter().any(|&frame| frame >= 64) {
+                return Err(invalid("Pick frame outside the 64-state group"));
+            }
+            CpuDiscretePickTransport::PrefixHolonomy {
+                frames: frames.into_iter().map(|frame| frame as u8).collect(),
+            }
+        } else {
+            CpuDiscretePickTransport::Identity
+        };
+        let token_blocks = decode_token_blocks(&table, &cells, vocab, blocks, "Pick")?;
+        validate_layout(bytes, &header)?;
+        let level0 = gates.iter().step_by(stages).copied().collect();
+        let mut pick = Self::from_parts(
+            token_blocks,
+            level0,
+            transport,
+            cl06_finite_composition_table().map_err(|error| invalid(error.to_string()))?,
+        )?;
+        pick.level_gates = gates.chunks_exact(stages).map(<[i32]>::to_vec).collect();
+        Ok(pick)
+    }
+
+    /// Gate trits held, `blocks x levels`.
+    pub fn gate_count(&self) -> usize {
+        self.level_gates.iter().map(Vec::len).sum()
+    }
+
+    /// Sets gate `block * levels + level` to a trit in -1..=1.
+    pub fn set_gate(&mut self, index: usize, value: i32) -> Result<()> {
+        if !(-1..=1).contains(&value) {
+            return Err(invalid("Pick gate outside -1..=1"));
+        }
+        let levels = self.level_gates[0].len();
+        let slot = self
+            .level_gates
+            .get_mut(index / levels)
+            .and_then(|row| row.get_mut(index % levels))
+            .ok_or_else(|| invalid("Pick gate index outside the gate count"))?;
+        *slot = value;
+        Ok(())
     }
 
     pub fn read(&self, prefix: &[u32]) -> Result<Vec<[i32; 8]>> {
@@ -1145,7 +1266,7 @@ impl CpuDiscretePick {
 
     fn transported(&self, prefix: &[u32]) -> Result<Vec<Vec<[i32; 8]>>> {
         let t = prefix.len() - 1;
-        let blocks = self.gates0.len();
+        let blocks = self.level_gates.len();
         let mut transported = vec![vec![[0i32; 8]; blocks]; t + 1];
         for b in 0..blocks {
             match &self.transport {
@@ -1208,7 +1329,7 @@ impl CpuDiscretePick {
             .collect();
         let distances: Vec<u32> = (1..t)
             .map(|p| {
-                (0..self.gates0.len())
+                (0..self.level_gates.len())
                     .map(|b| {
                         (codes[p - 1][b] ^ codes[t - 1][b]).count_ones()
                             + (codes[p][b] ^ codes[t][b]).count_ones()
@@ -1227,7 +1348,8 @@ impl CpuDiscretePick {
             .count() as u32;
         let mut blocks = Vec::with_capacity(query.len());
         let mut output_roots = Vec::with_capacity(query.len());
-        for (b, (&gate, query_block)) in self.gates0.iter().zip(query).enumerate() {
+        for (b, (levels, query_block)) in self.level_gates.iter().zip(query).enumerate() {
+            let gate = levels[0];
             let payload = &transported[pick + 1][b];
             let u: [i32; 8] = std::array::from_fn(|d| query_block[d] + gate * payload[d]);
             let root = snap_root(&u, 1 + gate.unsigned_abs() as usize)?;
@@ -6060,6 +6182,129 @@ mod tests {
         }
         assert_eq!(compared, 4 * 2 * (9 + 7 + 9 + 8));
         assert!(picked_rows_changed, "no row's read moved off the query");
+    }
+
+    /// The agreement test's roots, frames and sequences.
+    fn pick_agreement_inputs() -> (Vec<[u8; 2]>, Vec<Vec<[i32; 8]>>, Vec<u32>, [&'static [u32]; 4]) {
+        let roots: Vec<[u8; 2]> = (0..16u8).map(|i| [i, (i * 3 + 1) % 16]).collect();
+        let token_blocks = roots
+            .iter()
+            .map(|r| r.iter().map(|&x| orbit_root_coords(x).unwrap()).collect())
+            .collect();
+        let frames: Vec<u32> = (0..32u32).map(|i| i % 63 + 1).collect();
+        let sequences: [&'static [u32]; 4] = [
+            &[0, 1, 2, 3, 4, 5, 1, 2, 9],
+            &[7, 7, 7, 7, 7, 7, 7],
+            &[3, 8, 3, 8, 3, 8, 15, 3, 8],
+            &[12, 0, 5, 12, 0, 5, 12, 0],
+        ];
+        (roots, token_blocks, frames, sequences)
+    }
+
+    fn pick_reads(pick: &CpuDiscretePick, sequences: &[&[u32]]) -> Vec<Vec<[i32; 8]>> {
+        sequences
+            .iter()
+            .flat_map(|sequence| (1..=sequence.len()).map(|end| pick.read(&sequence[..end]).unwrap()))
+            .collect()
+    }
+
+    /// `from_bytes` reads a served Pick artifact like the `from_parts` oracle
+    /// built from its level-0 gates, for both transports and with non-zero
+    /// gates above level 0.
+    #[test]
+    fn pick_from_bytes_reads_like_from_parts() {
+        let context = 9u32;
+        let stages = expected_stages(context as usize).unwrap();
+        assert!(stages > 1);
+        let (roots, token_blocks, frames, sequences) = pick_agreement_inputs();
+        let mut compared = 0;
+        for (level0, upper) in [([1, -1], -1), ([-1, 1], 1), ([1, 1], -1)] {
+            let mut gates = vec![upper; 2 * stages];
+            gates[0] = level0[0];
+            gates[stages] = level0[1];
+            for (read_position, section, transport) in [
+                (3u32, None, CpuDiscretePickTransport::Identity),
+                (
+                    1,
+                    Some(frames.as_slice()),
+                    CpuDiscretePickTransport::PrefixHolonomy {
+                        frames: frames.iter().map(|&f| f as u8).collect(),
+                    },
+                ),
+            ] {
+                let artifact =
+                    serialized_pick_fixture(context, &roots, &gates, read_position, section);
+                let loaded = CpuDiscretePick::from_bytes(&artifact).unwrap();
+                assert_eq!(loaded.gate_count(), 2 * stages);
+                let oracle = CpuDiscretePick::from_parts(
+                    token_blocks.clone(),
+                    level0.to_vec(),
+                    transport,
+                    cl06_finite_composition_table().unwrap(),
+                )
+                .unwrap();
+                for sequence in sequences {
+                    for end in 1..=sequence.len() {
+                        let prefix = &sequence[..end];
+                        assert_eq!(
+                            loaded.read(prefix).unwrap(),
+                            oracle.read(prefix).unwrap(),
+                            "gates {gates:?} s14 {read_position} prefix {prefix:?}"
+                        );
+                        compared += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(compared, 3 * 2 * (9 + 7 + 9 + 8));
+    }
+
+    #[test]
+    fn pick_from_bytes_refuses_bad_artifacts() {
+        let context = 9u32;
+        let stages = expected_stages(context as usize).unwrap();
+        let (roots, _, frames, _) = pick_agreement_inputs();
+        let gates = vec![1i32; 2 * stages];
+        for read_position in [0u32, 2] {
+            let artifact = serialized_pick_fixture(context, &roots, &gates, read_position, None);
+            assert!(CpuDiscretePick::from_bytes(&artifact).is_err(), "s14 {read_position}");
+        }
+        let mut bad_gates = gates.clone();
+        bad_gates[1] = 2;
+        let artifact = serialized_pick_fixture(context, &roots, &bad_gates, 3, None);
+        assert!(CpuDiscretePick::from_bytes(&artifact).is_err());
+        // A wrong table count: identity transport with a frames section, and
+        // holonomy without one.
+        let artifact = serialized_pick_fixture(context, &roots, &gates, 3, Some(&frames));
+        assert!(CpuDiscretePick::from_bytes(&artifact).is_err());
+        let artifact = serialized_pick_fixture(context, &roots, &gates, 1, None);
+        assert!(CpuDiscretePick::from_bytes(&artifact).is_err());
+        let mut bad_frames = frames.clone();
+        bad_frames[5] = 64;
+        let artifact = serialized_pick_fixture(context, &roots, &gates, 1, Some(&bad_frames));
+        assert!(CpuDiscretePick::from_bytes(&artifact).is_err());
+        let artifact = serialized_pick_fixture(context, &roots, &gates, 3, None);
+        let mut pick = CpuDiscretePick::from_bytes(&artifact).unwrap();
+        assert!(pick.set_gate(pick.gate_count(), 0).is_err());
+        assert!(pick.set_gate(0, 2).is_err());
+    }
+
+    #[test]
+    fn pick_set_gate_moves_only_level_zero_reads() {
+        let context = 9u32;
+        let stages = expected_stages(context as usize).unwrap();
+        assert!(stages > 1);
+        let (roots, _, _, sequences) = pick_agreement_inputs();
+        let gates = vec![1i32; 2 * stages];
+        let artifact = serialized_pick_fixture(context, &roots, &gates, 3, None);
+        let mut pick = CpuDiscretePick::from_bytes(&artifact).unwrap();
+        let before = pick_reads(&pick, &sequences);
+        for index in (0..pick.gate_count()).filter(|index| index % stages != 0) {
+            pick.set_gate(index, -1).unwrap();
+            assert_eq!(pick_reads(&pick, &sequences), before, "gate {index}");
+        }
+        pick.set_gate(0, -1).unwrap();
+        assert_ne!(pick_reads(&pick, &sequences), before);
     }
 
     #[test]
