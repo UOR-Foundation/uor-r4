@@ -151,6 +151,10 @@ pub struct Reply {
     pub finish_reason: String,
     pub completion_tokens: u64,
     pub prompt_tokens: u64,
+    /// The served model the response names (`model`), empty when absent.
+    pub model: String,
+    /// DeepSeek's `usage.prompt_cache_hit_tokens`, 0 when absent (vLLM sends none).
+    pub cache_hit_tokens: u64,
 }
 
 /// `choices[0].message.content` is the answer; the reasoning is `reasoning_content`, else
@@ -167,6 +171,8 @@ pub fn parse_reply(v: &Value) -> Reply {
         finish_reason: s(&c["finish_reason"]).unwrap_or_default(),
         completion_tokens: v["usage"]["completion_tokens"].as_u64().unwrap_or(0),
         prompt_tokens: v["usage"]["prompt_tokens"].as_u64().unwrap_or(0),
+        model: s(&v["model"]).unwrap_or_default(),
+        cache_hit_tokens: v["usage"]["prompt_cache_hit_tokens"].as_u64().unwrap_or(0),
     }
 }
 
@@ -859,6 +865,7 @@ impl Run<'_> {
         let mut msgs: Vec<Value> = vec![];
         let mut turns: Vec<Value> = vec![];
         let (mut kept, mut generated, mut prompt_tokens) = (0u64, 0u64, 0u64);
+        let (mut cache_hit, mut served) = (0u64, String::new());
         for (t, user) in item.users.iter().enumerate() {
             msgs.push(user.clone());
             let seed = turn_seed(self.req.base_seed, i as u64, t as u64);
@@ -886,6 +893,8 @@ impl Run<'_> {
             }
             kept += r.completion_tokens;
             prompt_tokens += r.prompt_tokens;
+            cache_hit += r.cache_hit_tokens;
+            served = r.model.clone();
             msgs.push(json!({"role": "assistant", "content": r.answer}));
             turns.push(json!({"reasoning": r.reasoning, "answer": r.answer}));
         }
@@ -899,7 +908,7 @@ impl Run<'_> {
             Value::Array(turns)
         );
         let counts = json!({"id": item.id, "kept_tokens": kept, "generated_tokens": generated,
-            "prompt_tokens": prompt_tokens})
+            "prompt_tokens": prompt_tokens, "cache_hit_tokens": cache_hit, "model": served})
         .to_string();
         let rec: Value = serde_json::from_str(&line).unwrap_or(Value::Null);
         Outcome::Kept {

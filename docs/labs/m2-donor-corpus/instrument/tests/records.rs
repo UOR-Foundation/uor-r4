@@ -46,7 +46,17 @@ fn replies_parse_both_reasoning_fields() {
         "usage": {"completion_tokens": 7, "prompt_tokens": 3}}));
     assert_eq!((r.answer.as_str(), r.reasoning.as_str()), ("ans", "rc"));
     assert_eq!((r.completion_tokens, r.prompt_tokens), (7, 3));
+    assert_eq!((r.model.as_str(), r.cache_hit_tokens), ("", 0));
     assert_eq!(r.drop_reason(), None);
+    let r = parse_reply(
+        &json!({"model": "deepseek-v4-flash", "choices": [{"finish_reason": "stop",
+        "message": {"content": "a", "reasoning_content": "r"}}],
+        "usage": {"completion_tokens": 7, "prompt_tokens": 3, "prompt_cache_hit_tokens": 2}}),
+    );
+    assert_eq!(
+        (r.model.as_str(), r.cache_hit_tokens),
+        ("deepseek-v4-flash", 2)
+    );
     let r = parse_reply(&json!({"choices": [{"finish_reason": "stop",
         "message": {"content": " ans ", "reasoning": "r"}}]}));
     assert_eq!((r.answer.as_str(), r.reasoning.as_str()), (" ans ", "r"));

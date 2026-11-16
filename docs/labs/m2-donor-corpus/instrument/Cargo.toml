@@ -23,5 +23,5 @@ path = "src/main.rs"
 [dependencies]
 serde_json = "1"
 sha2 = "0.10.8"
-ureq = { version = "3", default-features = false, features = ["json"] }
+ureq = { version = "3", default-features = false, features = ["json", "rustls"] }
 parquet = { version = "60", default-features = false, features = ["snap", "zstd"] }
