@@ -247,10 +247,7 @@ impl NgramAssembler {
                 return Err(invalid("n-gram context followers differ from n1 + n2 + n3+"));
             }
         }
-        let (derived_contexts, derived_count_of_counts) = derive_census(&partition.triples);
-        if partition.contexts != derived_contexts {
-            return Err(invalid("n-gram context records differ from the ones the triples imply"));
-        }
+        let derived_count_of_counts = check_census(&partition.triples, &partition.contexts)?;
         if partition.count_of_counts != derived_count_of_counts {
             return Err(invalid("n-gram count-of-counts differ from the ones the triples imply"));
         }
@@ -320,26 +317,37 @@ impl NgramAssembler {
     }
 }
 
-/// The context records and n1..n4 that a run of canonical triples implies:
-/// one record per run of equal keys.
-fn derive_census(triples: &[NgramTriple]) -> (Vec<NgramContext>, [u64; 4]) {
-    let mut contexts: Vec<NgramContext> = Vec::new();
+/// Checks, in one pass and without a second vector, that `contexts` are
+/// exactly the records a run of canonical triples implies (one record per run
+/// of equal keys), and returns the n1..n4 the triples imply.
+fn check_census(triples: &[NgramTriple], contexts: &[NgramContext]) -> Result<[u64; 4]> {
+    let differ = || invalid("n-gram context records differ from the ones the triples imply");
     let mut count_of_counts = [0u64; 4];
+    let mut running: Option<NgramContext> = None;
+    let mut next = 0usize;
     for triple in triples {
         if (1..=4).contains(&triple.count) {
             count_of_counts[triple.count as usize - 1] += 1;
         }
-        if contexts.last().is_none_or(|h| h.key != triple.key) {
-            contexts.push(NgramContext {
-                key: triple.key,
-                total: 0,
-                followers: 0,
-                n1: 0,
-                n2: 0,
-                n3_plus: 0,
-            });
-        }
-        let h = contexts.last_mut().expect("a context was just pushed");
+        let h = match running.as_mut() {
+            Some(h) if h.key == triple.key => h,
+            _ => {
+                if let Some(done) = running.take() {
+                    if contexts.get(next) != Some(&done) {
+                        return Err(differ());
+                    }
+                    next += 1;
+                }
+                running.insert(NgramContext {
+                    key: triple.key,
+                    total: 0,
+                    followers: 0,
+                    n1: 0,
+                    n2: 0,
+                    n3_plus: 0,
+                })
+            }
+        };
         h.total += u64::from(triple.count);
         h.followers += 1;
         match triple.count {
@@ -348,7 +356,16 @@ fn derive_census(triples: &[NgramTriple]) -> (Vec<NgramContext>, [u64; 4]) {
             _ => h.n3_plus += 1,
         }
     }
-    (contexts, count_of_counts)
+    if let Some(done) = running {
+        if contexts.get(next) != Some(&done) {
+            return Err(differ());
+        }
+        next += 1;
+    }
+    if next != contexts.len() {
+        return Err(differ());
+    }
+    Ok(count_of_counts)
 }
 
 /// The kernels' u32 index products (2g for keys, 4c + 3 for context records)
@@ -405,8 +422,11 @@ pub fn plan_partitions(histogram: &[u64], budget: u64) -> Result<Vec<PartitionRa
         sum += count;
     }
     plan.push(PartitionRange { lo, hi: NGRAM_VOCABULARY, targets: sum });
-    if plan.iter().any(|p| p.targets > u64::from(u32::MAX)) {
-        return Err(invalid("a single partition token exceeds the u32 position bound"));
+    if let Some(p) = plan.iter().find(|p| p.targets > NGRAM_MAX_PARTITION_TARGETS) {
+        return Err(invalid(format!(
+            "partition plan: token values {}..{} hold {} targets, above the 2^30 partition bound",
+            p.lo, p.hi, p.targets
+        )));
     }
     Ok(plan)
 }
@@ -593,6 +613,21 @@ mod tests {
                 assert_eq!((t, h), (triples.clone(), contexts.clone()));
             }
         }
+    }
+
+    /// A single partition token value cannot be split, so the plan refuses one
+    /// that alone holds more than the device's 2^30 targets, at plan time.
+    #[test]
+    fn ngram_count_plan_refuses_a_partition_past_the_target_limit() {
+        let mut histogram = vec![0u64; 4096];
+        histogram[7] = NGRAM_MAX_PARTITION_TARGETS;
+        histogram[8] = 5;
+        let plan = plan_partitions(&histogram, NGRAM_MAX_PARTITION_TARGETS).expect("2^30 admitted");
+        assert!(plan.iter().any(|p| p.targets == NGRAM_MAX_PARTITION_TARGETS));
+        assert!(plan.iter().all(|p| p.targets <= NGRAM_MAX_PARTITION_TARGETS));
+        histogram[7] = NGRAM_MAX_PARTITION_TARGETS + 1;
+        let refusal = plan_partitions(&histogram, NGRAM_MAX_PARTITION_TARGETS).unwrap_err();
+        assert!(refusal.to_string().contains("above the 2^30 partition bound"), "{refusal}");
     }
 
     /// A consistent plant (count, context record and n1..n4 adjusted together)
