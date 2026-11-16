@@ -26,7 +26,7 @@ Each operator has one source definition. CUDA (nvcc PTX in its own module, built
 
 | Operator | Meaning | CUDA (wick) | CPU oracle | Serving (`discrete_d11`) |
 |---|---|---|---|---|
-| `PrimeRouteKey` | K_k = Π_{j≤k} q(t_{−j}, j); stored as the packed ordered ids (12 bits × k: u64 to k = 5, u128 to k = 10), a bijection by unique factorization; back-off K_{k−1} = K_k / q(t_{−k}, k) is dropping the last slot; shared-suffix gcd is slot-wise equality; hashing only for bucket placement, with the full key checked in the row | key generation on device from the resident u16 stream | `cpu-trunk-count-driver` (D84), 1–10% slice | key lookup in the frozen form |
+| `PrimeRouteKey` | K_k = Π_{j≤k} q(t_{−j}, j); stored as the packed ordered ids (12 bits × k: u64 to k = 5, u128 to k = 10), a bijection by unique factorization; back-off K_{k−1} = K_k / q(t_{−k}, k) is dropping the last slot; shared-suffix gcd is slot-wise equality; hashing only for bucket placement, with the full key checked in the row | key generation on device from the resident u16 stream | `cpu-trunk-count-driver`, 1–10% slice: a host parity check in a separately scanned Rust module, as D84 allows for CPU parity; it qualifies no bar | key lookup in the frozen form |
 | Counting kernel | radix sort-reduce of (key, token) per hash-range partition; prune to count ≥ 2 on device before copy-out; ties in top-k break by token id | yes | yes, on the slice | n/a (reads counts) |
 | E8 snap | each 8-coordinate trunk block to its nearest E8 point (Conway–Sloane: integer rounding plus a parity fix); a miss is filled by a Starling hard read over the ~7 nearest of the 240 root neighbours | yes | yes | yes |
 | Pick read | as claude-408: XOR + popcount over transported 16-bit block codes, least distance, ties to the latest position | `pick_device` | `discrete_route.rs` | `DiscreteReadMode::Pick` |
@@ -38,7 +38,9 @@ Banned on every path (§3.2, §3.3, DECISION §3.4 rule 4): logistic, stretch or
 
 ## 3. Replay oracle
 
-- **The canonical triple stream.** The written state is the sorted (key, token, count) triple stream, and its SHA-256 is the replay word [claude]. "Bit-identical" means that SHA is equal across the GPU writer, the CPU oracle (on the 1–10% slice, never the whole corpus; R2-m3) and the `discrete_d11` loader's read-back (P1 gate (a)) [claude].
+- **The canonical triple stream.** The written state is the sorted (key, token, count) triple stream, and its SHA-256 is the replay word [claude]. Two streams are hashed, and each gate names which one it uses [claude]:
+  - **The exact stream** is the unpruned counts. Its SHA must be equal between the GPU writer and the CPU oracle, on the 1–10% slice and never the whole corpus (R2-m3).
+  - **The declared stream** is the exact stream after the declared prune and rank-quantize step of §5. That step is a pure function of the exact stream, and the oracle applies it too. The SHA of the declared stream must be equal across the writer's output, the oracle's output and the `discrete_d11` loader's read-back of the frozen form (P1 gate (a)).
 - **Carried fields.** On ≥ 64 prompts, including misses and back-offs, the raw words of every carried field are equal between wick (CUDA) and the M1 (CPU): addresses, reads, Pick choices, pointer choices and emitted token ids (P4 gate) [claude]. Comparisons are of raw integer words, never rounded values [claude].
 - **Determinism.** Counts are commutative integer sums; top-k ties break by token id; error-writes apply in canonical key order. Replay is therefore exact by construction, and the oracle tests it [claude].
 
@@ -54,7 +56,7 @@ Every update lands in the same integer cells the server reads. There is no float
 ## 5. Lossless format
 
 - **Oracle form.** `SparseCountTable` (`BTreeMap<u32, BTreeMap<u16, u32>>`, `trunk.rs:510-513`), sized for 1,049,856 rows and keys up to order 2 [claude]. It stays the oracle form on fixtures and slices; it cannot hold 1e9 entries [claude].
-- **Frozen form (the artifact).** Elias–Fano sorted tries (the tongrams algorithm, re-implemented in Rust) with rank-quantized counts, entropy-pruned to fit ≤ 4 GB resident [claude, est]. Its read-back re-emits the canonical triple stream, so its SHA equals the writer's [claude].
+- **Frozen form (the artifact).** Elias–Fano sorted tries (the tongrams algorithm, re-implemented in Rust) with rank-quantized counts, entropy-pruned to fit ≤ 4 GB resident [claude, est]. Its read-back re-emits the declared stream (§3), so its SHA equals the declared-stream SHA of the writer and the oracle, not the exact-stream SHA [claude].
 - **Round trip.** A lossless round-trip between the frozen form and the oracle form on fixtures is a required test (DECISION §3.3) [claude]. Pruning is a declared step before freezing, measured by its BPB cost against unpruned R\* (P1 gate (b)); it is not a translation of a different model [claude].
 - **Fallback.** If 4 GB forces more than a 3% pruning cost, orders above 6 move to an optional mmap'd suffix array of ~13 GB on disk, read only on long matches, with cold tok/s reported [claude, est].
 
