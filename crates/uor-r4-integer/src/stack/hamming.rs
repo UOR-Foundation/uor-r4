@@ -1774,7 +1774,8 @@ mod code_index_tests {
         let mut positions_total = 0usize;
         let mut distance_total = 0usize;
         for t in 1..LEN {
-            // At row `t` the eligible positions are `1..t`, whose keys are `x_0..x_{t-2}`.
+            // At row `t` the eligible positions are 1 through t-1, whose keys are x_0 through
+            // x_{t-2}.
             if t >= 2 {
                 index.insert(codes[tokens[t - 2] as usize], (t - 1) as u32);
             }

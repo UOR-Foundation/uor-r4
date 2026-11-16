@@ -21,9 +21,9 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
 - **It saves work, not memory.** Positions are still stored once per head (`O(t)`), which the token
   vector already provides; the index adds the code buckets (at most one per distinct code).
 - **The 8.6× is at a 4,096-token stream** with a 256-code vocabulary. The ratio grows with context
-  because the distance count saturates at the distinct-code count: at 32k with the same codes it
-  would be ~137× fewer distance computations. That is an extrapolation from the measured shape, not
-  a 32k measurement.
+  because the distance count saturates at the distinct-code count: at 32k the vocabulary cap gives
+  ~128× (32768/256); using the measured 239.4 average it is ~137×. Both are extrapolations from the
+  measured shape, not a 32k measurement.
 - No model, quality or serving-time claim.
 
 ## What changed

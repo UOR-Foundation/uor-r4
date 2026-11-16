@@ -5,8 +5,9 @@ Parent: [codex-5](../codex-5/ORDER.md). Reviewed head: `79551bf0e`.
 
 ## Why this unit exists
 
-The inventory and claude-242 measured the Hamming read at **97% of decode at 32k**: `nearest` collects
-and sorts every earlier position, per head, per token. The read's *query* changes every token, so a
+claude-242 measured the Hamming read at **97% of decode at 32k** (the inventory records the
+selection-rule disagreement, not the timing): `nearest` collects and sorts every earlier position,
+per head, per token. The read's *query* changes every token, so a
 query-keyed sketch cannot be exact; but the *keys* do not change. The exact fix is an index from the
 key code to the positions that carry it: for a query, compute the distance to each **distinct** code
 present, walk the codes in distance order, and take the nearest positions with the existing
