@@ -98,6 +98,24 @@ same recall. That is one run at M1's shape and it is cheap; it has never been tr
 
 ## 4. Decision 11 — what "memory" is
 
+**The memory already exists; the choice does not.** The p recipe carries four Hamming reads
+(copy-latest, ask, place, copy-longest) over 64-bit sign codes, and the copy read's recall is
+**0.98–0.99 at three seeds** (served as `/6`). What fails is the **first reply token**: choosing
+*which* prompted value the question asks for (claude-326). So the remaining build is the **query
+key and the write priority**, not a new store.
+
+**Two constraints that shape any fix.**
+
+- **One read per artifact.** The schema admits exactly one optional read record: a stack with a
+  Q31 read cannot also carry Hamming reads, an address table, a point key or a relation read
+  (`format.rs:1285-1311`; `session.rs:4343-4345`). So "copy + choose" must live inside **one** read:
+  either the Hamming **ask head** (already in the recipe, `--hamming-ask 1`) learns the query, or
+  the Q31 read gains a copy path. A second read is a schema decision, not an addition.
+- **The read sees one row.** The native Q31 read consumes only the residual `b.x` at its depth; the
+  per-token transport output, the decay bucket, the Hamilton gate quaternion and the FBS atom/code
+  identity are **computed and discarded**, and its 16-lane L1 distances are reduced to an argmin
+  with the margins thrown away. The zeta phases on the served path are telemetry-only.
+
 The archived prime/angular router was read back from the files (pipeline map, "The archived prime
 and angular router"). What is measured:
 
@@ -175,11 +193,15 @@ Two different defects have been measured and must not be confused:
 - **Write scale** (claude-386/387): the read's payload is **2.6% of the stream's norm**; a 97%
   correct choice moves the logits to at most 19/1,024. Scaling the payload ×16 reached R_ask 0.367.
 
-**The owner's guess** (that the transport's Hamming distances, spins and spherical-harmonic angles
-are not stored) is half right: the read consumes the residual row only. The transport's rotations
-exist per layer and are **not** offered to the read as a key; the Hamming codes are a separate read
-(head 4), not part of the Q31 read's key. Whether adding them separates the fact positions is
-**untested**.
+**The owner's guess is confirmed, with a correction.** The read consumes the residual row only. The
+per-token transport quaternion, the decay bucket (λ, κ), the Hamilton gate quaternion and the FBS
+atom/code identity are **computed every token and discarded**; the Hamming distances belong to a
+*different* read that cannot share the artifact. There is no spherical-harmonic read anywhere on the
+served path (the 120 icosians are used only for snapping). What the read does keep is its argmin —
+the **distance margins are thrown away**, so today we cannot see the address entropy the literature
+says must be spiky. Whether the transport quantities would separate the fact positions is
+**untested**; they are free to harvest in the float trainer and available as `NativeQ31Carry` in the
+integer session.
 
 **Outside evidence (16 Nov).** The read's two defects have known names. The payload's dilution is
 **averaging**: a read that mixes k picks by an equal mean cannot return an exact value, and the
