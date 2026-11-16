@@ -29,6 +29,7 @@ struct Args {
     native_replay: bool,
     native_dump: Option<PathBuf>,
     native_train: Option<u64>,
+    native_picks: Option<PathBuf>,
 }
 
 fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
@@ -38,6 +39,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut native_replay = false;
     let mut native_dump = None;
     let mut native_train = None;
+    let mut native_picks = None;
     while let Some(flag) = argv.next() {
         let mut value = || argv.next().ok_or_else(|| format!("{flag} needs a value"));
         match flag.as_str() {
@@ -51,6 +53,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
                     .map_err(|e| format!("--native-train {v}: {e}"))?;
                 native_train = Some(n);
             }
+            "--native-picks" => native_picks = Some(PathBuf::from(value()?)),
             "--checkpoint" => checkpoint = Some(PathBuf::from(value()?)),
             "--run" => run = Some(PathBuf::from(value()?)),
             "--out" => out = Some(PathBuf::from(value()?)),
@@ -77,6 +80,9 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
     if native_train == Some(0) {
         return Err("--native-train reads at least one window".to_owned());
     }
+    if native_picks.is_some() && !first_only {
+        return Err("--native-picks needs --first-only: they are the hard copy's pick".to_owned());
+    }
     let out: PathBuf = out.ok_or("--out is required")?;
     if native_dump.as_ref() == Some(&out) {
         return Err("--native-dump and --out name the same file".to_owned());
@@ -90,6 +96,7 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args, String> {
         native_replay,
         native_dump,
         native_train,
+        native_picks,
     })
 }
 
@@ -106,6 +113,7 @@ fn settings(
     native_replay: bool,
     native_dump: Option<PathBuf>,
     native_train: Option<u64>,
+    native_picks: Option<PathBuf>,
 ) -> Result<PayloadProbeSettings, String> {
     let config = read_json(&run.join("config.json"))?;
     let recall = read_json(&run.join("recall.json"))?;
@@ -133,6 +141,7 @@ fn settings(
         native_replay,
         native_dump,
         native_train_windows: native_train,
+        native_picks,
     })
 }
 
@@ -164,6 +173,7 @@ fn run() -> Result<(), String> {
         args.native_replay,
         args.native_dump,
         args.native_train,
+        args.native_picks,
     )?;
     let device = candle_core::Device::new_cuda(0).map_err(|e| e.to_string())?;
     let probe =
@@ -301,5 +311,19 @@ mod tests {
             .collect();
         assert!(parse(argv(&bad)).is_err());
         assert!(parse(argv(&base)).unwrap().native_train.is_none());
+    }
+
+    #[test]
+    fn the_native_picks_need_the_hard_copy() {
+        let base = ["--checkpoint", "c", "--run", "r", "--out", "o"];
+        let alone: Vec<&str> = base.iter().copied().chain(["--native-picks", "p"]).collect();
+        assert!(parse(argv(&alone)).err().unwrap().contains("--first-only"));
+        let both: Vec<&str> = base
+            .iter()
+            .copied()
+            .chain(["--first-only", "--native-picks", "p"])
+            .collect();
+        assert_eq!(parse(argv(&both)).unwrap().native_picks, Some(PathBuf::from("p")));
+        assert!(parse(argv(&base)).unwrap().native_picks.is_none());
     }
 }

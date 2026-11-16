@@ -14861,6 +14861,27 @@ pub struct PayloadProbeSettings {
     /// `recall_query_window(seed, i, ..)` at the run's own seed, instead of the held-out ones;
     /// needs `native_dump`. The payload-probe passes stay on the held-out windows.
     pub native_train_windows: Option<u64>,
+    /// claude-395: when set, a file of little-endian `u32` picks, one per held-out row in row
+    /// order (window × context + offset, a window-local position + 1, 0 for none), that every
+    /// pass with the read uses as the hard copy's first pick
+    /// ([`crate::vector_reads::with_injected_first_picks`]); needs `first_only`.
+    pub native_picks: Option<std::path::PathBuf>,
+}
+
+/// claude-395: the native picks file, one `u32` per held-out row, checked for its length.
+fn read_native_picks(path: &Path, rows: usize) -> Result<Vec<u32>> {
+    let bytes = std::fs::read(path).map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+    if bytes.len() != rows * 4 {
+        return Err(invalid(format!(
+            "{}: {} bytes for {rows} held-out rows of 4 bytes",
+            path.display(),
+            bytes.len()
+        )));
+    }
+    Ok(bytes
+        .chunks_exact(4)
+        .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        .collect())
 }
 
 /// claude-395: the native read's per-row files beside a dump, one entry per dump row
@@ -15067,9 +15088,13 @@ fn payload_probe_pass(
     held: &[(CausalWindow, Vec<RecallQuery>)],
     seed: u64,
     scale: Option<f32>,
+    picks: Option<&[u32]>,
 ) -> Result<Vec<PayloadProbeRow>> {
     let table = table(model)?;
     let refs: Vec<&CausalWindow> = held.iter().map(|(w, _)| w).collect();
+    if picks.is_some_and(|p| p.len() != refs.len() * SHEET_CONTEXT) {
+        return Err(invalid("the native picks are not one per held-out row"));
+    }
     let mut out = Vec::new();
     hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, 0, false, || {
         for (c, chunk) in refs.chunks(16).enumerate() {
@@ -15078,10 +15103,17 @@ fn payload_probe_pass(
                 return Err(invalid("a held-out window is not the sheet's context"));
             }
             let forward = || crate::flock_read::points(model, &ids, chunk.len(), SHEET_CONTEXT);
-            let (hidden, probe) = match scale {
-                Some(s) => crate::vector_reads::with_payload_scale(s, || {
+            // claude-395: this forward's rows of the native picks, when the probe has them.
+            let start = c * 16 * SHEET_CONTEXT;
+            let rows_picks = picks.map(|p| p[start..start + ids.len()].to_vec());
+            let probed = || match rows_picks.clone() {
+                Some(p) => crate::vector_reads::with_injected_first_picks(p, || {
                     crate::vector_reads::probing_payload(forward)
-                })?,
+                }),
+                None => crate::vector_reads::probing_payload(forward),
+            };
+            let (hidden, probe) = match scale {
+                Some(s) => crate::vector_reads::with_payload_scale(s, probed)?,
                 None => (crate::vector_reads::without_vector_read(forward)?, Vec::new()),
             };
             if scale.is_some() && probe.len() != ids.len() {
@@ -15224,6 +15256,13 @@ pub fn recall_payload_probe(
     if settings.native_train_windows == Some(0) {
         return Err(invalid("the TRAIN replay reads at least one window"));
     }
+    if settings.native_picks.is_some() && !settings.first_only {
+        return Err(invalid("the native picks are the hard copy's first pick: they need first_only"));
+    }
+    let native_picks = match &settings.native_picks {
+        Some(path) => Some(read_native_picks(path, settings.eval_windows as usize * SHEET_CONTEXT)?),
+        None => None,
+    };
     arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
     crate::geometric_stack::set_retention_rates(settings.retain_rates);
     crate::geometric_stack::set_folded_scores(settings.fold_scores);
@@ -15242,10 +15281,10 @@ pub fn recall_payload_probe(
     let pass = |scale: Option<f32>| -> Result<Vec<PayloadProbeRow>> {
         if settings.first_only {
             crate::vector_reads::with_first_pick_payload(|| {
-                payload_probe_pass(&model, &held, settings.seed, scale)
+                payload_probe_pass(&model, &held, settings.seed, scale, native_picks.as_deref())
             })
         } else {
-            payload_probe_pass(&model, &held, settings.seed, scale)
+            payload_probe_pass(&model, &held, settings.seed, scale, None)
         }
     };
     let base = pass(Some(1.0))?;
@@ -15323,7 +15362,7 @@ pub fn recall_payload_probe(
     } else {
         serde_json::Value::Null
     };
-    let cut = payload_probe_pass(&model, &held, settings.seed, None)?;
+    let cut = payload_probe_pass(&model, &held, settings.seed, None, None)?;
     if cut.len() != base.len() {
         return Err(invalid("the cut pass read other rows than the base pass"));
     }
@@ -17585,6 +17624,24 @@ mod tests {
         let fewer = recall_row_targets(&windows[..2], SHEET_CONTEXT).unwrap();
         assert_eq!(fewer.random[..], a.random[..2 * SHEET_CONTEXT]);
         assert_ne!(a.random, a.ask);
+    }
+
+    /// claude-395: the native picks file reads back as little-endian `u32`s, one per row, and a
+    /// file of another length or one that is missing is refused.
+    #[test]
+    fn native_picks_read_one_per_row() {
+        let dir = std::env::temp_dir().join(format!("claude-395-picks-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("picks.u32");
+        let picks: Vec<u32> = vec![0, 1, 7, 191, 3, 0];
+        let bytes: Vec<u8> = picks.iter().flat_map(|p| p.to_le_bytes()).collect();
+        std::fs::write(&path, &bytes).unwrap();
+        assert_eq!(read_native_picks(&path, 6).unwrap(), picks);
+        assert!(read_native_picks(&path, 5).is_err());
+        assert!(read_native_picks(&path, 7).is_err());
+        assert!(read_native_picks(&dir.join("none.u32"), 6).is_err());
+        std::fs::remove_file(&path).unwrap();
+        std::fs::remove_dir(&dir).unwrap();
     }
 
     /// claude-328's I-2 and I-3 on every structural rule, for both forms: the query token, the
