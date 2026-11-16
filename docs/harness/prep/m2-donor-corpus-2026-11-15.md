@@ -132,6 +132,26 @@ At what measured rate and cost does DeepSeek V4.1 Flash on one rented 4×H200 po
      - One re-lease per part, through `put`'s restore into a new pod. A re-lease carries the cents already spent, so a late failure can stop a part on its cap. The REPORT reads a cap stop as a cap stop (S), never as a bank that ran out.
      - The caps are a backstop: $1,900 at most over 4 pods. The projection after tuning governs, and the REPORT gives it.
    - **Order:** the first new lease waits for D88 on `main` (the parent's PR), for this amendment's FIT, and for the tuning result, so every new pod serves at the chosen setting.
+
+   **Amendment 5 (16 Nov 2026): one 8×B200 and one 4×B200 beside pod 3, and three weighted parts.** D88 merged on `main` as 4b770a92b. The parent offered Casey one 8×B200 at about $85/h in place of two 4×B200 pods. At about 07:40Z Casey answered, word for word: "ok i mean yeah go for it just get it done please as quickly and cheaply as possible". The parent leased both pods at about 07:42Z without waiting for the tuning result, because hosts were scarce and setup takes about 40 min. Amendment 4 applies except what follows.
+   - **Pods:** pod 3 (part 0, 4×B200); part 1, an 8×B200 on machine 137783 (offer 57888900, about $85/h plus disk, `M2_MAX_DPH=86.80`); part 2, a 4×B200 on machine 137774 or 137780 (`M2_MAX_DPH=43.42`). That is three pods and 16 GPUs, about $172/h. There is no fourth pod.
+     - The 8×B200 passes amendment 3's `offer` checks with its own GPU count: 8 B200s, at least 2,000 GB of RAM, `bw_nvlink` of at least 400, and NV# between every pair. `serve b200` gives it data-parallel 4 × tensor-parallel 2; four Engram host copies take about 790 GB of RAM.
+     - Guard caps for part 1: `M2_CAP_CENTS=90000`, which is reached after about 10.4 h of its own lease. Part 2 keeps amendment 4's new-pod caps.
+   - **Three weighted parts** replace amendment 4's quarters. `pod.sh run COMMIT PAR SECS PART`, PART 0–2:
+
+     | Part | Pod | Bank lines | Lines | Budget (kept tokens) | Base seed |
+     |---|---|---|---|---|---|
+     | 0 | pod 3 | 1–200,786 | 200,786 | 290M | 20261116 |
+     | 1 | 8×B200 | 200,787–526,197 | 325,411 | 470M | 20662688 |
+     | 2 | 4×B200 | 526,198–692,364 | 166,167 | 240M | 21313510 |
+
+     - **Budgets:** in proportion to GPUs (4 : 8 : 4) over the 1B still to make once the new pods produce, with pod 3's head start (an estimated 50–60M kept tokens by then) added to part 0. Parts should then end at about the same time if every GPU runs at the same rate.
+     - **Line ranges:** in proportion to the budgets, so every part holds about 1.3 times the prompts its budget needs at about 1,875 kept tokens per prompt.
+     - **Seeds:** each base seed is 20261116 + 2 × (first line − 1), so every prompt keeps its full-bank seed.
+     - **Pod 3** has dispatched only lines below 200,786, so it resumes into part 0 unchanged.
+     - An unequal rate across pods costs wall time, not dollars: a pod that ends first is downed, and the cost per kept token is unchanged.
+   - **Serving on the new pods:** each starts production at the best setting so far (`serve b200`, 128 sequences per replica, `--parallel` equal to the replica count × 128, the server ceiling that won step 6: 512 on the 8×B200, 256 on the 4×B200) as soon as `wait-ready` passes. Each then moves to the tuned setting with one restart under `hold`, which `unserve` makes. Kept records from both settings stay in the part. The part's `engine.json` names each setting and the UTC from which it applied.
+   - **Local folders:** `local/m2-run/part-1/` and `local/m2-run/part-2/`. The unused `part-3/` folder is removed before sealing.
    - **Seal:** one sealed set per part, each verified against the full `bank.jsonl`. `verify` checks records by id, so the full bank holds for every part. Each set is stored at `results/claude/m2-donor-corpus-2026-11-16/part-K/` and read back. The REPORT lists the four roots and the summed kept tokens. Each set's `engine.json` names every serve setting it ran with and the UTC from which each applied.
    - **Expected:** if tuning gains nothing, one pod at about 9.5k kept tokens/s needs about 29 h for 1B, about $1,270. Four pods cut the wall time to about a quarter, for about $20 more setup per new pod. Each doubling of R halves the cost.
 3. **Setup** (`docs/labs/m2-donor-corpus/pod.sh setup`): download `deepseek-ai/DeepSeek-V4.1-Flash-1017` at revision `08c8657f02291e11b6f6b63e0e16014f8e748518` (MIT, not gated, about 511 GB in 48 shards). Check every LFS file against Hugging Face's sha256. Build the client on the pod at the receipt's instrument commit. Then `drive.sh machine POD` writes `machine.json` from the lease (offer, rate, lease time) and the pod's `gpus.csv`, `host-mem.txt` and vLLM version, and pushes it to the pod. `model.json` and `engine.json` are written on the laptop before `put` and hold the pins of Base artifact.

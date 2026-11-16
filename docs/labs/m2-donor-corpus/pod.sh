@@ -128,19 +128,24 @@ smoke)
   ;;
 run)
   # run COMMIT PARALLEL MAX_SECONDS: one segment of the corpus run, detached; resumes.
-  # run COMMIT PARALLEL MAX_SECONDS PART (amendment 4): PART 0-3 is one quarter of the bank, lines
-  # [PART*Q, (PART+1)*Q) with Q = 173,091, so no prompt is generated on two pods. Its base seed is
-  # 20261116 + 2*PART*Q, so turn_seed(base, i, t) = base + 2i + t gives each prompt the seed of its
-  # index in the full bank. Its budget is a quarter of 1B. Without PART: the full bank and 1B.
+  # run COMMIT PARALLEL MAX_SECONDS PART (amendment 5): PART 0-2 is a contiguous range of bank lines,
+  # FIRST..LAST below, so no prompt is generated on two pods. Ranges are in proportion to the parts'
+  # budgets (29% / 47% / 24% of 1B: pod 3's 4 GPUs plus its head start, the 8xB200, a 4xB200). The
+  # base seed is 20261116 + 2*(FIRST-1), so turn_seed(base, i, t) = base + 2i + t gives each prompt
+  # the seed of its index in the full bank. Without PART: the full bank and 1B.
   COMMIT=${1:?}; PAR=${2:?}; SECS=${3:?}; PART=${4:-}
   BANK=$W/bank.jsonl; SEED=20261116; BUDGET=1000000000
   if [ -n "$PART" ]; then
-    case $PART in 0|1|2|3) ;; *) echo "run: PART must be 0, 1, 2 or 3, got $PART"; exit 1 ;; esac
-    Q=173091
-    [ "$(wc -l < "$W/bank.jsonl")" -eq $((4 * Q)) ] || { echo "run: the bank is not $((4 * Q)) lines"; exit 1; }
-    BANK=$W/bank-part-$PART.jsonl; SEED=$((20261116 + 2 * PART * Q)); BUDGET=250000000
-    sed -n "$((PART * Q + 1)),$(((PART + 1) * Q))p" "$W/bank.jsonl" > "$BANK.tmp" && mv "$BANK.tmp" "$BANK"
-    [ "$(wc -l < "$BANK")" -eq "$Q" ] || { echo "run: $BANK is not $Q lines"; exit 1; }
+    case $PART in
+      0) FIRST=1; LAST=200786; BUDGET=290000000 ;;
+      1) FIRST=200787; LAST=526197; BUDGET=470000000 ;;
+      2) FIRST=526198; LAST=692364; BUDGET=240000000 ;;
+      *) echo "run: PART must be 0, 1 or 2, got $PART"; exit 1 ;;
+    esac
+    [ "$(wc -l < "$W/bank.jsonl")" -eq 692364 ] || { echo "run: the bank is not 692364 lines"; exit 1; }
+    BANK=$W/bank-part-$PART.jsonl; SEED=$((20261116 + 2 * (FIRST - 1)))
+    sed -n "${FIRST},${LAST}p" "$W/bank.jsonl" > "$BANK.tmp" && mv "$BANK.tmp" "$BANK"
+    [ "$(wc -l < "$BANK")" -eq $((LAST - FIRST + 1)) ] || { echo "run: $BANK is not $((LAST - FIRST + 1)) lines"; exit 1; }
   fi
   mkdir -p "$W/out"
   # A restore from the laptop is incomplete: the guard does not sync during one, so refuse to run.
