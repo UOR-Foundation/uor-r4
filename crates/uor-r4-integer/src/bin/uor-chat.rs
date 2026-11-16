@@ -91,6 +91,9 @@ struct CliArgs {
     say: Option<String>,
     /// One-shot raw token-ID prompt (`--prompt-ids 0,7,19,31`) for `--stack` parity verification.
     prompt_ids: Option<Vec<u32>>,
+    /// Drop the oldest token instead of refusing when the context is full (`--context-slide`),
+    /// for a `--stack` model whose reads see the window.
+    context_slide: bool,
     /// JSON script of dialogue turns for one artifact, written as one JSON record.
     script_path: Option<PathBuf>,
     /// Path to write a `UR4SESS1` binary session snapshot (`UR4SESS2` with a content readout) after a `--stack` step batch.
@@ -315,6 +318,7 @@ impl Default for CliArgs {
             no_turn_memory: false,
             say: None,
             prompt_ids: None,
+            context_slide: false,
             script_path: None,
             save_session: None,
             restore_session: None,
@@ -361,6 +365,10 @@ fn print_usage() {
     );
     eprintln!("      --threads <INT>         worker threads for --stack steps (default: 1)");
     eprintln!("      --say <TEXT>            answer one turn, print a JSON record and exit");
+    eprintln!(
+        "      --context-slide         drop the oldest token at the context bound instead of"
+    );
+    eprintln!("                              refusing (--stack; the reads must see the window)");
     eprintln!(
         "      --prompt-ids <CSV>      step comma-separated token IDs on --stack or --discrete,"
     );
@@ -660,6 +668,7 @@ fn parse_cli_args() -> CliArgs {
                     process::exit(1);
                 }
             }
+            "--context-slide" => args.context_slide = true,
             "--prompt-ids" => {
                 idx += 1;
                 if idx < raw.len() {
@@ -888,6 +897,12 @@ fn parse_cli_args() -> CliArgs {
     }
     if args.token_stdin && args.serve.is_none() {
         eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} '--token-stdin' requires '--serve'");
+        process::exit(1);
+    }
+    if args.context_slide && args.stack_path.is_none() {
+        eprintln!(
+            "{ANSI_RED_BOLD}error:{ANSI_RESET} '--context-slide' requires '--stack'"
+        );
         process::exit(1);
     }
     if args.prompt_ids.is_some() && args.stack_path.is_none() && args.discrete_path.is_none() {
@@ -2419,6 +2434,10 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
         return serve_loopback(config).map_err(|error| StackCliError::Usage(error.to_string()));
     }
     let mut chat = StackChat::from_tokenizer_path(&model, tokenizer_path, cli.protocol)?;
+    if cli.context_slide {
+        chat.set_context_slide(true)
+            .map_err(|error| StackCliError::Usage(format!("--context-slide: {error}")))?;
+    }
     // Serve again (claude-363): a reply whose found place no row was offered starts over from it.
     let serve_again = cli.place_serve_again == Some(true);
     chat.set_serve_again(serve_again);
@@ -2485,6 +2504,11 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
             }
         }
         let mut session = model.session();
+        if cli.context_slide {
+            session
+                .set_context_slide(true)
+                .map_err(|error| StackCliError::Usage(format!("--context-slide: {error}")))?;
+        }
         if let Some(restore_path) = cli.restore_session.as_deref() {
             let raw = std::fs::read(restore_path)?;
             let parsed =

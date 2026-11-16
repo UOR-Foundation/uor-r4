@@ -163,3 +163,42 @@ fn a_copy_boost_refuses_the_slide() {
     let message = session.set_context_slide(true).expect_err("the slide is refused");
     assert!(format!("{message}").contains("copy boost"), "{message}");
 }
+
+#[test]
+fn under_the_bound_the_slide_changes_nothing() {
+    // The policy may only take effect at the bound: below it, the two runs must agree token for
+    // token (and the read with it).
+    let shape = FbsSynth {
+        context: 8,
+        ..FBS_SYNTH_SMALL
+    };
+    let bytes = read_bearing(20_261_505, shape);
+    let model = IntegerStackModel::parse(&bytes).expect("parse");
+    let mut plain = model.session();
+    plain.set_q31_read_trace(true).expect("trace");
+    let mut sliding = model.session();
+    sliding.set_q31_read_trace(true).expect("trace");
+    sliding.set_context_slide(true).expect("slide");
+    let below = ids();
+    for (step, &id) in below.iter().take(8).enumerate() {
+        assert_eq!(
+            plain.step_native(id).expect("plain").token,
+            sliding.step_native(id).expect("slid").token,
+            "step {step}"
+        );
+    }
+    let plain_picks: Vec<u32> = plain
+        .q31_read_trace()
+        .expect("on")
+        .iter()
+        .map(|step| step.pick)
+        .collect();
+    let sliding_picks: Vec<u32> = sliding
+        .q31_read_trace()
+        .expect("on")
+        .iter()
+        .map(|step| step.pick)
+        .collect();
+    assert_eq!(plain_picks, sliding_picks);
+    assert_eq!(plain.tokens(), sliding.tokens());
+}

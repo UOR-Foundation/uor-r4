@@ -312,6 +312,16 @@ impl<'m> StackChat<'m> {
         self.serve_again = on;
     }
 
+    /// Drop the oldest token instead of refusing when the session's context is full
+    /// ([`IntegerStackSession::set_context_slide`]).
+    ///
+    /// The conversation's reads must see the window: the native Q31 read does (its history is
+    /// dropped with the tokens), while a Hamming read, the turn memory and a pointer head name
+    /// absolute positions and refuse the policy.
+    pub fn set_context_slide(&mut self, on: bool) -> Result<(), StackChatError> {
+        self.session.set_context_slide(on).map_err(StackChatError::Stack)
+    }
+
     /// Whether the reply produced last was served again ([`Self::set_serve_again`]).
     pub fn last_reply_served_again(&self) -> bool {
         self.served_again
