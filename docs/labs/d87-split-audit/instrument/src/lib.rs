@@ -616,10 +616,12 @@ impl SpanSet {
 
 /// Pack 13 ids (each below 4,096) exactly into three words.
 pub fn pack(ids: &[u32]) -> [u64; 3] {
-    debug_assert_eq!(ids.len(), GRAM);
+    assert_eq!(ids.len(), GRAM, "a 13-gram has {GRAM} ids");
     let mut w = [0u64; 3];
     for (i, &id) in ids.iter().enumerate() {
-        debug_assert!(id < 1 << ID_BITS);
+        // A hard check in release too: an id of 4,096 or more would spill into the next slot
+        // and make false matches.
+        assert!(id < 1 << ID_BITS, "token id {id} does not fit {ID_BITS} bits");
         w[i / 5] |= (id as u64) << (ID_BITS * (i % 5) as u32);
     }
     w
@@ -758,6 +760,9 @@ pub fn audit(plan: &Plan, coder: &Coder, threads: usize, bloom_log2: u32) -> Res
 
 /// The census of a plan: DEV grams and DEV-test spans collected, TRAIN streamed against them.
 pub fn audit_full(plan: &Plan, coder: &Coder, threads: usize, bloom_log2: u32) -> Result<(Value, Extras), String> {
+    if !(6..=40).contains(&bloom_log2) {
+        return Err(format!("bloom_log2 {bloom_log2} is outside 6..=40"));
+    }
     let paths: Vec<PathBuf> = plan.shards.iter().map(|(p, _)| p.clone()).collect();
     let fate_of = |p: &Path| &plan.fate[paths.iter().position(|q| q == p).unwrap()];
     // Pass 1: DEV grams and DEV counts; DEV-test records kept whole for the span census.

@@ -213,6 +213,14 @@ fn packing_is_exact() {
     assert_eq!(unpack(&w), base);
 }
 
+#[test]
+#[should_panic(expected = "does not fit")]
+fn packing_refuses_an_id_past_twelve_bits() {
+    let mut ids = vec![1u32; 13];
+    ids[3] = 4096;
+    let _ = pack(&ids);
+}
+
 /// `len` letters from a fixed stride walk over `alphabet`.
 fn letters(alphabet: &[u8], stride: usize, start: usize, len: usize) -> String {
     (0..len).map(|i| alphabet[(start + i * stride) % alphabet.len()] as char).collect()
