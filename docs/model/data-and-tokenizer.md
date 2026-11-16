@@ -1,7 +1,7 @@
 <!-- freshness: sources=crates/uor-r4-discrete/src/corpus.rs,crates/uor-r4-tokenizer,crates/uor-r4-tokenizer/src/bin/train-bpe.rs,crates/uor-r4-tokenizer/src/dialogue.rs,crates/uor-r4-tokenizer/src/lib.rs,crates/uor-r4-tokenizer/src/training.rs,crates/uor-r4-training/src/bin/mix-chat-corpus.rs,crates/uor-r4-training/src/bin/prepare-chat-parquet.rs,crates/uor-r4-training/src/bin/prepare-knowledge-corpus.rs -->
 # Data and tokenizer
 
-The model never sees letters or words. It sees a stream of numbered pieces of text, and a small program called a tokenizer cuts text into those pieces and turns them back into text. The project's data is chat-shaped text, prepared into files of piece numbers with one fixed tokenizer of 4,096 pieces. Every prepared file carries a fingerprint of that tokenizer, so a result can never be quietly compared across two different ways of cutting text. The data is small: the training set for the current model path is about 7.5 million tokens. A larger corpus, written once by an open donor model under a narrow owner exception, is planned but has not been generated.
+The model never sees letters or words. It sees a stream of numbered pieces of text, and a small program called a tokenizer cuts text into those pieces and turns them back into text. The project's data is chat-shaped text, prepared into files of piece numbers with one fixed tokenizer of 4,096 pieces. Every prepared file carries a fingerprint of that tokenizer, so a result can never be quietly compared across two different ways of cutting text. The data is small: the training set for the current model path is about 7.5 million tokens. A donor-written corpus of about one billion tokens ([D87](../integration/DECISIONS.md), [below](#the-d87-donor-corpus-a-protected-asset)) was generated and sealed on 16 November 2026; no model has been trained on it yet.
 
 Labels used below: **proof** means derived from definitions or code, **measurement** means a recorded run, **hypothesis** means an untested idea. See [`docs/formal_vocabulary.md`](../formal_vocabulary.md) and the [glossary](../start/glossary.md).
 
@@ -54,7 +54,8 @@ $$3+256+3837=4096 .$$
 | [TinyDialogues](https://huggingface.co/datasets/styfeng/TinyDialogues) | Short dialogues | 214M "Step 8" pretraining | MIT | Historical |
 | [SmolLM-Corpus](https://huggingface.co/datasets/HuggingFaceTB/smollm-corpus) (FineWeb-Edu, Cosmopedia-v2) | Web and synthetic text | "Plan A" pretraining | ODC-BY | Historical |
 | [SmolTalk](https://huggingface.co/datasets/HuggingFaceTB/smoltalk) and [UltraChat 200k](https://huggingface.co/datasets/HuggingFaceH4/ultrachat_200k), as `chat-v0-p2` | Chat | Chat pretraining share and assistant fine-tune | Apache-2.0 / MIT | Historical |
-| `distill-d1` | A donor-written corpus | The discrete student | Apache-2.0 donor | **Planned; not generated** |
+| `distill-d1` | A donor-written corpus | The discrete student | Apache-2.0 donor | Superseded by the D87 corpus (D86, D87) |
+| D87 donor corpus `m2-donor-corpus-2026-11-16`: 528,615 records, 1,009,576,044 kept donor tokens | Written by DeepSeek V4.1 Flash, reasoning and answer as hard text | The native student (D86 step 6) | DeepSeek Open Platform Terms §4.2 allow distillation (D89) | **Sealed; protected asset** ([below](#the-d87-donor-corpus-a-protected-asset)) |
 
 **TRAIN count check (claude-202):** the pinned `tokens.u16` is 15,025,658 bytes: a 64-byte header plus two bytes for each of 7,512,797 tokens, with 2,425,925 eligible targets. A 26 October sheet says 26,214,400 tokens and 10,975,281 targets for the same SHA; those figures match neither the file header nor its payload and are not the corpus count ([census](../labs/one-model-end-to-end/README.md), [count report](../loop/tasks/one-model-end-to-end/claude-202/REPORT.md)).
 
@@ -69,6 +70,51 @@ $$3+256+3837=4096 .$$
 | [`caseyallard/uor-r4-geometric-214m`](https://huggingface.co/caseyallard/uor-r4-geometric-214m) | Public | Four 214M historical float checkpoints (`base-tinystories`, `base-planA`, `chat-planA-b8`, `chat-smoltalk-b16`) with configs, sanitized run reports and the tokenizer. TinyStories validation NLL 1.032; FineWeb dev NLL 2.90 to 2.073; the chat variants rewrite and summarize usably, while code and arithmetic are wrong. Not the served model |
 | [`caseyallard/uor-r4-data`](https://huggingface.co/datasets/caseyallard/uor-r4-data) | Public | The project-generated data: tokenizer, memory-dialogue sets, dev split, conversational panels, TinyStories tokenized for the native learner |
 | `caseyallard/uor-r4-store` | Private | The working store: `data/*` (2.7 GB), base models, toolchain and binary caches, pod set-up, and archived run results ([compute](../labs/compute.md)) |
+
+## The D87 donor corpus: a protected asset
+
+**What it is.** This is the project's first large training corpus. It holds 528,615 records and 1,009,576,044 kept tokens, counted in the donor's tokenizer. DeepSeek V4.1 Flash wrote every answer. Each record keeps the donor's reasoning and its final answer as two separate pieces of text: no scores, probabilities or ranks (D87, §3.10). It was generated on 16 November 2026 under D87, D88 and D89, sealed in two parts, and verified in both copies ([claude-400](../loop/tasks/m2-donor-corpus-generation/claude-400/REPORT.md)):
+
+| Part | Engine | Records | Kept tokens | Merkle root |
+|---|---|---:|---:|---|
+| `part-0` | vLLM 0.33.0 on a rented 4×B200, seeded, revision `08c8657f…` | 71,014 | 136,098,802 | `ecdceae33a6891f5cdac2da2cf9a3c1dba85d907e52cdad87e33d6d7ec32e153` |
+| `api-a` | DeepSeek API `deepseek-flash`, off-peak, no seed | 457,601 | 873,477,242 | `f8a845b79bb5f1a9b12c25891eda2e90772a48175e54ee637e27fcbf8e645254` |
+
+**What it cost.** About $854 for the corpus alone. By the account balance it was about $879, which may include other use of the same API account. That is $225.82 for the rented pod, about $617 of API use by our own usage counts, and about $11 for two short-lived pods. On top of that come six engineering units (claude-398 to claude-403).
+
+**Why it matters.**
+1. **It has about 770 times the scored targets the current model trained on.** The current path's TRAIN set is 7,512,797 tokens with 2,425,925 scored targets. In our 4,096-piece tokenizer, this corpus projects to about 2.1B stream tokens, about 1.87B of them scored response targets. That projection uses claude-403's measured 1.85× token ratio on 31,910 of pod 3's records. The project's own measurements put data first:
+   - #1894 measured a larger gain from data than from model size on the older stack;
+   - D86's review found the current TRAIN to be about 39k usable windows.
+2. **It cannot be regenerated as it is.**
+   - `api-a` has no seed and no pinned weights. The API exposes no revision, and its served model may change or be withdrawn, so the same prompts would now give different text.
+   - `part-0` is seeded with a pinned revision, but regenerating it needs B200-class GPUs, and bit-identity on other hardware has not been shown.
+
+   Rebuilding something like it would cost the same money again and give a different corpus.
+3. **It outlives the tokenizer.** The shards store text, not token ids, so the corpus can be re-tokenized under any future vocabulary. That matters because claude-403 measured 8–13% single-byte fallback tokens in responses.
+4. **It keeps its own provenance.** The prompt bank and the seal inputs are stored beside it. That allows:
+   - splits by source (WildChat 304,584, Numina 77,233, OpenThoughts 71,766, OASST2 3,300 and GSM8K 718 records in `api-a`);
+   - contamination checks against the frozen panels;
+   - answer-only or reasoning-plus-answer training without regeneration.
+
+**Where it lives.** Two verified copies, each folder with its `storage-manifest.jsonl` (raw and compressed sha256):
+- the private HF store `caseyallard/uor-r4-store`, under `results/claude/m2-donor-corpus-2026-11-16/{part-0,api-a}/`;
+- wick's ZFS dataset `plexpool/uor-r4-corpus`, at `/mnt/plexpool/uor-r4-corpus/m2-donor-corpus-2026-11-16/`:
+  - `part-0`: 81 files, 158 MB;
+  - `api-a`: 457 files, 1,012 MB;
+  - `inputs`: 13 files, 205 MB (the prompt bank and seal inputs).
+
+**Rules.**
+- Never delete, move, rename, recompress or rewrite a file in either copy. No disk-hygiene sweep, archive move (L-003) or clean-up touches them.
+- Derived files are caches and may be deleted; the shards may not. The derived files are `student-ingest`'s token streams and every model input built from the shards.
+- Make a third copy before any change to either store.
+- To check a copy:
+  - run `sha256sum -c` against each folder's manifest;
+  - decompress into a scratch folder;
+  - run `donor-corpus verify` (`docs/labs/m2-donor-corpus/instrument`). The roots must equal the table above.
+- Recommended, and an owner step because it needs `sudo`: a named ZFS snapshot (`zfs snapshot plexpool/uor-r4-corpus@d87-sealed-2026-11-16`). The dataset now has only rolling hourly auto-snapshots, which expire.
+
+**What it is not.** It is an input to experiments, not evidence of capability. No model has been trained on it yet.
 
 
 ## `distill-d1`: one planned donor corpus
@@ -91,7 +137,8 @@ $$3+256+3837=4096 .$$
 | Data worth more than size, at 7M parameters | 0.1592 against 0.0837 bits per byte, one seed | measurement | [#1894](../../archive/history/github-archive-2026-10-15/markdown/1894-data-vs-architecture-settled-in-domain-data-is-worth-0-159-b.md) |
 | Multi-digit numbers | Not built; split pieces make numeric recall hard for the older model | measurement | [diagnosis](../../archive/labs/v5-numeric-diagnosis-2026-10-09/README.md) |
 | Other scripts and languages | Never tested; the corpora are English chat | none | [tokenizer page](../mechanisms/tokenizer.md) |
-| `distill-d1` | Registered, not generated, no capability claim | hypothesis | [sheet](../harness/prep/m1-distill-d1-donor-corpus-DRAFT-2026-10-19.md) |
+| `distill-d1` | Superseded by the D87 corpus; no capability claim | status | [sheet](../harness/prep/m1-distill-d1-donor-corpus-DRAFT-2026-10-19.md) |
+| D87 donor corpus | Sealed, two verified copies, no model trained on it, no capability claim | status | [claude-400](../loop/tasks/m2-donor-corpus-generation/claude-400/REPORT.md), [claude-403](../loop/tasks/m2-student-corpus-ingest/claude-403/REPORT.md) |
 
 No model holds a useful conversation yet, and 1 of 8 milestones is complete ([project track](../integration/project-track.md)).
 
