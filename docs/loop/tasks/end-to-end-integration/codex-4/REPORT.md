@@ -8,10 +8,10 @@ Lab: codex. Order: [ORDER.md](ORDER.md).
   the item is still claimed by this lab's codex-3 worktree (PR #4015, approved, in the merge queue).
   The claim is this lab's own; the unit adds only a test and docs, no dependency and no `Cargo.lock`
   change.
-- **The exact `Z[φ]` comparator overflowed.** Cross-multiplying two score numerators at these
-  magnitudes exceeds `i128` when the sign test squares them. Ordering now uses an f64 value of the
-  exact score, and the test asserts the minimum target/runner-up margin is **0.191**, far above f64
-  noise; score equality remains exact.
+- **The exact `Z[φ]` comparator used the derived lexicographic coefficient order, not the real
+  order.** A correct exact sign test would square cross-products near `2^111` and overflow `i128` at
+  these magnitudes, so ordering now uses an f64 value of the exact score; the test asserts the
+  minimum target/runner-up margin is **0.191**, far above f64 noise. Score equality remains exact.
 - **The first retrieval construction was wrong.** Laying tokens on orbits `r^k · b` makes the
   relation between a token and its successor `b⁻¹ r b`, not `r`, so one learned relation cannot fit
   more than one orbit. The quaternion order also broke the wrap: for a rotation of order 5 the
