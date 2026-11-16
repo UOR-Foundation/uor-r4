@@ -78,15 +78,25 @@ do_sync() {
     *) need+=("$name") ;;
     esac
   done <<< "$list"
+  # Copies land in .incoming/ and move into out/ only once their sha256 matches the listing, so a
+  # stream cut mid-file never leaves a file under its final name.
+  local inc="$LOCAL/out/.incoming" copyfail=0
+  rm -rf "$inc"; mkdir -p "$inc"
   if [ ${#need[@]} -gt 0 ]; then
-    ssh_pod "cd $W/out && tar cf - ${need[*]}" | tar xf - -C "$LOCAL/out" || { log "sync: copy failed"; return 2; }
+    ssh_pod "cd $W/out && tar cf - ${need[*]}" | tar xf - -C "$inc" || { log "sync: copy failed"; copyfail=1; }
   fi
-  # Between final syncs the logs are still growing: copied each time, checked only by a final sync.
-  [ "$final" = final ] || { ssh_pod "cd $W/out && tar cf - $LOGS 2>/dev/null || true" | tar xf - -C "$LOCAL/out" 2>/dev/null || true; }
   for name in "${need[@]+"${need[@]}"}"; do
     sum=$(echo "$list" | awk -v n="$name" '$2 == n {print $1}')
-    [ "$(shasum -a 256 "$LOCAL/out/$name" | cut -d' ' -f1)" = "$sum" ] || { log "MISMATCH $name"; bad=1; }
+    if [ -f "$inc/$name" ] && [ "$(shasum -a 256 "$inc/$name" | cut -d' ' -f1)" = "$sum" ]; then
+      mv -f "$inc/$name" "$LOCAL/out/$name"
+    else
+      log "not verified, not kept: $name"; bad=1
+    fi
   done
+  rm -rf "$inc"
+  # Between final syncs the logs are still growing: copied each time, checked only by a final sync.
+  [ "$final" = final ] || { ssh_pod "cd $W/out && tar cf - $LOGS 2>/dev/null || true" | tar xf - -C "$LOCAL/out" 2>/dev/null || true; }
+  [ "$copyfail" = 1 ] && return 2
   log "synced${final:+ ($final)} $(echo "$list" | grep -c . || true) files (${#need[@]} copied), mismatches=$bad; $(tail -1 "$LOCAL/out/rate.jsonl" 2>/dev/null || true)"
   return $bad
 }
@@ -165,6 +175,9 @@ put)
   for f in $LOGS; do [ -f "$LOCAL/out/$f" ] && files+=("$f"); done
   if [ ${#files[@]} -gt 0 ]; then
     (cd "$LOCAL/out" && shasum -a 256 "${files[@]}") > "$LOCAL/restore.sha256"
+    # On any failure from here the pod's out/ (copies of laptop files only) is removed, marker and
+    # all, so the guard is never blocked by .restoring and put can simply be run again.
+    trap 'ssh_pod "rm -rf $W/out" || true; echo "restore failed: pod out/ removed; run put again" >&2' EXIT
     ssh_pod "mkdir -p $W/out && touch $W/out/.restoring"
     (cd "$LOCAL/out" && tar cf - "${files[@]}") | ssh_pod "tar xf - -C $W/out"
     # Every restored file must read back "OK" on the pod; anything else stops before a run starts.
@@ -172,6 +185,7 @@ put)
     ok=$(echo "$got" | grep -c ': OK$' || true)
     [ "$ok" = "${#files[@]}" ] || { echo "$got" | grep -v ': OK$' >&2; echo "restore check FAILED: $ok of ${#files[@]} OK" >&2; exit 1; }
     ssh_pod "rm -f $W/out/.restoring"
+    trap - EXIT
     log "restored ${#files[@]} files to $W/out, sha256 OK"
   fi
   ;;
@@ -200,7 +214,10 @@ wait-segment)
 watch)
   echo "$guard_help"
   # shellcheck disable=SC1091
-  . "$LOCAL/lease.env"
+  [ -f "$LOCAL/lease.env" ] && . "$LOCAL/lease.env"
+  if [ -z "${M2_LEASE_EPOCH:-}" ] || [ -z "${M2_RATE_CENTS:-}" ] || [ "${M2_POD:-}" != "$POD" ]; then
+    alert "guard NOT started: $LOCAL/lease.env has no lease for $POD (run note first)"; exit 1
+  fi
   first=${M2_FIRST_LEASE_EPOCH:-$M2_LEASE_EPOCH}; prior=${M2_PRIOR_CENTS:-0}
   seenf="$LOCAL/guard-seen-$POD"; seen=0; [ -f "$seenf" ] && seen=1
   idle=0; unreach=0

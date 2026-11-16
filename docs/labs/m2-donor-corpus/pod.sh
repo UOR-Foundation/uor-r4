@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pod.sh STEP: the on-pod recipe for claude-400 (D87), run inside the vLLM image on the
-# leased Vast 8xH200 pod. Steps: setup | serve | wait-ready | smoke | run | status.
+# leased Vast 4xH200 pod. Steps: setup | serve | wait-ready | smoke | run | status.
 # The engine (vLLM) runs here, outside every compiled module (CHARTER 3.4); the client
 # is the repository's Rust instrument, built here from the copied source.
 set -euo pipefail
@@ -39,9 +39,8 @@ setup)
   echo "setup done"
   ;;
 serve)
-  # Two data-parallel replicas of TP4 on one endpoint; the recipe's H200 settings,
+  # One endpoint, one TP4 replica per four GPUs; the recipe's H200 settings,
   # no speculative decoding (the recipe marks it for small batches).
-  # One TP4 replica per four GPUs: DP1 on a 4xH200, DP2 on an 8xH200.
   MAX_SEQS=${MAX_SEQS:-256}
   NG=$(nvidia-smi -L | wc -l); DP=$((NG / 4))
   [ "$DP" -ge 1 ] && [ $((DP * 4)) -eq "$NG" ] || { echo "serve: $NG GPUs is not a multiple of 4"; exit 1; }
@@ -97,7 +96,7 @@ status)
   echo "run: $(kill -0 "$(cat "$W/run.pid" 2>/dev/null)" 2>/dev/null && echo alive || echo stopped)"
   echo "vllm: $(kill -0 "$(cat "$W/vllm.pid" 2>/dev/null)" 2>/dev/null && echo alive || echo stopped)"
   tail -3 "$W/out/rate.jsonl" 2>/dev/null || true
-  ls "$W/out" 2>/dev/null | grep -c '^shard-.*\.jsonl$' || true
+  echo "finished shards: $(find "$W/out" -maxdepth 1 -name 'shard-*.jsonl' 2>/dev/null | wc -l)"
   nvidia-smi --query-gpu=index,utilization.gpu,memory.used --format=csv,noheader
   ;;
 *) echo "unknown step $step" >&2; exit 1;;
