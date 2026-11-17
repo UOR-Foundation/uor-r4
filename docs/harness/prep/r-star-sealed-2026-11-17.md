@@ -2,7 +2,13 @@
 
 Lab: claude. Item: [one-model-end-to-end](../../roadmap/items/one-model-end-to-end.md) (#3407). Order: [claude-422](../../loop/tasks/written-state-count-model/claude-422/ORDER.md). Code: branch `claude/kn-sealed-422`, off `main` at `9465b92d6`. Release cited at dispatch: D86 (§3.10), wick is the owner's GPU.
 
-TEST FITNESS: PENDING - round 2 pending.
+TEST FITNESS: FIT - round 2 (fresh-context non-author, at `57b85a395`) found no blocker. Its three should-fix findings and two notes are folded in below:
+  - (1) Every run of the oracle test, not only step 4b, first checks the sha256 of its TRAIN and query streams.
+  - (2) The stall rule also requires the job's CPU time to have stopped, because the oracle phase runs on the CPU and prints only at its end.
+  - (3) The sealed run's failure cases are separated. A `--check-host` mismatch is an instrument failure, and only an exit before the "gpu scored" line is a crash. Replacing an invalid first JSON takes a decision card that amends the ORDER's seal, and the first JSON stays on record.
+  - (Notes) B1's `jq -e` check is written out. Step 3's line also checks that its inputs are the ten runs of one sweep.
+
+  Round 2 checked that every round-1 item is in the text, that the step-3 line is exact, that the 4a slice equals the oracle's, and that either negative reaches the equality assert.
 - Round 1 (fresh-context non-author, at `f649077c4`): NOT FIT, two blockers and five should-fix findings, all folded in below:
   - (1, blocker) The N\* choice is now written out as one `jq` line in step 3. It compares `bits_q12` as numbers and asserts equal bytes.
   - (2, blocker) A later R\* never replaces the sealed one. A change to bar Q's reference is a decision card, and none may land once a model has been scored on DEV-test.
@@ -35,20 +41,25 @@ The counts are exact. They are hashed per partition on the GPU and assembled in 
 
 All on wick's RTX 4090, from a source tarball of this branch's head. The instrument is `docs/labs/kn-reference/instrument` (claude-421). The job script hardcodes every stream path under `/workspace/out/c420/run1/`.
 1. **Build and CUDA tests.** `cargo test --release --features cuda --lib kn_score` passes (claude-421's 10 tests). The real-slice test also runs at its defaults (N = 2, 1%), to show the new settings left claude-421's check as it was.
+   - **Done at `f649077c4`** (job `c422-build`), before this sheet's FIT: 10 / 10 pass. The defaults check gave claude-421's slice exactly: 107,280 query tokens, 107,257 targets, order-0 n1..n4 [58, 64, 59, 57]. That job named the DEV-tune path in its script, and a query of that size can only be DEV-tune's 1% slice. No score was read from it beyond equality with the oracle.
 2. **Sweep on DEV-tune**, N = 1..=10:
 
    `kn-reference train.tokens.u16 dev-tune.tokens.u16 id-bytes.u8 dev-tune.novel.u8 N 134217728 sweep-N.json --check-host`
 
-   This uses the same budget as claude-421's scale run (2^27 positions per partition). Each run counts all of TRAIN at orders 0..N and scores all of DEV-tune. The host scorer checks every mass. After each run, a `jq -e` line checks B1, and the sweep stops at the first failure.
+   This uses the same budget as claude-421's scale run (2^27 positions per partition). Each run counts all of TRAIN at orders 0..N and scores all of DEV-tune. The host scorer checks every mass. After each run, this check tests B1, and the sweep stops at the first failure:
+
+   `jq -e --argjson n N '.per_mille == 1000 and .check_host == true and .sealed_run == false and .highest_order == $n and .budget == 134217728 and .inputs.train_tokens == 2091560001 and .inputs.train_sha256 == "c6cba29e…" and .inputs.query_sha256 == "75c6d1ac…" and .inputs.classes_sha256 == "7df42437…" and .inputs.id_bytes_sha256 == "befb22f6…" and .all.targets == 10807417 and .all.bytes == 21928475 and .novel.targets == 7566174 and .novel.bytes == 15995822' sweep-N.json`
+
+   The script carries the full 64-digit shas. The sealed run's check is the same with `.sealed_run == true`, DEV-test's query and novel shas (`023784b7…`, `5bf3881b…`) and DEV-test's totals.
 3. **Choice.** N\* is the N whose `all.bits_q12`, read as a number, is smallest. A tie goes to the smaller N. This is the line, run in the folder of the ten files:
 
-   `jq -s -r 'if (map(.all.bytes) | unique | length) == 1 then (sort_by((.all.bits_q12 | tonumber), .highest_order) | .[0].highest_order) else error("bytes differ across N") end' sweep-1.json sweep-2.json sweep-3.json sweep-4.json sweep-5.json sweep-6.json sweep-7.json sweep-8.json sweep-9.json sweep-10.json`
+   `jq -s -r 'if length == 10 and (map(.highest_order) | sort) == [1,2,3,4,5,6,7,8,9,10] and (map(.budget) | unique | length) == 1 and all(.[]; .per_mille == 1000) and (map(.all.bytes) | unique | length) == 1 then (sort_by((.all.bits_q12 | tonumber), .highest_order) | .[0].highest_order) else error("not the ten runs of one sweep") end' sweep-1.json sweep-2.json sweep-3.json sweep-4.json sweep-5.json sweep-6.json sweep-7.json sweep-8.json sweep-9.json sweep-10.json`
 
    `tonumber` is exact here: the totals are near 2^38, below 2^53.
 4. **Oracle at N\*.**
    - **a. The slice's coverage.** First, `kn-reference … dev-tune.tokens.u16 … dev-tune.novel.u8 N* 16777216 slice-nstar.json --per-mille 2 --check-host` runs on exactly the oracle test's slice. Both cut at the first BOS at or before the 2‰ mark, by the same rule. Every order 0..N\* must have `kept_contexts` > 0, so the check reaches the top order.
    - **b. The check.** The ignored test `kn_score_cuda_real_slice_equals_the_cpu_oracle` with `UOR_KN_N=N*` and `UOR_KN_PER_MILLE=2`. It requires every GPU mass to equal `KnOracle`'s. `KnOracle` is the independent CPU oracle: ordered maps keyed by the context tokens, with its own discount rule.
-     - Before it runs, the job logs the sha256 of the file in `UOR_KN_QUERY`, and it must be DEV-tune's (`75c6d1ac…`). The test itself has no seal guard.
+     - The test itself has no seal guard. So **every** run of it (steps 4b and 4c, the Short reading, and any rerun) first logs the sha256 of the files in `UOR_KN_QUERY` and `UOR_KN_TRAIN`. They must be DEV-tune's (`75c6d1ac…`) and TRAIN's (`c6cba29e…`), or the job aborts before the test starts.
      - The job logs the test's peak resident memory and its time. If the oracle runs out of memory (the container's limit is 16 GiB), steps 4a and 4b run again at 1‰, with the same pass rule.
    - **c. Negative.** The branch is fixed from 4a's JSON before the negative runs. If some order has `discount_fallback` true and no zero in its `count_of_counts`, the out-of-range branch is live: `oracle_discounts`'s range test is replaced by `true`. Otherwise the oracle's gamma is set to 0.
      - The negative passes only if the test fails at its equality assert, "the GPU path differs from the CPU oracle". A panic elsewhere does not count. If the range negative ends in another panic (for example an oracle mass that does not fit u64), that is recorded as "branch live, comparison not reached", and the gamma negative is run as well and must fail at the equality assert.
@@ -110,7 +121,7 @@ This unit is a measurement: it produces R\*. Its bars decide whether the sealed 
 - **Novel subset** (claude-411's rule, claude-420's masks): a target is novel when the 13 tokens before it in its record form no 13-gram of TRAIN. Bar Q gates on all targets and on the novel subset.
 - **DEV-test** is scored once, in step 6. No earlier step reads it:
   - the instrument refuses its sha256 without `--sealed-run`;
-  - the oracle test's query is checked to be DEV-tune's (step 4b);
+  - every run of the oracle test checks that its query is DEV-tune's (step 4b);
   - nothing seen on DEV-test feeds back into N.
 
 ## Minimum test power
@@ -127,8 +138,16 @@ Wick is the owner's GPU, so there is no rental (D86). Claude-421 timed about 10 
 
 ## Stop rule
 
-- **Stall rule:** a job whose log gains no new line for 20 minutes, with no GPU use of its own, is stopped by its own PID and reported. A run that is healthy but slow is never cancelled for its time.
+- **Stall rule:** a job is stopped by its own PID and reported only when all three hold for 20 minutes:
+  - its log gains no new line;
+  - it has no GPU use of its own;
+  - its CPU time (utime + stime in `/proc/PID/stat`, over the job's processes) does not advance.
+
+  The oracle phase runs on the CPU and prints only at its end, so the CPU-time condition keeps it alive while it works. A run that is healthy but slow is never cancelled for its time.
 - **A sweep run that fails B1** ends the sweep. It is classified (instrument or memory) and repaired, and the sweep is rerun from N = 1 under this sheet. DEV-test is untouched.
   - The partition budget may be lowered after a memory failure, but only if the per-order digests of the N values already run stay the same.
-- **The sealed run is run once.** Its first written JSON is the record. A crash before any JSON is written means no score was seen, so the run is repeated once. After that, a new sheet is needed.
+- **The sealed run is run once.** Its first written JSON is the record. The failure cases:
+  - **A crash** is an exit before the log's "gpu scored" line, for example out of memory while counting. No mass was computed and no score seen, so the run is repeated once. A second crash needs a new sheet.
+  - **A `--check-host` mismatch** (host ≠ GPU, which exits before the JSON is written) is an instrument failure, not a crash. It is not repeated. It goes to a repair and a new sheet.
+  - **A JSON that fails B1** stays on record. A repaired run under a new sheet may give R\* only through a decision card that amends the ORDER's seal. The first JSON stays on record beside the new one.
 - **No number seen on DEV-test feeds back into the choice of N.**

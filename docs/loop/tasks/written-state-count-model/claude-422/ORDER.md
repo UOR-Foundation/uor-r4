@@ -55,7 +55,9 @@ key holds at most 10 context tokens (`NGRAM_MAX_ORDER`), so this unit can reach 
 ## The seal
 
 Nothing scores DEV-test before G2 to G5 pass. The sealed number is the first JSON the sealed run
-writes. A later run, for any reason, is reported beside it and never replaces it.
+writes. A later run, for any reason, is reported beside it and never replaces it. The one exception
+is a first JSON that fails G6: a repaired run under a new sheet may replace it only through a
+decision card that amends this paragraph, and the first JSON stays on record.
 
 ## Out of scope
 
