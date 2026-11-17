@@ -78,7 +78,8 @@ Negatives, each failing and then restored [claude]:
 ## Checks run at the head
 
 - Laptop host tests: `kn_` 9 / 9. The 30 / 30 counter and driver-source tests ran at c095c0413; the code after that touches `kn_score*.rs` only. The stub-nvcc cuda check of the lib, tests and bins is clean. The instrument's 4 tests pass [claude].
-- `uor-harness loop pr-check --local`: recorded on the PR [claude].
+- After wick run 3 (f9a51d738), the only commits are the oracle and test review fixes, a doc comment and one test-line destructure. No GPU, filter or instrument code changed, so run 3's measurements stand at the head [claude].
+- `uor-harness loop pr-check --local`: verdict PASS. Its advisories are D76 only: scope, read path and filemap [claude].
 - Reviews [claude, delegate:reviewer]:
   - the GPU scorer: APPROVE-WITH-LOW;
   - the filter and instrument: APPROVE-WITH-LOW;
