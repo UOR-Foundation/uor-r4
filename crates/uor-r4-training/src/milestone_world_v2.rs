@@ -2175,6 +2175,40 @@ impl<'a> MWorld2<'a> {
             query.tag.pool = Some(asked.pool());
             query.tag.answer = Some(answer);
             turns.push(query);
+            // The other stated relation is asked and answered too (codex-38). An episode already
+            // carries three acknowledgments (the assertion, the update, the companion), so one
+            // question leaves the answer frame outnumbered four to one at the reply's first token.
+            // A second question puts a second query->answer turn in the same episode, and it asks
+            // exactly the discrimination the item tests: two facts stated, one of them asked.
+            let (second_asked, second_answer, second_stale) = if ask_companion {
+                let mut stale = vec![companion_value.to_lowercase()];
+                if updated {
+                    stale.push(first.to_lowercase());
+                }
+                (rel, current.clone(), stale)
+            } else {
+                let mut stale = vec![first.to_lowercase()];
+                if updated {
+                    stale.push(current.to_lowercase());
+                }
+                (companion, companion_value.clone(), stale)
+            };
+            let checks = vec![
+                Check2::V1(Check::AnyOf(vec![second_answer.to_lowercase()])),
+                Check2::V1(Check::NoneOf(second_stale)),
+            ];
+            let mut second = rel_turn(
+                rng,
+                cell.phrasing,
+                second_asked,
+                Act::Query,
+                &second_answer,
+                checks,
+                second_asked.answers,
+            );
+            second.tag.pool = Some(second_asked.pool());
+            second.tag.answer = Some(second_answer);
+            turns.push(second);
         }
         for turn in &mut turns {
             turn.user = articles(&turn.user);
@@ -3679,7 +3713,11 @@ mod tests {
     ///
     /// [`MWorld2::digest`] hashes the tables and constants only, so it does
     /// not move with the relation generator; this digest is what does.
-    const STREAM_DIGEST: &str = "0167c1a06d0df94b6e7ee8662298099190b94ab5186bdcba81842b1466dc70ea";
+    ///
+    /// Moved deliberately by codex-38's balance change: every relation episode now asks and
+    /// answers the other stated relation as well, so the corpus carries two query->answer turns
+    /// for its three acknowledgments. A later move is again a change of the instrument.
+    const STREAM_DIGEST: &str = "d2c51f588502c36c9225b66dace96995e712dd74c619b996c27f35829233677f";
 
     /// SHA-256 over the JSON of a fixed-seed stream of revision-2.1 episodes
     /// under the toy meter: for each of the four cells, 150 episodes of the
@@ -5162,7 +5200,7 @@ mod chain_tests {
     /// recipe: for each of the four cells, 150 episodes of the default mix
     /// (seed 2101) and 150 relation-only episodes (seed 2102), toy meter.
     const V2_DIGEST: &str = "04ad3bb0bf68d4213d90b41ffb886711ffa4c98043e5ac15f58719d7ce68ae4f";
-    const STREAM_DIGEST: &str = "0167c1a06d0df94b6e7ee8662298099190b94ab5186bdcba81842b1466dc70ea";
+    const STREAM_DIGEST: &str = "d2c51f588502c36c9225b66dace96995e712dd74c619b996c27f35829233677f";
 
     #[test]
     fn chains_leave_the_tables_and_the_default_stream_unchanged() {
@@ -5243,7 +5281,8 @@ mod chain_tests {
 
     /// The SHA-256 of the JSON of `chains(32, 2_048)` under the toy meter,
     /// from the first build that compiled this test (claude-271).
-    const CHAIN_DIGEST: &str = "51875e572ceded49a894caa064a1b5ea553cfa2f601d7784e374c481fb4ca9f5";
+    /// The chained stream's digest, moved with [`STREAM_DIGEST`] by the same balance change.
+const CHAIN_DIGEST: &str = "e076886e834b78e81340eb90dc7ed388435eefc0e4b2aee9ff4149017a63e716";
 
     #[test]
     fn the_chained_stream_is_pinned() {

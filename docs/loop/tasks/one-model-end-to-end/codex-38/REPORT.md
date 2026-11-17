@@ -59,3 +59,13 @@ episode (or fewer acknowledgments per assertion) so the opener's prior stops fav
 
 The reading to move is the opener distribution above and `answered`; the reading that must not fall
 is the value-present count on the one-user-turn item (57) and the token loss.
+
+## Correction: the answer opener was 7.4 %, not 3.8 %
+
+§3 counted only the `ĠYou` token. The answer frame also opens with `ĠYour` (`Your job is {v}.`,
+`Your friend is {v}.`), and the two together are **15,850 of 214,271 responses = 7.4 %**, against
+`ĠG` at 15.1 %. So the prior is **2.04 : 1**, not four to one.
+
+The mechanism is unchanged — the acknowledgment still wins the opener in every row, and the rank
+reading still puts the answer opener at median rank 27 — but the margin is half what §3 said, and
+the rebalance in codex-39 was sized against the corrected figure.
