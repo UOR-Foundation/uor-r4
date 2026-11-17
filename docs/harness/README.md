@@ -68,6 +68,20 @@ uor-harness git push-check              the pre-push hook: pr-check --local for 
 uor-harness check [--staged]            every machine-checkable rule in one pass
 ```
 
+### Native-space contract
+
+D85 makes one persistent native geometric state the default model path. The machine-readable
+index is [`native-space.json`](native-space.json); the protocol is
+[`.agents/skills/native-space-cycle/SKILL.md`](../../.agents/skills/native-space-cycle/SKILL.md).
+
+`uor-harness check --only harness.native_space_contract` verifies that the owner decision,
+charter marker block, both project skills, milestone owner rule, PLAN path, first roadmap item,
+AGENTS instruction, change log, owner-path registration and model surfaces carry the exact
+canonical assertion from `native-space.json`. Missing or reworded records are errors; the
+assertion deliberately uses a canonical marker so a sentence that merely contains the relevant
+words cannot pass. A future model-training item must pass this check before touching a training
+path.
+
 ### `loop render` (loop PR 3)
 
 ```sh
@@ -349,8 +363,26 @@ uor-harness loop copyright [--zip <path>]
   - `antigravity`: `~/.gemini/config/plugins/uor-r4-loop/plugin.json`, `~/.gemini/config/plugins/uor-r4-loop/hooks.json`, `~/.gemini/config/skills/<6 skills>/SKILL.md`
   - `deepseek`: `~/.dsh/hooks.json`, `~/.dsh/profiles/headless/cordis.patch.yml`, `~/.dsh/skills/<6 skills>/SKILL.md`, and `local/deepseek/headless-overlay.yml`
   Inside the repository it writes only under gitignored `local/` (`local/deepseek/headless-overlay.yml` and `local/loop/install-backups/`). Differing existing files are refused unless `--replace` is given, which backs them up to `local/loop/install-backups/` first.
-- `loop onboard --client <C>` prints `PASS`, `FAIL`, `REFUSED` or `N/A` for `rules`, `skills`, `hooks`, `canary` (evaluated in-process on `loop guard`), `identity` and `binary`, followed by `lane:` and `pickup:`. `--write-receipt` writes `docs/harness/onboarding/<client>.json`, and `--check-receipts` verifies the committed receipt of every lab in `docs/harness/labs.json` and re-runs each one's in-process canary write refusal check (a lab that has left keeps its adapter, and its receipt stays as unchecked history: codex, 26 Oct 2026).
+- `loop onboard --client <C>` prints `PASS`, `FAIL`, `REFUSED` or `N/A` for `rules`, `skills`, `hooks`, `canary` (evaluated in-process on `loop guard`), `identity` and `binary`, followed by `lane:` and `pickup:`. `--write-receipt` writes `docs/harness/onboarding/<client>.json`, and `--check-receipts` verifies the committed receipt of every lab in `docs/harness/labs.json` and re-runs each one's in-process canary write refusal check.
 - `loop copyright` compares tracked repository markdown and text files against the owner's private Loop Kit archive (`--zip <path>` or `~/Downloads/LoopKit*.zip`) using 8-word windows in memory. It runs on the laptop only and never stores kit text or hashes in the repository.
+
+## Book page freshness (`cargo xtask book-fresh`)
+
+Each page of the book can say which files it describes and the commit it was last read against. The record is the page's first line, an HTML comment that GitHub and mdBook both hide:
+
+```text
+<!-- freshness: sources=crates/uor-r4-integer/src/stack/**,scripts/pod/uor-pod checked=<40-hex commit> -->
+```
+
+- `sources=` is a comma-separated list of repository-root paths or git globs (`*` stays inside one path segment, `**` crosses segments). Every entry must match at least one tracked file. `sources=none` marks a page that describes nothing in the repository that can change.
+- `checked=` names the full commit the whole page was read against, with its present-tense claims looked up in those sources. Leave it out until someone has done that read: an unchecked page is reported as unchecked, never given a date it did not earn.
+- A change to the page itself never counts against it; only commits touching its sources do.
+
+`cargo xtask book-fresh [--json OUT]` reads the record of every page in `docs/SUMMARY.md` and runs `git log <checked>..HEAD` over each page's sources (with every `GIT_*` variable removed). It prints the count per status and lists each page that is `stale` (later commits change its sources), `unchecked`, `unrecorded` (no record line), `broken` (a source matches no tracked file, or the commit is unknown or not an ancestor of `HEAD`) or `malformed`. `--json` writes the same as `uor-r4.book-fresh/1`. It is advisory (D76): it exits 0 whatever freshness it finds, and a page it cannot read or assess is listed as `broken`; only a bad argument, an unreadable SUMMARY, no git history or an unwritable `--json` file exits 1.
+
+To re-check a page: read it whole against its sources at the current `main`, fix what is wrong, and set `checked=` to that commit (`git rev-parse origin/main`) in the same PR.
+
+`cargo xtask book-stage` strips the record from the staged copy and puts one line at the top of each page instead: "Checked against its sources at <commit> (<date>); no later commit changes them" or the count of later commits that do; "Not yet checked" (with the reason when the page has no record or its record needs repair); "This page names no sources to check against"; or, when git history is missing at build time, "Freshness unknown". Only the staged copy under `target/book-src` changes; the files in `docs/` and GitHub's view of them do not.
 
 ## Where it sits against what already exists
 
@@ -412,7 +444,7 @@ the tool fails loudly rather than guessing.
 
 ## Working in a multi-lab project
 
-Three labs work this repository, plus this one. Each runs its own copy of the CLI, and **nothing here is a
+Four other labs work this repository, plus this one. Each runs its own copy of the CLI, and **nothing here is a
 socket or a daemon** — GitHub is the bus and `main` is the truth. What the harness adds is the
 part GitHub alone does not give: a committed record of who holds what, and what each lab is
 doing between merges.
@@ -520,7 +552,7 @@ why it is now one file per lab per month. `multilab migrate-ledger` moves any ol
 receipts across without losing a line.
 
 **Why claims moved into the committed tree.** They used to live in a gitignored
-`.harness/claims.json`, which is right for one checkout and useless for four: a claim nobody else
+`.harness/claims.json`, which is right for one checkout and useless across concurrent labs: a claim nobody else
 can read cannot prevent the collision it exists to prevent. **The shared tier is read through git**
 — `git show origin/main:docs/harness/claims.json` — and not from the shared checkout's working copy:
 that checkout is frozen by R10 and falls behind, and reading it reported a released claim as held

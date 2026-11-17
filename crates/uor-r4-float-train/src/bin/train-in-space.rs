@@ -1,7 +1,7 @@
 //! `train-in-space --data-root DIR --out DIR [--objective sheet|voronoi|nearest|cell] [--steps N]
 //! [--train-split DIR --train-sha256 HEX --train-mask-sha256 HEX] [--train-targets observed|mode:K]
 //! [--batch B] [--eval-every K] [--seed S] [--lr X] [--lr-end X] [--decay-mult X]
-//! [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--fix-input-table 0|1] [--flock-read K] [--content-read K] [--hamming-read H] [--hamming-copy-key 1|2] [--hamming-copy-latest 0|1] [--opening-read K] [--opening-anchor turn|last] [--prompt-register Q] [--register-picks K] [--register-select learned|all] [--width N] [--type-spin 0|1] [--opening-weight W] [--samples N] [--reply-tokens N] [--micro-batch M] [--profile K] [--time-without-quantizers 0|1] [--fused-quantize 0|1] [--turn-memory K] [--turn-memory-empty 0|1] [--turn-memory-reply 0|1] [--turn-memory-leave-copied 0|1] [--turn-memory-dropout P] [--fbs-arm one-atom|identity|frozen] [--train-as-served 0|1] [--writer-anchor 0|1] [--init-from CHECKPOINT] [--served-forward 0|1] [--context N]`
+//! [--retain-rates 0|1] [--fold-scores 0|1] [--reflect-floor 0|1] [--fix-input-table 0|1] [--flock-read K] [--content-read K] [--hamming-read H] [--hamming-copy-key 1|2] [--hamming-copy-latest 0|1] [--opening-read K] [--opening-anchor turn|last] [--prompt-register Q] [--register-picks K] [--register-select learned|all] [--width N] [--type-spin 0|1] [--opening-weight W] [--samples N] [--reply-tokens N] [--micro-batch M] [--carry-windows K] [--profile K] [--time-without-quantizers 0|1] [--fused-quantize 0|1] [--turn-memory K] [--turn-memory-empty 0|1] [--turn-memory-reply 0|1] [--turn-memory-leave-copied 0|1] [--turn-memory-dropout P] [--fbs-arm one-atom|identity|frozen] [--train-as-served 0|1] [--writer-anchor 0|1] [--init-from CHECKPOINT] [--address-memory e8|sign|collapse|token] [--address-band X] [--pair-rows N] [--pair-weight replies|boost] [--starling-read lorentz|l2 | --prime-route-read 1 | --state-flock-read K] [--vector-read-depth D] [--vector-read-margin X] [--vector-read-credit X] [--vector-read-stream-grad 0|1] [--served-forward 0|1] [--context N]`
 //!
 //! `--train-targets mode:K` (K from 1 to 4, claude-296) trains on fixed targets: each scored
 //! TRAIN target becomes the commonest scored token after its last K tokens in the whole split,
@@ -56,6 +56,50 @@
 //! turn-memory reads are refused until their checkpoint restore is implemented, so no read is
 //! silently recreated from new parameters.
 //!
+//! `--address-memory e8|sign|collapse|token` (claude-346) adds the address memory to a training
+//! run with `--out`: a learned table inside the trunk, one row per 8-coordinate block and layer,
+//! read by the state's nearest E8 root (`e8`), by the block's signs (`sign`), with no address
+//! (`collapse`), or by a hash of the position's own token (`token`). `--address-band X` sets the
+//! band inside which a state takes a gradient through its address; the arm's default when left
+//! out, and 0 for none. The rows start at zero, train at the rate over the block count, and under
+//! `--train-as-served 1` are rounded to 16 bits on the residual stream's 2^-16 grid. Each
+//! checkpoint saves them as `address_memory.safetensors`, which scoring loads and the export
+//! refuses, and adds a line to `DIR/address.jsonl`. `--init-from` and `--recall` refuse the flag.
+//!
+//! `--starling-read lorentz|l2`, `--prime-route-read 1` and `--state-flock-read K` (claude-381)
+//! add one state-keyed look-back read to a training run with `--out`, after layer
+//! `--vector-read-depth D` (the last when left out): each position reads one earlier position
+//! chosen by its own state, turned and folded to a 16-coordinate address, and adds the shared
+//! table's point of the token that followed it, through a weight that starts at 0. `lorentz`
+//! scores by the hyperbolic distance of the lifted addresses and `l2` by the flat one, with no
+//! read when the best score is below 0; `--prime-route-read` names each address block's nearest
+//! icosian and picks the least zeta phase energy; `--state-flock-read K` averages the K nearest
+//! in mean L1. A margin hinge (`--vector-read-margin`, default 1; weight `--vector-read-credit`,
+//! default 1) credits the best earlier position followed by the row's own next token over every
+//! other; since claude-385 the address reads the stream without its gradient, so the credit
+//! trains the read alone, unless `--vector-read-stream-grad 1`. These are float reference reads:
+//! one at a time, never with `--init-from` or `--train-as-served 1`; each checkpoint saves
+//! `vector_read.safetensors`, which the export refuses, and prints a `[vread]` count line. A
+//! Starling offset starts at the first forward's median nearest earlier distance (claude-385).
+//! Under `--recall` (claude-385) each reading in
+//! `recall.jsonl` adds the read's choices at the scored rows and the held-out hits with the read
+//! cut (`vector_read`).
+//!
+//! `--pair-rows N` (claude-370) adds the pair rows to a training run with `--out`: a table of
+//! learned rows addressed by the exact unordered pairs of different tokens in a user turn. A pair
+//! gets a row when it appears in at least N of TRAIN's user turns (N is 1 or more); the rows
+//! start at zero. The turn's rows are summed and added once at the first layer's seam at every
+//! position of the reply. Each checkpoint saves them as `pair_rows.safetensors` and
+//! `pair_rows.dict`, which scoring loads and the export refuses. The flag is training-only: a
+//! scoring pass reads the rows from the checkpoint, so every mode but training with `--out`
+//! refuses it, and so do `--recall`, `--init-from` and `--train-as-served`.
+//!
+//! `--pair-weight replies` (claude-373) weighs each pair row by the fixed `1 / R`, where `R` is
+//! the number of different replies that follow the TRAIN turns holding the pair (at most
+//! 4096): the bag is the weighted sum of the turn's rows. The weights are saved with the rows.
+//! It wants `--pair-rows`. `--pair-weight boost` (claude-374) weighs each row `1 + 1 / R` from the
+//! same counts, so a pair seen with thousands of replies keeps claude-370's full row.
+//!
 //! `--writer-anchor 1` anchors the writer's ports (claude-290): the shared table's first and last
 //! 8D blocks hold exactly the SpiralCore roots of each token's own cell, re-set after every main
 //! step with their gradient masked, while the other columns stay learned. 0, the default,
@@ -73,6 +117,14 @@
 //! match in place of the mean of its nearest sixteen (`HammingReads::with_copy_latest`,
 //! claude-345), the rule the integer session serves as `CopyRule::LatestExact`; the checkpoint
 //! records it, so scoring and the export read it there.
+//! `--hamming-copy-longest A,B` (needs `--hamming-copy-latest 1` and one-token copy keys) names
+//! the reply marker, the two token ids that stand before a reply's first token, and has each copy
+//! head read the latest exact match whose token before it also agrees, the latest exact match at
+//! a reply's opening row (`HammingReads::with_copy_longest`, claude-357): the rule the integer
+//! session serves as `CopyRule::LongestAfterOpening`. The run refuses a TRAIN or DEV split, and
+//! the scoring pass a `--panel`, where the marker and the reply mask disagree at any position;
+//! the turn memory's leave rule asks the copy read by the same rule. The checkpoint records the
+//! marker, and `config.json` carries it to the export.
 //! `--hamming-ask 1` (needs `--hamming-read`) turns the type heads into ask heads, which ask with
 //! their token's point plus a learned question row against the copy key (`HammingReads::with_ask`,
 //! claude-330). With `--recall`, `--hamming-attract λ` adds λ times the found-copy pull to the loss
@@ -263,7 +315,7 @@
 //! as used, and refuses a run in which one was not taken; that split's memory-pass rows are the
 //! forced forward's. Refused, before any forward: a position that is not traced and R's refusals.
 //!
-//! `train-in-space --data-root DIR --panel-prompts 1 --out DIR [--panel NAME=DIR ...] [--runs DIR] --samples 1536 --reply-tokens 64`
+//! `train-in-space --data-root DIR --panel-prompts 1 --out DIR [--panel NAME=DIR ...] [--runs DIR] --samples 1536 --reply-tokens 64 [--context N] [--sample-opening first|last]`
 //! (point-key-integer, claude-224) writes, with no model, the prompts a `--score-rows` run decodes on
 //! DEV and each panel (`prompts-{split}.json`), for `fbs-toks --replies`. With `--runs` (claude-220's
 //! `out`), it also writes each seed's prompts with its float served names, refusing a served sample
@@ -330,6 +382,7 @@ use uor_r4_float_train::in_space_long::{
     DecodeRule, LongConfig, PastWindowRule, PointObjective, ReadScope, RecallForm, TrainSplit, TrainTargets, DEFAULT_REGISTER_PICKS,
     MEMORY_DROPOUT_MAX,
 };
+use uor_r4_float_train::vector_reads::{VectorReadArm, VectorReadKind, DEFAULT_MARGIN};
 use uor_r4_float_train::{FloatTrainError, Result};
 use uor_r4_integer::fbs_snapshot::DecisionForce;
 
@@ -346,6 +399,178 @@ fn init_from_applies(init_from: bool, training_with_out: bool) -> Result<()> {
     if init_from && !training_with_out {
         return Err(FloatTrainError::Invalid(
             "--init-from applies to training with --out only".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+/// claude-381, claude-385: a vector read is built by a training run with `--out`, the long run or
+/// the recall task; a mode that trains nothing refuses it.
+fn vector_read_applies(read: bool, training_with_out: bool) -> Result<()> {
+    if read && !training_with_out {
+        return Err(FloatTrainError::Invalid(
+            "the vector reads apply to training with --out only".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+/// claude-346: the address memory is built by a training run; scoring reads it from the
+/// checkpoint, so a mode that trains nothing refuses the flags rather than ignore them.
+fn address_applies(address: bool, training_with_out: bool) -> Result<()> {
+    if address && !training_with_out {
+        return Err(FloatTrainError::Invalid(
+            "--address-memory and --address-band apply to training with --out only".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+/// claude-381: the vector read's flags as given, before they become one arm.
+#[derive(Default)]
+struct VectorReadFlags {
+    starling: Option<String>,
+    prime: bool,
+    flock: Option<usize>,
+    depth: Option<usize>,
+    margin: Option<String>,
+    credit: Option<String>,
+    stream_grad: Option<bool>,
+}
+
+/// claude-381: at most one of `--starling-read lorentz|l2`, `--prime-route-read 1` and
+/// `--state-flock-read K` names the read; `--vector-read-depth`, `--vector-read-margin` and
+/// `--vector-read-credit` set it, and `--vector-read-stream-grad 1` (claude-385) lets the credit
+/// reach the stream under the address; each is refused without a read.
+fn vector_read_arm(flags: &VectorReadFlags) -> Result<Option<VectorReadArm>> {
+    let mut kinds = Vec::new();
+    match flags.starling.as_deref() {
+        None => {}
+        Some("lorentz") => kinds.push(VectorReadKind::StarlingLorentz),
+        Some("l2") => kinds.push(VectorReadKind::StarlingL2),
+        Some(other) => {
+            return Err(FloatTrainError::Invalid(format!(
+                "--starling-read wants lorentz or l2, not {other}"
+            )))
+        }
+    }
+    if flags.prime {
+        kinds.push(VectorReadKind::PrimeRoute);
+    }
+    match flags.flock {
+        Some(0) => {
+            return Err(FloatTrainError::Invalid(
+                "--state-flock-read keeps at least one neighbour".to_owned(),
+            ))
+        }
+        Some(neighbours) => kinds.push(VectorReadKind::Flock { neighbours }),
+        None => {}
+    }
+    let positive = |name: &str, value: &Option<String>, default: f32| -> Result<f32> {
+        match value {
+            None => Ok(default),
+            Some(v) => v
+                .parse::<f32>()
+                .ok()
+                .filter(|x| x.is_finite() && *x >= 0.0)
+                .ok_or_else(|| {
+                    FloatTrainError::Invalid(format!("{name} wants a number of 0 or more"))
+                }),
+        }
+    };
+    let margin = positive("--vector-read-margin", &flags.margin, DEFAULT_MARGIN)?;
+    let credit = positive("--vector-read-credit", &flags.credit, 1.0)?;
+    match kinds.as_slice() {
+        [] if flags.depth.is_some()
+            || flags.margin.is_some()
+            || flags.credit.is_some()
+            || flags.stream_grad.is_some() =>
+        {
+            Err(FloatTrainError::Invalid(
+                "--vector-read-depth, --vector-read-margin, --vector-read-credit and \
+                 --vector-read-stream-grad set a vector read; turn one on with --starling-read, \
+                 --prime-route-read or --state-flock-read"
+                    .to_owned(),
+            ))
+        }
+        [] => Ok(None),
+        [kind] => {
+            if flags.depth == Some(0) {
+                return Err(FloatTrainError::Invalid(
+                    "--vector-read-depth counts layers from 1".to_owned(),
+                ));
+            }
+            Ok(Some(VectorReadArm {
+                kind: *kind,
+                depth: flags.depth,
+                margin,
+                credit,
+                stream_grad: flags.stream_grad.unwrap_or(false),
+            }))
+        }
+        _ => Err(FloatTrainError::Invalid(
+            "one vector read at a time: --starling-read, --prime-route-read and \
+             --state-flock-read exclude each other"
+                .to_owned(),
+        )),
+    }
+}
+
+/// claude-370: `--pair-rows N` names the least number of TRAIN user turns a token pair must
+/// appear in to get a learned row; 0 would give every pair a row, so it is refused.
+fn pair_rows_min(value: &str) -> Result<u32> {
+    match value.parse::<u32>() {
+        Ok(min) if min >= 1 => Ok(min),
+        _ => Err(FloatTrainError::Invalid(format!(
+            "--pair-rows wants a minimum turn count of 1 or more, not {value:?}"
+        ))),
+    }
+}
+
+/// `--pair-weight replies` (claude-373) weighs the pair rows by one over their reply count;
+/// `--pair-weight boost` (claude-374) by one plus it. The pair is (weighed, boosted).
+fn pair_weight(value: &str) -> Result<(bool, bool)> {
+    match value {
+        "replies" => Ok((true, false)),
+        "boost" => Ok((true, true)),
+        _ => Err(FloatTrainError::Invalid(format!(
+            "--pair-weight wants replies or boost, not {value:?}"
+        ))),
+    }
+}
+
+/// claude-370: the pair rows are built by a training run; scoring reads them from the
+/// checkpoint, so a mode that trains nothing refuses the flag, and so do the training
+/// switches the rows are not built for.
+fn pair_rows_applies(
+    pair: bool,
+    training_with_out: bool,
+    recall: bool,
+    init_from: bool,
+    train_as_served: bool,
+) -> Result<()> {
+    if !pair {
+        return Ok(());
+    }
+    if !training_with_out {
+        return Err(FloatTrainError::Invalid(
+            "--pair-rows applies to training with --out only; scoring loads the rows from the checkpoint"
+                .to_owned(),
+        ));
+    }
+    if recall {
+        return Err(FloatTrainError::Invalid(
+            "--pair-rows is not built for the --recall task".to_owned(),
+        ));
+    }
+    if init_from {
+        return Err(FloatTrainError::Invalid(
+            "--pair-rows starts its rows at zero and refuses --init-from".to_owned(),
+        ));
+    }
+    if train_as_served {
+        return Err(FloatTrainError::Invalid(
+            "--pair-rows has no served form yet and refuses --train-as-served".to_owned(),
         ));
     }
     Ok(())
@@ -401,6 +626,8 @@ fn main() -> Result<()> {
     let mut served_grade_on = false;
     let mut panel_prompts_on = false;
     let mut integer_grade_on = false;
+    // claude-381: the vector read's flags, resolved into one arm after the loop.
+    let mut vread = VectorReadFlags::default();
     let mut served_forward = None;
     let mut batched_decode = None;
     let mut decode_cache = true;
@@ -452,6 +679,7 @@ fn main() -> Result<()> {
         hamming_copy_key: 1,
         hamming_copy_keys: None,
         hamming_copy_latest: false,
+        hamming_copy_longest: None,
         hamming_ask: false,
         hamming_attract: 0.0,
         hamming_attract_at_question: false,
@@ -463,6 +691,7 @@ fn main() -> Result<()> {
         samples: 6,
         reply_tokens: 48,
         micro_batch: 0,
+        carry_windows: 0,
         fast_rivals: false,
         profile: 0,
         turn_memory: 0,
@@ -478,6 +707,12 @@ fn main() -> Result<()> {
         context: uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT,
         train_targets: TrainTargets::Observed,
         init_from: None,
+        address_memory: None,
+        address_band: None,
+        pair_rows: None,
+        pair_weight: false,
+        pair_weight_boost: false,
+        vector_read: None,
     };
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -646,6 +881,7 @@ fn main() -> Result<()> {
             "--train-targets" => config.train_targets = TrainTargets::parse(&value)?,
             "--steps" => config.steps = number(&value)?,
             "--micro-batch" => config.micro_batch = number(&value)?,
+            "--carry-windows" => config.carry_windows = number(&value)?,
             "--fast-rivals" => config.fast_rivals = switch(&value)?,
             "--profile" => config.profile = number(&value)?,
             "--time-without-quantizers" => time_quantizers = switch(&value)?,
@@ -675,6 +911,26 @@ fn main() -> Result<()> {
             "--train-as-served" => config.train_as_served = switch(&value)?,
             "--writer-anchor" => config.writer_anchor = switch(&value)?,
             "--init-from" => config.init_from = Some(PathBuf::from(value)),
+            "--address-memory" => {
+                config.address_memory =
+                    Some(uor_r4_float_train::e8_address::AddressArm::parse(&value)?)
+            }
+            "--address-band" => {
+                config.address_band = Some(value.parse().map_err(|_| {
+                    FloatTrainError::Invalid("--address-band wants a number".to_owned())
+                })?)
+            }
+            "--pair-rows" => config.pair_rows = Some(pair_rows_min(&value)?),
+            "--pair-weight" => {
+                (config.pair_weight, config.pair_weight_boost) = pair_weight(&value)?
+            }
+            "--starling-read" => vread.starling = Some(value.clone()),
+            "--prime-route-read" => vread.prime = switch(&value)?,
+            "--state-flock-read" => vread.flock = Some(number(&value)?),
+            "--vector-read-depth" => vread.depth = Some(number(&value)?),
+            "--vector-read-margin" => vread.margin = Some(value.clone()),
+            "--vector-read-credit" => vread.credit = Some(value.clone()),
+            "--vector-read-stream-grad" => vread.stream_grad = Some(switch(&value)?),
             "--served-forward" => served_forward = Some(switch(&value)?),
             "--batched-decode" => batched_decode = Some(switch(&value)?),
             "--decode-cache" => decode_cache = switch(&value)?,
@@ -708,6 +964,22 @@ fn main() -> Result<()> {
             "--hamming-read" => config.hamming_read = number(&value)?,
             "--hamming-copy-key" => config.hamming_copy_key = number(&value)?,
             "--hamming-copy-latest" => config.hamming_copy_latest = switch(&value)?,
+            "--hamming-copy-longest" => {
+                let ids: Vec<usize> = value.split(',').map(number).collect::<Result<_>>()?;
+                config.hamming_copy_longest = match ids[..] {
+                    [first, second] => u32::try_from(first)
+                        .ok()
+                        .zip(u32::try_from(second).ok())
+                        .map(|(first, second)| [first, second]),
+                    _ => None,
+                };
+                if config.hamming_copy_longest.is_none() {
+                    return Err(FloatTrainError::Invalid(
+                        "--hamming-copy-longest wants the reply marker's two token ids, as A,B"
+                            .to_owned(),
+                    ));
+                }
+            }
             "--hamming-copy-keys" => {
                 config.hamming_copy_keys = Some(
                     value
@@ -832,6 +1104,7 @@ fn main() -> Result<()> {
             }
         }
     }
+    config.vector_read = vector_read_arm(&vread)?;
     // The opening read (claude-154): its anchor is written exactly when the read is on.
     match (opening_read, opening_anchor) {
         (Some(k), anchor) => {
@@ -933,6 +1206,25 @@ fn main() -> Result<()> {
         ));
     }
     init_from_applies(config.init_from.is_some(), modes[7] && recall == 0)?;
+    address_applies(
+        config.address_memory.is_some() || config.address_band.is_some(),
+        modes[7] && recall == 0,
+    )?;
+    // claude-381: a vector read is built by a training run, as the address memory is; claude-385
+    // adds the recall task, which trains with `--out` too.
+    vector_read_applies(config.vector_read.is_some(), modes[7])?;
+    if config.pair_weight && config.pair_rows.is_none() {
+        return Err(FloatTrainError::Invalid(
+            "--pair-weight replies weighs the pair rows and wants --pair-rows".to_owned(),
+        ));
+    }
+    pair_rows_applies(
+        config.pair_rows.is_some(),
+        modes[7],
+        recall > 0,
+        config.init_from.is_some(),
+        config.train_as_served,
+    )?;
     fast_rivals_applies(
         config.fast_rivals,
         modes[7] && recall == 0,
@@ -944,7 +1236,7 @@ fn main() -> Result<()> {
         decode.is_some(),
         score.is_some(),
     )?;
-    context_applies(config.context, modes[7] && recall == 0, grad_norms, score.is_some())?;
+    context_applies(config.context, modes[7] && recall == 0, grad_norms, score.is_some() || panel_prompts_on)?;
     time_without_quantizers_applies(
         time_quantizers,
         modes[7] && recall == 0,
@@ -980,11 +1272,7 @@ fn main() -> Result<()> {
             "--past-window applies to --score-rows only".to_owned(),
         ));
     }
-    if last_opening.is_some() && score.is_none() {
-        return Err(FloatTrainError::Invalid(
-            "--sample-opening applies to --score-rows only".to_owned(),
-        ));
-    }
+    prompt_cut_applies(config.context, last_opening, score.is_some(), panel_prompts_on, runs.is_some())?;
     if !panel_queries.is_empty() && score.is_none() && !census_on {
         return Err(FloatTrainError::Invalid(
             "--panel-queries applies to --score-rows and --census only".to_owned(),
@@ -1192,7 +1480,17 @@ fn main() -> Result<()> {
     if panel_prompts_on {
         let out = out
             .ok_or_else(|| FloatTrainError::Invalid("--panel-prompts needs --out DIR".to_owned()))?;
-        for (file, rows) in panel_prompts(&data_root, &extra_panels, config.samples, config.reply_tokens, runs.as_deref(), &out)? {
+        let prompts = panel_prompts(
+            &data_root,
+            &extra_panels,
+            config.samples,
+            config.reply_tokens,
+            config.context,
+            last_opening.unwrap_or(false),
+            runs.as_deref(),
+            &out,
+        )?;
+        for (file, rows) in prompts {
             println!("{}", serde_json::json!({ "file": file, "rows": rows }));
         }
         return Ok(());
@@ -1871,14 +2169,41 @@ fn served_forward_applies(
 
 /// `--context` sets the window training cuts TRAIN at and builds its model to read (claude-273),
 /// `--grad-norms 1` reads TRAIN the same way, and `--score-rows` cuts its panels at it
-/// (claude-274). Every other mode, `--recall` among them, reads 192-token windows, so another
+/// (claude-274), as `--panel-prompts` does for the prompts it writes (claude-352; `scoring` is
+/// true for either). Every other mode, `--recall` among them, reads 192-token windows, so another
 /// window there would be ignored: it is refused.
 fn context_applies(context: usize, training: bool, grad_norms: bool, scoring: bool) -> Result<()> {
     if context != uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT
         && !(training || grad_norms || scoring)
     {
         return Err(FloatTrainError::Invalid(
-            "--context applies to training with --out, --grad-norms 1 and --score-rows only"
+            "--context applies to training with --out, --grad-norms 1, --score-rows and --panel-prompts only"
+                .to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+/// claude-352: `--panel-prompts` writes the prompts `--score-rows` decodes, so it takes that
+/// mode's `--context` and `--sample-opening`, and `--sample-opening` applies to those two modes
+/// only. With `--runs DIR` each prompt is also named by a run decoded at the sheet's window and
+/// first opening, so there another window or the last opening is refused by name.
+fn prompt_cut_applies(
+    context: usize,
+    last_opening: Option<bool>,
+    scoring: bool,
+    panel_prompts: bool,
+    runs: bool,
+) -> Result<()> {
+    if last_opening.is_some() && !scoring && !panel_prompts {
+        return Err(FloatTrainError::Invalid(
+            "--sample-opening applies to --score-rows and --panel-prompts only".to_owned(),
+        ));
+    }
+    let sheet = uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT;
+    if panel_prompts && runs && (context != sheet || last_opening == Some(true)) {
+        return Err(FloatTrainError::Invalid(
+            "--panel-prompts --runs DIR names each prompt by a run decoded at the sheet's window and first opening: --context and --sample-opening last do not apply"
                 .to_owned(),
         ));
     }
@@ -2026,6 +2351,23 @@ mod tests {
         assert!(context_applies(sheet + 1, false, false, false).is_err());
     }
 
+    /// claude-352: the prompt builder takes the scorer's window and opening. The opening alone,
+    /// and either of them beside a served run, is refused by name.
+    #[test]
+    fn the_prompt_builder_takes_the_scorers_window_and_opening() {
+        let sheet = uor_r4_float_train::hamilton_sheet::SHEET_CONTEXT;
+        assert!(prompt_cut_applies(sheet, None, false, false, false).is_ok());
+        assert!(prompt_cut_applies(256, Some(true), false, true, false).is_ok(), "the 256 retake's prompts");
+        assert!(prompt_cut_applies(256, Some(true), true, false, false).is_ok(), "scoring");
+        assert!(prompt_cut_applies(sheet, Some(false), false, true, true).is_ok(), "the sheet's cut, named by a run");
+        let alone = prompt_cut_applies(sheet, Some(false), false, false, false).unwrap_err().to_string();
+        assert!(alone.contains("--sample-opening applies"), "{alone}");
+        for (context, opening) in [(256, None), (sheet, Some(true))] {
+            let named = prompt_cut_applies(context, opening, false, true, true).unwrap_err().to_string();
+            assert!(named.contains("--panel-prompts --runs DIR"), "{named}");
+        }
+    }
+
     #[test]
     fn the_quantizer_timing_run_keeps_every_evaluation_out_of_its_window() {
         // claude-283: `--profile 64` ends its window at step 8 + 128 = 136.
@@ -2078,5 +2420,124 @@ mod tests {
         assert!(init_from_applies(true, true).is_ok());
         let error = init_from_applies(true, false).unwrap_err().to_string();
         assert!(error.contains("training with --out only"), "{error}");
+    }
+
+    #[test]
+    fn the_address_memory_is_a_training_only_switch() {
+        assert!(address_applies(false, false).is_ok());
+        assert!(address_applies(true, true).is_ok());
+        let error = address_applies(true, false).unwrap_err().to_string();
+        assert!(error.contains("training with --out only"), "{error}");
+    }
+
+    #[test]
+    fn a_vector_read_trains_with_out_and_nowhere_else() {
+        // claude-385: training with `--out` (the long run and `--recall` alike) takes a read.
+        assert!(vector_read_applies(true, true).is_ok());
+        assert!(vector_read_applies(false, false).is_ok());
+        let refused = vector_read_applies(true, false).unwrap_err().to_string();
+        assert!(refused.contains("apply to training with --out only"), "{refused}");
+    }
+
+    #[test]
+    fn the_vector_read_flags_name_one_read() {
+        let flags = |f: &dyn Fn(&mut VectorReadFlags)| {
+            let mut v = VectorReadFlags::default();
+            f(&mut v);
+            vector_read_arm(&v)
+        };
+        assert_eq!(flags(&|_| {}).unwrap(), None);
+        let lorentz = flags(&|v| v.starling = Some("lorentz".to_owned())).unwrap().unwrap();
+        assert_eq!(lorentz.kind, VectorReadKind::StarlingLorentz);
+        assert_eq!((lorentz.depth, lorentz.margin, lorentz.credit), (None, DEFAULT_MARGIN, 1.0));
+        assert!(!lorentz.stream_grad);
+        let l2 = flags(&|v| {
+            v.starling = Some("l2".to_owned());
+            v.depth = Some(3);
+            v.margin = Some("0.5".to_owned());
+            v.credit = Some("2".to_owned());
+            v.stream_grad = Some(true);
+        })
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            (l2.kind, l2.depth, l2.margin, l2.credit),
+            (VectorReadKind::StarlingL2, Some(3), 0.5, 2.0)
+        );
+        assert!(l2.stream_grad);
+        assert_eq!(
+            flags(&|v| v.prime = true).unwrap().unwrap().kind,
+            VectorReadKind::PrimeRoute
+        );
+        assert_eq!(
+            flags(&|v| v.flock = Some(4)).unwrap().unwrap().kind,
+            VectorReadKind::Flock { neighbours: 4 }
+        );
+        type Set<'a> = &'a dyn Fn(&mut VectorReadFlags);
+        let refused: [(Set, &str); 8] = [
+            (&|v| v.starling = Some("cos".to_owned()), "wants lorentz or l2"),
+            (&|v| v.stream_grad = Some(true), "turn one on"),
+            (&|v| v.flock = Some(0), "at least one neighbour"),
+            (&|v| v.depth = Some(2), "turn one on"),
+            (&|v| v.margin = Some("1".to_owned()), "turn one on"),
+            (
+                &|v| {
+                    v.prime = true;
+                    v.flock = Some(2);
+                },
+                "one vector read at a time",
+            ),
+            (
+                &|v| {
+                    v.prime = true;
+                    v.depth = Some(0);
+                },
+                "counts layers from 1",
+            ),
+            (
+                &|v| {
+                    v.prime = true;
+                    v.credit = Some("-1".to_owned());
+                },
+                "0 or more",
+            ),
+        ];
+        for (set, fragment) in refused {
+            let error = flags(set).unwrap_err().to_string();
+            assert!(error.contains(fragment), "{error}");
+        }
+    }
+
+    #[test]
+    fn the_pair_rows_are_a_training_only_switch() {
+        assert_eq!(pair_weight("replies").unwrap(), (true, false));
+        assert_eq!(pair_weight("boost").unwrap(), (true, true));
+        for value in ["turns", "1", "", "Boost"] {
+            let error = pair_weight(value).unwrap_err().to_string();
+            assert!(
+                error.contains("--pair-weight wants replies or boost"),
+                "{error}"
+            );
+        }
+        assert_eq!(pair_rows_min("2").unwrap(), 2);
+        for value in ["0", "-1", "x", ""] {
+            let error = pair_rows_min(value).unwrap_err().to_string();
+            assert!(error.contains("--pair-rows wants a minimum turn count of 1 or more"), "{error}");
+        }
+        assert!(pair_rows_applies(false, false, true, true, true).is_ok());
+        assert!(pair_rows_applies(true, true, false, false, false).is_ok());
+        let cases = [
+            ((true, false, false, false, false), "training with --out only"),
+            ((true, true, true, false, false), "--recall task"),
+            ((true, true, false, true, false), "refuses --init-from"),
+            ((true, true, false, false, true), "refuses --train-as-served"),
+        ];
+        for ((pair, out, recall, init_from, served), fragment) in cases {
+            let error = pair_rows_applies(pair, out, recall, init_from, served)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("--pair-rows"), "{error}");
+            assert!(error.contains(fragment), "{error}");
+        }
     }
 }

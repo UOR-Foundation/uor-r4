@@ -158,6 +158,14 @@ pub struct LongConfig {
     /// session serves as `CopyRule::LatestExact`. Left out of `config.json` when false.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub hamming_copy_latest: bool,
+    /// The longest rule (`HammingReads::with_copy_longest`, claude-357), named by the reply
+    /// marker: the two token ids that stand before a reply's first token. A copy head then reads
+    /// the latest exact match whose token before it also agrees, and the latest exact match at a
+    /// reply's opening row, the rule the integer session serves as
+    /// `CopyRule::LongestAfterOpening`. Needs `hamming_copy_latest` and one-token copy keys.
+    /// Left out of `config.json` when not set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hamming_copy_longest: Option<[u32; 2]>,
     /// The Hamming read's type heads as ask heads (`HammingReads::with_ask`, claude-330): each
     /// asks with its token's point plus a learned question row, against the copy key. Off by
     /// default, and left out of `config.json` when off.
@@ -294,6 +302,37 @@ pub struct LongConfig {
     /// schedule start fresh. Left out of `config.json` when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub init_from: Option<PathBuf>,
+    /// The address memory's arm (claude-346, [`crate::e8_address`]): a learned table inside the
+    /// trunk, read by each state's own address. Left out of `config.json` when absent, so a run
+    /// without it writes the same file as before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address_memory: Option<crate::e8_address::AddressArm>,
+    /// The address memory's band `τ`; the arm's default when absent. Needs `address_memory`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address_band: Option<f64>,
+    /// The pair rows' minimum turn count (`--pair-rows`), `None` when off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pair_rows: Option<u32>,
+    /// Whether each pair row is weighed by one over its count of different replies
+    /// (`--pair-weight replies`, claude-373).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pair_weight: bool,
+    /// With `pair_weight`, each row weighs `1 + 1 / R` in place of `1 / R`
+    /// (`--pair-weight boost`, claude-374). Left out of `config.json` when false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pair_weight_boost: bool,
+    /// The window carry (`--carry-windows K`, claude-380): each step's batch is `batch / K`
+    /// streams of K back-to-back windows of one conversation ([`carry_stream_windows`]), each
+    /// window's recurrence starting from the state its stream's previous window ended in, with
+    /// the gradient through the step's K windows and cut between steps. 0 is off. Left out of
+    /// `config.json` when 0, so a run without it writes the same file as before.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub carry_windows: usize,
+    /// A state-keyed look-back read after one layer (claude-381, [`crate::vector_reads`]), with
+    /// its margin credit in the loss. Left out of `config.json` when absent, so a run without it
+    /// writes the same file as before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vector_read: Option<crate::vector_reads::VectorReadArm>,
 }
 
 /// What TRAIN's scored targets are ([`LongConfig::train_targets`], claude-296).
@@ -363,7 +402,15 @@ impl ServedValues {
         reads: Option<&crate::flock_read_hamming::HammingReads>,
         memory: Option<&crate::flock_read_memory::TurnMemory>,
     ) -> Result<Self> {
+        // The address memory set on this thread (claude-346), which shares its variables with
+        // the run's own copy: its rows are rounded to the served 16 bits with the rest.
+        let address = crate::e8_address::address_memory();
         let mut vars: Vec<&candle_core::Var> = model.variables().values().collect();
+        if let Some(address) = address.as_ref() {
+            // Before the float copies, as for the ask weights below.
+            address.hold_in_exported_range()?;
+            vars.extend(address.variables());
+        }
         if let Some(reads) = reads {
             // claude-339: before the float copies, so the float master stays at the range's
             // end too and cannot run on past what the export can hold.
@@ -388,6 +435,9 @@ impl ServedValues {
             }
             if let Some(memory) = memory {
                 crate::fbs_export::round_memory_as_exported(memory)?;
+            }
+            if let Some(address) = address.as_ref() {
+                address.round_as_exported()?;
             }
             Ok(())
         })();
@@ -681,6 +731,11 @@ impl Drop for ArmGuard {
         crate::flock_read_memory::set_turn_memory(None);
         crate::flock_read_memory::set_memory_rows(None);
         crate::flock_read_memory::set_reply_rows(None);
+        crate::e8_address::set_address_memory(None);
+        crate::vector_reads::set_vector_read(None);
+        crate::vector_reads::clear_credit();
+        let _ = crate::vector_reads::take_stats();
+        crate::pair_rows::set_pair_rows(None);
         set_trained_cut(None);
         crate::flock_read_hamming::set_row_cut(None);
     }
@@ -770,12 +825,55 @@ fn load_reads(directory: &Path, device: &Device) -> Result<()> {
     crate::flock_read_memory::set_turn_memory(crate::flock_read_memory::TurnMemory::load(
         directory, device,
     )?);
+    crate::e8_address::set_address_memory(crate::e8_address::AddressMemory::load(
+        directory, device,
+    )?);
+    crate::vector_reads::set_vector_read(crate::vector_reads::VectorRead::load(directory, device)?);
+    let pair = crate::pair_rows::PairRows::load(directory, device)?;
+    if let Some(rows) = &pair {
+        let (nonzero, rms) = rows.census()?;
+        println!(
+            "[pair] loaded {} pairs; dictionary sha256 {}; rows nonzero {nonzero}, rms {rms:.6}",
+            rows.dict().len(),
+            sha256_bytes(&rows.dict().to_bytes())
+        );
+        // claude-373: say whether the rows are weighed, in the trainer's census form, so a
+        // weighed checkpoint that lost its weights reads "none" here.
+        match rows.reply_counts_of_weights()? {
+            Some(counts) => println!(
+                "[pair] loaded weight replies: {}",
+                crate::pair_rows::reply_census(&counts)
+            ),
+            None => println!("[pair] loaded weight replies: none"),
+        }
+        // claude-374: which weight the loaded rows carry, for I-8 to compare with training.
+        println!("[pair] loaded weight kind: {}", rows.weight_kind());
+    }
+    crate::pair_rows::set_pair_rows(pair);
     Ok(())
+}
+
+/// The tokens of `\nUser:`, a user turn's marker; the same ids as `USER_MARKER` in
+/// `bin/train-question-reach.rs:26-28`.
+const PAIR_USER_MARKER: [u32; 3] = [55, 2728, 28];
+/// The tokens of `\nAssistant:`, a reply's header; the same ids as `ASSISTANT_HEADER` in
+/// `bin/train-question-reach.rs:26-28`.
+const PAIR_ASSISTANT_HEADER: [u32; 6] = [201, 35, 560, 652, 714, 28];
+
+/// The marks the pair rows find a turn and its reply by.
+pub(crate) fn pair_marks() -> crate::pair_rows::PairMarks {
+    crate::pair_rows::PairMarks {
+        user: PAIR_USER_MARKER.to_vec(),
+        assistant: PAIR_ASSISTANT_HEADER.to_vec(),
+    }
 }
 
 const INIT_RECORD_SCHEMA: &str = "uor-r4.train-in-space-init/1";
 const HAMMING_SIDECAR: &str = "hamming_read.safetensors";
-const UNSUPPORTED_INIT_SIDECARS: [&str; 6] = [
+const UNSUPPORTED_INIT_SIDECARS: [&str; 9] = [
+    "address_memory.safetensors",
+    crate::vector_reads::FILE,
+    "pair_rows.safetensors",
     "flock_read.safetensors",
     "content_read.safetensors",
     "opening_read.safetensors",
@@ -864,6 +962,25 @@ fn validate_checkpoint_selection(config: &LongConfig) -> Result<()> {
     let Some(checkpoint) = &config.init_from else {
         return Ok(());
     };
+    // claude-346: the address memory starts at zero rows beside a fresh trunk; adding one to a
+    // loaded trunk is a run of its own, not yet built.
+    if config.address_memory.is_some() {
+        return Err(invalid(
+            "--init-from does not start an address memory; --address-memory trains from a fresh start",
+        ));
+    }
+    // claude-370: the pair rows likewise start at zero beside a fresh trunk.
+    if config.pair_rows.is_some() {
+        return Err(invalid(
+            "--init-from does not start the pair rows; --pair-rows trains from a fresh start",
+        ));
+    }
+    // claude-381: so does a vector read's zero weight.
+    if config.vector_read.is_some() {
+        return Err(invalid(
+            "--init-from does not start a vector read; the vector reads train from a fresh start",
+        ));
+    }
     if !checkpoint.is_dir() {
         return Err(invalid(format!(
             "--init-from wants a saved checkpoint directory, not {}",
@@ -1065,6 +1182,9 @@ fn checkpoint_hamming(
                 "--hamming-copy-key and --hamming-copy-keys need the checkpoint's --hamming-read",
             ));
         }
+        if config.hamming_copy_longest.is_some() {
+            return Err(invalid("--hamming-copy-longest needs the checkpoint's --hamming-read"));
+        }
         return Ok(None);
     }
     let reads = crate::flock_read_hamming::HammingReads::load(directory, device)?.ok_or_else(
@@ -1132,6 +1252,14 @@ fn checkpoint_hamming(
             "--init-from checkpoint carries the Hamming question from {} rows back, but this run names {}",
             reads.carry_rows(),
             config.hamming_carry_question
+        )));
+    }
+    // claude-357: the leave rule and the marker check read the run's marker, so the two agree.
+    if reads.copy_longest() != config.hamming_copy_longest {
+        return Err(invalid(format!(
+            "--init-from checkpoint's longest-rule marker is {:?}, but this run names {:?}",
+            reads.copy_longest(),
+            config.hamming_copy_longest
         )));
     }
     let reads = start_place(config, reads)?;
@@ -1212,6 +1340,9 @@ fn start_hamming(
         if config.hamming_copy_latest {
             return Err(invalid("--hamming-copy-latest sets the Hamming read's copy rule; turn the read on with --hamming-read"));
         }
+        if config.hamming_copy_longest.is_some() {
+            return Err(invalid("--hamming-copy-longest sets the Hamming read's copy rule; turn the read on with --hamming-read"));
+        }
         return Ok(None);
     }
     if let Some(keys) = &config.hamming_copy_keys {
@@ -1232,6 +1363,12 @@ fn start_hamming(
     }
     if config.hamming_copy_latest {
         reads = reads.with_copy_latest();
+    }
+    if let Some(marker) = config.hamming_copy_longest {
+        if !config.hamming_copy_latest {
+            return Err(invalid("--hamming-copy-longest orders the latest exact matches: it needs --hamming-copy-latest 1"));
+        }
+        reads = reads.with_copy_longest(marker)?;
     }
     if config.type_spin {
         reads = reads.with_type_spin()?;
@@ -1406,7 +1543,13 @@ fn start_memory(
             .into_iter()
             .filter(|row| !row.prompt.is_empty())
             .map(|row| {
-                let copied = copy_names_by(&leave_keys, &windows[row.window].input_ids, row.offset, row.target);
+                let copied = copy_names_ruled(
+                    &leave_keys,
+                    config.hamming_copy_longest,
+                    &windows[row.window].input_ids,
+                    row.offset,
+                    row.target,
+                );
                 let key = row.prompt[..config.turn_memory.min(row.prompt.len())].to_vec();
                 (key, copied)
             })
@@ -1447,7 +1590,7 @@ fn start_memory(
                 .iter()
                 .map(|row| {
                     let ids = &windows[row.window].input_ids;
-                    copy_names_by(&leave_keys, ids, row.offset, row.target)
+                    copy_names_ruled(&leave_keys, config.hamming_copy_longest, ids, row.offset, row.target)
                 })
                 .collect()
         });
@@ -2206,7 +2349,11 @@ fn step_gradient(
             (!rows.is_empty()).then(|| (reads, table, rows, rows.len() as f64 / *all as f64))
         });
         let (loss, share, forward_grads) = with_training_forward(served, seed, step, || {
-            let loss = batch_loss(model, objective, &ids, &scored, &targets, hi - lo, served)?;
+            // claude-381: only this forward's credit, collected here and nowhere else.
+            crate::vector_reads::clear_credit();
+            let loss = crate::vector_reads::collecting(|| {
+                batch_loss(model, objective, &ids, &scored, &targets, hi - lo, served)
+            })?;
             let detached = loss.detach();
             let loss = match share {
                 Some(share) => loss.affine(share, 0.0)?,
@@ -2237,6 +2384,17 @@ fn step_gradient(
                         }
                         _ => loss,
                     }
+                }
+                None => loss,
+            };
+            // claude-381: a vector read's margin credit, at this forward's share of the windows
+            // (an average per window, where the cross-entropy's `share` is per scored row; a
+            // micro-batch skipped above for having no scored row adds no credit). With one
+            // forward a step, the weight is 1.
+            let loss = match crate::vector_reads::take_credit() {
+                Some(credit) => {
+                    let weight = (hi - lo) as f64 / windows.len() as f64;
+                    loss.add(&credit.affine(weight, 0.0)?)?
                 }
                 None => loss,
             };
@@ -2284,6 +2442,268 @@ fn window_starts(windows: &[&CausalWindow]) -> Vec<Option<usize>> {
             _ => None,
         })
         .collect()
+}
+
+/// claude-380 (V1): TRAIN cut for the window carry. Each BOS-opened conversation becomes its
+/// windows of `context` inputs back to back, the first at its BOS, none overlapping and none
+/// dropped: a window with no scored target still carries the state on. The last is padded with
+/// BOS past the conversation's last input, as [`hs::build_document_windows`] pads. Returns the
+/// windows and each conversation's range of them. A conversation that fits one window is cut as
+/// [`hs::build_document_windows`] cuts it. Tokens before the first BOS are skipped, as there.
+pub fn carry_stream_windows(
+    tokens: &[u32],
+    mask: &[u8],
+    context: usize,
+    bos_id: u32,
+) -> Result<(Vec<CausalWindow>, Vec<std::ops::Range<usize>>)> {
+    if mask.len() != tokens.len() {
+        return Err(invalid("the carry's TRAIN mask is not its tokens' length"));
+    }
+    if context < 4 {
+        return Err(invalid(
+            "a window carry wants windows of at least the convolution's width",
+        ));
+    }
+    let starts: Vec<usize> = tokens
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &t)| (t == bos_id).then_some(i))
+        .collect();
+    let (mut windows, mut ranges) = (Vec::new(), Vec::new());
+    for (doc_id, &start) in starts.iter().enumerate() {
+        let end = starts.get(doc_id + 1).copied().unwrap_or(tokens.len());
+        if end - start <= 1 {
+            continue;
+        }
+        let first = windows.len();
+        let mut at = start;
+        // Inputs at `at..stop` predict the targets one position later.
+        while at < end - 1 {
+            let stop = (at + context).min(end - 1);
+            let mut input_ids = vec![bos_id; context];
+            input_ids[..stop - at].copy_from_slice(&tokens[at..stop]);
+            let (mut scored_offsets, mut scored_targets, mut scored_corpus_positions) =
+                (Vec::new(), Vec::new(), Vec::new());
+            for input in at..stop {
+                let p = input + 1;
+                if tokens[p] != bos_id && mask[p] == 1 {
+                    scored_offsets.push(input - at);
+                    scored_targets.push(tokens[p]);
+                    scored_corpus_positions.push(p);
+                }
+            }
+            windows.push(CausalWindow {
+                doc_id,
+                input_ids,
+                scored_offsets,
+                scored_targets,
+                scored_corpus_positions,
+            });
+            at = stop;
+        }
+        ranges.push(first..windows.len());
+    }
+    if ranges.is_empty() {
+        return Err(invalid("the carry's TRAIN holds no conversation"));
+    }
+    Ok((windows, ranges))
+}
+
+/// claude-380: which windows each step of a carried run trains. `lanes` streams each walk one
+/// conversation's windows in order, and take the next conversation of the epoch's shuffled order
+/// ([`epoch_order`] over conversations) when theirs ends; a new epoch reshuffles.
+#[derive(Clone, Debug)]
+pub struct CarrySchedule {
+    docs: Vec<std::ops::Range<usize>>,
+    seed: u64,
+    epoch: u64,
+    order: Vec<usize>,
+    next: usize,
+    /// Each lane's conversation and the index of its next window there.
+    lanes: Vec<(usize, usize)>,
+}
+
+impl CarrySchedule {
+    /// Refused without lanes, with fewer conversations than lanes, or with an empty conversation.
+    pub fn new(docs: Vec<std::ops::Range<usize>>, lanes: usize, seed: u64) -> Result<Self> {
+        if lanes == 0 || docs.len() < lanes || docs.iter().any(|d| d.is_empty()) {
+            return Err(invalid(
+                "a carry schedule wants lanes, and at least as many non-empty conversations",
+            ));
+        }
+        let order = epoch_order(docs.len(), seed, 0);
+        let mut schedule = Self {
+            docs,
+            seed,
+            epoch: 0,
+            order,
+            next: 0,
+            lanes: Vec::new(),
+        };
+        schedule.lanes = (0..lanes).map(|_| (schedule.draw(), 0)).collect();
+        Ok(schedule)
+    }
+
+    fn draw(&mut self) -> usize {
+        if self.next == self.order.len() {
+            self.epoch += 1;
+            self.order = epoch_order(self.docs.len(), self.seed, self.epoch);
+            self.next = 0;
+        }
+        self.next += 1;
+        self.order[self.next - 1]
+    }
+
+    /// The next step's `chunks · lanes` windows, chunk after chunk: chunk `j` holds each lane's
+    /// next window, in lane order. With each, whether it opens its conversation, so its lane's
+    /// state starts from zero.
+    pub fn step(&mut self, chunks: usize) -> Vec<(usize, bool)> {
+        let mut out = Vec::with_capacity(chunks * self.lanes.len());
+        for _ in 0..chunks {
+            for lane in 0..self.lanes.len() {
+                let (mut doc, mut k) = self.lanes[lane];
+                if k == self.docs[doc].len() {
+                    (doc, k) = (self.draw(), 0);
+                }
+                out.push((self.docs[doc].start + k, k == 0));
+                self.lanes[lane] = (doc, k + 1);
+            }
+        }
+        out
+    }
+
+    /// The epoch the next conversation is drawn from.
+    pub fn epoch(&self) -> u64 {
+        self.epoch
+    }
+}
+
+/// claude-380: the settings a carried run refuses, by flag: the reads, controls and cuts whose
+/// training forward the carry does not reach, and micro-batches, whose separate backwards would
+/// cut the gradient it carries.
+fn check_carry_flags(config: &LongConfig) -> Result<()> {
+    if config.carry_windows == 0 {
+        return Ok(());
+    }
+    if config.carry_windows > config.batch || !config.batch.is_multiple_of(config.carry_windows) {
+        return Err(invalid(format!(
+            "--carry-windows {} must divide --batch {}",
+            config.carry_windows, config.batch
+        )));
+    }
+    let refused: Vec<&str> = [
+        (config.micro_batch != 0, "--micro-batch"),
+        (config.train_targets != TrainTargets::Observed, "--train-targets"),
+        (config.hamming_attract > 0.0, "--hamming-attract"),
+        (config.hamming_place.is_some(), "--hamming-place"),
+        (config.flock_read > 0, "--flock-read"),
+        (config.content_read > 0, "--content-read"),
+        (config.opening_read > 0, "--opening-read"),
+        (config.prompt_register > 0, "--prompt-register"),
+        (config.type_spin, "--type-spin"),
+        (config.reply_read_train.is_some(), "--reply-read-train"),
+        (config.train_as_served, "--train-as-served"),
+        (config.pair_rows.is_some(), "--pair-rows"),
+        (config.address_memory.is_some(), "--address-memory"),
+        (config.profile > 0, "--profile"),
+        (config.opening_weight != 1, "--opening-weight"),
+        (
+            config.vector_read.is_some(),
+            "--starling-read, --prime-route-read and --state-flock-read",
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(on, name)| on.then_some(name))
+    .collect();
+    if refused.is_empty() {
+        return Ok(());
+    }
+    Err(invalid(format!(
+        "--carry-windows carries the recurrence only; it refuses {}",
+        refused.join(", ")
+    )))
+}
+
+/// claude-380: one carried step's loss and gradient. `windows` are `chunks · lanes` long, chunk
+/// after chunk ([`CarrySchedule::step`]); `opens[b]` says window `b` opens its conversation.
+/// Chunk `j`'s forward starts from the state chunk `j − 1` ended in (`carry` for the first
+/// chunk), each lane zeroed where its window opens a conversation. Every chunk's loss is weighted
+/// by its share of the step's scored rows, as [`step_gradient`] weights micro-batches, and one
+/// backward of their sum runs through all K chunks, so the gradient reaches K − 1 windows back.
+/// `carry` leaves holding the last chunk's state, detached: the gradient stops between steps.
+/// A chunk with no scored row still runs forward, to carry its state on.
+#[allow(clippy::too_many_arguments)]
+fn carry_step_gradient(
+    model: &StackModel,
+    objective: PointObjective,
+    windows: &[&CausalWindow],
+    opens: &[bool],
+    lanes: usize,
+    context: usize,
+    served: bool,
+    seed: u64,
+    step: usize,
+    opening_weight: Option<(&[u8], usize)>,
+    carry: &mut Vec<crate::geometric_stack::LayerCarry>,
+    mut rows: impl FnMut(usize, usize) -> Result<()>,
+) -> Result<(f64, candle_core::backprop::GradStore)> {
+    if lanes == 0 || windows.len() % lanes != 0 || opens.len() != windows.len() {
+        return Err(invalid("a carried step's windows are not whole chunks of its lanes"));
+    }
+    let chunks = windows.len() / lanes;
+    let total = opening_weighted_total(windows, opening_weight)?;
+    let (losses, shares, grads, state) = with_training_forward(served, seed, step, || {
+        let mut state = carry.clone();
+        let (mut losses, mut shares, mut sum): (Vec<Tensor>, Vec<f64>, Option<Tensor>) =
+            (Vec::new(), Vec::new(), None);
+        for chunk in 0..chunks {
+            let (lo, hi) = (chunk * lanes, (chunk + 1) * lanes);
+            rows(lo, hi)?;
+            let (ids, scored, targets) = match opening_weight {
+                Some((mask, weight)) => assemble_with_opening_weight(&windows[lo..hi], mask, weight)?,
+                None => assemble(&windows[lo..hi]),
+            };
+            if ids.len() != lanes * context {
+                return Err(invalid("a carried chunk's windows are not context-long"));
+            }
+            let keep: Vec<f32> = opens[lo..hi].iter().map(|&o| if o { 0.0 } else { 1.0 }).collect();
+            let keep = Tensor::from_vec(keep, lanes, model.device())?;
+            let incoming = state
+                .iter()
+                .map(|layer| layer.masked(&keep))
+                .collect::<Result<Vec<_>>>()?;
+            let share = (chunks > 1).then(|| scored.len() as f64 / total as f64);
+            let (loss, outgoing) = crate::geometric_stack::with_window_carry(incoming, || {
+                if scored.is_empty() {
+                    trained_points(model, &ids, lanes)?;
+                    return Ok(None);
+                }
+                Ok(Some(batch_loss(model, objective, &ids, &scored, &targets, lanes, served)?))
+            })?;
+            state = outgoing;
+            let Some(loss) = loss else {
+                continue;
+            };
+            losses.push(loss.detach());
+            shares.push(share.unwrap_or(1.0));
+            let weighted = match share {
+                Some(share) => loss.affine(share, 0.0)?,
+                None => loss,
+            };
+            sum = Some(match sum {
+                None => weighted,
+                Some(acc) => acc.add(&weighted)?,
+            });
+        }
+        let sum = sum.ok_or_else(|| invalid(format!("training step {step} has no scored row")))?;
+        let grads = variables_only(&sum, sum.backward()?)?;
+        stage_clock::mark("backward");
+        Ok((losses, shares, grads, state))
+    })?;
+    *carry = state.iter().map(|layer| layer.detached()).collect();
+    let value = weighted_step_loss(&losses, &shares, step)?;
+    stage_clock::mark("objective.readback");
+    Ok((value, grads))
 }
 
 /// claude-337: the found-copy pull's record over the steps since the last checkpoint, on a
@@ -3338,6 +3758,15 @@ fn unserved_reads() -> Vec<&'static str> {
     }
     if crate::flock_read_register::prompt_register().is_some() {
         set.push("the prompt register");
+    }
+    if crate::e8_address::address_memory().is_some() {
+        set.push("the address memory");
+    }
+    if crate::vector_reads::vector_read().is_some() {
+        set.push("the vector read");
+    }
+    if crate::pair_rows::pair_rows().is_some() {
+        set.push("the pair rows");
     }
     set
 }
@@ -5358,21 +5787,29 @@ pub struct PanelPrompt {
 }
 
 /// The prompts [`score_rows`] decodes on a split (claude-224):
-/// - the windows are [`sample_windows`]';
+/// - the windows are [`sample_windows`]', or [`last_openings`]' with `last_opening` (claude-352);
 /// - each prompt is its window's input through its first scored offset;
 /// - each reference is its [`reference_reply`].
 ///
 /// No model is involved.
-fn split_prompts(windows: &[CausalWindow], mask: &[u8], samples: usize, reply_tokens: usize) -> Vec<PanelPrompt> {
-    sample_windows(windows, mask, samples)
-        .into_iter()
-        .map(|window| PanelPrompt {
-            position: window.scored_corpus_positions[0],
-            prompt: window.input_ids[..=window.scored_offsets[0]].to_vec(),
-            reference: reference_reply(window, reply_tokens),
-            float_keyed: None,
-        })
-        .collect()
+fn split_prompts(
+    windows: &[CausalWindow],
+    mask: &[u8],
+    samples: usize,
+    reply_tokens: usize,
+    last_opening: bool,
+) -> Vec<PanelPrompt> {
+    let prompt = |window: &CausalWindow| PanelPrompt {
+        position: window.scored_corpus_positions[0],
+        prompt: window.input_ids[..=window.scored_offsets[0]].to_vec(),
+        reference: reference_reply(window, reply_tokens),
+        float_keyed: None,
+    };
+    if last_opening {
+        last_openings(windows, mask, samples).iter().map(prompt).collect()
+    } else {
+        sample_windows(windows, mask, samples).into_iter().map(prompt).collect()
+    }
 }
 
 /// `--panel-prompts` (claude-224): DEV's and each panel's prompts, as [`score_rows`] decodes them,
@@ -5383,26 +5820,38 @@ fn split_prompts(windows: &[CausalWindow], mask: &[u8], samples: usize, reply_to
 /// name. A served sample whose position, prompt or reference is not its prompt's is refused: the
 /// float arms decoded these prompts, so the two lists are one.
 ///
+/// `context` cuts each panel's windows as `--score-rows --context` cuts them, and DEV keeps
+/// [`SHEET_CONTEXT`]; with `last_opening` every split's prompts are [`last_openings`]', as
+/// `--score-rows --sample-opening last` decodes them (claude-352). At [`SHEET_CONTEXT`] and the
+/// first opening the files are the ones written before.
+///
 /// It returns each written file's name and rows.
+#[allow(clippy::too_many_arguments)]
 pub fn panel_prompts(
     data_root: &Path,
     panels: &[(String, PathBuf)],
     samples: usize,
     reply_tokens: usize,
+    context: usize,
+    last_opening: bool,
     served_runs: Option<&Path>,
     out: &Path,
 ) -> Result<Vec<(String, usize)>> {
     let windows_of = |tokens: &[u32], mask: &[u8]| -> Result<Vec<CausalWindow>> {
-        Ok(hs::build_document_windows(tokens, mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?.0)
+        Ok(hs::build_document_windows(tokens, mask, context, hs::SHEET_BOS_ID)?.0)
     };
     let (dev_windows, dev_mask) = load_dev(data_root)?;
-    let mut splits = vec![("dev".to_owned(), split_prompts(&dev_windows, &dev_mask, samples, reply_tokens))];
+    let mut splits =
+        vec![("dev".to_owned(), split_prompts(&dev_windows, &dev_mask, samples, reply_tokens, last_opening))];
     for (name, dir) in panels {
         if !panel_name_ok(name) || splits.iter().any(|(n, _)| n == name) {
             return Err(invalid(format!("--panel {name}: a panel name is one word, not dev")));
         }
         let (tokens, mask, _) = load_unpinned_uort(dir)?;
-        splits.push((name.clone(), split_prompts(&windows_of(&tokens, &mask)?, &mask, samples, reply_tokens)));
+        splits.push((
+            name.clone(),
+            split_prompts(&windows_of(&tokens, &mask)?, &mask, samples, reply_tokens, last_opening),
+        ));
     }
     fs::create_dir_all(out)?;
     let mut written = Vec::new();
@@ -5697,6 +6146,90 @@ fn copy_names_by(keys: &[usize], ids: &[u32], offset: usize, target: u32) -> boo
         }
         _ => copy_names(ids, offset, target),
     })
+}
+
+/// Whether the copy read names `target` under the run's copy rule (claude-357): the turn memory's
+/// leave rule asks the copy read as it is built. Without the longest rule this is
+/// [`copy_names_by`]. With it, `longest` holding the reply marker: a row that opens a reply (its
+/// previous and own tokens are the marker) reads its latest exact match, as before; every other
+/// row reads the latest position `s` in `2..offset` whose two previous tokens are the row's
+/// previous and own tokens, and with none its latest exact match. This is the choice of
+/// `HammingReads::with_copy_longest` and of the integer session's
+/// `CopyRule::LongestAfterOpening`, read off the tokens.
+fn copy_names_ruled(
+    keys: &[usize],
+    longest: Option<[u32; 2]>,
+    ids: &[u32],
+    offset: usize,
+    target: u32,
+) -> bool {
+    let Some(marker) = longest else {
+        return copy_names_by(keys, ids, offset, target);
+    };
+    if offset >= 1 && ids[offset - 1] == marker[0] && ids[offset] == marker[1] {
+        return copy_names_by(keys, ids, offset, target);
+    }
+    let exact = |s: &usize| ids[*s - 1] == ids[offset];
+    (2..offset)
+        .rev()
+        .find(|s| exact(s) && ids[*s - 2] == ids[offset - 1])
+        .or_else(|| (1..offset).rev().find(exact))
+        .is_some_and(|s| ids[s] == target)
+}
+
+/// The reply marker against a split's reply mask (claude-357). Under the longest rule the copy
+/// read finds the row that chooses a reply's first token by the marker, the two token ids before
+/// it, and not by the mask. Refused unless the marker stands before every reply's first token of
+/// `tokens` and nowhere else; returns how many replies open.
+fn check_reply_marker(name: &str, tokens: &[u32], mask: &[u8], marker: [u32; 2]) -> Result<usize> {
+    if tokens.len() != mask.len() {
+        return Err(invalid(format!(
+            "{name}: {} tokens and {} mask bytes",
+            tokens.len(),
+            mask.len()
+        )));
+    }
+    let mut openings = 0;
+    for position in 1..tokens.len() {
+        let opens = mask[position] != 0 && mask[position - 1] == 0;
+        let marked = position >= 2
+            && tokens[position - 2] == marker[0]
+            && tokens[position - 1] == marker[1];
+        if opens != marked {
+            return Err(invalid(format!(
+                "--hamming-copy-longest {},{}: in {name}, the token at {position} {}",
+                marker[0],
+                marker[1],
+                if opens {
+                    "opens a reply without the marker before it"
+                } else {
+                    "follows the marker and opens no reply"
+                }
+            )));
+        }
+        openings += usize::from(opens);
+    }
+    Ok(openings)
+}
+
+/// [`check_reply_marker`] on the run's TRAIN and DEV splits, before anything is built; nothing
+/// without `--hamming-copy-longest`.
+fn check_run_markers(data_root: &Path, config: &LongConfig) -> Result<()> {
+    let Some(marker) = config.hamming_copy_longest else {
+        return Ok(());
+    };
+    let (tokens, mask) = match config.train_split.as_ref() {
+        None => load_train_split(data_root)?,
+        Some(split) => load_named_split(split)?,
+    };
+    let train = check_reply_marker("TRAIN", &tokens, &mask, marker)?;
+    let (tokens, mask) = load_dev_split(data_root)?;
+    let dev = check_reply_marker("DEV", &tokens, &mask, marker)?;
+    println!(
+        "[hamming] the longest rule's marker {},{} stands before every reply opening and nowhere else: TRAIN {train}, DEV {dev}",
+        marker[0], marker[1]
+    );
+    Ok(())
 }
 
 /// The forms a reply key holds, in the order the read asks them. Without a tail (claude-193),
@@ -8538,8 +9071,8 @@ pub fn root_separation() -> Result<(f64, f64)> {
 }
 
 /// The pinned DEV panel's windows and its response mask.
-fn load_dev(data_root: &Path) -> Result<(Vec<CausalWindow>, Vec<u8>)> {
-    let (dev_tokens, dev_mask) = hs::load_pinned_uort_split(
+fn load_dev_split(data_root: &Path) -> Result<(Vec<u32>, Vec<u8>)> {
+    hs::load_pinned_uort_split(
         &data_root.join("ft/dev/tokens.u16"),
         &data_root.join("ft/dev/response_mask.u8"),
         hs::PINNED_DEV_TOKENS_SHA256,
@@ -8548,7 +9081,11 @@ fn load_dev(data_root: &Path) -> Result<(Vec<CausalWindow>, Vec<u8>)> {
         hs::EXPECTED_DEV_ELIGIBLE_TARGETS,
         hs::SHEET_VOCAB,
         hs::SHEET_BOS_ID,
-    )?;
+    )
+}
+
+fn load_dev(data_root: &Path) -> Result<(Vec<CausalWindow>, Vec<u8>)> {
+    let (dev_tokens, dev_mask) = load_dev_split(data_root)?;
     let (dev_windows, _) =
         hs::build_document_windows(&dev_tokens, &dev_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
     Ok((dev_windows, dev_mask))
@@ -9356,6 +9893,11 @@ pub fn score_rows(
             return Err(invalid(format!("--panel-queries {name} needs --panel {name}=DIR")));
         }
     }
+    let panel_marker = match panels.is_empty() {
+        true => None,
+        false => crate::flock_read_hamming::HammingReads::load(checkpoint, device)?
+            .and_then(|reads| reads.copy_longest()),
+    };
     for (name, dir) in panels {
         if !panel_name_ok(name) || splits.iter().any(|s| s.name == *name) {
             return Err(invalid(format!(
@@ -9363,6 +9905,14 @@ pub fn score_rows(
             )));
         }
         let (tokens, mask, sha) = load_unpinned_uort(dir)?;
+        // claude-357: a checkpoint under the longest rule finds reply openings by its marker.
+        if let Some(marker) = panel_marker {
+            let openings = check_reply_marker(name, &tokens, &mask, marker)?;
+            println!(
+                "[longest] the checkpoint reads by the marker {},{}: {name} has it before every reply opening and nowhere else: {openings}",
+                marker[0], marker[1]
+            );
+        }
         // claude-287: the rule's cut, and the context its windows and decodes run at.
         let (runs_at, windows) = match past_window {
             Some(rule) => past_window_cut(rule, &tokens, &mask, context)?,
@@ -9919,6 +10469,20 @@ pub fn score_rows(
                     search: None,
                     context: split.context,
                 });
+            }
+            // The pair rows (claude-370): the sampled prompts, as the decode is fed them, whose
+            // reply reads a bag. Once per panel, in the memory pass.
+            if let Some(rows) = crate::pair_rows::pair_rows().filter(|_| on) {
+                let fed: Vec<&[u32]> = prompts
+                    .iter()
+                    .map(|window| &window.input_ids[..=window.scored_offsets[0]])
+                    .collect();
+                let readers = crate::pair_rows::bag_readers(rows.dict(), rows.marks(), &fed)?;
+                println!(
+                    "[pair] {}: {readers} of {} sampled replies read a bag",
+                    split.name,
+                    fed.len()
+                );
             }
             // A chained panel's queries (claude-275), greedy at full scope with the memory on and
             // off: each from a prompt ending at its opening, graded by whether the reply states
@@ -12910,6 +13474,289 @@ pub fn recall_query_window(
     Ok((window, queries))
 }
 
+/// claude-397: the facts that a reader of one two-class window's stream cannot tell apart from a
+/// query's other fact ([`recall_other_candidates`]). Positions are value positions `p`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct OtherFactCandidates {
+    pub slot: usize,
+    pub bucket: usize,
+    pub scored_offset: usize,
+    pub asked: usize,
+    pub other: usize,
+    /// The consistent facts, ascending; `other` is one of them.
+    pub candidates: Vec<usize>,
+    /// The window's facts, ascending.
+    pub facts: Vec<usize>,
+}
+
+/// Where one read pick lands against a query's facts. A pick is stored `s + 1`, and pick `s`
+/// copies `ids[s + 1]`, so a pick equal to a fact's value position `p` picked that fact.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OtherPickClass {
+    Asked,
+    Other,
+    Candidate,
+    Fact,
+    Row,
+}
+
+impl OtherFactCandidates {
+    pub fn class(&self, pick: u32) -> OtherPickClass {
+        let p = pick as usize;
+        if pick == 0 {
+            OtherPickClass::Row
+        } else if p == self.asked {
+            OtherPickClass::Asked
+        } else if p == self.other {
+            OtherPickClass::Other
+        } else if self.candidates.contains(&p) {
+            OtherPickClass::Candidate
+        } else if self.facts.contains(&p) {
+            OtherPickClass::Fact
+        } else {
+            OtherPickClass::Row
+        }
+    }
+}
+
+/// claude-397: for each query of one window ([`recall_query_window`]), the facts consistent with
+/// being its other fact, from what the stream shows before the scored row:
+/// - not the asked fact;
+/// - not asked in an earlier slot (that query is in the stream);
+/// - at a distance `q − p` from the query inside the asked fact's bucket.
+///
+/// The episode pairing itself is a hidden shuffle, so on a query with more than one consistent
+/// fact no read of the stream can know which one is the other. (The generator also clips the
+/// bucket at `q − 2`; every fact sits at `p ≥ 2`, so the clip never removes one.) Refuses a
+/// window whose facts are not distinct, or whose other fact is not consistent.
+pub fn recall_other_candidates(queries: &[RecallQuery]) -> Result<Vec<OtherFactCandidates>> {
+    let mut facts: Vec<usize> = queries
+        .iter()
+        .flat_map(|q| [q.ask_value_pos, q.other_value_pos])
+        .collect();
+    facts.sort_unstable();
+    if facts.windows(2).any(|w| w[0] == w[1]) {
+        return Err(invalid("a two-class window's facts must be distinct"));
+    }
+    let mut out = Vec::with_capacity(queries.len());
+    for q in queries {
+        let &(low, high) = RECALL_QUERY_BUCKETS
+            .get(q.bucket)
+            .ok_or_else(|| invalid(format!("recall bucket {} is out of range", q.bucket)))?;
+        let earlier: Vec<usize> = queries
+            .iter()
+            .filter(|e| e.slot < q.slot)
+            .map(|e| e.ask_value_pos)
+            .collect();
+        let candidates: Vec<usize> = facts
+            .iter()
+            .copied()
+            .filter(|&p| {
+                p != q.ask_value_pos
+                    && p < q.query_pos
+                    && (low..=high).contains(&(q.query_pos - p))
+                    && !earlier.contains(&p)
+            })
+            .collect();
+        if !candidates.contains(&q.other_value_pos) {
+            return Err(invalid(format!(
+                "slot {}'s other fact at {} is not consistent with its stream",
+                q.slot, q.other_value_pos
+            )));
+        }
+        out.push(OtherFactCandidates {
+            slot: q.slot,
+            bucket: q.bucket,
+            scored_offset: q.scored_offset,
+            asked: q.ask_value_pos,
+            other: q.other_value_pos,
+            candidates,
+            facts: facts.clone(),
+        });
+    }
+    Ok(out)
+}
+
+/// `num / den` to three decimals, rounded half up, from integers only (`den > 0`).
+fn ratio3(num: u64, den: u64) -> String {
+    let v = (num * 1000 + den / 2) / den.max(1);
+    format!("{}.{:03}", v / 1000, v % 1000)
+}
+
+/// lcm(1..=8): every `1 / K` for a window's at most 7 consistent facts is a whole number of these.
+const OTHER_CEILING_UNIT: u64 = 840;
+
+/// claude-397's settings: which windows, the run's target files to check them against, and the
+/// saved eval picks to class.
+#[derive(Clone, Debug)]
+pub struct OtherCeilingSettings {
+    pub seed: u64,
+    pub header: usize,
+    pub windows: u64,
+    /// The held-out windows (`seed ^ RECALL_EVAL_SEED`, as the probe draws them), else TRAIN.
+    pub held: bool,
+    /// A dump path whose `.ask.u32`, `.other.u32` and `.bucket.u8` must equal these windows'.
+    pub targets: Option<PathBuf>,
+    /// Named u32 pick files, one word per row (`window * SHEET_CONTEXT + offset`).
+    pub picks: Vec<(String, PathBuf)>,
+}
+
+/// R1 for one far bucket: the consistent-set sizes and the uniform-guess ceiling `mean(1 / K)`.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct OtherCeilingBucket {
+    pub rows: u64,
+    /// `k_counts[k]` rows have `K = k`.
+    pub k_counts: [u64; 9],
+    pub k1_share: String,
+    /// `sum(840 / K)`; the ceiling is this over `840 * rows`.
+    pub ceiling_840ths: u64,
+    pub ceiling: String,
+}
+
+/// R2 and R3 for one pick file and far bucket.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct OtherPicksBucket {
+    pub rows: u64,
+    pub asked: u64,
+    pub other: u64,
+    pub candidate: u64,
+    pub fact: u64,
+    pub row: u64,
+    pub k1_rows: u64,
+    pub other_on_k1: u64,
+    pub k2_rows: u64,
+    pub other_on_k2: u64,
+    /// `P` in 840ths: `sum([pick in C] * 840 / K)`, the per-fact rate on the consistent set.
+    pub per_fact_840ths: u64,
+    /// Outcome 4's test: `A <= 2 P`.
+    pub asked_at_most_twice_per_fact: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct OtherCeilingReport {
+    pub seed: u64,
+    pub header: usize,
+    pub windows: u64,
+    pub held: bool,
+    /// Rows checked against the run's target files, when given.
+    pub targets_rows_checked: Option<u64>,
+    /// Indexed by far bucket (0, 1).
+    pub buckets: Vec<OtherCeilingBucket>,
+    pub picks: BTreeMap<String, Vec<OtherPicksBucket>>,
+}
+
+fn read_words_exact(path: &Path, words: usize, width: usize) -> Result<Vec<u8>> {
+    let bytes = fs::read(path).map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+    if bytes.len() != words * width {
+        return Err(invalid(format!(
+            "{} holds {} bytes, not {words} words of {width}",
+            path.display(),
+            bytes.len()
+        )));
+    }
+    Ok(bytes)
+}
+
+fn u32_words(bytes: &[u8]) -> Vec<u32> {
+    bytes
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect()
+}
+
+/// claude-397: R1 to R3 of the ORDER, from integer counts. Rebuilds the windows from the seed,
+/// checks them against the run's target files when given (outcome 0), and classes every saved
+/// pick at every scored row. No model and no device.
+pub fn recall_other_ceiling(s: &OtherCeilingSettings) -> Result<OtherCeilingReport> {
+    let seed = if s.held { s.seed ^ RECALL_EVAL_SEED } else { s.seed };
+    let rows = s.windows as usize * SHEET_CONTEXT;
+    let mut sets = Vec::new();
+    for w in 0..s.windows {
+        let (_, queries) = recall_query_window(seed, w, SHEET_CONTEXT, s.header)?;
+        for c in recall_other_candidates(&queries)? {
+            sets.push((w as usize * SHEET_CONTEXT + c.scored_offset, c));
+        }
+    }
+    let targets_rows_checked = match &s.targets {
+        None => None,
+        Some(dump) => {
+            let file = |ext: &str| PathBuf::from(format!("{}.{ext}", dump.display()));
+            let ask = u32_words(&read_words_exact(&file("ask.u32"), rows, 4)?);
+            let other = u32_words(&read_words_exact(&file("other.u32"), rows, 4)?);
+            let bucket = read_words_exact(&file("bucket.u8"), rows, 1)?;
+            let (mut want_ask, mut want_other, mut want_bucket) =
+                (vec![0u32; rows], vec![0u32; rows], vec![0u8; rows]);
+            for (row, c) in &sets {
+                want_ask[*row] = c.asked as u32;
+                want_other[*row] = c.other as u32;
+                want_bucket[*row] = c.bucket as u8 + 1;
+            }
+            if ask != want_ask || other != want_other || bucket != want_bucket {
+                return Err(invalid(format!(
+                    "{}'s target files differ from the rebuilt windows",
+                    dump.display()
+                )));
+            }
+            Some(rows as u64)
+        }
+    };
+    let mut buckets = vec![OtherCeilingBucket::default(); RECALL_QUERY_BUCKETS.len()];
+    for (_, c) in &sets {
+        let k = c.candidates.len();
+        let b = &mut buckets[c.bucket];
+        b.rows += 1;
+        b.k_counts[k] += 1;
+        b.ceiling_840ths += OTHER_CEILING_UNIT / k as u64;
+    }
+    for b in &mut buckets {
+        b.k1_share = ratio3(b.k_counts[1], b.rows);
+        b.ceiling = ratio3(b.ceiling_840ths, OTHER_CEILING_UNIT * b.rows);
+    }
+    let mut picks = BTreeMap::new();
+    for (name, path) in &s.picks {
+        let words = u32_words(&read_words_exact(path, rows, 4)?);
+        let mut out = vec![OtherPicksBucket::default(); RECALL_QUERY_BUCKETS.len()];
+        for (row, c) in &sets {
+            let o = &mut out[c.bucket];
+            let k = c.candidates.len() as u64;
+            let class = c.class(words[*row]);
+            o.rows += 1;
+            match class {
+                OtherPickClass::Asked => o.asked += 1,
+                OtherPickClass::Other => o.other += 1,
+                OtherPickClass::Candidate => o.candidate += 1,
+                OtherPickClass::Fact => o.fact += 1,
+                OtherPickClass::Row => o.row += 1,
+            }
+            let hit = class == OtherPickClass::Other;
+            if k == 1 {
+                o.k1_rows += 1;
+                o.other_on_k1 += u64::from(hit);
+            } else {
+                o.k2_rows += 1;
+                o.other_on_k2 += u64::from(hit);
+            }
+            if matches!(class, OtherPickClass::Other | OtherPickClass::Candidate) {
+                o.per_fact_840ths += OTHER_CEILING_UNIT / k;
+            }
+        }
+        for o in &mut out {
+            o.asked_at_most_twice_per_fact =
+                o.asked * OTHER_CEILING_UNIT <= 2 * o.per_fact_840ths;
+        }
+        picks.insert(name.clone(), out);
+    }
+    Ok(OtherCeilingReport {
+        seed: s.seed,
+        header: s.header,
+        windows: s.windows,
+        held: s.held,
+        targets_rows_checked,
+        buckets,
+        picks,
+    })
+}
+
 /// One recall checkpoint's reading, one line of `recall.jsonl` ([`run_recall`]).
 #[derive(Clone, Debug, Serialize)]
 pub struct RecallReading {
@@ -12958,6 +13805,9 @@ pub struct RecallReading {
     /// heads on.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hamming_type_weight_mean_abs: Option<Vec<f64>>,
+    /// claude-385: the vector read's choices and its cut reading, when the run has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vector_read: Option<VectorReadReading>,
 }
 
 /// The mean, least and greatest of a group of gains.
@@ -13741,6 +14591,16 @@ pub fn run_recall(
     if form.eval_windows == 0 {
         return Err(invalid("a recall run scores at least one held-out window"));
     }
+    if config.address_memory.is_some() || config.address_band.is_some() {
+        return Err(invalid(
+            "the address memory trains with --out's long run, not under --recall",
+        ));
+    }
+    if config.pair_rows.is_some() {
+        return Err(invalid(
+            "the pair rows train with --out's long run, not under --recall",
+        ));
+    }
     if form.query && pairs_per_bucket != RECALL_QUERY_EPISODES {
         return Err(invalid(format!(
             "the two-class task holds {RECALL_QUERY_EPISODES} episodes a window, not {pairs_per_bucket}"
@@ -13826,25 +14686,72 @@ pub fn run_recall(
     let mut opening = start_opening(config, device)?;
     // The prompt register (claude-155), when on: its own optimizer, applied inside the trunk.
     let mut register = start_register(config, device)?;
+    // claude-385: a vector read (claude-381), when on, as `run_long` starts it: identity
+    // rotations and a zero weight, its own optimizer, its margin credit in the loss.
+    let mut vread = match config.vector_read {
+        Some(arm) => {
+            let layers = model.config.layers();
+            let depth = arm.depth.unwrap_or(layers);
+            if depth > layers {
+                return Err(invalid(format!(
+                    "--vector-read-depth {depth} is past the model's {layers} layers"
+                )));
+            }
+            let read = crate::vector_reads::VectorRead::new(
+                arm.kind,
+                depth,
+                config.width,
+                arm.margin,
+                arm.credit,
+                device,
+            )?
+            .with_stream_grad(arm.stream_grad);
+            crate::vector_reads::set_vector_read(Some(read.clone()));
+            println!(
+                "[vread] {} read after layer {depth} of {layers}, margin {}, credit x {}, stream \
+                 gradient {}",
+                arm.kind.name(),
+                arm.margin,
+                arm.credit,
+                if arm.stream_grad { "on" } else { "off" }
+            );
+            let opt = crate::flock_read::FlockAdamW::for_vars(&read.variables())?;
+            Some((read, opt))
+        }
+        None => None,
+    };
     let mut opt_main = StackAdamW::new(&model, hs::SHEET_WEIGHT_DECAY, hs::SHEET_CLIP)?;
     let mut opt_decay = StackAdamW::new(&model, 0.0, hs::SHEET_CLIP)?;
     let log = out.join("recall.jsonl");
     let (mut train_seconds, mut loss_sum, mut loss_steps) = (0.0f64, 0.0f64, 0usize);
     let (mut attract_sum, mut attract_steps) = (0.0f64, 0usize);
     let reading = |step: usize, loss: Option<f64>, seconds: f64, attract: Option<f64>| -> Result<()> {
-        let (rows, hits, query, picks) = if form.query {
-            let refs: Vec<&CausalWindow> = held_queries.iter().map(|(w, _)| w).collect();
-            let picks = recall_picks(&model, &refs, config.seed)?;
-            let counts = count_queries(&held_queries, &picks)?;
-            let (mut rows, mut hits) = ([0usize; 4], [0usize; 4]);
-            for b in 0..2 {
-                rows[2 + b] = counts.rows[b].iter().sum();
-                hits[2 + b] = counts.ask[b].iter().sum();
+        let score = || -> Result<RecallScore> {
+            Ok(if form.query {
+                let refs: Vec<&CausalWindow> = held_queries.iter().map(|(w, _)| w).collect();
+                let picks = recall_picks(&model, &refs, config.seed)?;
+                let counts = count_queries(&held_queries, &picks)?;
+                let (mut rows, mut hits) = ([0usize; 4], [0usize; 4]);
+                for b in 0..2 {
+                    rows[2 + b] = counts.rows[b].iter().sum();
+                    hits[2 + b] = counts.ask[b].iter().sum();
+                }
+                (rows, hits, Some(counts), picks)
+            } else {
+                let (rows, hits) = recall_hits(&model, &held_out, config.seed)?;
+                (rows, hits, None, Vec::new())
+            })
+        };
+        // claude-385: with a vector read, its choice at each scored row, and the same held-out
+        // pass again with the read cut (eval only, `R^{-v}`).
+        let ((rows, hits, query, picks), vector_read) = match crate::vector_reads::vector_read() {
+            Some(read) => {
+                let (scored, chosen) = crate::vector_reads::recording_picks(&score)?;
+                let cut = crate::vector_reads::without_vector_read(&score)?;
+                let line = vector_read_reading(&read, &held_out, &held_queries, &chosen, cut)?;
+                (scored, Some(line))
             }
-            (rows, hits, Some(counts), picks)
-        } else {
-            let (rows, hits) = recall_hits(&model, &held_out, config.seed)?;
-            (rows, hits, None, Vec::new())
+            None => (score()?, None),
         };
         let readings = if form.readings {
             Some(recall_readings(&model, &held_out, &held_queries, &picks, config.seed)?)
@@ -13927,14 +14834,25 @@ pub fn run_recall(
                 ),
                 _ => None,
             },
+            vector_read,
         };
         println!(
             "[recall] step {step} hits {:?} of {:?} train {seconds:.0}s",
             line.hits, line.rows
         );
+        if let Some(v) = &line.vector_read {
+            println!(
+                "[vread] step {step}: read {:?} chose target {:?} other {:?}, cut hits {:?}, offset {:?}",
+                v.read, v.chose_target, v.chose_other, v.cut_hits, v.offset
+            );
+        }
         append_line(&log, &serde_json::to_string(&line)?)
     };
     reading(0, None, 0.0, None)?;
+    // claude-385: a Starling read's offset starts from the first training batch's address scale.
+    if vread.as_ref().is_some_and(|(read, _)| read.kind().is_starling()) {
+        crate::vector_reads::calibrate_next_offset();
+    }
     for step in 0..config.steps {
         let windows: Vec<CausalWindow> = (0..config.batch)
             .map(|b| {
@@ -13962,19 +14880,28 @@ pub fn run_recall(
             step + 1,
             false,
             || {
-                let loss = batch_loss(
-                    &model,
-                    config.objective,
-                    &ids,
-                    &scored,
-                    &targets,
-                    config.batch,
-                    false,
-                )?;
+                // claude-385: a vector read's credit, collected in this forward only.
+                crate::vector_reads::clear_credit();
+                let loss = crate::vector_reads::collecting(|| {
+                    batch_loss(
+                        &model,
+                        config.objective,
+                        &ids,
+                        &scored,
+                        &targets,
+                        config.batch,
+                        false,
+                    )
+                })?;
                 let value = f64::from(loss.to_scalar::<f32>()?);
                 if !value.is_finite() {
                     return Err(invalid(format!("non-finite recall loss at step {step}")));
                 }
+                // The logged loss is the task's alone; the credit joins the gradient.
+                let loss = match crate::vector_reads::take_credit() {
+                    Some(credit) => loss.add(&credit)?,
+                    None => loss,
+                };
                 // The task loss alone is the logged loss; the pull adds λ times its mean distance.
                 let pull = match (&hamming, pulls.is_empty()) {
                     (Some((reads, _)), false) => {
@@ -14020,6 +14947,9 @@ pub fn run_recall(
         if let Some((reg, opt)) = register.as_mut() {
             opt.step_vars(&reg.variables(), &grads, lr)?;
         }
+        if let Some((read, opt)) = vread.as_mut() {
+            opt.step_vars(&read.variables(), &grads, lr)?;
+        }
         opt_decay.update_filtered(&model, &grads, lr * config.decay_mult, |name| {
             name.ends_with("rec.decay")
         })?;
@@ -14056,7 +14986,704 @@ pub fn run_recall(
     if let Some(reg) = crate::flock_read_register::prompt_register() {
         reg.save(&directory)?;
     }
+    if let Some(read) = crate::vector_reads::vector_read() {
+        read.save(&directory)?;
+    }
     Ok(())
+}
+
+/// One held-out pass of the recall task: rows and hits per bucket, the two-class counts, and the
+/// picks the readings use.
+type RecallScore = ([usize; 4], [usize; 4], Option<QueryCounts>, Vec<u32>);
+
+/// claude-385: a vector read at one recall reading, on the held-out windows.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct VectorReadReading {
+    pub kind: String,
+    /// Scored rows per bucket (the `rows` layout: the two-class task at places 2 and 3) whose read
+    /// chose an earlier position at all; whose chosen position is followed by the scored target
+    /// (the asked value: the read picked the asked fact); and, two-class only, by the other
+    /// fact's value.
+    pub read: [usize; 4],
+    pub chose_target: [usize; 4],
+    pub chose_other: [usize; 4],
+    /// The held-out hits with the read cut (`R^{-v}`, the read unset for the pass), and the
+    /// two-class counts under the cut.
+    pub cut_hits: [usize; 4],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cut_query: Option<QueryCounts>,
+    pub weight_mean_abs: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<f64>,
+    /// The Starling offset the first training forward set from the address scale, at the
+    /// reading after it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub calibrated_offset: Option<f64>,
+    /// Over the training forwards since the last reading: rows with an earlier position, rows
+    /// that read, rows with a positive, rows that chose a positive, credit terms.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub train: Option<[f64; 5]>,
+}
+
+/// Count `chosen`, the read's choice (position + 1, 0 for none) at every row of the held-out
+/// windows in order, at each scored row: whether it read, and whether the chosen position is
+/// followed by the target (or, two-class, the other fact's value).
+pub fn count_read_choices(
+    held_out: &[(CausalWindow, Vec<usize>)],
+    held_queries: &[(CausalWindow, Vec<RecallQuery>)],
+    chosen: &[u32],
+) -> Result<([usize; 4], [usize; 4], [usize; 4])> {
+    // (window index, scored offset, target, other value, place): the pass scores one task's
+    // windows, the two-class task's when it has any.
+    let mut rows: Vec<(usize, usize, u32, Option<u32>, usize)> = Vec::new();
+    let windows: Vec<&CausalWindow> = if held_queries.is_empty() {
+        for (w, (window, buckets)) in held_out.iter().enumerate() {
+            let scored = window.scored_offsets.iter().zip(&window.scored_targets).zip(buckets);
+            for ((&t, &v), &b) in scored {
+                rows.push((w, t, v, None, b));
+            }
+        }
+        held_out.iter().map(|(w, _)| w).collect()
+    } else {
+        for (w, (_, queries)) in held_queries.iter().enumerate() {
+            for q in queries {
+                rows.push((w, q.scored_offset, q.ask_value, Some(q.other_value), 2 + q.bucket));
+            }
+        }
+        held_queries.iter().map(|(w, _)| w).collect()
+    };
+    if chosen.len() != windows.len() * SHEET_CONTEXT {
+        return Err(invalid(format!(
+            "{} recorded choices for {} held-out windows of {SHEET_CONTEXT}",
+            chosen.len(),
+            windows.len()
+        )));
+    }
+    let (mut read, mut target, mut other) = ([0usize; 4], [0usize; 4], [0usize; 4]);
+    for (w, t, v, o, place) in rows {
+        let window = windows[w];
+        let s1 = chosen[w * SHEET_CONTEXT + t] as usize;
+        if s1 == 0 {
+            continue;
+        }
+        if s1 > t {
+            return Err(invalid(format!("a read at row {t} chose a later position {}", s1 - 1)));
+        }
+        read[place] += 1;
+        let next = window.input_ids[s1];
+        if next == v {
+            target[place] += 1;
+        } else if Some(next) == o {
+            other[place] += 1;
+        }
+    }
+    Ok((read, target, other))
+}
+
+/// claude-385: [`VectorReadReading`] of `read` from its recorded choices and the cut pass.
+fn vector_read_reading(
+    read: &crate::vector_reads::VectorRead,
+    held_out: &[(CausalWindow, Vec<usize>)],
+    held_queries: &[(CausalWindow, Vec<RecallQuery>)],
+    chosen: &[u32],
+    cut: RecallScore,
+) -> Result<VectorReadReading> {
+    let (reads, chose_target, chose_other) = count_read_choices(held_out, held_queries, chosen)?;
+    let train = match crate::vector_reads::take_stats() {
+        Some(s) => {
+            let get = |t: &Tensor| -> Result<f64> { Ok(f64::from(t.to_scalar::<f32>()?)) };
+            Some([
+                get(&s.rows)?,
+                get(&s.read_rows)?,
+                get(&s.positive_rows)?,
+                get(&s.chose_positive)?,
+                get(&s.hinge_pairs)?,
+            ])
+        }
+        None => None,
+    };
+    Ok(VectorReadReading {
+        kind: read.kind().name(),
+        read: reads,
+        chose_target,
+        chose_other,
+        cut_hits: cut.1,
+        cut_query: cut.2,
+        weight_mean_abs: read.weight_mean_abs()?,
+        offset: read.offset_value()?.map(f64::from),
+        calibrated_offset: crate::vector_reads::take_calibrated_offset().map(f64::from),
+        train,
+    })
+}
+
+/// claude-387: the run settings a saved two-class recall checkpoint is read back with: the run's
+/// `config.json` (seed and trunk flags) and `recall.json` (the form's header and held-out count).
+#[derive(Clone, Debug, Serialize)]
+pub struct PayloadProbeSettings {
+    pub seed: u64,
+    pub retain_rates: bool,
+    pub fold_scores: bool,
+    pub reflect_floor: bool,
+    pub fix_input_table: bool,
+    pub header: usize,
+    pub eval_windows: u64,
+    /// The eval payload scales; the first is the saved forward's own, 1.
+    pub scales: Vec<f32>,
+    /// claude-388: every pass with the read copies Flock's first kept pick alone (the hard copy,
+    /// [`crate::vector_reads::with_first_pick_payload`]) instead of its picks' mean.
+    pub first_only: bool,
+    /// claude-389: one more hard-copy pass at payload scale 1 captures the read's inputs and
+    /// replays them through the native Q31 read ([`crate::native_replay::replay`]); needs
+    /// `first_only`.
+    pub native_replay: bool,
+    /// claude-389: where the replay writes its barred operator and converted words as one
+    /// [`uor_r4_native_vector::Q31ReadDump`], for control 2 (CPU against CUDA); needs
+    /// `native_replay`.
+    pub native_dump: Option<std::path::PathBuf>,
+    /// claude-395: when set, the native replay and its dump read the first `n` TRAIN windows,
+    /// `recall_query_window(seed, i, ..)` at the run's own seed, instead of the held-out ones;
+    /// needs `native_dump`. The payload-probe passes stay on the held-out windows.
+    pub native_train_windows: Option<u64>,
+    /// claude-395: when set, a file of little-endian `u32` picks, one per held-out row in row
+    /// order (window × context + offset, a window-local position + 1, 0 for none), that every
+    /// pass with the read uses as the hard copy's first pick
+    /// ([`crate::vector_reads::with_injected_first_picks`]); needs `first_only`.
+    pub native_picks: Option<std::path::PathBuf>,
+}
+
+/// claude-395: the native picks file, one `u32` per held-out row, checked for its length.
+fn read_native_picks(path: &Path, rows: usize) -> Result<Vec<u32>> {
+    let bytes = std::fs::read(path).map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+    if bytes.len() != rows * 4 {
+        return Err(invalid(format!(
+            "{}: {} bytes for {rows} held-out rows of 4 bytes",
+            path.display(),
+            bytes.len()
+        )));
+    }
+    Ok(bytes
+        .chunks_exact(4)
+        .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        .collect())
+}
+
+/// claude-395: the native read's per-row files beside a dump, one entry per dump row
+/// (`window * time + offset`), each 0 away from a query row.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecallRowTargets {
+    /// The asked fact's value position `p` (a pick `s` copies `ids[s + 1]`, so the target is
+    /// `p`, the rule's `s + 1` form).
+    pub ask: Vec<u32>,
+    /// The other fact's value position.
+    pub other: Vec<u32>,
+    /// C2's control: a seeded uniform earlier row in `1..=scored_offset`.
+    pub random: Vec<u32>,
+    /// The query's far bucket, 1 or 2 (`RecallQuery::bucket + 1`).
+    pub bucket: Vec<u8>,
+}
+
+/// SplitMix64, one draw per seed.
+fn splitmix64(seed: u64) -> u64 {
+    let mut z = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// The seed of C2's random targets (the sheet's "fixed 393 seed").
+pub const RECALL_RANDOM_TARGET_SEED: u64 = 393;
+
+/// claude-395: the per-row targets of windows whose queries are `queries[w]`, each window
+/// `time` rows. A target must be an earlier row of its window, `1..=scored_offset`; each
+/// query row is written once. The random draw depends on `(window, slot)` only.
+pub fn recall_row_targets(queries: &[Vec<RecallQuery>], time: usize) -> Result<RecallRowTargets> {
+    let rows = queries
+        .len()
+        .checked_mul(time)
+        .ok_or_else(|| invalid("the targets' row count overflows"))?;
+    let mut out = RecallRowTargets {
+        ask: vec![0; rows],
+        other: vec![0; rows],
+        random: vec![0; rows],
+        bucket: vec![0; rows],
+    };
+    for (w, window) in queries.iter().enumerate() {
+        for q in window {
+            let offset = q.scored_offset;
+            if offset == 0 || offset >= time {
+                return Err(invalid("a query's scored row is outside its window"));
+            }
+            let row = w * time + offset;
+            if out.bucket[row] != 0 {
+                return Err(invalid("two queries score the same row"));
+            }
+            for pos in [q.ask_value_pos, q.other_value_pos] {
+                if pos == 0 || pos > offset {
+                    return Err(invalid("a target is not an earlier row of its window"));
+                }
+            }
+            let bucket = u8::try_from(q.bucket + 1)
+                .map_err(|_| invalid("a query's bucket does not fit a byte"))?;
+            let draw = splitmix64(RECALL_RANDOM_TARGET_SEED ^ ((w as u64) << 8) ^ q.slot as u64);
+            out.ask[row] = q.ask_value_pos as u32;
+            out.other[row] = q.other_value_pos as u32;
+            out.random[row] = (draw % offset as u64) as u32 + 1;
+            out.bucket[row] = bucket;
+        }
+    }
+    Ok(out)
+}
+
+/// `path` with `suffix` appended to its file name.
+fn with_suffix(path: &std::path::Path, suffix: &str) -> std::path::PathBuf {
+    let mut name = path.as_os_str().to_owned();
+    name.push(suffix);
+    std::path::PathBuf::from(name)
+}
+
+/// claude-395: the four row files beside a dump: `.ask.u32`, `.other.u32`, `.random.u32`
+/// (little-endian `u32` per row) and `.bucket.u8`.
+pub fn write_recall_row_targets(dump: &std::path::Path, targets: &RecallRowTargets) -> Result<()> {
+    let le = |v: &[u32]| v.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>();
+    write_new(&with_suffix(dump, ".ask.u32"), &le(&targets.ask))?;
+    write_new(&with_suffix(dump, ".other.u32"), &le(&targets.other))?;
+    write_new(&with_suffix(dump, ".random.u32"), &le(&targets.random))?;
+    write_new(&with_suffix(dump, ".bucket.u8"), &targets.bucket)
+}
+
+/// claude-389: the hard-copy forward of every held-out window at payload scale 1, each forward's
+/// read captured ([`crate::vector_reads::capturing_replay`]) and split into windows of the sheet's
+/// context, with the held-out query rows marked. Every forward must be one Flock read of all its
+/// rows, under one read state.
+fn native_replay_pass(
+    model: &StackModel,
+    held: &[(CausalWindow, Vec<RecallQuery>)],
+    seed: u64,
+) -> Result<(crate::native_replay::ReplayModel, Vec<crate::native_replay::ReplayWindow>)> {
+    use crate::native_replay::{ReplayModel, ReplayWindow};
+    let refs: Vec<&CausalWindow> = held.iter().map(|(w, _)| w).collect();
+    let mut state: Option<ReplayModel> = None;
+    let mut windows = Vec::new();
+    hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, 0, false, || {
+        for (c, chunk) in refs.chunks(16).enumerate() {
+            let (ids, _, _) = assemble(chunk);
+            if ids.len() != chunk.len() * SHEET_CONTEXT {
+                return Err(invalid("a held-out window is not the sheet's context"));
+            }
+            let forward = || crate::flock_read::points(model, &ids, chunk.len(), SHEET_CONTEXT);
+            let (_, captures) = crate::vector_reads::with_first_pick_payload(|| {
+                crate::vector_reads::with_payload_scale(1.0, || {
+                    crate::vector_reads::capturing_replay(forward)
+                })
+            })?;
+            let [capture] = captures.as_slice() else {
+                return Err(invalid(format!(
+                    "{} replay captures for one forward: the read ran other than once",
+                    captures.len()
+                )));
+            };
+            let (time, width) = (capture.time, capture.width);
+            if !capture.flock {
+                return Err(invalid("the native replay reads a Flock read only"));
+            }
+            if capture.ids != ids
+                || time != SHEET_CONTEXT
+                || capture.batch * time != ids.len()
+                || capture.first_pick.len() != ids.len()
+                || capture.stream.len() != ids.len() * width
+                || capture.out.len() != ids.len() * width
+            {
+                return Err(invalid("the replay capture's rows are not the forward's"));
+            }
+            let blocks = |v: &[f32]| -> Vec<[f32; 4]> {
+                v.chunks_exact(4).map(|g| [g[0], g[1], g[2], g[3]]).collect()
+            };
+            let read = ReplayModel {
+                width,
+                query_gates_raw: blocks(&capture.query_rotation),
+                key_gates_raw: blocks(&capture.key_rotation),
+                weights: capture.weight.clone(),
+                table: capture.table.clone(),
+            };
+            match &state {
+                Some(first) if *first != read => {
+                    return Err(invalid("the read's state moved between replay forwards"));
+                }
+                Some(_) => {}
+                None => state = Some(read),
+            }
+            for (j, window) in chunk.iter().enumerate() {
+                let w = c * 16 + j;
+                let offsets: Vec<usize> = held[w].1.iter().map(|q| q.scored_offset).collect();
+                if offsets != window.scored_offsets {
+                    return Err(invalid("a window's scored rows are not its queries' rows"));
+                }
+                let mut query = vec![false; time];
+                for q in &held[w].1 {
+                    if q.scored_offset >= time {
+                        return Err(invalid("a held-out query row is outside its window"));
+                    }
+                    query[q.scored_offset] = true;
+                }
+                let rows = j * time..(j + 1) * time;
+                let lanes = j * time * width..(j + 1) * time * width;
+                windows.push(ReplayWindow {
+                    time,
+                    stream: capture.stream[lanes.clone()].to_vec(),
+                    ids: capture.ids[rows.clone()].to_vec(),
+                    f32_first_pick: capture.first_pick[rows].to_vec(),
+                    f32_out: capture.out[lanes].to_vec(),
+                    query,
+                });
+            }
+        }
+        Ok(())
+    })?;
+    let state = state.ok_or_else(|| invalid("the native replay read no forward"))?;
+    Ok((state, windows))
+}
+
+/// claude-387: one held-out query row of the payload probe at one payload scale.
+#[derive(Clone, Debug, Serialize)]
+pub struct PayloadProbeRow {
+    pub window: usize,
+    pub bucket: usize,
+    pub slot: usize,
+    /// The asked token's score minus the best other token's, in the nearest-table decode that
+    /// [`recall_picks`] makes (negative mean L1 displacement).
+    pub margin: f32,
+    /// The decoded token.
+    pub pick: u32,
+    pub ask_value: u32,
+    pub other_value: u32,
+    /// `|x|`, `|p|` and `x · p` where the read adds, at this row.
+    pub stream_norm: f32,
+    pub payload_norm: f32,
+    pub dot: f32,
+    /// The next tokens of the read's real kept picks, best first.
+    pub next_ids: Vec<u32>,
+}
+
+/// claude-387: every held-out query row of the saved recall checkpoint `checkpoint`, decoded
+/// with the read's payload times `scale` (`None`: the read cut, `R^{-v}`, with no probe rows).
+fn payload_probe_pass(
+    model: &StackModel,
+    held: &[(CausalWindow, Vec<RecallQuery>)],
+    seed: u64,
+    scale: Option<f32>,
+    picks: Option<&[u32]>,
+) -> Result<Vec<PayloadProbeRow>> {
+    let table = table(model)?;
+    let refs: Vec<&CausalWindow> = held.iter().map(|(w, _)| w).collect();
+    if picks.is_some_and(|p| p.len() != refs.len() * SHEET_CONTEXT) {
+        return Err(invalid("the native picks are not one per held-out row"));
+    }
+    let mut out = Vec::new();
+    hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, 0, false, || {
+        for (c, chunk) in refs.chunks(16).enumerate() {
+            let (ids, _, _) = assemble(chunk);
+            if ids.len() != chunk.len() * SHEET_CONTEXT {
+                return Err(invalid("a held-out window is not the sheet's context"));
+            }
+            let forward = || crate::flock_read::points(model, &ids, chunk.len(), SHEET_CONTEXT);
+            // claude-395: this forward's rows of the native picks, when the probe has them.
+            let start = c * 16 * SHEET_CONTEXT;
+            let rows_picks = picks.map(|p| p[start..start + ids.len()].to_vec());
+            let probed = || match rows_picks.clone() {
+                Some(p) => crate::vector_reads::with_injected_first_picks(p, || {
+                    crate::vector_reads::probing_payload(forward)
+                }),
+                None => crate::vector_reads::probing_payload(forward),
+            };
+            let (hidden, probe) = match scale {
+                Some(s) => crate::vector_reads::with_payload_scale(s, probed)?,
+                None => (crate::vector_reads::without_vector_read(forward)?, Vec::new()),
+            };
+            if scale.is_some() && probe.len() != ids.len() {
+                return Err(invalid(format!(
+                    "{} probe rows for {} positions: the read ran other than once",
+                    probe.len(),
+                    ids.len()
+                )));
+            }
+            let mut at = Vec::new();
+            for (j, window) in chunk.iter().enumerate() {
+                let w = c * 16 + j;
+                let queries = &held[w].1;
+                let offsets: Vec<usize> = queries.iter().map(|q| q.scored_offset).collect();
+                if offsets != window.scored_offsets {
+                    return Err(invalid("a window's scored rows are not its queries' rows"));
+                }
+                for q in queries {
+                    at.push((w, j * SHEET_CONTEXT + q.scored_offset, q));
+                }
+            }
+            let index: Vec<u32> = at.iter().map(|&(_, r, _)| r as u32).collect();
+            let index = Tensor::from_vec(index, at.len(), model.device())?;
+            let scores = nearest_scores(&hidden.index_select(&index, 0)?, &table)?.to_vec2::<f32>()?;
+            for ((w, r, q), row) in at.into_iter().zip(scores) {
+                let ask = q.ask_value as usize;
+                let (mut pick, mut best_other) = (0usize, f32::NEG_INFINITY);
+                for (t, &v) in row.iter().enumerate() {
+                    if v > row[pick] {
+                        pick = t;
+                    }
+                    if t != ask && v > best_other {
+                        best_other = v;
+                    }
+                }
+                let p = probe.get(r);
+                out.push(PayloadProbeRow {
+                    window: w,
+                    bucket: q.bucket,
+                    slot: q.slot,
+                    margin: row[ask] - best_other,
+                    pick: pick as u32,
+                    ask_value: q.ask_value,
+                    other_value: q.other_value,
+                    stream_norm: p.map_or(0.0, |p| p.stream_norm),
+                    payload_norm: p.map_or(0.0, |p| p.payload_norm),
+                    dot: p.map_or(0.0, |p| p.dot),
+                    next_ids: p.map_or_else(Vec::new, |p| p.next_ids.clone()),
+                });
+            }
+        }
+        Ok(())
+    })?;
+    Ok(out)
+}
+
+/// claude-387: the count, mean, lower median and 10th and 90th percentiles of `v`; the count
+/// alone when empty.
+fn probe_spread(mut v: Vec<f64>) -> serde_json::Value {
+    if v.is_empty() {
+        return serde_json::json!({ "n": 0 });
+    }
+    v.sort_by(f64::total_cmp);
+    let at = |f: f64| v[((v.len() - 1) as f64 * f).floor() as usize];
+    let mean = v.iter().sum::<f64>() / v.len() as f64;
+    serde_json::json!({
+        "n": v.len(), "mean": mean, "p10": at(0.1), "median": at(0.5), "p90": at(0.9)
+    })
+}
+
+/// claude-387: the summary of one pass's `rows` over the rows `keep` selects.
+fn payload_probe_summary(
+    rows: &[PayloadProbeRow],
+    keep: impl Fn(usize, &PayloadProbeRow) -> bool,
+) -> serde_json::Value {
+    let picked: Vec<(usize, &PayloadProbeRow)> =
+        rows.iter().enumerate().filter(|&(i, r)| keep(i, r)).collect();
+    let f = |g: &dyn Fn(&PayloadProbeRow) -> f64| -> serde_json::Value {
+        probe_spread(picked.iter().map(|(_, r)| g(r)).collect())
+    };
+    let (mut ask, mut oth, mut n) = ([0usize; 2], [0usize; 2], [0usize; 2]);
+    for (_, r) in &picked {
+        n[r.bucket] += 1;
+        ask[r.bucket] += usize::from(r.pick == r.ask_value);
+        oth[r.bucket] += usize::from(r.pick == r.other_value);
+    }
+    let rate = |a: [usize; 2]| -> Vec<f64> {
+        (0..2).map(|b| if n[b] == 0 { 0.0 } else { a[b] as f64 / n[b] as f64 }).collect()
+    };
+    serde_json::json!({
+        "rows": n,
+        "ask": ask,
+        "oth": oth,
+        "r_ask": rate(ask),
+        "r_oth": rate(oth),
+        "margin": f(&|r| f64::from(r.margin)),
+        "margin_positive": picked.iter().filter(|(_, r)| r.margin > 0.0).count(),
+        // Added after the first probe read, outside the fixed reading map: whether the decoded
+        // token is one of the read's kept picks' next tokens, and the first kept pick's.
+        "pick_kept": picked.iter().filter(|(_, r)| r.next_ids.contains(&r.pick)).count(),
+        "pick_first": picked.iter().filter(|(_, r)| r.next_ids.first() == Some(&r.pick)).count(),
+        "stream_norm": f(&|r| f64::from(r.stream_norm)),
+        "payload_norm": f(&|r| f64::from(r.payload_norm)),
+        "ratio": f(&|r| if r.stream_norm > 0.0 {
+            f64::from(r.payload_norm) / f64::from(r.stream_norm)
+        } else {
+            0.0
+        }),
+        "cosine": f(&|r| {
+            let d = f64::from(r.stream_norm) * f64::from(r.payload_norm);
+            if d > 0.0 { f64::from(r.dot) / d } else { 0.0 }
+        }),
+    })
+}
+
+/// claude-387: the payload probe of the saved two-class recall checkpoint `checkpoint` (a run's
+/// `models/step-*` directory) under `settings`, as `probe.json`'s value: at each held-out query
+/// row `|x|`, `|p|`, their cosine, the read's kept picks against the asked fact, and the asked
+/// token's decoded margin, at each payload scale and with the read cut. Eval only.
+pub fn recall_payload_probe(
+    checkpoint: &Path,
+    settings: &PayloadProbeSettings,
+    device: &Device,
+) -> Result<serde_json::Value> {
+    if settings.scales.first() != Some(&1.0) {
+        return Err(invalid("the probe's first payload scale is the saved forward's, 1"));
+    }
+    if settings.eval_windows == 0 {
+        return Err(invalid("the probe reads at least one held-out window"));
+    }
+    if settings.native_replay && !settings.first_only {
+        return Err(invalid("the native replay replays the hard copy: it needs first_only"));
+    }
+    if settings.native_dump.is_some() && !settings.native_replay {
+        return Err(invalid("the native dump is the replay's input: it needs native_replay"));
+    }
+    if settings.native_train_windows.is_some() && settings.native_dump.is_none() {
+        return Err(invalid("the TRAIN replay is only for its dump: it needs native_dump"));
+    }
+    if settings.native_train_windows == Some(0) {
+        return Err(invalid("the TRAIN replay reads at least one window"));
+    }
+    if settings.native_picks.is_some() && !settings.first_only {
+        return Err(invalid("the native picks are the hard copy's first pick: they need first_only"));
+    }
+    let native_picks = match &settings.native_picks {
+        Some(path) => Some(read_native_picks(path, settings.eval_windows as usize * SHEET_CONTEXT)?),
+        None => None,
+    };
+    arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
+    crate::geometric_stack::set_retention_rates(settings.retain_rates);
+    crate::geometric_stack::set_folded_scores(settings.fold_scores);
+    crate::geometric_stack::set_reflected_floor(settings.reflect_floor);
+    crate::geometric_stack::set_input_table_fixed(settings.fix_input_table);
+    let _guard = ArmGuard;
+    let model = StackModel::load(checkpoint, device)?;
+    load_reads(checkpoint, device)?;
+    let read = crate::vector_reads::vector_read()
+        .ok_or_else(|| invalid("the checkpoint has no vector read to probe"))?;
+    let held_seed = settings.seed ^ RECALL_EVAL_SEED;
+    let held = (0..settings.eval_windows)
+        .map(|i| recall_query_window(held_seed, i, SHEET_CONTEXT, settings.header))
+        .collect::<Result<Vec<_>>>()?;
+    // claude-388: every pass with the read runs under the hard copy when the settings ask.
+    let pass = |scale: Option<f32>| -> Result<Vec<PayloadProbeRow>> {
+        if settings.first_only {
+            crate::vector_reads::with_first_pick_payload(|| {
+                payload_probe_pass(&model, &held, settings.seed, scale, native_picks.as_deref())
+            })
+        } else {
+            payload_probe_pass(&model, &held, settings.seed, scale, None)
+        }
+    };
+    let base = pass(Some(1.0))?;
+    let first_right: Vec<bool> =
+        base.iter().map(|r| r.next_ids.first() == Some(&r.ask_value)).collect();
+    // How many of the kept picks point at the asked fact (and at the other fact), over all query
+    // rows and over the rows whose first pick is right.
+    let kept_max = base.iter().map(|r| r.next_ids.len()).max().unwrap_or(0);
+    let mut kept_ask = vec![[0usize; 2]; kept_max + 1];
+    let mut kept_oth = vec![[0usize; 2]; kept_max + 1];
+    for (r, &right) in base.iter().zip(&first_right) {
+        let a = r.next_ids.iter().filter(|&&t| t == r.ask_value).count();
+        let o = r.next_ids.iter().filter(|&&t| t == r.other_value).count();
+        kept_ask[a][0] += 1;
+        kept_oth[o][0] += 1;
+        if right {
+            kept_ask[a][1] += 1;
+            kept_oth[o][1] += 1;
+        }
+    }
+    let (mut passes, mut scaled_picks) = (Vec::new(), Vec::new());
+    for &scale in &settings.scales {
+        let rows = if scale == 1.0 {
+            base.clone()
+        } else {
+            pass(Some(scale))?
+        };
+        if rows.len() != base.len() {
+            return Err(invalid("a scaled pass read other rows than the base pass"));
+        }
+        passes.push(serde_json::json!({
+            "scale": scale,
+            "all": payload_probe_summary(&rows, |_, _| true),
+            "first_right": payload_probe_summary(&rows, |i, _| first_right[i]),
+            "first_not_right": payload_probe_summary(&rows, |i, _| !first_right[i]),
+        }));
+        scaled_picks.push(rows.iter().map(|r| r.pick).collect::<Vec<u32>>());
+    }
+    // Added after the first probe read: the payload weight's sign census.
+    let w = read.weight_values()?;
+    let weight = serde_json::json!({
+        "width": w.len(),
+        "negative": w.iter().filter(|&&v| v < 0.0).count(),
+        "zero": w.iter().filter(|&&v| v == 0.0).count(),
+        "min": w.iter().copied().fold(f32::INFINITY, f32::min),
+        "max": w.iter().copied().fold(f32::NEG_INFINITY, f32::max),
+        "abs": probe_spread(w.iter().map(|&v| f64::from(v.abs())).collect()),
+    });
+    // claude-389: the native Q31 replay of the hard-copy read, once over every forward's capture.
+    let native_replay = if settings.native_replay {
+        // claude-395: the TRAIN windows at the run's own seed, when the settings ask.
+        let train = match settings.native_train_windows {
+            Some(n) => Some(
+                (0..n)
+                    .map(|i| recall_query_window(settings.seed, i, SHEET_CONTEXT, settings.header))
+                    .collect::<Result<Vec<_>>>()?,
+            ),
+            None => None,
+        };
+        let replayed = train.as_deref().unwrap_or(&held[..]);
+        let (state, windows) = native_replay_pass(&model, replayed, settings.seed)?;
+        let (summary, dump) = crate::native_replay::replay_with_dump(&state, &windows)?;
+        if let Some(path) = &settings.native_dump {
+            let dump = dump.ok_or_else(|| invalid("a refused state has no read to dump"))?;
+            if dump.batch != replayed.len() || dump.time != SHEET_CONTEXT {
+                return Err(invalid("the dump's shape is not the replayed windows'"));
+            }
+            let bytes = dump.to_bytes().map_err(|e| invalid(e.to_string()))?;
+            // `create_new`: the dump never writes over a file, even one made during the run.
+            write_new(path, &bytes)?;
+            let queries: Vec<Vec<RecallQuery>> = replayed.iter().map(|(_, q)| q.clone()).collect();
+            write_recall_row_targets(path, &recall_row_targets(&queries, SHEET_CONTEXT)?)?;
+        }
+        serde_json::to_value(summary)?
+    } else {
+        serde_json::Value::Null
+    };
+    let cut = payload_probe_pass(&model, &held, settings.seed, None, None)?;
+    if cut.len() != base.len() {
+        return Err(invalid("the cut pass read other rows than the base pass"));
+    }
+    let rows: Vec<serde_json::Value> = base
+        .iter()
+        .zip(&cut)
+        .enumerate()
+        .map(|(i, (r, c))| {
+            let picks: Vec<u32> = scaled_picks.iter().map(|p| p[i]).collect();
+            serde_json::json!({
+                "window": r.window, "bucket": r.bucket, "slot": r.slot,
+                "ask_value": r.ask_value, "other_value": r.other_value,
+                "pick": r.pick, "margin": r.margin, "picks_by_scale": picks,
+                "cut_pick": c.pick, "cut_margin": c.margin,
+                "stream_norm": r.stream_norm, "payload_norm": r.payload_norm, "dot": r.dot,
+                "next_ids": r.next_ids,
+            })
+        })
+        .collect();
+    Ok(serde_json::json!({
+        "checkpoint": checkpoint.display().to_string(),
+        "settings": settings,
+        "kind": read.kind().name(),
+        "depth": read.depth(),
+        "weight_mean_abs": read.weight_mean_abs()?,
+        "weight": weight,
+        "query_rows": base.len(),
+        "first_right": first_right.iter().filter(|&&r| r).count(),
+        "kept_picks_on_ask": kept_ask,
+        "kept_picks_on_other": kept_oth,
+        "passes": passes,
+        "cut": {
+            "all": payload_probe_summary(&cut, |_, _| true),
+            "first_right": payload_probe_summary(&cut, |i, _| first_right[i]),
+        },
+        "rows": rows,
+        "native_replay": native_replay,
+    }))
 }
 
 /// The pinned tokenizer.
@@ -14671,9 +16298,41 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
              TRAIN's own targets",
         ));
     }
+    if config.address_band.is_some() && config.address_memory.is_none() {
+        return Err(invalid(
+            "--address-band sets the address memory's band; turn the memory on with --address-memory",
+        ));
+    }
+    // claude-381: a float reference read; the export refuses it, so it cannot train as served.
+    if config.vector_read.is_some() && config.train_as_served {
+        return Err(invalid(
+            "a vector read is a float reference read the export refuses; it does not train as served",
+        ));
+    }
+    if config.pair_rows == Some(0) {
+        return Err(invalid("--pair-rows wants a minimum of 1 or more"));
+    }
+    if config.pair_weight && config.pair_rows.is_none() {
+        return Err(invalid(
+            "--pair-weight replies weighs the pair rows; turn them on with --pair-rows",
+        ));
+    }
+    if config.pair_weight_boost && !config.pair_weight {
+        return Err(invalid(
+            "the pair rows' boost raises their reply weight; it wants pair_weight",
+        ));
+    }
+    // claude-370: the export has no section for the pair rows, so no artifact holds them.
+    if config.pair_rows.is_some() && config.train_as_served {
+        return Err(invalid(
+            "--train-as-served rounds what the export carries; the pair rows have no exported form",
+        ));
+    }
     // Training as served (claude-258) rounds what the export carries: the trunk, the Hamming
     // read and the turn memory. A read it does not carry would train at values no artifact holds,
     // and a run with folded or reflected rate scores has no export at all (`run_rate_reading`).
+    // The address memory (claude-346) is rounded to its served 16 bits with them; the export's
+    // section for it is a later unit's, and until then the export refuses its checkpoint.
     if config.train_as_served
         && (config.flock_read > 0
             || config.content_read > 0
@@ -14691,6 +16350,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
              refuses folded or reflected rate scores",
         ));
     }
+    check_carry_flags(config)?;
     if out.exists() {
         return Err(invalid(format!(
             "{} exists; a run never writes over one",
@@ -14710,7 +16370,39 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             config.context,
             config.train_targets,
         )?;
+    // claude-380: under the carry, TRAIN is cut back to back instead, every window kept, and
+    // each conversation's windows are walked in order by the schedule's lanes.
+    let (usable, carry_docs) = if config.carry_windows == 0 {
+        (usable, None)
+    } else {
+        let (tokens, mask) = match config.train_split.as_ref() {
+            None => load_train_split(data_root)?,
+            Some(split) => load_named_split(split)?,
+        };
+        let (windows, docs) =
+            carry_stream_windows(&tokens, &mask, config.context, hs::SHEET_BOS_ID)?;
+        let spanning = docs.iter().filter(|d| d.len() > 1).count();
+        let longest = docs.iter().map(|d| d.len()).max().unwrap_or(0);
+        println!(
+            "[carry] K {} windows a step, {} lanes: TRAIN cut back to back into {} windows over \
+             {} conversations, {} of them past one window (longest {} windows)",
+            config.carry_windows,
+            config.batch / config.carry_windows,
+            windows.len(),
+            docs.len(),
+            spanning,
+            longest
+        );
+        if spanning == 0 {
+            return Err(invalid(
+                "--carry-windows on a TRAIN where no conversation spans two windows trains what \
+                 the carry off trains",
+            ));
+        }
+        (windows, Some(docs))
+    };
     let (dev_windows, dev_mask) = load_dev(data_root)?;
+    check_run_markers(data_root, config)?;
     let prompts = sample_windows(&dev_windows, &dev_mask, config.samples);
     println!(
         "[in-space] usable TRAIN windows {} (batch {}, {} steps = {:.2} epochs), DEV windows {}",
@@ -14768,6 +16460,115 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     };
     // The Hamming reads, when on: their own optimizer, applied inside the trunk.
     let mut hamming = start_hamming(config, device)?;
+    // The address memory (claude-346), when on: zero rows, its own optimizer, applied inside the
+    // trunk after every layer.
+    let mut address = match config.address_memory {
+        Some(arm) => {
+            let memory = crate::e8_address::AddressMemory::new(
+                arm,
+                model.config.layers(),
+                config.width,
+                config.address_band,
+                config.seed,
+                device,
+            )?;
+            crate::e8_address::set_address_memory(Some(memory.clone()));
+            println!(
+                "[address] {} arm: {} layers of {} cells a block, band {}, rows step at lr x {}",
+                arm.name(),
+                memory.layers(),
+                arm.cells(),
+                memory.band(),
+                memory.rate()
+            );
+            let opt = crate::flock_read::FlockAdamW::for_vars(&memory.variables())?;
+            Some((memory, opt))
+        }
+        None => None,
+    };
+    // A vector read (claude-381), when on: identity rotations and a zero weight, its own
+    // optimizer, applied inside the trunk after its layer; its margin credit joins the loss.
+    let mut vread = match config.vector_read {
+        Some(arm) => {
+            let layers = model.config.layers();
+            let depth = arm.depth.unwrap_or(layers);
+            if depth > layers {
+                return Err(invalid(format!(
+                    "--vector-read-depth {depth} is past the model's {layers} layers"
+                )));
+            }
+            let read = crate::vector_reads::VectorRead::new(
+                arm.kind,
+                depth,
+                config.width,
+                arm.margin,
+                arm.credit,
+                device,
+            )?
+            .with_stream_grad(arm.stream_grad);
+            crate::vector_reads::set_vector_read(Some(read.clone()));
+            println!(
+                "[vread] {} read after layer {} of {}, margin {}, credit x {}",
+                arm.kind.name(),
+                depth,
+                layers,
+                arm.margin,
+                arm.credit
+            );
+            let opt = crate::flock_read::FlockAdamW::for_vars(&read.variables())?;
+            Some((read, opt))
+        }
+        None => None,
+    };
+    // The pair rows (claude-370), when on: a zero row for each pair of turn tokens seen in at
+    // least `min` user turns of TRAIN, their own optimizer, added at every reply position.
+    let mut pair = match config.pair_rows {
+        Some(min) => {
+            let (tokens, _) = match config.train_split.as_ref() {
+                None => load_train_split(data_root)?,
+                Some(split) => load_named_split(split)?,
+            };
+            let rows = crate::pair_rows::PairRows::from_tokens(
+                model.config.vocab_size,
+                &tokens,
+                &pair_marks(),
+                min,
+                config.width,
+                device,
+            )?;
+            // claude-373: each row weighed by one over its count of different TRAIN replies.
+            let rows = if config.pair_weight {
+                let counts = crate::pair_rows::reply_counts(rows.dict(), &tokens, &pair_marks())?;
+                println!(
+                    "[pair] weight replies: {}",
+                    crate::pair_rows::reply_census(&counts)
+                );
+                // claude-374: the same counts, each row at 1 + 1/R.
+                let rows = if config.pair_weight_boost {
+                    rows.with_boost_weights(&counts)?
+                } else {
+                    rows.with_reply_weights(&counts)?
+                };
+                println!("[pair] weight kind: {}", rows.weight_kind());
+                rows
+            } else {
+                rows
+            };
+            crate::pair_rows::set_pair_rows(Some(rows.clone()));
+            println!(
+                "[pair] min {min}: {} pairs have rows; width {}; dictionary sha256 {}",
+                rows.dict().len(),
+                config.width,
+                sha256_bytes(&rows.dict().to_bytes())
+            );
+            let vars = rows.variables();
+            let opt = crate::flock_read::FlockAdamW::for_vars(&vars.iter().collect::<Vec<_>>())?;
+            Some((rows, opt))
+        }
+        None => None,
+    };
+    // The address memory's cells on the same TRAIN windows, checkpoint after checkpoint.
+    let address_census = std::cell::RefCell::new(crate::e8_address::Census::default());
     // claude-337: the found-copy pull's record since the last checkpoint, when the pull is on.
     let mut pull_tally = (config.hamming_attract > 0.0).then(|| PullTally::new(config.hamming_attract));
     write_initialization_record(out, config)?;
@@ -14971,6 +16772,70 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         if let Some(memory) = crate::flock_read_memory::turn_memory() {
             memory.save(&directory)?;
         }
+        // The address memory (claude-346), at the values this checkpoint holds: the cells its
+        // rows are read by on the first TRAIN windows, then the rows.
+        if let Some(address) = crate::e8_address::address_memory() {
+            let windows = usable.len().min(crate::e8_address::CENSUS_WINDOWS);
+            let layers = address_census.borrow_mut().read(&address, || {
+                with_eval_forward(config.train_as_served, config.seed, step, || {
+                    for window in &usable[..windows] {
+                        model.hidden(&window.input_ids, 1, window.input_ids.len())?;
+                    }
+                    Ok(())
+                })
+            })?;
+            let mean = |of: &dyn Fn(&crate::e8_address::LayerCensus) -> f64| {
+                layers.iter().map(of).sum::<f64>() / layers.len().max(1) as f64
+            };
+            println!(
+                "[address] step {step}: cells in use a block {:.1}, largest cell share {:.3}, moved {}, in band {:.3}, mean |row| {:.6}",
+                mean(&|layer| layer.cells_used_mean),
+                mean(&|layer| layer.largest_cell_share),
+                layers
+                    .iter()
+                    .map(|layer| layer.moved_share)
+                    .sum::<Option<f64>>()
+                    .map_or("-".to_owned(), |sum| format!(
+                        "{:.3}",
+                        sum / layers.len().max(1) as f64
+                    )),
+                mean(&|layer| layer.in_band_share),
+                mean(&|layer| layer.row_mean_abs),
+            );
+            let line = serde_json::json!({
+                "step": step,
+                "arm": address.arm().name(),
+                "band": address.band(),
+                "windows": windows,
+                "layers": layers,
+            });
+            append_line(&out.join("address.jsonl"), &serde_json::to_string(&line)?)?;
+            address.save(&directory)?;
+        }
+        // The vector read (claude-381): its counts over the training forwards since the last
+        // checkpoint, then the read.
+        if let Some(read) = crate::vector_reads::vector_read() {
+            if let Some(stats) = crate::vector_reads::take_stats() {
+                let get = |t: &Tensor| -> Result<f64> { Ok(f64::from(t.to_scalar::<f32>()?)) };
+                let (rows, read_rows) = (get(&stats.rows)?, get(&stats.read_rows)?);
+                let (positive, chose) = (get(&stats.positive_rows)?, get(&stats.chose_positive)?);
+                println!(
+                    "[vread] step {step}: {} read {read_rows:.0} of {rows:.0} rows, positive rows {positive:.0}, chose a positive {chose:.0}, credit terms {:.0}",
+                    read.kind().name(),
+                    get(&stats.hinge_pairs)?
+                );
+            }
+            read.save(&directory)?;
+        }
+        // The pair rows (claude-370), at the values this checkpoint holds.
+        if let Some(rows) = crate::pair_rows::pair_rows() {
+            rows.save(&directory)?;
+            let (nonzero, rms) = rows.census()?;
+            println!(
+                "[pair] step {step}: rows nonzero {nonzero} of {}, rms {rms:.6}",
+                rows.dict().len()
+            );
+        }
         if let Some(served) = served {
             served.restore()?;
         }
@@ -14979,6 +16844,11 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     };
 
     checkpoint(&model, 0, None, 0.0)?;
+    // claude-385: a Starling read's offset starts from the first training batch's address scale,
+    // after the step-0 checkpoint's DEV panel.
+    if vread.as_ref().is_some_and(|(read, _)| read.kind().is_starling()) {
+        crate::vector_reads::calibrate_next_offset();
+    }
     let mut order = epoch_order(usable.len(), config.seed, 0);
     let mut cursor = 0usize;
     let mut epoch = 0u64;
@@ -14986,21 +16856,43 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     // step after it, whose time it is compared with.
     let mut profiled_row: Option<ProfileRow> = None;
     let mut profile_rows: Vec<ProfileRow> = Vec::new();
+    // claude-380: the carry's schedule and the state its lanes carry between steps, detached.
+    let carry_lanes = config.batch / config.carry_windows.max(1);
+    let mut schedule = carry_docs
+        .map(|docs| CarrySchedule::new(docs, carry_lanes, config.seed))
+        .transpose()?;
+    let mut window_state = match schedule {
+        Some(_) => crate::geometric_stack::zero_window_state(
+            model.config.layers(),
+            carry_lanes,
+            model.config.width,
+            device,
+        )?,
+        None => Vec::new(),
+    };
     for step in 0..config.steps {
-        if cursor + config.batch > order.len() {
-            epoch += 1;
-            order = epoch_order(usable.len(), config.seed, epoch);
-            cursor = 0;
-        }
-        let picked = &order[cursor..cursor + config.batch];
+        let (picked, opens): (Vec<usize>, Vec<bool>) = match schedule.as_mut() {
+            Some(schedule) => schedule.step(config.carry_windows).into_iter().unzip(),
+            None => {
+                if cursor + config.batch > order.len() {
+                    epoch += 1;
+                    order = epoch_order(usable.len(), config.seed, epoch);
+                    cursor = 0;
+                }
+                cursor += config.batch;
+                (order[cursor - config.batch..cursor].to_vec(), Vec::new())
+            }
+        };
+        let picked = &picked[..];
         let windows: Vec<&CausalWindow> = picked.iter().map(|&i| &usable[i]).collect();
-        cursor += config.batch;
         // Each forward's rows, built before the step's clock starts: one forward of the whole
-        // batch, or one per micro-batch. A window the memory is dropped from (protocol I-B)
-        // names no memory row; its draw keeps its place in the whole batch.
-        let micro = match config.micro_batch {
-            0 => config.batch,
-            m => m,
+        // batch, or one per micro-batch, or under the carry one per chunk of its lanes. A window
+        // the memory is dropped from (protocol I-B) names no memory row; its draw keeps its
+        // place in the whole batch.
+        let micro = match (config.carry_windows, config.micro_batch) {
+            (0, 0) => config.batch,
+            (0, m) => m,
+            _ => carry_lanes,
         };
         let kept = |b: usize| {
             !memory_dropped(config.seed, step, b, config.batch, config.turn_memory_dropout)
@@ -15050,19 +16942,36 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         if served.is_some() {
             stage_clock::mark("served.round");
         }
-        let (value, mut grads) = step_gradient(
-            &model,
-            config.objective,
-            &windows,
-            config.micro_batch,
-            config.context,
-            config.train_as_served,
-            config.seed,
-            step,
-            Some((&train_mask, config.opening_weight)),
-            forward_rows,
-            pull_tally.as_mut(),
-        )?;
+        let (value, mut grads) = if schedule.is_some() {
+            carry_step_gradient(
+                &model,
+                config.objective,
+                &windows,
+                &opens,
+                carry_lanes,
+                config.context,
+                config.train_as_served,
+                config.seed,
+                step,
+                Some((&train_mask, config.opening_weight)),
+                &mut window_state,
+                forward_rows,
+            )?
+        } else {
+            step_gradient(
+                &model,
+                config.objective,
+                &windows,
+                config.micro_batch,
+                config.context,
+                config.train_as_served,
+                config.seed,
+                step,
+                Some((&train_mask, config.opening_weight)),
+                forward_rows,
+                pull_tally.as_mut(),
+            )?
+        };
         // The gradient, taken at the exported values, moves the float values they came from.
         if let Some(served) = served {
             served.restore()?;
@@ -15098,6 +17007,19 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         }
         if let Some((mem, opt)) = memory.as_mut() {
             opt.step_vars(&mem.variables(), &grads, lr)?;
+        }
+        // The address memory's rows (claude-346): a position's rows, one per block, take the
+        // same gradient, so each steps at the rate over the block count.
+        if let Some((address, opt)) = address.as_mut() {
+            opt.step_vars(&address.variables(), &grads, lr * address.rate())?;
+        }
+        // The vector read (claude-381), at the trainer's rate.
+        if let Some((read, opt)) = vread.as_mut() {
+            opt.step_vars(&read.variables(), &grads, lr)?;
+        }
+        // The pair rows (claude-370), at the trainer's rate, only on a step that read a bag.
+        if let Some((rows, opt)) = pair.as_mut() {
+            rows.step(opt, &grads, lr)?;
         }
         crate::flock_read_memory::set_memory_rows(None);
         crate::flock_read_memory::set_reply_rows(None);
@@ -15884,6 +17806,127 @@ mod tests {
         assert_eq!(got, expected);
     }
 
+    /// claude-385: a read's choice counts at the scored rows. Two-class: a pick of the asked
+    /// fact's value position is the target, of the other fact's the other, of a filler a read
+    /// only, none nothing. Key-again: a pick of the value's first position is the target. A short
+    /// recording and a later position are refused.
+    #[test]
+    fn read_choices_count_the_asked_fact_at_the_scored_rows() {
+        let held_queries = vec![recall_query_window(7, 0, SHEET_CONTEXT, 4).unwrap()];
+        let qs = &held_queries[0].1;
+        let mut chosen = vec![0u32; SHEET_CONTEXT];
+        chosen[qs[0].scored_offset] = qs[0].ask_value_pos as u32;
+        chosen[qs[1].scored_offset] = qs[1].other_value_pos as u32;
+        chosen[qs[2].scored_offset] = 1;
+        let (read, target, other) = count_read_choices(&[], &held_queries, &chosen).unwrap();
+        let (mut want_read, mut want_target, mut want_other) = ([0usize; 4], [0usize; 4], [0usize; 4]);
+        want_read[2 + qs[0].bucket] += 1;
+        want_read[2 + qs[1].bucket] += 1;
+        want_read[2 + qs[2].bucket] += 1;
+        want_target[2 + qs[0].bucket] += 1;
+        want_other[2 + qs[1].bucket] += 1;
+        assert_eq!((read, target, other), (want_read, want_target, want_other));
+
+        let held_out = vec![recall_window(7, 0, SHEET_CONTEXT, 4).unwrap()];
+        let (window, buckets) = &held_out[0];
+        let (t, v) = (window.scored_offsets[0], window.scored_targets[0]);
+        let first = window.input_ids.iter().position(|&id| id == v).unwrap();
+        assert!(first < t);
+        let mut chosen = vec![0u32; SHEET_CONTEXT];
+        chosen[t] = first as u32;
+        let (read, target, other) = count_read_choices(&held_out, &[], &chosen).unwrap();
+        let mut want = [0usize; 4];
+        want[buckets[0]] = 1;
+        assert_eq!((read, target, other), (want, want, [0; 4]));
+
+        assert!(count_read_choices(&held_out, &[], &chosen[1..]).is_err());
+        chosen[t] = t as u32 + 1;
+        let later = count_read_choices(&held_out, &[], &chosen).unwrap_err().to_string();
+        assert!(later.contains("later position"), "{later}");
+    }
+
+    /// claude-395: the row files put each query's targets at `window * time + scored_offset`,
+    /// and nowhere else.
+    #[test]
+    fn recall_row_targets_sit_at_the_scored_rows() {
+        let windows: Vec<Vec<RecallQuery>> = (0..3)
+            .map(|i| recall_query_window(11, i, SHEET_CONTEXT, 4).unwrap().1)
+            .collect();
+        let t = recall_row_targets(&windows, SHEET_CONTEXT).unwrap();
+        assert_eq!(t.ask.len(), 3 * SHEET_CONTEXT);
+        assert_eq!(t.bucket.len(), 3 * SHEET_CONTEXT);
+        let mut marked = 0;
+        for (w, qs) in windows.iter().enumerate() {
+            for q in qs {
+                let row = w * SHEET_CONTEXT + q.scored_offset;
+                assert_eq!(t.ask[row] as usize, q.ask_value_pos);
+                assert_eq!(t.other[row] as usize, q.other_value_pos);
+                assert_eq!(t.bucket[row] as usize, q.bucket + 1);
+                assert!(t.random[row] >= 1 && t.random[row] as usize <= q.scored_offset);
+                marked += 1;
+            }
+        }
+        assert_eq!(marked, 3 * RECALL_QUERY_EPISODES);
+        let nonzero = |v: &[u32]| v.iter().filter(|&&x| x != 0).count();
+        assert_eq!(nonzero(&t.ask), marked);
+        assert_eq!(nonzero(&t.other), marked);
+        assert_eq!(nonzero(&t.random), marked);
+        assert_eq!(t.bucket.iter().filter(|&&b| b != 0).count(), marked);
+    }
+
+    /// claude-395: a target that is not an earlier row of its window, a row outside the window
+    /// and two queries on one row are each refused.
+    #[test]
+    fn recall_row_targets_refuse_a_bad_query() {
+        let (_, qs) = recall_query_window(11, 0, SHEET_CONTEXT, 4).unwrap();
+        let mut late = qs.clone();
+        late[0].ask_value_pos = late[0].scored_offset + 1;
+        assert!(recall_row_targets(&[late], SHEET_CONTEXT).is_err());
+        let mut zero = qs.clone();
+        zero[1].other_value_pos = 0;
+        assert!(recall_row_targets(&[zero], SHEET_CONTEXT).is_err());
+        let mut outside = qs.clone();
+        outside[2].scored_offset = SHEET_CONTEXT;
+        assert!(recall_row_targets(&[outside], SHEET_CONTEXT).is_err());
+        let mut twice = qs.clone();
+        twice[3].scored_offset = twice[2].scored_offset;
+        assert!(recall_row_targets(&[twice], SHEET_CONTEXT).is_err());
+        assert!(recall_row_targets(&[qs], SHEET_CONTEXT).is_ok());
+    }
+
+    /// claude-395: C2's random targets depend on `(window, slot)` only: the same windows give
+    /// the same draws, and a window's draws do not change when another window is added.
+    #[test]
+    fn recall_row_targets_draw_the_same_random_rows() {
+        let windows: Vec<Vec<RecallQuery>> = (0..4)
+            .map(|i| recall_query_window(13, i, SHEET_CONTEXT, 4).unwrap().1)
+            .collect();
+        let a = recall_row_targets(&windows, SHEET_CONTEXT).unwrap();
+        let b = recall_row_targets(&windows, SHEET_CONTEXT).unwrap();
+        assert_eq!(a, b);
+        let fewer = recall_row_targets(&windows[..2], SHEET_CONTEXT).unwrap();
+        assert_eq!(fewer.random[..], a.random[..2 * SHEET_CONTEXT]);
+        assert_ne!(a.random, a.ask);
+    }
+
+    /// claude-395: the native picks file reads back as little-endian `u32`s, one per row, and a
+    /// file of another length or one that is missing is refused.
+    #[test]
+    fn native_picks_read_one_per_row() {
+        let dir = std::env::temp_dir().join(format!("claude-395-picks-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("picks.u32");
+        let picks: Vec<u32> = vec![0, 1, 7, 191, 3, 0];
+        let bytes: Vec<u8> = picks.iter().flat_map(|p| p.to_le_bytes()).collect();
+        std::fs::write(&path, &bytes).unwrap();
+        assert_eq!(read_native_picks(&path, 6).unwrap(), picks);
+        assert!(read_native_picks(&path, 5).is_err());
+        assert!(read_native_picks(&path, 7).is_err());
+        assert!(read_native_picks(&dir.join("none.u32"), 6).is_err());
+        std::fs::remove_file(&path).unwrap();
+        std::fs::remove_dir(&dir).unwrap();
+    }
+
     /// claude-328's I-2 and I-3 on every structural rule, for both forms: the query token, the
     /// bijection, one write per relation, the target, 4 targets, the ranges, the distances and
     /// the tails.
@@ -16276,6 +18319,125 @@ mod tests {
         }
     }
 
+    /// A hand-built query: slot, bucket, query position, asked and other value positions.
+    fn other_query(slot: usize, bucket: usize, q: usize, pa: usize, po: usize) -> RecallQuery {
+        RecallQuery {
+            slot,
+            bucket,
+            j: 0,
+            query_pos: q,
+            scored_offset: q + 4,
+            ask_relation: 16,
+            other_relation: 17,
+            ask_value: 528,
+            other_value: 529,
+            ask_value_pos: pa,
+            other_value_pos: po,
+            ask_distance: q - pa,
+            other_distance: q - po,
+            ask_nearer: q - pa < q - po,
+            ask_first: pa < po,
+            values: Vec::new(),
+        }
+    }
+
+    /// claude-397: the consistent sets on a hand-built window (buckets 33–96 and 97–180). Slot 2
+    /// keeps 90 and 120 but not 100, slot 0's asked fact; slot 3 likewise drops 20.
+    #[test]
+    fn recall_other_candidates_follow_the_stream() {
+        let window = [
+            other_query(0, 0, 150, 100, 90),
+            other_query(1, 1, 156, 20, 30),
+            other_query(2, 0, 162, 110, 120),
+            other_query(3, 1, 168, 40, 50),
+        ];
+        let sets = recall_other_candidates(&window).unwrap();
+        let got: Vec<Vec<usize>> = sets.iter().map(|c| c.candidates.clone()).collect();
+        assert_eq!(got, vec![vec![90, 110], vec![30, 40, 50], vec![90, 120], vec![30, 50]]);
+        assert_eq!(sets[0].facts, vec![20, 30, 40, 50, 90, 100, 110, 120]);
+        let c = &sets[0];
+        assert_eq!(c.class(100), OtherPickClass::Asked);
+        assert_eq!(c.class(90), OtherPickClass::Other);
+        assert_eq!(c.class(110), OtherPickClass::Candidate);
+        assert_eq!(c.class(20), OtherPickClass::Fact);
+        assert_eq!(c.class(0), OtherPickClass::Row);
+        assert_eq!(c.class(5), OtherPickClass::Row);
+        // K = 1: slot 2's facts move to 125 and 130, out of slot 0's range.
+        let one = [
+            other_query(0, 0, 150, 100, 90),
+            other_query(1, 1, 156, 20, 30),
+            other_query(2, 0, 162, 130, 125),
+            other_query(3, 1, 168, 40, 50),
+        ];
+        assert_eq!(recall_other_candidates(&one).unwrap()[0].candidates, vec![90]);
+        // Refusals: a repeated fact, and an other fact outside the asked fact's bucket.
+        let mut twice = window.clone();
+        twice[3].other_value_pos = 20;
+        assert!(recall_other_candidates(&twice).is_err());
+        let mut far = window.clone();
+        far[0].other_value_pos = 140;
+        let refused = recall_other_candidates(&far).unwrap_err().to_string();
+        assert!(refused.contains("not consistent"), "{refused}");
+    }
+
+    /// claude-397: on real windows the other fact is always consistent, the target check passes
+    /// on the files the run would write and fails on one changed word, and picks that copy the
+    /// other fact class as `other` everywhere.
+    #[test]
+    fn recall_other_ceiling_reads_real_windows() {
+        let dir = std::env::temp_dir().join(format!("recall-other-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let (seed, header, windows) = (1u64, 4usize, 8u64);
+        let rows = windows as usize * SHEET_CONTEXT;
+        let (mut ask, mut other, mut bucket) = (vec![0u32; rows], vec![0u32; rows], vec![0u8; rows]);
+        for w in 0..windows {
+            let (_, qs) =
+                recall_query_window(seed ^ RECALL_EVAL_SEED, w, SHEET_CONTEXT, header).unwrap();
+            for q in qs {
+                let row = w as usize * SHEET_CONTEXT + q.scored_offset;
+                ask[row] = q.ask_value_pos as u32;
+                other[row] = q.other_value_pos as u32;
+                bucket[row] = q.bucket as u8 + 1;
+            }
+        }
+        let bytes = |v: &[u32]| v.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>();
+        let dump = dir.join("held.q31");
+        fs::write(dir.join("held.q31.ask.u32"), bytes(&ask)).unwrap();
+        fs::write(dir.join("held.q31.other.u32"), bytes(&other)).unwrap();
+        fs::write(dir.join("held.q31.bucket.u8"), &bucket).unwrap();
+        fs::write(dir.join("other.picks"), bytes(&other)).unwrap();
+        let settings = OtherCeilingSettings {
+            seed,
+            header,
+            windows,
+            held: true,
+            targets: Some(dump.clone()),
+            picks: vec![("other".into(), dir.join("other.picks"))],
+        };
+        let report = recall_other_ceiling(&settings).unwrap();
+        assert_eq!(report.targets_rows_checked, Some(rows as u64));
+        let total: u64 = report.buckets.iter().map(|b| b.rows).sum();
+        assert_eq!(total, windows * RECALL_QUERY_EPISODES as u64);
+        for b in &report.buckets {
+            assert_eq!(b.k_counts[0], 0, "the other fact is always consistent");
+            assert_eq!(b.k_counts.iter().sum::<u64>(), b.rows);
+        }
+        for o in &report.picks["other"] {
+            assert_eq!(o.other, o.rows);
+            assert_eq!(o.other_on_k1, o.k1_rows);
+            assert_eq!(o.other_on_k2, o.k2_rows);
+        }
+        let mut wrong = other.clone();
+        let first = wrong.iter().position(|&x| x != 0).unwrap();
+        wrong[first] += 1;
+        fs::write(dir.join("held.q31.other.u32"), bytes(&wrong)).unwrap();
+        assert!(recall_other_ceiling(&settings).is_err(), "a changed target word is refused");
+        assert_eq!(ratio3(1, 3), "0.333");
+        assert_eq!(ratio3(2, 3), "0.667");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
     /// claude-328's I-2 balance over 10,000 windows of each form. In each bucket × slot cell (about
     /// 5,000 queries) the asked fact is the nearer one, and relation 0 is asked, each 0.5 ± 0.02;
     /// each slot receives a 33–96 bucket in 0.5 ± 0.02 of windows. "Written first" is not a
@@ -16587,6 +18749,7 @@ mod tests {
             hamming_copy_key: 1,
             hamming_copy_keys: None,
             hamming_copy_latest: false,
+            hamming_copy_longest: None,
             hamming_ask: false,
             hamming_attract: 0.0,
             hamming_attract_at_question: false,
@@ -16601,6 +18764,7 @@ mod tests {
             samples: 6,
             reply_tokens: 48,
             micro_batch: 0,
+            carry_windows: 0,
             fast_rivals: false,
             profile: 0,
             turn_memory: 0,
@@ -16616,6 +18780,12 @@ mod tests {
             context: hs::SHEET_CONTEXT,
             train_targets: TrainTargets::Observed,
             init_from: None,
+            address_memory: None,
+            address_band: None,
+            pair_rows: None,
+            pair_weight: false,
+            pair_weight_boost: false,
+            vector_read: None,
         }
     }
 
@@ -19325,6 +21495,99 @@ mod tests {
     }
 
     #[test]
+    fn a_zero_pair_minimum_is_refused() {
+        let missing = std::env::temp_dir().join(format!("claude-370-zero-{}", std::process::id()));
+        let mut config = config(0, None);
+        config.pair_rows = Some(0);
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("--pair-rows wants a minimum of 1 or more")),
+            "{refused:?}"
+        );
+        // claude-373: the weight alone has no rows to weigh.
+        (config.pair_rows, config.pair_weight) = (None, true);
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("--pair-weight replies weighs the pair rows")),
+            "{refused:?}"
+        );
+        config.pair_weight = false;
+        // claude-374: the boost alone has no reply weight to raise.
+        (config.pair_rows, config.pair_weight_boost) = (Some(2), true);
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("the pair rows' boost raises their reply weight")),
+            "{refused:?}"
+        );
+        (config.pair_rows, config.pair_weight_boost) = (None, false);
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn pair_rows_refuse_training_as_served() {
+        let missing = std::env::temp_dir().join(format!("claude-370-served-{}", std::process::id()));
+        let mut config = config(0, None);
+        (config.pair_rows, config.train_as_served) = (Some(2), true);
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("the pair rows have no exported form")),
+            "{refused:?}"
+        );
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn pair_rows_refuse_a_checkpoint_start() {
+        let missing = std::env::temp_dir().join(format!("claude-370-init-{}", std::process::id()));
+        let mut config = config(0, None);
+        (config.pair_rows, config.init_from) = (Some(2), Some(missing.join("checkpoint")));
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("--init-from does not start the pair rows")),
+            "{refused:?}"
+        );
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn pair_rows_refuse_the_recall_task() {
+        let missing = std::env::temp_dir().join(format!("claude-370-recall-{}", std::process::id()));
+        let mut config = config(0, None);
+        config.pair_rows = Some(2);
+        let form = RecallForm::default();
+        let refused = run_recall(&missing, &config, RECALL_QUERY_EPISODES, form, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("the pair rows train with --out's long run")),
+            "{refused:?}"
+        );
+        assert!(!missing.exists());
+    }
+
+    #[test]
     fn a_config_without_the_profile_writes_no_profile_key() {
         let mut config = config(0, None);
         let json = String::from_utf8(serde_json::to_vec_pretty(&config).unwrap()).unwrap();
@@ -20521,9 +22784,9 @@ mod tests {
         let windows = hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, bos).unwrap().0;
         let prompt = |doc: u32| std::iter::once(bos).chain((0..20).map(|i| 10 + i + doc)).collect::<Vec<u32>>();
         let row = |position: usize, doc: u32| PanelPrompt { position, prompt: prompt(doc), reference: vec![5, 6, 7], float_keyed: None };
-        assert_eq!(split_prompts(&windows, &mask, 2, 64), [row(21, 0), row(45, 1)]);
-        assert_eq!(split_prompts(&windows, &mask, 2, 2)[0].reference, [5, 6], "at most the reply tokens");
-        assert_eq!(split_prompts(&windows, &mask, 1, 64), [row(21, 0)], "the stride takes the first");
+        assert_eq!(split_prompts(&windows, &mask, 2, 64, false), [row(21, 0), row(45, 1)]);
+        assert_eq!(split_prompts(&windows, &mask, 2, 2, false)[0].reference, [5, 6], "at most the reply tokens");
+        assert_eq!(split_prompts(&windows, &mask, 1, 64, false), [row(21, 0)], "the stride takes the first");
     }
 
     fn integer_sample(keyed: Option<u32>, reply: Vec<u32>, reference: Vec<u32>) -> IntegerSample {
@@ -22371,6 +24634,32 @@ mod tests {
         );
     }
 
+    /// claude-352: `--panel-prompts` writes the prompts the scorer decodes. With
+    /// `--sample-opening last` each is its window's input through the last reply opening, with
+    /// that reply as its reference; without it, the first opening's, as before.
+    #[test]
+    fn the_panel_prompts_follow_the_sample_opening() {
+        // BOS, a 20-token prompt, a reply (3), a 5-token prompt, a reply (3).
+        let mut tokens = vec![0u32];
+        tokens.extend(100..120);
+        tokens.extend([200, 201, 202]);
+        tokens.extend(300..305);
+        tokens.extend([400, 401, 402]);
+        let mask: Vec<u8> =
+            tokens.iter().map(|&t| u8::from((200..203).contains(&t) || (400..403).contains(&t))).collect();
+        let (windows, _) = hs::build_document_windows(&tokens, &mask, 2048, 0).unwrap();
+        let first = split_prompts(&windows, &mask, 4, 64, false);
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].position, 21);
+        assert_eq!(first[0].prompt, tokens[..21]);
+        assert_eq!(first[0].reference, [200, 201, 202]);
+        let last = split_prompts(&windows, &mask, 4, 64, true);
+        assert_eq!(last.len(), 1);
+        assert_eq!(last[0].position, 29);
+        assert_eq!(last[0].prompt, tokens[..29]);
+        assert_eq!(last[0].reference, [400, 401, 402]);
+    }
+
     /// claude-274: a scored file at 192 writes no `context`, so a 192 manifest is as before; at
     /// another window it names it.
     #[test]
@@ -23560,6 +25849,59 @@ mod tests {
         assert!(RECALL_ABLATIONS.iter().all(|a| *a == Ablation::CopyAtQuery || a.row_scope().is_none()));
     }
 
+    /// claude-357: the longest rule's marker stays out of `config.json` when not set, needs the
+    /// read, the latest-exact rule and one-token keys, and reaches the reads the run builds.
+    #[test]
+    fn the_longest_flag_is_off_by_default_and_checked() {
+        let plain = serde_json::to_string(&config(0, None)).unwrap();
+        assert!(!plain.contains("hamming_copy_longest"));
+        let on = LongConfig {
+            hamming_read: 4,
+            hamming_copy_latest: true,
+            hamming_copy_longest: Some([714, 28]),
+            ..config(0, None)
+        };
+        let json = serde_json::to_string(&on).unwrap();
+        assert!(json.contains("\"hamming_copy_longest\":[714,28]"));
+        let refused = |c: LongConfig| start_hamming(&c, &Device::Cpu).err().map(|e| e.to_string());
+        let no_read = LongConfig { hamming_read: 0, hamming_copy_latest: false, ..on.clone() };
+        assert!(refused(no_read).unwrap().contains("--hamming-copy-longest sets"));
+        let no_latest = LongConfig { hamming_copy_latest: false, ..on.clone() };
+        assert!(refused(no_latest).unwrap().contains("it needs --hamming-copy-latest 1"));
+        let two_token = LongConfig { hamming_copy_key: 2, ..on.clone() };
+        assert!(refused(two_token).unwrap().contains("one-token copy keys"));
+        let (reads, _) = start_hamming(&on, &Device::Cpu).unwrap().expect("a read");
+        assert_eq!(reads.copy_longest(), Some([714, 28]));
+        let off = LongConfig { hamming_copy_longest: None, ..on.clone() };
+        let (plain_reads, _) = start_hamming(&off, &Device::Cpu).unwrap().expect("a read");
+        assert_eq!(plain_reads.copy_longest(), None);
+        // A resumed run's marker must be its checkpoint's, both ways and by value.
+        let other = LongConfig { hamming_copy_longest: Some([714, 29]), ..on.clone() };
+        crate::flock_read_hamming::set_hamming_reads(None);
+        let dir = std::env::temp_dir().join(format!(
+            "longest-checkpoint-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        for (saved, run, fits) in [
+            (&reads, &on, true),
+            (&plain_reads, &off, true),
+            (&reads, &off, false),
+            (&plain_reads, &on, false),
+            (&reads, &other, false),
+        ] {
+            std::fs::create_dir(&dir).unwrap();
+            saved.save(&dir).unwrap();
+            let got = checkpoint_hamming(run, &dir, &Device::Cpu).map(|r| r.map(|(r, _)| r.copy_longest()));
+            std::fs::remove_dir_all(&dir).unwrap();
+            match got {
+                Ok(marker) => assert!(fits && marker == Some(run.hamming_copy_longest), "{marker:?}"),
+                Err(e) => assert!(!fits && e.to_string().contains("longest-rule marker"), "{e}"),
+            }
+        }
+        crate::flock_read_hamming::set_hamming_reads(None);
+    }
+
     /// claude-334: `−aS` drops the stream read's ask (type) class alone and keeps the hold on;
     /// `−H` drops no class and turns the hold off; neither cuts rows.
     #[test]
@@ -23835,6 +26177,117 @@ mod tests {
         }
         crate::flock_read_hamming::set_hamming_reads(None);
     }
+
+    /// claude-380: the carry's TRAIN cut. Two conversations, the first two windows long: each
+    /// conversation's windows lie back to back from its BOS, their inputs together are its inputs
+    /// in order, the last is BOS-padded, a target is scored where the mask says, and the first
+    /// window is [`hs::build_document_windows`]'s.
+    #[test]
+    fn the_carry_cuts_each_conversation_back_to_back() {
+        let bos = hs::SHEET_BOS_ID;
+        let tokens = vec![bos, 11, 12, 13, 14, 15, 16, 17, bos, 21, 22];
+        let mask = vec![0, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1];
+        let (windows, docs) = carry_stream_windows(&tokens, &mask, 4, bos).unwrap();
+        assert_eq!(docs, vec![0..2, 2..3]);
+        assert_eq!(windows[0].input_ids, vec![bos, 11, 12, 13]);
+        assert_eq!(windows[1].input_ids, vec![14, 15, 16, bos]);
+        assert_eq!(windows[2].input_ids, vec![bos, 21, bos, bos]);
+        assert_eq!(
+            windows.iter().map(|w| w.doc_id).collect::<Vec<_>>(),
+            vec![0, 0, 1]
+        );
+        // Inputs 0..7 of the first conversation predict tokens 1..8; 1, 5 and 8 are unscored
+        // (mask 0, or the next conversation's BOS).
+        assert_eq!(windows[0].scored_offsets, vec![1, 2, 3]);
+        assert_eq!(windows[0].scored_targets, vec![12, 13, 14]);
+        assert_eq!(windows[1].scored_offsets, vec![1, 2]);
+        assert_eq!(windows[1].scored_targets, vec![16, 17]);
+        assert_eq!(windows[1].scored_corpus_positions, vec![6, 7]);
+        assert_eq!(windows[2].scored_targets, vec![21, 22]);
+        let (whole, _) = hs::build_document_windows(&tokens, &mask, 4, bos).unwrap();
+        let first = whole.iter().find(|w| w.doc_id == 0).unwrap();
+        assert_eq!(first.input_ids, windows[0].input_ids);
+        assert_eq!(first.scored_offsets, windows[0].scored_offsets);
+        // Refused: a mask of another length, and windows under the convolution's width.
+        assert!(carry_stream_windows(&tokens, &mask[1..], 4, bos).is_err());
+        assert!(carry_stream_windows(&tokens, &mask, 3, bos).is_err());
+    }
+
+    /// claude-380: each lane walks whole conversations in order, a conversation's first window
+    /// is the only one marked as opening it, a step is chunk after chunk of the lanes, and an
+    /// epoch draws every conversation once before the next reshuffles.
+    #[test]
+    fn the_carry_schedule_walks_whole_conversations_per_lane() {
+        let docs = vec![0..3, 3..4, 4..6, 6..7, 7..11];
+        let (lanes, chunks) = (2usize, 3usize);
+        let mut schedule = CarrySchedule::new(docs.clone(), lanes, 7).unwrap();
+        let mut walked: Vec<Vec<(usize, bool)>> = vec![Vec::new(); lanes];
+        for _ in 0..20 {
+            let step = schedule.step(chunks);
+            assert_eq!(step.len(), chunks * lanes);
+            for (i, &window) in step.iter().enumerate() {
+                walked[i % lanes].push(window);
+            }
+        }
+        let mut opened = vec![0usize; docs.len()];
+        for lane in &walked {
+            let mut at = 0;
+            while at < lane.len() {
+                let (start, opens) = lane[at];
+                assert!(opens, "a lane's run begins at a conversation's first window");
+                let doc = docs.iter().position(|d| d.start == start).unwrap();
+                opened[doc] += 1;
+                for k in 1..docs[doc].len() {
+                    if at + k == lane.len() {
+                        break;
+                    }
+                    assert_eq!(lane[at + k], (start + k, false));
+                }
+                at += docs[doc].len();
+            }
+        }
+        // 120 windows, 11 a pass: every conversation drawn, none more than one draw ahead.
+        let (least, most) = (opened.iter().min().unwrap(), opened.iter().max().unwrap());
+        assert!(*least > 0 && most - least <= 1, "{opened:?}");
+        assert!(schedule.epoch() > 0);
+        assert!(CarrySchedule::new(docs.clone(), 0, 7).is_err());
+        assert!(CarrySchedule::new(docs[..1].to_vec(), 2, 7).is_err());
+    }
+
+    /// claude-380: the carry's flag is left out of `config.json` when off, written when on, and
+    /// refused where it does not divide the batch, with micro-batches, or as served.
+    #[test]
+    fn the_carry_flag_is_absent_when_off_and_refused_where_it_does_not_fit() {
+        let mut off = config(0, None);
+        off.batch = 4;
+        let written = serde_json::to_string(&off).unwrap();
+        assert!(!written.contains("carry_windows"));
+        assert!(check_carry_flags(&off).is_ok());
+        let mut on = off.clone();
+        on.carry_windows = 2;
+        assert!(serde_json::to_string(&on).unwrap().contains("\"carry_windows\":2"));
+        assert!(check_carry_flags(&on).is_ok());
+        for (k, micro) in [(3, 0), (8, 0), (2, 2)] {
+            let mut bad = on.clone();
+            bad.carry_windows = k;
+            bad.micro_batch = micro;
+            assert!(check_carry_flags(&bad).is_err(), "K {k}, micro {micro}");
+        }
+        let mut served = on.clone();
+        served.train_as_served = true;
+        let refused = check_carry_flags(&served).unwrap_err().to_string();
+        assert!(refused.contains("--train-as-served"), "{refused}");
+        let mut read = on.clone();
+        read.vector_read = Some(crate::vector_reads::VectorReadArm {
+            kind: crate::vector_reads::VectorReadKind::PrimeRoute,
+            depth: None,
+            margin: 0.0,
+            credit: 0.0,
+            stream_grad: false,
+        });
+        let refused = check_carry_flags(&read).unwrap_err().to_string();
+        assert!(refused.contains("--prime-route-read"), "{refused}");
+    }
 }
 
 #[cfg(test)]
@@ -23880,5 +26333,81 @@ mod copy_names_tests {
                 assert_eq!(copy_names_by(&[1, 1], &ids, offset, target), copy_names(&ids, offset, target));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod copy_longest_tests {
+    use super::{check_reply_marker, copy_names, copy_names_ruled};
+
+    /// claude-357: under the longest rule the leave rule asks the copy read as it is built. A row
+    /// reads the latest match whose token before it also agrees, and with none the latest match;
+    /// a row whose previous and own tokens are the marker reads the latest, as before.
+    #[test]
+    fn the_leave_rule_reads_the_longer_match_except_at_an_opening() {
+        let (c, x, q, b, p) = (11, 12, 13, 14, 15);
+        let ids = [c, x, q, b, x, p, c, x];
+        let absent = Some([98, 99]);
+        assert!(copy_names(&ids, 7, p) && !copy_names(&ids, 7, q), "the latest X is followed by P");
+        assert!(copy_names_ruled(&[1], None, &ids, 7, p), "without the rule: the latest");
+        assert!(copy_names_ruled(&[1], absent, &ids, 7, q), "the X after C is followed by Q");
+        assert!(!copy_names_ruled(&[1], absent, &ids, 7, p));
+        assert!(copy_names_ruled(&[1], Some([c, x]), &ids, 7, p), "an opening row: the latest");
+        assert!(!copy_names_ruled(&[1], Some([c, x]), &ids, 7, q));
+        assert!(copy_names_ruled(&[1], absent, &ids, 4, q), "no longer match: the latest");
+        assert!(!copy_names_ruled(&[1], absent, &ids, 0, x));
+        assert!(!copy_names_ruled(&[1], absent, &ids, 1, q));
+        // Every six-token window over three tokens, against the rule spelled out position by
+        // position as the integer reader walks it (`longest_of`).
+        let spelled = |ids: &[u32], t: usize, target: u32, marker: [u32; 2]| {
+            let opening = t >= 1 && ids[t - 1] == marker[0] && ids[t] == marker[1];
+            let (mut exact, mut long) = (None, None);
+            for s in 1..t {
+                if ids[s - 1] == ids[t] {
+                    exact = Some(s);
+                    if !opening && s >= 2 && ids[s - 2] == ids[t - 1] {
+                        long = Some(s);
+                    }
+                }
+            }
+            long.or(exact).is_some_and(|s| ids[s] == target)
+        };
+        let mut differ = 0;
+        for code in 0..729u32 {
+            let ids: Vec<u32> = (0..6).map(|i| code / 3u32.pow(i) % 3).collect();
+            for marker in [[0, 1], [2, 2], [98, 99]] {
+                for offset in 0..6 {
+                    for target in 0..3 {
+                        let ruled = copy_names_ruled(&[1], Some(marker), &ids, offset, target);
+                        assert_eq!(
+                            ruled,
+                            spelled(&ids, offset, target, marker),
+                            "{ids:?} {offset} {target} {marker:?}"
+                        );
+                        differ += usize::from(ruled != copy_names(&ids, offset, target));
+                    }
+                }
+            }
+        }
+        assert!(differ > 0, "the rule changes some row");
+    }
+
+    /// claude-357: the marker stands before every reply's first token and nowhere else, or the
+    /// split is refused with the position.
+    #[test]
+    fn the_marker_check_refuses_a_missing_and_a_stray_marker() {
+        let tokens = [1, 3, 7, 8, 5, 5, 4, 7, 8, 6];
+        let mask = [0, 0, 0, 0, 1, 1, 0, 0, 0, 1];
+        assert_eq!(check_reply_marker("toy", &tokens, &mask, [7, 8]).unwrap(), 2);
+        let stray = check_reply_marker("toy", &tokens, &mask, [3, 7]).unwrap_err().to_string();
+        assert!(stray.contains("the token at 3 follows the marker and opens no reply"), "{stray}");
+        let other = [1, 3, 7, 9, 5, 5, 4, 7, 8, 6];
+        let missing = check_reply_marker("toy", &other, &mask, [7, 8]).unwrap_err().to_string();
+        assert!(
+            missing.contains("the token at 4 opens a reply without the marker before it"),
+            "{missing}"
+        );
+        assert!(check_reply_marker("toy", &tokens, &mask[..9], [7, 8]).is_err(), "lengths differ");
+        assert_eq!(check_reply_marker("toy", &[1, 2], &[0, 0], [7, 8]).unwrap(), 0);
     }
 }

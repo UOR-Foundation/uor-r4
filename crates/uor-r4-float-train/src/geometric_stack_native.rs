@@ -617,6 +617,136 @@ pub struct LayerCarry {
     pub(crate) held: Tensor,
 }
 
+// claude-380 (V1): the state a training window hands the next window of its conversation, one
+// per layer, in [`LayerCarry`]'s shapes. Unlike the decode carry its tensors keep their graph,
+// so the gradient runs back through every window a step carries; the trainer detaches them
+// where it truncates.
+thread_local! {
+    static WINDOW_CARRY: std::cell::RefCell<Option<WindowFrame>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// The layers' incoming states, and the outgoing ones each layer has written so far.
+struct WindowFrame {
+    incoming: Vec<LayerCarry>,
+    outgoing: Vec<Option<LayerCarry>>,
+}
+
+/// Run `forward` with each layer's recurrence started from `incoming[layer]` in place of zero
+/// (claude-380): its scan from `held`, through the scan's own kernel, and its convolution's first
+/// positions from `inputs`. Returns the forward's value and the state each layer ended its window
+/// in, graphs kept. Refused when a frame is already set, when a layer of the forward has no
+/// incoming state, or when a layer's state is not written.
+pub fn with_window_carry<R>(
+    incoming: Vec<LayerCarry>,
+    forward: impl FnOnce() -> Result<R>,
+) -> Result<(R, Vec<LayerCarry>)> {
+    if WINDOW_CARRY.with(|c| c.borrow().is_some()) {
+        return Err(invalid("a window carry is already set on this thread"));
+    }
+    let layers = incoming.len();
+    WINDOW_CARRY.with(|c| {
+        *c.borrow_mut() = Some(WindowFrame {
+            incoming,
+            outgoing: vec![None; layers],
+        })
+    });
+    let value = forward();
+    let frame = WINDOW_CARRY.with(|c| c.borrow_mut().take());
+    let value = value?;
+    let outgoing = frame
+        .ok_or_else(|| invalid("the window carry's frame was taken during its forward"))?
+        .outgoing
+        .into_iter()
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| invalid("a layer of the carried forward wrote no state"))?;
+    Ok((value, outgoing))
+}
+
+/// The zero state of `layers` layers for `batch` rows of `width`: what a conversation's first
+/// window starts from, and what [`StackModel::hidden`] starts every window from without a carry.
+pub fn zero_window_state(
+    layers: usize,
+    batch: usize,
+    width: usize,
+    device: &Device,
+) -> Result<Vec<LayerCarry>> {
+    (0..layers)
+        .map(|_| {
+            Ok(LayerCarry {
+                inputs: (0..CONVOLUTION_WIDTH - 1)
+                    .map(|_| Tensor::zeros((batch, 1, width), DType::F32, device))
+                    .collect::<candle_core::Result<_>>()?,
+                held: Tensor::zeros((batch, 1, width / 4, 4), DType::F32, device)?,
+            })
+        })
+        .collect()
+}
+
+impl LayerCarry {
+    /// This state with each row kept where `keep` is 1 and zeroed where it is 0 (`keep` is
+    /// `(batch,)` f32): a row whose window opens a conversation starts from zero.
+    pub fn masked(&self, keep: &Tensor) -> Result<Self> {
+        let batch = keep.dims1()?;
+        let rows = keep.reshape((batch, 1, 1))?;
+        Ok(Self {
+            inputs: self
+                .inputs
+                .iter()
+                .map(|t| t.broadcast_mul(&rows))
+                .collect::<candle_core::Result<_>>()?,
+            held: self.held.broadcast_mul(&keep.reshape((batch, 1, 1, 1))?)?,
+        })
+    }
+
+    /// This state cut from its graph: where the trainer truncates the gradient.
+    pub fn detached(&self) -> Self {
+        Self {
+            inputs: self.inputs.iter().map(Tensor::detach).collect(),
+            held: self.held.detach(),
+        }
+    }
+
+    /// Whether any tensor of this state still records the ops that made it.
+    pub fn tracks(&self) -> bool {
+        self.held.track_op() || self.inputs.iter().any(Tensor::track_op)
+    }
+}
+
+/// The incoming state of `layer` when a window carry is set, checked against the forward's shape.
+fn window_incoming(layer: usize, batch: usize, width: usize) -> Result<Option<LayerCarry>> {
+    WINDOW_CARRY.with(|c| {
+        let frame = c.borrow();
+        let Some(frame) = frame.as_ref() else {
+            return Ok(None);
+        };
+        let state = frame
+            .incoming
+            .get(layer)
+            .ok_or_else(|| invalid("the window carry holds no state for this layer"))?;
+        if state.held.dims4()? != (batch, 1, width / 4, 4)
+            || state.inputs.len() != CONVOLUTION_WIDTH - 1
+            || state.inputs.iter().any(|t| t.dims3().ok() != Some((batch, 1, width)))
+        {
+            return Err(invalid("the window carry's state does not fit the forward's rows"));
+        }
+        Ok(Some(state.clone()))
+    })
+}
+
+/// Record the state `layer` ended its window in.
+fn window_outgoing(layer: usize, state: LayerCarry) -> Result<()> {
+    WINDOW_CARRY.with(|c| {
+        let mut frame = c.borrow_mut();
+        let slot = frame
+            .as_mut()
+            .and_then(|f| f.outgoing.get_mut(layer))
+            .ok_or_else(|| invalid("no window carry slot for this layer"))?;
+        *slot = Some(state);
+        Ok(())
+    })
+}
+
 /// The trunk's exact step cache (claude-278, P3 cache unit 1). A decode step re-runs the whole
 /// window through [`StackModel::hidden`]. The trunk is causal, and every op in it but two works
 /// one row at a time with fixed thread blocks, so its result does not depend on how many rows a
@@ -1609,6 +1739,7 @@ impl StackModel {
                 "prompt register",
                 crate::flock_read_register::prompt_register().is_some(),
             ),
+            ("vector read", crate::vector_reads::vector_read().is_some()),
         ];
         if let Some((name, _)) = reads.iter().find(|(_, set)| *set) {
             return Some(CacheRefusal::ReadHook(name));
@@ -1674,6 +1805,39 @@ impl StackModel {
             stage_clock::mark_with(|| format!("layer{layer}.recurrence"));
             x = q16(x.add(&self.mlp(&p, layer, &x)?)?)?;
             stage_clock::mark_with(|| format!("layer{layer}.mlp"));
+            // The address memory (claude-346), when one is set on this thread: after every
+            // layer's Hamilton block, each position adds the rows its own state's blocks name.
+            // It reads nothing of another position, so a cached step needs no carry for it.
+            if let Some(memory) = crate::e8_address::address_memory() {
+                x = q16(memory.apply(layer, &x, ids)?)?;
+                stage_clock::mark_with(|| format!("layer{layer}.address"));
+            }
+            // A state-keyed look-back read (claude-381), when one is set on this thread: after
+            // layer `depth`, each position reads one earlier position chosen by its own state.
+            if let Some(read) = crate::vector_reads::vector_read() {
+                if layer + 1 == read.depth() {
+                    let table = self
+                        .variables()
+                        .get("embedding.weight")
+                        .ok_or_else(|| invalid("the model has no shared vector table"))?
+                        .as_tensor()
+                        .clone();
+                    x = q16(read.apply(&x, ids, &table)?)?;
+                    stage_clock::mark_with(|| format!("layer{layer}.vector_read"));
+                }
+            }
+            // The turn's pair rows (claude-370), when set on this thread: added once, at the
+            // first layer's seam, to every reply position of a turn whose pairs have rows. A
+            // step reads the bag from its carried window, so it needs no carry of its own.
+            if layer == 0 {
+                if let Some(rows) = crate::pair_rows::pair_rows() {
+                    x = q16(match carry.as_ref() {
+                        Some(c) if c.mode == CarryMode::Step => rows.apply_last(&x, c.window)?,
+                        _ => rows.apply(&x, ids)?,
+                    })?;
+                    stage_clock::mark("layer0.pair_rows");
+                }
+            }
             // The content read (claude-145), when one is set on this thread: after layer 3, keyed
             // on the input tokens' own points.
             if layer + 1 == crate::flock_read_content::CONTENT_AFTER_LAYER {
@@ -1987,6 +2151,16 @@ impl StackModel {
             .layer(layer, "rec.conv.bias")?
             .broadcast_as((batch, time, width))?
             .contiguous()?;
+        // claude-380: the state the previous training window of this row's conversation ended
+        // in, when the trainer set a window carry; none otherwise, and every line below runs as
+        // it did. A decode carry and a window carry are not combined.
+        let window = window_incoming(layer, batch, width)?;
+        if window.is_some() && (carry.is_some() || time + 1 < CONVOLUTION_WIDTH) {
+            return Err(invalid(
+                "a window carry runs a whole training window of at least the convolution's width, \
+                 without a decode carry",
+            ));
+        }
         if let Some((CarryMode::Step, layers)) = carry.as_ref() {
             // One position: the term at `shift` reads the input `shift` positions back, which the
             // carry holds, added in the whole window's order.
@@ -2001,13 +2175,18 @@ impl StackModel {
                 let shifted = if shift == 0 {
                     input.clone()
                 } else {
-                    Tensor::cat(
-                        &[
-                            &Tensor::zeros((batch, shift, width), DType::F32, &self.device)?,
-                            &input.narrow(1, 0, time - shift)?,
-                        ],
-                        1,
-                    )?
+                    // The `shift` positions before the window: zeros, or under a window carry
+                    // the previous window's last `shift` inputs, oldest first.
+                    let before = match window.as_ref() {
+                        None => Tensor::zeros((batch, shift, width), DType::F32, &self.device)?,
+                        Some(state) => Tensor::cat(
+                            &state.inputs[CONVOLUTION_WIDTH - 1 - shift..]
+                                .iter()
+                                .collect::<Vec<_>>(),
+                            1,
+                        )?,
+                    };
+                    Tensor::cat(&[&before, &input.narrow(1, 0, time - shift)?], 1)?
                 };
                 convolved = convolved.add(&shifted.broadcast_mul(&weights.get(shift)?)?)?;
             }
@@ -2119,6 +2298,34 @@ impl StackModel {
                 carried.inputs.remove(0);
                 carried.inputs.push(input.detach().contiguous()?);
                 state
+            }
+            capture if window.is_some() => {
+                // claude-380: the scan from the carried state, through its own kernel: one
+                // position ahead of the window with a zero transition and the held state as its
+                // drive gives the held state back, then every position of the window runs the
+                // whole-conversation scan's step, `T ⊗ previous + D` ([`quaternion_scan_step`]).
+                let state = window.ok_or_else(|| invalid("window carry missing"))?;
+                if capture.is_some() || state.held.dtype() != transition.dtype() {
+                    return Err(invalid(
+                        "a window carry needs no decode carry and the scan's own dtype",
+                    ));
+                }
+                let zero = transition.narrow(1, 0, 1)?.zeros_like()?;
+                let both = quaternion_scan(
+                    &Tensor::cat(&[&zero, &transition], 1)?.contiguous()?,
+                    &Tensor::cat(&[&state.held, &drive], 1)?.contiguous()?,
+                )?;
+                let scanned = both.narrow(1, 1, time)?;
+                window_outgoing(
+                    layer,
+                    LayerCarry {
+                        inputs: (time + 1 - CONVOLUTION_WIDTH..time)
+                            .map(|t| Ok(input.narrow(1, t, 1)?.contiguous()?))
+                            .collect::<Result<_>>()?,
+                        held: scanned.narrow(1, time - 1, 1)?.contiguous()?,
+                    },
+                )?;
+                scanned
             }
             capture => {
                 let state = quaternion_scan(&transition.contiguous()?, &drive.contiguous()?)?;
@@ -3903,6 +4110,253 @@ mod decode_cache_tests {
         Ok(())
     }
 
+    /// claude-346: the address memory reads each position's own state and token and nothing
+    /// else, so a cached step adds the rows the whole-window forward adds at that position, bit
+    /// for bit, under every arm, with nothing carried for it.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_address_memory_steps_as_the_whole_window_does() -> Result<()> {
+        use crate::e8_address::{set_address_memory, AddressArm, AddressMemory};
+        struct Clear;
+        impl Drop for Clear {
+            fn drop(&mut self) {
+                set_address_memory(None);
+            }
+        }
+        let _clear = Clear;
+        let device = Device::new_cuda(0)?;
+        let model = small_model(&device, 64)?;
+        let mut rng = Lcg(346);
+        let rows: Vec<Vec<u32>> = (0..2)
+            .map(|_| (0..20).map(|_| (rng.next() % 4096) as u32).collect())
+            .collect();
+        let none = |_: &mut DecodeCache| -> Result<()> { Ok(()) };
+        let plain = bits(&model.hidden(&windows(&rows, 10), 2, 10)?)?;
+        for arm in AddressArm::ALL {
+            let memory =
+                AddressMemory::new(arm, model.config.layers(), model.config.width, None, 346, &device)?
+                    .randomized(346)?;
+            set_address_memory(Some(memory));
+            // The rows are in the forward the steps are compared with.
+            assert_ne!(bits(&model.hidden(&windows(&rows, 10), 2, 10)?)?, plain, "{arm:?}");
+            let (differing, first) = compare_steps(&model, &rows, 7, 3, None, &none)?;
+            assert_eq!(differing, 0, "{arm:?}: first {first:?}");
+        }
+        Ok(())
+    }
+
+    /// claude-381: a vector read set on the thread is in the trunk's forward (a weight of 0
+    /// changes no value, a weight of 0.5 changes the points), and once cleared the trunk gives
+    /// the points it gave before the read was set, bit for bit, for every kind and at a middle
+    /// depth and the last.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn a_set_then_cleared_vector_read_leaves_the_trunk_bit_for_bit() -> Result<()> {
+        use crate::vector_reads::{set_vector_read, VectorRead, VectorReadKind, DEFAULT_MARGIN};
+        struct Clear;
+        impl Drop for Clear {
+            fn drop(&mut self) {
+                set_vector_read(None);
+            }
+        }
+        let _clear = Clear;
+        let device = Device::new_cuda(0)?;
+        let model = small_model(&device, 64)?;
+        let mut rng = Lcg(381);
+        let rows: Vec<Vec<u32>> = (0..2)
+            .map(|_| (0..20).map(|_| (rng.next() % 4096) as u32).collect())
+            .collect();
+        let ids = windows(&rows, 10);
+        let values = |t: &Tensor| -> Result<Vec<f32>> { Ok(t.flatten_all()?.to_vec1::<f32>()?) };
+        let plain_points = model.hidden(&ids, 2, 10)?;
+        let plain = bits(&plain_points)?;
+        let layers = model.config.layers();
+        for kind in [
+            VectorReadKind::StarlingLorentz,
+            VectorReadKind::StarlingL2,
+            VectorReadKind::PrimeRoute,
+            VectorReadKind::Flock { neighbours: 2 },
+        ] {
+            for depth in [layers / 2, layers] {
+                let read =
+                    VectorRead::new(kind, depth, model.config.width, DEFAULT_MARGIN, 1.0, &device)?;
+                // A large offset: every Starling row with an earlier position reads.
+                read.set_for_test(0.0, Some(1.0e6))?;
+                set_vector_read(Some(read.clone()));
+                assert_eq!(
+                    values(&model.hidden(&ids, 2, 10)?)?,
+                    values(&plain_points)?,
+                    "{kind:?} at {depth}: a zero weight changed a value"
+                );
+                read.set_for_test(0.5, Some(1.0e6))?;
+                set_vector_read(Some(read));
+                assert_ne!(
+                    bits(&model.hidden(&ids, 2, 10)?)?,
+                    plain,
+                    "{kind:?} at {depth}: the read is not in the forward"
+                );
+                set_vector_read(None);
+                assert_eq!(
+                    bits(&model.hidden(&ids, 2, 10)?)?,
+                    plain,
+                    "{kind:?} at {depth}: the cleared trunk differs"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// claude-370: the pair-rows tests' marks (user `[3]`, assistant `[4, 5]`) and three windows
+    /// of 16: (a) a turn with pairs whose reply is open from position 5; (b) no turn at all; (c)
+    /// a turn whose reply a user marker at 8 closes, then a second turn whose reply opens at 12.
+    #[cfg(feature = "cuda")]
+    fn pair_rows_windows() -> Vec<Vec<u32>> {
+        vec![
+            vec![3, 10, 11, 12, 4, 5, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29],
+            (30..46).collect(),
+            vec![3, 13, 14, 4, 5, 40, 41, 42, 3, 15, 16, 4, 5, 43, 44, 46],
+        ]
+    }
+
+    /// Rows for every pair of [`pair_rows_windows`] and of one turn (50, 51) none of them holds,
+    /// `width` wide: zero, or drawn from a fixed generator.
+    #[cfg(feature = "cuda")]
+    fn pair_rows_for(model: &StackModel, zero: bool) -> Result<crate::pair_rows::PairRows> {
+        use crate::pair_rows::{PairDictionary, PairMarks, PairRows};
+        let marks = PairMarks {
+            user: vec![3],
+            assistant: vec![4, 5],
+        };
+        let mut stream: Vec<u32> = pair_rows_windows().concat();
+        stream.extend([3, 50, 51, 4, 5, 60]);
+        let dict = PairDictionary::count(model.config.vocab_size, &stream, &marks, 1)?;
+        let (count, width) = (dict.len(), model.config.width);
+        let rows = PairRows::new(dict, marks, width, model.device())?;
+        if !zero {
+            let mut rng = Lcg(370);
+            let values: Vec<f32> = (0..count * width).map(|_| rng.unit()).collect();
+            rows.variables()[0].set(&Tensor::from_vec(values, (count, width), model.device())?)?;
+        }
+        Ok(rows)
+    }
+
+    /// Clears the thread's pair rows on every exit, a failed assertion included.
+    #[cfg(feature = "cuda")]
+    struct ClearPairRows;
+    #[cfg(feature = "cuda")]
+    impl Drop for ClearPairRows {
+        fn drop(&mut self) {
+            crate::pair_rows::set_pair_rows(None);
+        }
+    }
+
+    /// claude-370: a cached step adds the bag its carried window names, so every step's points
+    /// equal the whole-window forward's at that position, bit for bit: inside an open reply, in
+    /// a row with no turn, and across a user marker and a second header.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_pair_rows_step_as_the_whole_window_does() -> Result<()> {
+        let _clear = ClearPairRows;
+        let device = Device::new_cuda(0)?;
+        let model = small_model(&device, 64)?;
+        let rows = pair_rows_windows();
+        let none = |_: &mut DecodeCache| -> Result<()> { Ok(()) };
+        let plain = bits(&model.hidden(&windows(&rows, 16), 3, 16)?)?;
+        crate::pair_rows::set_pair_rows(Some(pair_rows_for(&model, false)?));
+        // The rows are in the forward the steps are compared with.
+        assert_ne!(bits(&model.hidden(&windows(&rows, 16), 3, 16)?)?, plain);
+        let (differing, first) = compare_steps(&model, &rows, 7, 9, None, &none)?;
+        assert_eq!(differing, 0, "first {first:?}");
+        Ok(())
+    }
+
+    /// claude-370: zero rows add nothing, so the forward is the one with no rows set, bit for
+    /// bit: a `-0.0` turned `+0.0` counts as a change.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn zero_pair_rows_leave_the_forward_bit_for_bit() -> Result<()> {
+        let _clear = ClearPairRows;
+        let device = Device::new_cuda(0)?;
+        let model = small_model(&device, 64)?;
+        let ids = windows(&pair_rows_windows(), 16);
+        let plain = bits(&model.hidden(&ids, 3, 16)?)?;
+        crate::pair_rows::set_pair_rows(Some(pair_rows_for(&model, true)?));
+        assert_eq!(bits(&model.hidden(&ids, 3, 16)?)?, plain);
+        Ok(())
+    }
+
+    /// claude-370: the rows reach reply positions only: every position before a window's first
+    /// reply position is the no-rows forward's, and some reply position is not.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn pair_rows_change_reply_positions_only() -> Result<()> {
+        let _clear = ClearPairRows;
+        let device = Device::new_cuda(0)?;
+        let model = small_model(&device, 64)?;
+        let (batch, time) = (3, 16);
+        let ids = windows(&pair_rows_windows(), time);
+        let plain = bits(&model.hidden(&ids, batch, time)?)?;
+        let rows = pair_rows_for(&model, false)?;
+        let plan = crate::pair_rows::plan(rows.dict(), rows.marks(), &ids, batch, time)?;
+        crate::pair_rows::set_pair_rows(Some(rows));
+        let read = bits(&model.hidden(&ids, batch, time)?)?;
+        let width = plain.len() / (batch * time);
+        let point = |v: &[u32], b: usize, t: usize| v[(b * time + t) * width..][..width].to_vec();
+        let mut changed = 0;
+        for b in 0..batch {
+            let first = (0..time)
+                .find(|&t| plan.turn_of[b * time + t] as usize != plan.turns)
+                .unwrap_or(time);
+            for t in 0..time {
+                let same = point(&read, b, t) == point(&plain, b, t);
+                if t < first {
+                    assert!(same, "row {b} position {t} changed before the first reply");
+                } else if !same {
+                    changed += 1;
+                }
+            }
+        }
+        assert!(changed > 0, "no reply position changed");
+        Ok(())
+    }
+
+    /// claude-370: the trunk's error reaches exactly the rows the windows name: each gets a
+    /// non-zero gradient, and the row of a turn no window holds gets none.
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_trunk_error_reaches_the_pair_rows() -> Result<()> {
+        let _clear = ClearPairRows;
+        let device = Device::new_cuda(0)?;
+        let model = small_model(&device, 64)?;
+        let (batch, time) = (3, 16);
+        let ids = windows(&pair_rows_windows(), time);
+        let rows = pair_rows_for(&model, false)?;
+        let plan = crate::pair_rows::plan(rows.dict(), rows.marks(), &ids, batch, time)?;
+        let var = rows.variables()[0].clone();
+        crate::pair_rows::set_pair_rows(Some(rows));
+        let hidden = model.hidden(&ids, batch, time)?;
+        let mut rng = Lcg(3700);
+        let weights: Vec<f32> = (0..hidden.elem_count()).map(|_| rng.unit()).collect();
+        let weights = Tensor::from_vec(weights, hidden.dims(), &device)?;
+        let grads = hidden.mul(&weights)?.sum_all()?.backward()?;
+        let grad = grads
+            .get(var.as_tensor())
+            .expect("the pair rows got no gradient")
+            .abs()?
+            .sum(1)?
+            .to_vec1::<f32>()?;
+        let named: std::collections::BTreeSet<u32> = plan.hit_row.iter().copied().collect();
+        assert!(named.len() < grad.len(), "every row is named: the test needs one that is not");
+        for (row, &g) in grad.iter().enumerate() {
+            if named.contains(&(row as u32)) {
+                assert!(g > 0.0, "named row {row} got no gradient");
+            } else {
+                assert_eq!(g, 0.0, "unnamed row {row} got a gradient");
+            }
+        }
+        Ok(())
+    }
+
     /// The two-position step through the scan's own CUDA kernel equals the whole scan's next
     /// position, bit for bit, on random transitions and drives.
     #[cfg(feature = "cuda")]
@@ -3924,6 +4378,127 @@ mod decode_cache_tests {
             )?;
             assert_eq!(bits(&step)?, bits(&whole.narrow(1, t, 1)?)?, "position {t}");
         }
+        Ok(())
+    }
+
+    /// Two rows of 16 tokens: the second token range of each row holds no id of its first.
+    #[cfg(feature = "cuda")]
+    fn carry_rows() -> Vec<Vec<u32>> {
+        let mut rng = Lcg(380);
+        (0..2)
+            .map(|b| {
+                (0..16)
+                    .map(|t| match (b, t) {
+                        (0, 3) => 4_000,
+                        _ => 1 + (rng.next() % 3_000) as u32,
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// claude-380 (V1): a window carry is the whole window. From the zero state the carried
+    /// forward of a row's first 8 positions is [`StackModel::hidden`]'s, bit for bit; the next 8
+    /// from the state those ended in are the whole 16-position forward's last 8; a row whose
+    /// state is masked to zero gets the uncarried forward of its 8; and the second window from
+    /// zero differs from the whole forward (the negative gate: the carry is what matches). Both
+    /// rate readings.
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore = "needs a CUDA device; run on the pod"]
+    fn a_carried_window_is_the_whole_windows_forward() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let _restore = Restore(retention_rates());
+        let model = small_model(&device, 16)?;
+        let rows = carry_rows();
+        let half = |from: usize| -> Vec<u32> {
+            rows.iter().flat_map(|r| r[from..from + 8].iter().copied()).collect()
+        };
+        let (layers, width) = (model.config.layers(), model.config.width);
+        for retain in [false, true] {
+            set_retention_rates(retain);
+            let whole = model
+                .hidden(&windows(&rows, 16), 2, 16)?
+                .reshape((2, 16, width))?;
+            let zero = zero_window_state(layers, 2, width, &device)?;
+            let (first, state) = with_window_carry(zero.clone(), || model.hidden(&half(0), 2, 8))?;
+            assert_eq!(bits(&first)?, bits(&model.hidden(&half(0), 2, 8)?)?, "retain {retain}");
+            assert_eq!(
+                bits(&first)?,
+                bits(&whole.narrow(1, 0, 8)?)?,
+                "retain {retain}: the first window"
+            );
+            let (second, _) = with_window_carry(state.clone(), || model.hidden(&half(8), 2, 8))?;
+            assert_eq!(
+                bits(&second)?,
+                bits(&whole.narrow(1, 8, 8)?)?,
+                "retain {retain}: the carried second window"
+            );
+            let keep = Tensor::from_vec(vec![1f32, 0.0], 2, &device)?;
+            let masked = state.iter().map(|l| l.masked(&keep)).collect::<Result<Vec<_>>>()?;
+            let (mixed, _) = with_window_carry(masked, || model.hidden(&half(8), 2, 8))?;
+            let mixed = mixed.reshape((2, 8, width))?;
+            let fresh = model.hidden(&half(8), 2, 8)?.reshape((2, 8, width))?;
+            assert_eq!(bits(&mixed.narrow(0, 0, 1)?)?, bits(&whole.narrow(1, 8, 8)?.narrow(0, 0, 1)?)?);
+            assert_eq!(bits(&mixed.narrow(0, 1, 1)?)?, bits(&fresh.narrow(0, 1, 1)?)?);
+            let (cold, _) = with_window_carry(zero, || model.hidden(&half(8), 2, 8))?;
+            assert_ne!(bits(&cold)?, bits(&whole.narrow(1, 8, 8)?)?, "retain {retain}");
+        }
+        // Refused: a nested frame, and a state for other rows.
+        let zero = zero_window_state(layers, 2, width, &device)?;
+        assert!(with_window_carry(zero.clone(), || {
+            with_window_carry(zero.clone(), || model.hidden(&half(0), 2, 8))
+        })
+        .is_err());
+        let one = zero_window_state(layers, 1, width, &device)?;
+        assert!(with_window_carry(one, || model.hidden(&half(0), 2, 8)).is_err());
+        Ok(())
+    }
+
+    /// claude-380: the gradient crosses the window boundary and stops where the state is cut.
+    /// Row 0's id 4000 sits only in its first window. A loss on the second window alone reaches
+    /// that id's embedding row through the carried state, and reaches it not at all from the
+    /// same state detached ([`LayerCarry::detached`], what the trainer hands the next step).
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore = "needs a CUDA device; run on the pod"]
+    fn the_gradient_crosses_one_window_and_stops_where_detached() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let _restore = Restore(retention_rates());
+        set_retention_rates(true);
+        let model = small_model(&device, 16)?;
+        let rows = carry_rows();
+        let half = |from: usize| -> Vec<u32> {
+            rows.iter().flat_map(|r| r[from..from + 8].iter().copied()).collect()
+        };
+        let width = model.config.width;
+        let embedding = model
+            .variables()
+            .get("embedding.weight")
+            .ok_or_else(|| invalid("no embedding"))?
+            .as_tensor()
+            .clone();
+        let reach = |detach: bool| -> Result<f32> {
+            let zero = zero_window_state(model.config.layers(), 2, width, &device)?;
+            let (_, state) = with_window_carry(zero, || model.hidden(&half(0), 2, 8))?;
+            assert!(state.iter().all(LayerCarry::tracks));
+            let state: Vec<LayerCarry> = if detach {
+                state.iter().map(LayerCarry::detached).collect()
+            } else {
+                state
+            };
+            assert_eq!(state.iter().any(LayerCarry::tracks), !detach);
+            let (second, _) = with_window_carry(state, || model.hidden(&half(8), 2, 8))?;
+            let grads = second.sqr()?.sum_all()?.backward()?;
+            Ok(match grads.get(&embedding) {
+                None => 0.0,
+                Some(g) => g.narrow(0, 4_000, 1)?.abs()?.sum_all()?.to_scalar::<f32>()?,
+            })
+        };
+        let carried = reach(false)?;
+        let cut = reach(true)?;
+        assert!(carried > 0.0, "the carried state passes the gradient back: {carried}");
+        assert_eq!(cut, 0.0, "a detached state passes none");
         Ok(())
     }
 }

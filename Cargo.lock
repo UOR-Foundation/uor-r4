@@ -2375,6 +2375,9 @@ dependencies = [
  "serde_json",
  "sha2",
  "uor-r4-core",
+ "uor-r4-cpu-train",
+ "uor-r4-integer",
+ "uor-r4-native-vector",
 ]
 
 [[package]]
@@ -2393,6 +2396,7 @@ dependencies = [
  "uor-r4-core",
  "uor-r4-cpu-train",
  "uor-r4-integer",
+ "uor-r4-native-vector",
  "uor-r4-tokenizer",
 ]
 
@@ -2484,6 +2488,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "uor-r4-native-vector",
  "uor-r4-tokenizer",
  "uor-r4-vision",
  "wasm-bindgen",
@@ -2505,6 +2510,10 @@ version = "0.1.0"
 dependencies = [
  "sha2",
 ]
+
+[[package]]
+name = "uor-r4-native-vector"
+version = "0.1.0"
 
 [[package]]
 name = "uor-r4-object-store"

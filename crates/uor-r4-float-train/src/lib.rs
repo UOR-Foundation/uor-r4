@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use std::fmt;
 
 pub mod cuda_stack_kernels;
+pub mod e8_address;
 pub mod fbs_export;
 pub mod flock_read;
 pub mod flock_read_content;
@@ -24,8 +25,10 @@ pub mod geometric_stack;
 pub mod hamilton_sheet;
 pub mod in_space_long;
 pub mod kernel_controls;
+pub mod native_replay;
 pub mod native_starling_spec;
 pub mod native_vector_writer;
+pub mod pair_rows;
 pub mod query_cache;
 pub mod secant_descent;
 pub mod spiralcore_fbs;
@@ -33,6 +36,7 @@ pub mod spiralcore_fbs_arms;
 pub mod spiralcore_fbs_sheet;
 pub mod top8_positions;
 pub mod turn_census;
+pub mod vector_reads;
 
 /// One ahead-of-time PTX module: its file, the sources `build.rs` joins and compiles for it,
 /// and the `extern "C" __global__` entry points it found in them, in declaration order.
