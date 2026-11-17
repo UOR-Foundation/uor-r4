@@ -59,8 +59,11 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
             let micros = started.elapsed().as_micros().max(1);
             let (digest, _, _) = assembler.finish();
             println!(
-                "{{\"order\":{order},\"highest\":{},\"budget\":{budget},\"partitions\":{},\"targets\":{},\"grams\":{},\"contexts\":{},\"count_of_counts\":{:?},\"micros\":{micros},\"targets_per_s\":{},\"triple_sha256\":\"{}\",\"context_sha256\":\"{}\"}}",
+                "{{\"order\":{order},\"highest\":{},\"budget\":{budget},\"plan_order\":{},\"partitions\":{},\"targets\":{},\"grams\":{},\"contexts\":{},\"count_of_counts\":{:?},\"micros\":{micros},\"targets_per_s\":{},\"triple_sha256\":\"{}\",\"context_sha256\":\"{}\"}}",
                 if adjusted { max_order.to_string() } else { "null".to_string() },
+                // Adjusted order 0 under N >= 1 returns order 1's plan, whose
+                // partitions feed the unigram continuation.
+                if adjusted && order == 0 && max_order >= 1 { 1 } else { order },
                 plan.len(),
                 digest.targets,
                 digest.grams,
