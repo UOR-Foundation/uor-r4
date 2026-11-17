@@ -445,11 +445,46 @@ mod tests {
         assert_eq!(scored, wanted);
     }
 
+    /// N = 0: order-0 KN against the uniform base alone, by hand. On the
+    /// fixture's raw order-0 counts (5:4, 6:4, 7:1, 8:1; A = 10; n1(h) = 2,
+    /// n2(h) = 0, n3+(h) = 2) with Dq = [M/2, M/2, M], the a = 4 targets take
+    /// the Dq3 branch.
+    #[test]
+    fn kn_score_order_zero_against_uniform() {
+        let t: [u16; 12] = [0, 5, 6, 5, 6, 5, 7, 0, 6, 5, 6, 8];
+        let (mut digest, triples, contexts) = oracle_adjusted(&t, 0, 0).expect("order 0");
+        let counts: Vec<(u16, u32)> = triples.iter().map(|x| (x.next, x.count)).collect();
+        assert_eq!(counts, [(5, 4), (6, 4), (7, 1), (8, 1)]);
+        digest.count_of_counts = [2, 1, 1, 1];
+        let tables = KnTables::new(0, vec![(digest, triples, contexts)]).expect("tables");
+        let h = M / 2;
+        // gamma = (h*2 + h*0 + M*2) / 10; the base share of every id is gamma * (M/4096) / M.
+        let gamma = (2 * h + 2 * M) / 10;
+        let share = gamma * (M / 4096) / M;
+        let p_frequent = (4 * M - M) / 10 + share;
+        let p_once = (M - h) / 10 + share;
+        for (j, want) in [(1, p_frequent), (2, p_frequent), (6, p_once), (11, p_once)] {
+            assert_eq!(
+                u128::from(tables.score_target(&t, j).expect("mass")),
+                want,
+                "target {j}"
+            );
+        }
+        assert_eq!(
+            u128::from(tables.score_target(&[0, 9], 1).expect("mass")),
+            share
+        );
+        let sum: u128 = (0..4096u16)
+            .map(|w| u128::from(tables.mass(&[w], 0).expect("mass")))
+            .sum();
+        assert!(sum <= M && sum >= M - 3 * 4096, "sum {sum}");
+    }
+
     /// Every history's 4,096 masses sum to M up to the floors: less than three
     /// units per order per target.
     #[test]
     fn kn_score_masses_sum_to_one_up_to_the_floors() {
-        for highest in 1..=3u32 {
+        for highest in 1..=4u32 {
             let tokens = kn_score_stream(0x4191 + u64::from(highest), 6_000);
             let tables = tables_from_oracle(&tokens, highest);
             let n = highest as usize;
@@ -458,8 +493,8 @@ mod tests {
                 .collect();
             histories.extend([
                 vec![],
-                vec![9, 9, 9][..n].to_vec(),
-                vec![0, 300, 5][..n].to_vec(),
+                vec![9, 9, 9, 9][..n].to_vec(),
+                vec![0, 300, 5, 300][..n].to_vec(),
             ]);
             histories.sort();
             histories.dedup();
