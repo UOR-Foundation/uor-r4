@@ -35,6 +35,15 @@ Measured stage profile before the fix (655.8 ms/step): **backward 616.6 ms (94 %
 projection's siblings and the objective's table gradient, so the ablation above (cell 38 s vs
 cell+fast 19 s) is what separated them: **the table scan was ~0.29 s of the 0.59 s step.**
 
+## U0b — DONE: the DEV evaluation is capped
+
+The DEV panel is a whole held-out corpus; every evaluation scored **2,131,471 rows at
+`rows × vocabulary`**, which cost ~12 minutes per evaluation — more than the training it reports on.
+`--dev-tokens N` now caps the split (the windows are cut by BOS, so a token cap drops at most the
+last partial document): **200,000 tokens → 1,052 windows / 101,175 scored rows**, a 21× cheaper
+evaluation that reads the same curve. Every future run should cap it; a full-panel score is a
+separate, deliberate measurement.
+
 ## U2 — The route per output, not per row
 
 **Now:** `spiralcore_fbs_fwd`/`_bwd` compute `sc_fbs_route` (and the sibling counterfactuals) once per
@@ -45,8 +54,18 @@ recomputed `rows` (4,096) times, per projection, per layer, in **both** directio
 block; the gather reads it. Backward: precompute the per-output sibling set; the per-row kernel only
 pairs it with `dL/dy`.
 
-**Gate:** bit-identical forward outputs and gradients on a fixed batch (the route is unchanged, only
-its recomputation is removed). Then tokens/s.
+**Status: not done, and not a one-condition change.** Re-mapping one block per output and looping
+over rows inside it only amortises the route across the block's threads — 4–16×, not the 1,024× the
+redundancy offers — because every thread still walks the tree for its own rows. The full win needs
+either a precomputed route buffer (a small kernel over `outputs`, one `(atom, state, count, before,
+choice, goal)` per block; ~27 words × 64 blocks) or a shared-memory route per block, and the sibling
+set at stage 0 is `frontier_count` wide (up to 512), which is what makes the shared-memory version
+dynamic-size rather than fixed. That is a dedicated unit with the bit-identical gate above.
+
+**U3's premise was wrong:** the writer's candidates are **full-width table rows**, not the 8-lane
+gathers the projections use, so the "score the identity on 8 lanes" shortcut does not apply to them.
+The honest options there are a fused streaming kernel (same maths, less traffic) or fewer kept
+cells/slots, which changes the model.
 
 ## U3 — The writer's candidate inventory
 

@@ -9107,6 +9107,15 @@ thread_local! {
     /// unpinned but hashed at load, and it carries its own vocabulary in the UORT header, so a
     /// corpus cut with another tokenizer can be scored. Cleared at process start.
     static DEV_OVERRIDE: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+    /// Score at most this many DEV tokens (`--dev-tokens N`). The DEV panel is a whole held-out
+    /// corpus; every evaluation scores all of it at `rows × vocabulary`, which costs more than the
+    /// training step it reports on. A cap keeps the reading representative and the evaluation cheap.
+    static DEV_TOKENS: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
+/// Cap the DEV split at `tokens` tokens for this process; `None` scores all of it.
+pub fn set_dev_tokens_cap(tokens: Option<usize>) {
+    DEV_TOKENS.with(|cell| cell.set(tokens));
 }
 
 /// Score `dir` as DEV for this process; `None` restores the pinned panel.
@@ -9117,7 +9126,11 @@ pub fn set_dev_override(dir: Option<PathBuf>) {
 /// The pinned DEV panel's windows and its response mask.
 fn load_dev_split(data_root: &Path) -> Result<(Vec<u32>, Vec<u8>)> {
     if let Some(dir) = DEV_OVERRIDE.with(|cell| cell.borrow().clone()) {
-        let (tokens, mask, _) = load_unpinned_uort(&dir)?;
+        let (mut tokens, mut mask, _) = load_unpinned_uort(&dir)?;
+        if let Some(cap) = DEV_TOKENS.with(|cell| cell.get()) {
+            tokens.truncate(cap.min(tokens.len()));
+            mask.truncate(tokens.len());
+        }
         return Ok((tokens, mask));
     }
     hs::load_pinned_uort_split(
