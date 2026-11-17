@@ -1,1 +1,0 @@
-Harmless runtime isolation sentinel. No research payload or answer.

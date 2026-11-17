@@ -1,1 +1,0 @@
-Harmless #1094 worker isolation denial sentinel.

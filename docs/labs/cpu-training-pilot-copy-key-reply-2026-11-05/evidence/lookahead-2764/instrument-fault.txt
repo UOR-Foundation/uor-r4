@@ -1,2 +1,0 @@
-seed1 instrument-or-control-fault
-seed2 instrument-or-control-fault

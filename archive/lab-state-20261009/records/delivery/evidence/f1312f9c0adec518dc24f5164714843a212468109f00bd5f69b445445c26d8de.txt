@@ -1,1 +1,0 @@
-Command: ['git', 'diff', '--check', 'origin/main...HEAD']

@@ -1,3 +1,0 @@
-
-> uor-r4-studio-foundation@0.1.0 typecheck
-> tsc --noEmit

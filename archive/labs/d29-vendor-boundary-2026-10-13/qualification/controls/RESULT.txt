@@ -1,2 +1,0 @@
-31/31 fixed controls PASS
-Training HELD; no optimizer or corpus run

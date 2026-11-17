@@ -1,2 +1,0 @@
-// Dummy file to make bindgen work
-// (certain cupti header version contain references to <string> but don't use it)
