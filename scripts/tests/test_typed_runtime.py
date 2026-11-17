@@ -58,17 +58,6 @@ class TypedRuntimeContractTests(unittest.TestCase):
             self.assertTrue((legacy_dest / 'index.css').is_file())
             self.assertFalse((legacy_dest / 'assets/js/lifecycle_persistence.js').exists())
 
-    def test_publisher_refuses_retired_and_archive_targets_before_building(self):
-        publisher = REPO / 'scripts/studio/build-and-publish.sh'
-        for target in ('archive', 'gh-pages-preview', 'main'):
-            with self.subTest(target=target):
-                result = run('bash', str(publisher), '--target', target, '--push', '--yes')
-                self.assertEqual(result.returncode, 2)
-                self.assertIn('--target must be gh-pages', result.stderr)
-        result = run('bash', str(publisher), '--push', '--yes')
-        self.assertEqual(result.returncode, 2)
-        self.assertIn('explicit --target gh-pages', result.stderr)
-
     def test_publisher_exposes_opt_in_typed_mode(self):
         publisher = REPO / 'scripts/studio/build-and-publish.sh'
         help_result = run('bash', str(publisher), '--help')

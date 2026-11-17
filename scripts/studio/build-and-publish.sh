@@ -7,7 +7,7 @@
 #
 # SAFETY
 #   * default is a DRY RUN: builds, stages, makes a local commit in a throwaway worktree of the
-#     target branch, prints the tree and the rollback line, and pushes NOTHING.
+#     target branch, prints the tree, and pushes NOTHING.
 #   * --push is the only way anything reaches the remote, and it also requires --yes. It is meant
 #     to be run by the owner/Lead from a clean, attached checkout of main after review.
 #   * the current checkout's tracked files are untouched: build outputs live in the gitignored
@@ -54,6 +54,27 @@ keep_worktree=0
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'build-and-publish: %s\n' "$*" >&2; exit 2; }
+
+# Emit a rollback only after a successful push. Its explicit lease fails closed
+# if another publication has advanced gh-pages, even after an intervening fetch.
+publish_studio() {
+    local checkout=$1 previous=$2 published rollback
+    published=$(git -C "$checkout" rev-parse HEAD)
+    git -C "$checkout" push origin "$published:refs/heads/gh-pages" || return 1
+    rollback="git push --force-with-lease=refs/heads/gh-pages:$published origin $previous:refs/heads/gh-pages"
+    say "PUSHED gh-pages -> $published"
+    say "rollback if needed: $rollback"
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+        {
+            echo "### Studio published to gh-pages"
+            echo ""
+            echo "- previous head: \`$previous\`"
+            echo "- new head: \`$published\`"
+            echo "- rollback: \`$rollback\`"
+            echo "- the next docs-site book deploy keeps studio/"
+        } >> "$GITHUB_STEP_SUMMARY"
+    fi
+}
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -230,7 +251,6 @@ site_wt="$staging/site"
 git worktree add -q --detach "$site_wt" "refs/remotes/origin/$target"
 prev=$(git -C "$site_wt" rev-parse HEAD)
 say "previous origin/$target head: $prev"
-say "rollback: git push --force-with-lease origin $prev:$target"
 # Replace the whole Studio directory: no file from the retired 13 Oct app may survive a publish.
 rm -rf "$site_wt/studio"
 mkdir -p "$site_wt/studio"
@@ -282,21 +302,7 @@ else
     say "staged Studio tree ($(find "$site_wt/studio" -type f | wc -l | tr -d ' ') files):"
     ( cd "$site_wt" && find studio -maxdepth 3 -type f | sort | sed -n '1,40p' )
     if [ "$push" = 1 ]; then
-        git -C "$site_wt" push origin HEAD:"$target"
-        published=$(git -C "$site_wt" rev-parse HEAD)
-        say ""
-        say "PUSHED $target -> $published"
-        say "rollback if needed: git push --force-with-lease origin $prev:$target"
-        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-            {
-                echo "### Studio published to $target"
-                echo ""
-                echo "- previous head: \`$prev\`"
-                echo "- new head: \`$published\`"
-                echo "- rollback: \`git push --force-with-lease origin $prev:$target\`"
-                echo "- the next docs-site book deploy keeps studio/ (docs-site.yml preserves it)"
-            } >> "$GITHUB_STEP_SUMMARY"
-        fi
+        publish_studio "$site_wt" "$prev"
     else
         say ""
         say "DRY RUN: nothing pushed. To publish:"

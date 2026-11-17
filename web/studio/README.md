@@ -197,11 +197,10 @@ and `454bb30fc` and `d8e67c66` are historical identities. Publishing a newer pag
 2. runs the worker, static page-load, runtime page-load and wasm-instruction checks;
 3. stages the runtime files with `scripts/stage-studio-site.sh` (replacing `studio/` wholesale so
    no file from the retired app survives) and writes `models.json`;
-4. makes a publish commit in a throwaway git worktree of `origin/gh-pages`, checks the GitHub Pages size limits, prints the staged tree, the
-   previous head and the rollback line;
+4. makes a publish commit in a throwaway git worktree of `origin/gh-pages`, checks the GitHub Pages size limits, prints the staged tree and previous head;
 5. pushes only when `--push --yes` is given. **The default is a dry run, and `--push` without
    `--yes` refuses.** Live (`--target gh-pages --push --yes`) is refused unless the checkout is
-   on an attached `main` branch whose HEAD is `origin/main`.
+   on an attached `main` branch whose HEAD is `origin/main`. After a successful push, the printed rollback command requires the remote to remain at that exact publication.
 
 ```sh
 # preview the Studio locally against the live site

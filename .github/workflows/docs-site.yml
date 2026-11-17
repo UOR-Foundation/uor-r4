@@ -87,23 +87,27 @@ jobs:
       - name: Check the built links
         run: cargo run -q --locked -p xtask -- book-check
 
-      - name: Check the book artifact boundary
+      - name: Package the checked book
         run: |
           set -euo pipefail
           test -f book/index.html
           test ! -L book
-          unexpected=$(find book ! -type f ! -type d -print -quit)
+          test ! -e book/studio
+          unexpected=$(find book \( -iname .git -o \( ! -type f ! -type d \) \) -print -quit)
           if [ -n "$unexpected" ]; then
-            echo "::error::the book contains a link or special file"
+            echo "::error::reserved Git metadata, link or special file in the book"
             exit 1
           fi
+
+          # One regular archive carries every checked asset, including dot-directories.
+          tar -cf checked-book.tar -C book .
 
       - name: Pass the checked book to the manual publisher
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.target == 'gh-pages'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: checked-book
-          path: book/
+          path: checked-book.tar
           if-no-files-found: error
           retention-days: 1
 
@@ -124,7 +128,13 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: checked-book
-          path: book
+          path: incoming
+
+      - name: Unpack the checked book
+        run: |
+          set -euo pipefail
+          mkdir book
+          tar -xf incoming/checked-book.tar -C book
 
       - name: Publish
         env:
