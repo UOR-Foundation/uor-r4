@@ -762,6 +762,8 @@ fn routes_for_queries(plan: &RoutePlan, queries: &[f32]) -> Result<FbsRoutes, St
     Ok(FbsRoutes {
         in_blocks: plan.input_blocks,
         out_blocks: plan.output_blocks,
+        terms: 1,
+        counts: Vec::new(),
         atoms,
         states,
     })

@@ -122,6 +122,8 @@ pub fn synthetic_fbs_trunk_with(seed: u64, s: FbsSynth) -> FbsTrunkSnapshot {
         FbsRoutes {
             in_blocks,
             out_blocks,
+            terms: 1,
+            counts: Vec::new(),
             atoms: (0..out_blocks)
                 .map(|_| (rng.next() % in_blocks as u64) as u16)
                 .collect(),

@@ -173,14 +173,189 @@ pub fn decode_coded_routes(
     Ok(FbsRoutes {
         in_blocks,
         out_blocks,
+        terms: 1,
+        counts: Vec::new(),
         atoms,
         states,
     })
 }
 
+/// Fit `terms` (atom, Cl(0,6) state) gathers to one projection's dense weights.
+///
+/// `weights` is the projection's `out x in` matrix, row-major. Each output block's eight rows are
+/// approximated by `terms` signed-permutation gathers, each on one atom, chosen greedily by the
+/// signed correlation with the block's residual (the term's coefficient is the format's `±1`), then
+/// subtracted. A projection that is already a single gather reproduces `decode_coded_routes`' route
+/// at `terms = 1`; more terms spend the block's off-gather mass.
+pub fn fit_routes_k(
+    weights: &[f32],
+    in_blocks: usize,
+    out_blocks: usize,
+    terms: usize,
+) -> Result<FbsRoutes> {
+    if !(1..=4).contains(&terms) {
+        return Err(invalid(format!("{terms} terms a block is outside 1..=4")));
+    }
+    let in_width = in_blocks * 8;
+    if in_blocks == 0 || out_blocks == 0 || weights.len() != out_blocks * 8 * in_width {
+        return Err(invalid(format!(
+            "a {in_blocks} -> {out_blocks} block projection of {in_width} inputs needs {} weights, got {}",
+            out_blocks * 8 * in_width,
+            weights.len()
+        )));
+    }
+    let axes = spiralcore_signed_axes();
+    let mut atoms = Vec::with_capacity(out_blocks * terms);
+    let mut states = Vec::with_capacity(out_blocks * terms);
+    let mut counts = Vec::with_capacity(out_blocks);
+    for o in 0..out_blocks {
+        let mut block = weights[o * 8 * in_width..(o * 8 + 8) * in_width].to_vec();
+        let block_norm = block.iter().map(|v| v * v).sum::<f32>().sqrt();
+        let mut used = 0usize;
+        for t in 0..terms {
+            if t > 0 {
+                // A block that its first gathers already reproduce serves no further term: the
+                // map's extra terms are padding for it, not a perturbation.
+                let left = block.iter().map(|v| v * v).sum::<f32>().sqrt();
+                if left <= 1e-6 * block_norm.max(1e-12) {
+                    break;
+                }
+            }
+            let mut best = (f32::NEG_INFINITY, 0usize, 0usize);
+            for atom in 0..in_blocks {
+                for state in 0..64usize {
+                    let codes = &axes[state * 8..state * 8 + 8];
+                    let mut correlation = 0f32;
+                    for (lane, &code) in codes.iter().enumerate() {
+                        let column = atom * 8 + usize::from(code & 7);
+                        let sign = if code & 8 == 0 { 1.0 } else { -1.0 };
+                        correlation += block[lane * in_width + column] * sign;
+                    }
+                    if correlation > best.0 {
+                        best = (correlation, atom, state);
+                    }
+                }
+            }
+            let (_, atom, state) = best;
+            atoms.push(atom as u16);
+            states.push(state as u8);
+            used += 1;
+            for (lane, &code) in axes[state * 8..state * 8 + 8].iter().enumerate() {
+                let column = atom * 8 + usize::from(code & 7);
+                let sign = if code & 8 == 0 { 1.0 } else { -1.0 };
+                block[lane * in_width + column] -= sign;
+            }
+        }
+        // Pad the unused terms: the table is `out_blocks * terms` words, and the block's count
+        // says they are not served.
+        counts.push(used as u8);
+        while used < terms {
+            atoms.push(0);
+            states.push(0);
+            used += 1;
+        }
+    }
+    Ok(FbsRoutes {
+        in_blocks,
+        out_blocks,
+        terms,
+        counts,
+        atoms,
+        states,
+    })
+}
+
+/// The projection's effective dense matrix, `out_width x in_width`, row-major: row `o*8+lane`,
+/// column `c`.
+///
+/// It is read through the model's own projection on the unit basis, so it is the map the trunk
+/// actually applies, not the queries' parametrisation. A one-gather projection has one nonzero an
+/// output row; a projection the integer form cannot serve has more.
+pub fn read_projection_dense(
+    model: &StackModel,
+    name: &str,
+    in_width: usize,
+    out_width: usize,
+) -> Result<Vec<f32>> {
+    let queries = model
+        .variables()
+        .get(name)
+        .ok_or_else(|| invalid(format!("the trunk lacks {name}")))?
+        .as_tensor();
+    let mut basis = vec![0f32; in_width * in_width];
+    for c in 0..in_width {
+        basis[c * in_width + c] = 1.0;
+    }
+    let carrier = Tensor::from_vec(basis, (in_width, in_width), queries.device())?;
+    let projected = model
+        .linear(&carrier, queries)?
+        .flatten_all()?
+        .to_vec1::<f32>()?;
+    let mut dense = vec![0f32; out_width * in_width];
+    for c in 0..in_width {
+        for row in 0..out_width {
+            dense[row * in_width + c] = projected[c * out_width + row];
+        }
+    }
+    Ok(dense)
+}
+
+/// How much of a projection's dense map the served `terms`-gather form keeps, for each `k`:
+/// `(k, residual_norm, dense_norm, blocks_exact, blocks)`. The residual is the Frobenius norm of
+/// the dense matrix minus the fitted route's matrix, so `residual / dense` is the share of the
+/// trained map the integer form discards.
+pub fn route_term_report(
+    model: &StackModel,
+    name: &str,
+    in_width: usize,
+    out_width: usize,
+    ks: &[usize],
+) -> Result<Vec<(usize, f64, f64, usize, usize)>> {
+    let dense = read_projection_dense(model, name, in_width, out_width)?;
+    let (in_blocks, out_blocks) = (in_width / 8, out_width / 8);
+    let dense_norm = dense.iter().map(|v| (*v as f64) * (*v as f64)).sum::<f64>().sqrt();
+    let mut report = Vec::with_capacity(ks.len());
+    for &k in ks {
+        let routes = fit_routes_k(&dense, in_blocks, out_blocks, k)
+            .map_err(|e| invalid(format!("{name}: {e}")))?;
+        let axes = spiralcore_signed_axes();
+        let mut residual = 0f64;
+        let mut blocks_exact = 0usize;
+        for o in 0..out_blocks {
+            let mut block_residual = 0f64;
+            for lane in 0..8 {
+                let row = o * 8 + lane;
+                let mut served = vec![0f32; in_width];
+                let count = routes
+                    .counts
+                    .get(o)
+                    .copied()
+                    .map_or(routes.terms, usize::from);
+                for t in 0..count {
+                    let state = usize::from(routes.states[o * routes.terms + t]);
+                    let atom = usize::from(routes.atoms[o * routes.terms + t]);
+                    let code = axes[state * 8 + lane];
+                    let sign = if code & 8 == 0 { 1.0 } else { -1.0 };
+                    served[atom * 8 + usize::from(code & 7)] += sign;
+                }
+                for c in 0..in_width {
+                    let d = f64::from(dense[row * in_width + c]) - f64::from(served[c]);
+                    block_residual += d * d;
+                }
+            }
+            if block_residual.sqrt() < 1e-6 {
+                blocks_exact += 1;
+            }
+            residual += block_residual;
+        }
+        report.push((k, residual.sqrt(), dense_norm, blocks_exact, out_blocks));
+    }
+    Ok(report)
+}
+
 /// The `(input, output)` widths of projection `part` in a trunk of width `d`,
 /// MLP width `m` and `g = d/4 + d` gate rows.
-fn projection_widths(part: &str, d: usize, m: usize) -> (usize, usize) {
+pub fn projection_widths(part: &str, d: usize, m: usize) -> (usize, usize) {
     match part {
         "rec.in" => (d, 2 * d),
         "rec.gate" => (d, d / 4 + d),
@@ -1477,6 +1652,57 @@ mod tests {
     /// `fold_scores` or `reflect_floor` on is refused, since the integer artifact only clamps the rate
     /// score.
     #[test]
+    fn a_two_term_projection_fits_two_gathers_and_one_gather_cannot() {
+        let (in_blocks, out_blocks) = (4usize, 2usize);
+        let in_width = in_blocks * 8;
+        let axes = spiralcore_signed_axes();
+        // Block 0 is two gathers; block 1 is one. A fixed two-term map must serve block 1 with
+        // one term, not perturb it with padding.
+        let terms = [
+            (0usize, 1usize, 7usize),
+            (0usize, 3usize, 42usize),
+            (1usize, 2usize, 11usize),
+        ];
+        let mut weights = vec![0f32; out_blocks * 8 * in_width];
+        for &(block, atom, state) in &terms {
+            for (lane, &code) in axes[state * 8..state * 8 + 8].iter().enumerate() {
+                let column = atom * 8 + usize::from(code & 7);
+                let sign = if code & 8 == 0 { 1.0 } else { -1.0 };
+                weights[(block * 8 + lane) * in_width + column] += sign;
+            }
+        }
+        let residual = |routes: &FbsRoutes| -> f32 {
+            let mut left = weights.clone();
+            for o in 0..out_blocks {
+                let count = routes.counts.get(o).copied().map_or(routes.terms as u8, |c| c) as usize;
+                for t in 0..count {
+                    let state = usize::from(routes.states[o * routes.terms + t]);
+                    let atom = usize::from(routes.atoms[o * routes.terms + t]);
+                    for (lane, &code) in axes[state * 8..state * 8 + 8].iter().enumerate() {
+                        let column = atom * 8 + usize::from(code & 7);
+                        let sign = if code & 8 == 0 { 1.0 } else { -1.0 };
+                        left[(o * 8 + lane) * in_width + column] -= sign;
+                    }
+                }
+            }
+            left.iter().map(|v| v * v).sum::<f32>().sqrt()
+        };
+        let two = fit_routes_k(&weights, in_blocks, out_blocks, 2).expect("fit");
+        assert_eq!(two.terms, 2);
+        assert_eq!(two.atoms.len(), out_blocks * 2);
+        assert_eq!(two.counts, vec![2, 1], "block 1 needs one term and serves one");
+        assert!(residual(&two) < 1e-5, "two terms recover the projection exactly");
+        let one = fit_routes_k(&weights, in_blocks, out_blocks, 1).expect("fit");
+        assert_eq!(one.terms, 1);
+        assert!(
+            residual(&one) > 2.0,
+            "one term leaves the second gather's mass: {}",
+            residual(&one)
+        );
+        assert!(residual(&one) > residual(&two) + 2.0);
+    }
+
+    #[test]
     fn the_run_rate_reading_is_retain_rates_and_refuses_the_other_score_forms() {
         assert!(run_rate_reading(r#"{"retain_rates": true, "fold_scores": false, "reflect_floor": false}"#).unwrap());
         assert!(!run_rate_reading(r#"{"steps": 16384}"#).unwrap(), "absent, as before 27 Oct");
@@ -2450,6 +2676,8 @@ mod tests {
             let routes = FbsRoutes {
                 in_blocks,
                 out_blocks,
+                terms: 1,
+                counts: Vec::new(),
                 atoms: (0..out_blocks)
                     .map(|_| (rng.next() % in_blocks as u64) as u16)
                     .collect(),
@@ -2468,6 +2696,8 @@ mod tests {
         let routes = FbsRoutes {
             in_blocks: 4,
             out_blocks: 2,
+            terms: 1,
+            counts: Vec::new(),
             atoms: vec![1, 3],
             states: vec![5, 40],
         };

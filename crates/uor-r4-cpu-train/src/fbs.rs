@@ -183,6 +183,7 @@ struct Map {
     atoms: Vec<u16>,
     codes: Vec<[u8; 8]>,
     terms: usize,
+    counts: Vec<u8>,
 }
 
 impl Map {
@@ -191,6 +192,7 @@ impl Map {
             atoms: image.atoms.to_vec(),
             codes: image.codes.to_vec(),
             terms: image.terms.max(1),
+            counts: image.counts.to_vec(),
         }
     }
 }
@@ -1223,7 +1225,8 @@ fn gather<T: Copy + Into<i64>>(map: &Map, input: &[T], from_exp: i32, out: &mut 
     let terms = map.terms.max(1);
     for (o, block) in out.chunks_exact_mut(8).enumerate() {
         let mut lanes = [0i32; 8];
-        for term in 0..terms {
+        let count = map.counts.get(o).copied().map_or(terms, usize::from);
+        for term in 0..count {
             let at = o * terms + term;
             let base = usize::from(map.atoms[at]) * 8;
             for (slot, &code) in lanes.iter_mut().zip(&map.codes[at]) {

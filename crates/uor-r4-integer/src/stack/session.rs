@@ -313,6 +313,8 @@ struct FbsMap {
     /// Terms an output block sums. The layout is `out_blocks * terms`; one term (the default) is
     /// the historical single gather, and `terms` is derived from the table's length.
     terms: usize,
+    /// Terms each output block actually serves, in `1..=terms`. A map's unused terms are padding.
+    counts: Vec<u8>,
 }
 
 /// One recurrence layer of a SpiralCore/FBS trunk: route tables in place of
@@ -433,6 +435,8 @@ pub struct FbsMapImage<'a> {
     pub codes: &'a [[u8; 8]],
     /// Terms per output block; `atoms`/`codes` hold `out_blocks * terms`.
     pub terms: usize,
+    /// Terms each output block serves; empty means one each.
+    pub counts: &'a [u8],
 }
 
 impl FbsImage<'_> {
@@ -456,6 +460,7 @@ impl<'a> FbsMapImage<'a> {
             atoms: &map.atoms,
             codes: &map.codes,
             terms: map.terms,
+            counts: &map.counts,
         }
     }
 }
@@ -698,10 +703,21 @@ fn fbs_model(artifact: &Container, shape: &StackShape) -> Result<FbsModel, Stack
             atoms.push(atom as u16);
             route_codes.push(crate::discrete_d11::cl06_axes(state));
         }
+        let mut counts = Vec::with_capacity(out_blocks);
+        for o in 0..out_blocks {
+            let count = (((entries[o * terms] >> 22) & 3) as usize) + 1;
+            if count > terms {
+                return Err(StackError::Numerics(format!(
+                    "{name}: block {o} serves {count} terms of {terms}"
+                )));
+            }
+            counts.push(count as u8);
+        }
         Ok(FbsMap {
             atoms,
             codes: route_codes,
             terms,
+            counts,
         })
     };
     let mut layers = Vec::with_capacity(shape.layers());
@@ -4171,7 +4187,8 @@ fn stack_fbs_gather<T: Copy + Into<i64>>(map: &FbsMap, x: &[T], x_exp: i32, out:
     let terms = map.terms.max(1);
     for (o, block) in out.chunks_exact_mut(8).enumerate() {
         let mut lanes = [0i32; 8];
-        for term in 0..terms {
+        let count = map.counts.get(o).copied().map_or(terms, usize::from);
+        for term in 0..count {
             let at = o * terms + term;
             let atom = map.atoms[at];
             let codes = &map.codes[at];
@@ -6507,6 +6524,7 @@ mod route_terms_tests {
             atoms: vec![atom],
             codes: vec![codes],
             terms: 1,
+            counts: Vec::new(),
         };
         let mut out = [0i32; 8];
         stack_fbs_gather(&map, x, RESIDUAL_EXP, &mut out);
@@ -6528,6 +6546,7 @@ mod route_terms_tests {
             atoms: vec![0, 1],
             codes: vec![identity, negated],
             terms: 2,
+            counts: vec![2],
         };
         let mut out = [0i32; 8];
         stack_fbs_gather(&map, &x, RESIDUAL_EXP, &mut out);
@@ -6542,5 +6561,25 @@ mod route_terms_tests {
         // The count is derived from the table: two entries a block is two terms.
         let entries: Vec<u32> = vec![0, (1 << 16) | 1];
         assert_eq!(entries.len() / 1, 2);
+    }
+
+    #[test]
+    fn a_block_serves_only_its_count_so_the_maps_padding_term_is_inert() {
+        let x: Vec<i32> = (0..24).map(|i| i as i32).collect();
+        let identity: [u8; 8] = std::array::from_fn(|j| j as u8);
+        // Block 0 serves two terms (atoms 0 and 1); block 1 serves one, and its second entry is
+        // padding that must not be read.
+        let map = FbsMap {
+            atoms: vec![0, 1, 2, 0],
+            codes: vec![identity, identity, identity, identity],
+            terms: 2,
+            counts: vec![2, 1],
+        };
+        let mut out = [0i32; 16];
+        stack_fbs_gather(&map, &x, RESIDUAL_EXP, &mut out);
+        let first: [i32; 8] = std::array::from_fn(|j| (j + j + 8) as i32);
+        let second: [i32; 8] = std::array::from_fn(|j| (16 + j) as i32);
+        assert_eq!(&out[..8], &first, "block 0 sums its two terms");
+        assert_eq!(&out[8..], &second, "block 1 serves one term and ignores its padding");
     }
 }

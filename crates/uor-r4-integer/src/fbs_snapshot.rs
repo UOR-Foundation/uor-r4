@@ -120,12 +120,24 @@ pub fn write_new_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 pub struct FbsRoutes {
     /// Input 8-blocks the atoms index.
     pub in_blocks: usize,
-    /// Output 8-blocks, one route each.
+    /// Output 8-blocks, each routed by `terms` gathers.
     pub out_blocks: usize,
-    /// `out_blocks` input-block indices, each below `in_blocks`.
+    /// Terms an output block sums (1..=4). Absent in a historical snapshot, which is one term.
+    #[serde(default = "one_term")]
+    pub terms: usize,
+    /// `out_blocks` term counts, each in `1..=terms`; empty means every block uses one term, as
+    /// every historical route does. A block's unused terms are padding and are not served.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub counts: Vec<u8>,
+    /// `out_blocks * terms` input-block indices, each below `in_blocks`.
     pub atoms: Vec<u16>,
-    /// `out_blocks` signed-axis states, each below 64.
+    /// `out_blocks * terms` signed-axis states, each below 64.
     pub states: Vec<u8>,
+}
+
+/// A historical route snapshot has one term a block.
+fn one_term() -> usize {
+    1
 }
 
 /// One recurrence layer of a SpiralCore/FBS trunk snapshot (`d = width`,

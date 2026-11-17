@@ -2168,34 +2168,62 @@ fn pack_fbs_routes(
             routes.in_blocks, routes.out_blocks
         )));
     }
+    let terms = routes.terms.max(1);
+    if !(1..=4).contains(&terms) {
+        return Err(StackError::Numerics(format!(
+            "{name}: {terms} terms a block is outside 1..=4"
+        )));
+    }
+    let expected = out_blocks * terms;
     for (part, len) in [("atoms", routes.atoms.len()), ("states", routes.states.len())] {
-        if len != out_blocks {
+        if len != expected {
             return Err(StackError::TableLength {
                 name: format!("{name}.{part}"),
                 len,
-                expected: out_blocks,
+                expected,
             });
         }
     }
-    routes
-        .atoms
-        .iter()
-        .zip(&routes.states)
-        .enumerate()
-        .map(|(o, (&atom, &state))| {
-            if usize::from(atom) >= in_blocks {
+    if !routes.counts.is_empty() && routes.counts.len() != out_blocks {
+        return Err(StackError::TableLength {
+            name: format!("{name}.counts"),
+            len: routes.counts.len(),
+            expected: out_blocks,
+        });
+    }
+    let mut words = Vec::with_capacity(expected);
+    for (o, (&atom, &state)) in routes.atoms.iter().zip(&routes.states).enumerate() {
+        if usize::from(atom) >= in_blocks {
+            return Err(StackError::Numerics(format!(
+                "{name}[{o}]: atom {atom} is not below {in_blocks} input blocks"
+            )));
+        }
+        if state >= 64 {
+            return Err(StackError::Numerics(format!(
+                "{name}[{o}]: state {state} is not below 64"
+            )));
+        }
+        let mut word = u32::from(atom) | (u32::from(state) << 16);
+        // The block's own term count rides in the first word's high bits as `count - 1`, so a
+        // block that needs one gather is not perturbed by the map's extra terms. A historical
+        // route leaves the bits zero, which is one term, so the bytes are unchanged.
+        if o % terms == 0 {
+            let count = routes
+                .counts
+                .get(o / terms)
+                .copied()
+                .unwrap_or(1);
+            if !(1..=terms as u8).contains(&count) {
                 return Err(StackError::Numerics(format!(
-                    "{name}[{o}]: atom {atom} is not below {in_blocks} input blocks"
+                    "{name}: block {} uses {count} terms of {terms}",
+                    o / terms
                 )));
             }
-            if state >= 64 {
-                return Err(StackError::Numerics(format!(
-                    "{name}[{o}]: state {state} is not below 64"
-                )));
-            }
-            Ok(u32::from(atom) | (u32::from(state) << 16))
-        })
-        .collect()
+            word |= u32::from(count - 1) << 22;
+        }
+        words.push(word);
+    }
+    Ok(words)
 }
 
 /// Export a SpiralCore/FBS [`FbsTrunkSnapshot`] into a deterministic `UORLUT01`
@@ -3813,13 +3841,19 @@ pub struct FbsWriterOutput {
 /// `o`, channel `j` is `v[atoms[o]*8 + (code & 7)]`, negated when `code & 8`,
 /// with `code` the `j`-th Cl(0,6) signed-axis code of `states[o]`.
 pub(crate) fn fbs_reference_gather(routes: &FbsRoutes, v: &[f64]) -> Vec<f64> {
+    let terms = routes.terms.max(1);
     let mut y = vec![0.0f64; routes.out_blocks * 8];
     for (o, (&atom, &state)) in routes.atoms.iter().zip(&routes.states).enumerate() {
+        let block = o / terms;
+        let count = routes.counts.get(block).copied().unwrap_or(1) as usize;
+        if o % terms >= count {
+            continue;
+        }
         let base = usize::from(atom) * 8;
         let axes = crate::discrete_d11::cl06_axes(usize::from(state));
         for (j, &code) in axes.iter().enumerate() {
             let x = v[base + usize::from(code & 7)];
-            y[o * 8 + j] = if code & 8 != 0 { -x } else { x };
+            y[block * 8 + j] += if code & 8 != 0 { -x } else { x };
         }
     }
     y
@@ -4081,5 +4115,45 @@ impl TieRecorder {
 impl Drop for TieRecorder {
     fn drop(&mut self) {
         TIE_MARGINS.with(|cell| cell.set(None));
+    }
+}
+
+#[cfg(test)]
+mod route_term_tests {
+    use super::*;
+
+    fn route(terms: usize, counts: Vec<u8>, atoms: Vec<u16>, states: Vec<u8>) -> FbsRoutes {
+        FbsRoutes {
+            in_blocks: 4,
+            out_blocks: 2,
+            terms,
+            counts,
+            atoms,
+            states,
+        }
+    }
+
+    #[test]
+    fn a_block_count_rides_in_the_first_word_and_a_one_term_map_is_unchanged() {
+        // The historical map: one atom and one state a block, no count bits.
+        let historical = route(1, Vec::new(), vec![1, 3], vec![2, 4]);
+        let words = pack_fbs_routes("test", &historical, 32, 16).expect("pack");
+        assert_eq!(words, vec![0x0002_0001, 0x0004_0003]);
+
+        // A two-term map whose first block serves two and second serves one.
+        let mixed = route(2, vec![2, 1], vec![1, 0, 3, 0], vec![2, 0, 4, 0]);
+        let words = pack_fbs_routes("test", &mixed, 32, 16).expect("pack");
+        assert_eq!(words.len(), 4);
+        assert_eq!(words[0] >> 22, 1, "block 0 serves two terms");
+        assert_eq!(words[2] >> 22, 0, "block 1 serves one term");
+        // The atom and state fields are untouched by the count.
+        assert_eq!(words[0] & 0x003f_ffff, 0x0002_0001);
+        assert_eq!(words[2] & 0x003f_ffff, 0x0004_0003);
+    }
+
+    #[test]
+    fn a_block_cannot_serve_more_terms_than_the_map_carries() {
+        let bad = route(2, vec![3, 1], vec![1, 0, 3, 0], vec![2, 0, 4, 0]);
+        assert!(pack_fbs_routes("test", &bad, 32, 16).is_err());
     }
 }
