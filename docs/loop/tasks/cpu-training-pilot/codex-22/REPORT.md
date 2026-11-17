@@ -24,13 +24,15 @@ On Apple silicon macOS all eight tests of the audit binary passed. A separate in
 
 The host and AArch64 checks above passed again after the flag correction. The locked libc source provides different definitions for AArch64 and MIPS64 as required by their respective Linux ABIs.
 
+An independent native run used the committed source at `14caa4eafc233a64ad637600c6427e1149e0cbcc` on Ubuntu 24.04.5 LTS, Linux 6.8.0-142-generic AArch64, rustc and Cargo 1.97.1. `cargo test --locked -p uor-r4-cpu-train --bin cpu-carry-hold-audit` ran all 10 tests. All passed, with zero ignored or filtered cases. The run exercised FIFO, symlink and non-regular-file refusals, retained receipt collision and deterministic repeated batch output. Local verification log SHA-256: `d2f6b18a13f9ab9c81cf0f7c3d8f3cf9a4cfa0fc5f0343d70f715060755d2d67`.
+
 ## Skills used
 
 Source review, native host testing and Linux cross-compilation.
 
 ## Still open
 
-The repaired Linux success test was type-checked. Runtime verification on Linux remains outstanding at this commit. The historical eight-checkpoint evidence and resource ledger retain their original recorded scope.
+Both native macOS and AArch64 Linux checks now have results. The historical eight-checkpoint evidence and resource ledger retain their original recorded scope.
 
 ## Plain summary
 
