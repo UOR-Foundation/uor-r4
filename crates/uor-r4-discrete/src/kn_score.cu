@@ -7,7 +7,9 @@
 // Tables are flat arrays with per-order offsets: order k's contexts are
 // ctx_off[k]..ctx_off[k+1] and its triples tri_off[k]..tri_off[k+1], both in
 // the counter's canonical order. A key is two u64 words, lo then hi, of the
-// 128-bit PrimeRouteKey word. Arithmetic uses nvcc's unsigned __int128.
+// 128-bit PrimeRouteKey word. Arithmetic uses nvcc's unsigned __int128 for
+// add, subtract, multiply and shift; division is div_u128_u64 below, never
+// nvcc's own 128-bit division routine.
 
 typedef unsigned short u16;
 typedef unsigned int u32;

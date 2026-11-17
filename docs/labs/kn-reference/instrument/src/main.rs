@@ -20,12 +20,29 @@ use uor_r4_discrete::ngram_count::NGRAM_BOS;
 use uor_r4_integer::lawful_likelihood::{bits_q12, LOG2_SCALE, PROBABILITY_ONE as BITS_ONE};
 
 // The scorer's masses and `bits_q12` must share one unit: 2^48.
-const _: () = assert!(KN_ONE == BITS_ONE);
+const _: () = assert!(KN_ONE == BITS_ONE && KN_ONE == 1 << 48);
 
 /// The novel class of claude-420's `S.novel.u8`.
 const CLASS_NOVEL: u8 = 1;
 /// The BOS class: never scored.
 const CLASS_BOS: u8 = 3;
+/// The record end id: a whole-record prefix ends on it.
+const EOS: u16 = 1;
+
+/// The sha256 of claude-420's sealed `dev-test.tokens.u16`. It is scored only with
+/// `--sealed-run`, which claude-422 passes after its sheet and FIT.
+const DEV_TEST_TOKENS_SHA256: &str =
+    "023784b74c98a796401a064d50bf2f83f2f8eb95ab8bbead1cbe2aec6e7a176b";
+
+/// Refuses the sealed DEV-test stream unless the run is the sealed run.
+fn seal_check(query_sha256: &str, sealed_run: bool) -> Result<(), Failure> {
+    if query_sha256 == DEV_TEST_TOKENS_SHA256 && !sealed_run {
+        return Err(fail(
+            "the query is the sealed DEV-test stream; only the sealed run (--sealed-run) scores it",
+        ));
+    }
+    Ok(())
+}
 
 type Failure = Box<dyn std::error::Error>;
 
@@ -35,10 +52,13 @@ fn fail(message: impl Into<String>) -> Failure {
 
 /// The length of the prefix holding the first `per_mille` per mille of `tokens`, cut at a
 /// record start: the last BOS at or before the mark, so the prefix ends before it. A prefix
-/// with no whole record is refused.
+/// with no whole record, an empty stream, and a cut that does not follow an EOS are refused.
 fn record_prefix(tokens: &[u16], per_mille: u64) -> Result<usize, Failure> {
     if per_mille == 0 || per_mille > 1000 {
         return Err(fail(format!("--per-mille takes 1..=1000, got {per_mille}")));
+    }
+    if tokens.is_empty() {
+        return Err(fail("the stream is empty"));
     }
     if per_mille == 1000 {
         return Ok(tokens.len());
@@ -53,7 +73,24 @@ fn record_prefix(tokens: &[u16], per_mille: u64) -> Result<usize, Failure> {
             "the first {per_mille} per mille holds no whole record"
         )));
     }
+    if tokens[cut - 1] != EOS {
+        return Err(fail(format!(
+            "the record before position {cut} does not end on EOS"
+        )));
+    }
     Ok(cut)
+}
+
+/// The classes of the query prefix. The class file must cover the whole query stream, so a
+/// class file made for another stream that only agrees on the prefix is refused.
+fn classes_prefix(classes: &[u8], stream_len: usize, prefix: usize) -> Result<&[u8], Failure> {
+    if classes.len() != stream_len {
+        return Err(fail(format!(
+            "the class file holds {} positions, the query stream {stream_len}",
+            classes.len()
+        )));
+    }
+    Ok(&classes[..prefix])
 }
 
 /// Bits and bytes over a set of targets.
@@ -107,6 +144,9 @@ fn tally(
     let mut novel = Tally::default();
     let mut next = masses.iter();
     for (j, (&token, &class)) in query.iter().zip(classes).enumerate() {
+        if class > CLASS_BOS {
+            return Err(fail(format!("position {j}: class {class} is not 0..=3")));
+        }
         if (token == NGRAM_BOS) != (class == CLASS_BOS) {
             return Err(fail(format!(
                 "position {j}: token {token} has class {class}"
@@ -156,13 +196,15 @@ struct Args {
     out: String,
     per_mille: u64,
     check_host: bool,
+    sealed_run: bool,
 }
 
 fn parse(args: &[String]) -> Result<Args, Failure> {
-    let usage = "usage: kn-reference TRAIN.u16 QUERY.u16 ID-BYTES.u8 CLASSES.u8 N BUDGET OUT.json [--per-mille P] [--check-host]";
+    let usage = "usage: kn-reference TRAIN.u16 QUERY.u16 ID-BYTES.u8 CLASSES.u8 N BUDGET OUT.json [--per-mille P] [--check-host] [--sealed-run]";
     let mut positional = Vec::new();
     let mut per_mille = 1000;
     let mut check_host = false;
+    let mut sealed_run = false;
     let mut at = 0;
     while at < args.len() {
         match args[at].as_str() {
@@ -171,6 +213,7 @@ fn parse(args: &[String]) -> Result<Args, Failure> {
                 per_mille = args.get(at).ok_or_else(|| fail(usage))?.parse()?;
             }
             "--check-host" => check_host = true,
+            "--sealed-run" => sealed_run = true,
             other => positional.push(other.to_string()),
         }
         at += 1;
@@ -184,6 +227,7 @@ fn parse(args: &[String]) -> Result<Args, Failure> {
         out,
         per_mille,
         check_host,
+        sealed_run,
     })
 }
 
@@ -208,6 +252,8 @@ fn run(args: &[String]) -> Result<(), Failure> {
     let started = std::time::Instant::now();
     let train_bytes = std::fs::read(train_path)?;
     let query_bytes = std::fs::read(query_path)?;
+    let query_sha256 = sha256_hex(&query_bytes);
+    seal_check(&query_sha256, args.sealed_run)?;
     let id_bytes = std::fs::read(id_bytes_path)?;
     let classes_bytes = std::fs::read(classes_path)?;
     if id_bytes.len() != 4096 {
@@ -221,9 +267,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
     let train = &train_all[..record_prefix(&train_all, args.per_mille)?];
     let query_len = record_prefix(&query_all, args.per_mille)?;
     let query = &query_all[..query_len];
-    let classes = classes_bytes
-        .get(..query_len)
-        .ok_or_else(|| fail("the class file is shorter than the query"))?;
+    let classes = classes_prefix(&classes_bytes, query_all.len(), query_len)?;
     eprintln!(
         "read: train {} of {} tokens, query {} of {}, {} ms",
         train.len(),
@@ -312,9 +356,10 @@ fn run(args: &[String]) -> Result<(), Failure> {
         "budget": args.budget,
         "per_mille": args.per_mille,
         "check_host": args.check_host,
+        "sealed_run": args.sealed_run,
         "inputs": {
             "train_sha256": sha256_hex(&train_bytes),
-            "query_sha256": sha256_hex(&query_bytes),
+            "query_sha256": query_sha256,
             "id_bytes_sha256": sha256_hex(&id_bytes),
             "classes_sha256": sha256_hex(&classes_bytes),
             "train_tokens": train.len(),
@@ -345,6 +390,24 @@ mod tests {
         assert!(record_prefix(&tokens, 100).is_err());
         assert!(record_prefix(&tokens, 0).is_err());
         assert!(record_prefix(&tokens, 1001).is_err());
+        assert!(record_prefix(&[], 500).is_err());
+        // [0 5] [0 6 1]: the cut at the second BOS follows 5, not EOS.
+        assert!(record_prefix(&[0, 5, 0, 6, 1], 500).is_err());
+    }
+
+    #[test]
+    fn a_class_file_must_cover_the_whole_query_stream() {
+        let classes = [3u8, 1, 0, 1, 3, 1];
+        assert_eq!(classes_prefix(&classes, 6, 4).unwrap(), &classes[..4]);
+        // A longer class file (another stream) agreeing on the prefix is refused.
+        assert!(classes_prefix(&classes, 5, 4).is_err());
+    }
+
+    #[test]
+    fn the_sealed_stream_is_refused_outside_the_sealed_run() {
+        assert!(seal_check(DEV_TEST_TOKENS_SHA256, false).is_err());
+        assert!(seal_check(DEV_TEST_TOKENS_SHA256, true).is_ok());
+        assert!(seal_check(&"0".repeat(64), false).is_ok());
     }
 
     #[test]
@@ -382,6 +445,7 @@ mod tests {
         assert!(tally(&query, &[half, quarter], &id_bytes, &classes).is_err());
         assert!(tally(&query, &[half, quarter, half, half], &id_bytes, &classes).is_err());
         assert!(tally(&query, &[half, quarter, half], &id_bytes, &[0, 1, 0, 1]).is_err());
+        assert!(tally(&query, &[half, quarter, half], &id_bytes, &[3, 4, 0, 1]).is_err());
     }
 
     const PROBABILITY_ONE_TEST: u64 = 1 << 48;

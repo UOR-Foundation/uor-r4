@@ -106,6 +106,63 @@ fn kn_score_cuda_matches_the_host_scorer() {
     );
 }
 
+/// A stream whose copies are long (4..=27 tokens, one draw in 4), so grams of
+/// orders up to 10 repeat with a falling spectrum n1 > n2 > n3 > n4 > 0.
+fn long_copy_stream(seed: u64, len: usize) -> Vec<u16> {
+    let mut state = seed | 1;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state >> 16) as u32
+    };
+    let mut stream: Vec<u16> = vec![NGRAM_BOS];
+    while stream.len() < len {
+        let r = next();
+        if (r >> 16) % 4 == 0 && stream.len() > 64 {
+            let run = 4 + (r >> 20) as usize % 24;
+            let from = next() as usize % (stream.len() - run);
+            for at in from..from + run {
+                stream.push(stream[at]);
+            }
+            continue;
+        }
+        let product = (r % 16) * ((r >> 4) % 16) * ((r >> 8) % 16) * ((r >> 12) % 16);
+        stream.push(if (r >> 24) % 97 == 0 {
+            NGRAM_BOS
+        } else {
+            (5 + product / 16) as u16
+        });
+    }
+    stream.truncate(len);
+    stream
+}
+
+/// Orders 5..=10 put context slots below bit 64: the 5th-latest token
+/// straddles the key's two words and the 6th..10th sit in the low word.
+#[test]
+fn kn_score_cuda_matches_the_host_scorer_at_high_orders() {
+    let train = long_copy_stream(0x421d, 40_000);
+    let other = long_copy_stream(0x421e, 20_000);
+    for highest in 5..=10u32 {
+        let host = tables(&train, highest);
+        let scorer = KnScorer::new(0, &host).expect("scorer");
+        for (name, query) in [("train", &train), ("other seed", &other)] {
+            let want = host.scored_masses(query).expect("host masses");
+            let got = scorer.score(query).expect("gpu masses");
+            assert_eq!(got.len(), want.len(), "N {highest} {name}: length");
+            let first = (0..want.len()).find(|&i| got[i] != want[i]);
+            assert_eq!(first, None, "N {highest} {name}: first differing target");
+            eprintln!("N {highest} {name}: {} masses equal", want.len());
+        }
+        let (_, top, _) = host.order_tables(highest).expect("top order");
+        assert!(
+            top.iter().any(|t| t.count >= 2),
+            "N {highest}: the top order holds no repeated gram"
+        );
+    }
+}
+
 #[test]
 fn kn_score_cuda_empty_and_bos_only_queries_score_nothing() {
     let train = kn_score_stream(0x421c, 6_000);
