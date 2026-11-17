@@ -7086,9 +7086,10 @@ fn load_unpinned_uort(dir: &Path) -> Result<(Vec<u32>, Vec<u8>, String)> {
         .chunks_exact(2)
         .map(|w| u32::from(u16::from_le_bytes([w[0], w[1]])))
         .collect();
-    if tokens.first() != Some(&hs::SHEET_BOS_ID)
-        || tokens.iter().any(|&t| t as usize >= hs::SHEET_VOCAB)
-    {
+    // The split's own vocabulary (UORT header bytes 16..20); a zero is a legacy fixture.
+    let declared = u32::from_le_bytes(token_bytes[16..20].try_into().unwrap()) as usize;
+    let vocab_size = if declared == 0 { hs::SHEET_VOCAB } else { declared };
+    if tokens.first() != Some(&hs::SHEET_BOS_ID) || tokens.iter().any(|&t| t as usize >= vocab_size) {
         return Err(invalid(format!(
             "{}: the tokens are out of range or do not start with BOS",
             dir.display()
@@ -9097,8 +9098,24 @@ pub fn root_separation() -> Result<(f64, f64)> {
     Ok((nearest, farthest))
 }
 
+thread_local! {
+    /// A DEV split named on the command line (`--dev DIR`) in place of the pinned `ft/dev`. It is
+    /// unpinned but hashed at load, and it carries its own vocabulary in the UORT header, so a
+    /// corpus cut with another tokenizer can be scored. Cleared at process start.
+    static DEV_OVERRIDE: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Score `dir` as DEV for this process; `None` restores the pinned panel.
+pub fn set_dev_override(dir: Option<PathBuf>) {
+    DEV_OVERRIDE.with(|cell| *cell.borrow_mut() = dir);
+}
+
 /// The pinned DEV panel's windows and its response mask.
 fn load_dev_split(data_root: &Path) -> Result<(Vec<u32>, Vec<u8>)> {
+    if let Some(dir) = DEV_OVERRIDE.with(|cell| cell.borrow().clone()) {
+        let (tokens, mask, _) = load_unpinned_uort(&dir)?;
+        return Ok((tokens, mask));
+    }
     hs::load_pinned_uort_split(
         &data_root.join("ft/dev/tokens.u16"),
         &data_root.join("ft/dev/response_mask.u8"),

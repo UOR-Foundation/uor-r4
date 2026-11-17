@@ -1037,6 +1037,9 @@ fn main() -> Result<()> {
                 })
             }
             "--width" => config.width = number(&value)?,
+            "--dev" => {
+                uor_r4_float_train::in_space_long::set_dev_override(Some(PathBuf::from(&value)));
+            }
             "--vocab-size" => {
                 let vocab = usize::try_from(number(&value)?).map_err(|_| FloatTrainError::Invalid("--vocab-size too big".to_owned()))?;
                 if vocab < 8 || vocab > 65_536 {
