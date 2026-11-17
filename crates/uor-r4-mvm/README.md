@@ -11,7 +11,7 @@ cargo run --locked -q -p uor-r4-mvm --bin uor-mvm -- collatz 27
 
 `status` boots the pinned initramfs and prints the guest architecture and CID. `collatz N` finds the smallest starting value in 1 through N with the longest stopping time under the Collatz iteration. For 27 the guest prints `limit=27 start=27 steps=111`. The command compiles the checked-in C program with the supplied integer, executes its RISC-V ELF, and forwards its output. It requires an ELF machine ID of 243 and at least one retired guest instruction.
 
-Each process gets 8 MiB of guest RAM and up to 25 million retired instructions. The CLI accepts two commands and bounds N to 1–512. The guest starts fresh on each invocation and receives no host filesystem, command, credential or network connection. The native library’s general-purpose C input is for trusted callers. Parsing recurses on the host and global array declarations determine compiler allocations before guest execution begins. The guest RAM and fuel limits apply to execution. The browser worker, persistence and GitHub companion are separate work under #3939.
+Each process gets 8 MiB of guest RAM and up to 25 million retired instructions. The CLI accepts two commands and bounds N to 1–512. The guest starts fresh on each invocation and receives no host filesystem, command, credential or network connection. The public Rust API provides `guest_identity()` and `run_collatz(limit: u16)`. Both create a fresh guest, and the library validates the numeric range before boot. Only crate-private code accepts C, guest paths, bytecode or command text. Its pinned compiler and filesystem have outstanding correctness defects tracked in the workbench item. The guest RAM and fuel limits apply to execution. The browser worker, persistence and GitHub companion are separate work under #3939.
 
 ## Upstream provenance
 
@@ -35,7 +35,7 @@ The module ends at line 45,938. `r4_compositional_gllm` begins at line 45,940 an
 - The local ELF parser validates every program header and supplies checked file and guest-memory ranges to the loader. Snapshots save the next sector number. The vsock sender checks the full payload length and the receiver requires one complete frame.
 - `mvm_initramfs.rs` is generated from the pinned binary into a Rust byte slice, so no compiled initramfs binary is committed. Its bytes and SHA-256 are tested.
 - Vendored modules are `#[rustfmt::skip]` so package formatting cannot change upstream hashes; new tests and adapter code remain rustfmt-checked.
-- `lib.rs` exposes native compiler and emulator APIs to the host program. The fixed CLI uses guest files and numeric input. Tests use synthetic placeholders for the native secret policy.
+- `lib.rs` exposes the guest identity and the fixed workload. Internal host tests exercise the original source and use synthetic placeholders for the secret policy. An external API test compares guest output to an independent stopping-time calculation for all 512 supported inputs.
 - Cargo/rustc are not emulated by an AST evaluator. Without a genuine guest Rust toolchain they must report unavailable. C compilation and execution must emit genuine `EM_RISCV` output and exact nontrivial results.
 
 The native package tests check exact output, ELF identity, filesystem changes, in-memory CoW restore, vsock admission and pinned source identities. The browser and desktop acceptance tests belong to the remaining workbench item.

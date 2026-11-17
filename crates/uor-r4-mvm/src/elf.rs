@@ -1,5 +1,7 @@
 //! Checked loadable segments for the software guest. Admission and loading use the same parser.
-use crate::{admit_rv64_elf, Elf64HeaderSummary, ElfAdmission};
+use crate::spiralcore_vsock::r4_spiralcore_vsock::{
+    admit_rv64_elf, Elf64HeaderSummary, ElfAdmission,
+};
 
 pub(super) struct Image<'a> {
     pub entry: u64,

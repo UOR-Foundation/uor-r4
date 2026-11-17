@@ -1,8 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::mvm_initramfs::MVM_INITRAMFS;
 use sha2::{Digest, Sha256};
-use uor_r4_mvm::MVM_INITRAMFS;
 
 const UPSTREAM_COMMIT: &str = "01956d5c35f268fc7d1b646d97d3dff21b9e945f";
 const MVM_SHA: &str = "2789ec57daa7f92dbd094e5d2c38a8ae343b4f38bd09cd2ed6bc377fa7d67206";
@@ -47,7 +47,7 @@ fn readme_pins_upstream_commit_and_hashes() {
 fn reversing_declared_mvm_patch_recovers_pinned_upstream_bytes() {
     let adapted = String::from_utf8(source("mvm.rs")).expect("mvm.rs UTF-8");
     let lines: Vec<_> = adapted.split_inclusive('\n').collect();
-    let mut patch = include_str!("../provenance/mvm-uor.patch")
+    let mut patch = include_str!("../../provenance/mvm-uor.patch")
         .split_inclusive('\n')
         .peekable();
     assert_eq!(patch.next(), Some("--- a/mvm.rs\n"));

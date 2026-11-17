@@ -1,9 +1,13 @@
 use std::collections::BTreeMap;
 
-use uor_r4_mvm::{
-    admit_elf64_riscv, admit_guest_socket_domain, admit_spiralcore_header, compile_c_to_rv64_elf,
-    EgressVerdict, ElfAdmission, FrameVerdict, MvmSandbox, SocketAdmission, SpiralCoreHeader,
-    SPIRALCORE_MAGIC,
+use crate::mvm::{
+    admit_elf64_riscv, admit_guest_socket_domain, admit_spiralcore_header, MvmSandbox,
+    SpiralCoreHeader, SPIRALCORE_MAGIC,
+};
+
+use crate::mvm_cc::compile_c_to_rv64_elf;
+use crate::spiralcore_vsock::r4_spiralcore_vsock::{
+    EgressVerdict, ElfAdmission, FrameVerdict, SocketAdmission,
 };
 
 #[test]
@@ -276,7 +280,7 @@ fn cow_restore_replays_sector_allocation_and_preserves_files() {
 
 #[test]
 fn vsock_delivers_exact_limit_and_refuses_padding() {
-    use uor_r4_mvm::{MvmError, SPIRALCORE_MAX_PAYLOAD};
+    use crate::mvm::{MvmError, SPIRALCORE_MAX_PAYLOAD};
     let sender = MvmSandbox::boot_default().expect("boot");
     let mut receiver = MvmSandbox::boot_with_cid(4).expect("boot receiver");
     let payload = vec![b'x'; SPIRALCORE_MAX_PAYLOAD];

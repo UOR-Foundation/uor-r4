@@ -10,6 +10,9 @@
 @@ -38 +38 @@
 -static INITRAMFS_IMAGE: &[u8] = include_bytes!("mvm_initramfs.bin");
 +static INITRAMFS_IMAGE: &[u8] = crate::mvm_initramfs::MVM_INITRAMFS;
+@@ -104 +104 @@
+-    pub fn to_bytes(&self) -> [u8; 16] {
++    pub fn to_bytes(self) -> [u8; 16] {
 @@ -161,0 +162 @@
 +    next_sector: u32,
 @@ -206,43 +207,4 @@

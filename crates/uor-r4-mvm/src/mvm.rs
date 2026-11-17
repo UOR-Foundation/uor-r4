@@ -101,7 +101,7 @@ pub struct SpiralCoreHeader {
 
 impl SpiralCoreHeader {
     /// Encode header to its canonical 16-byte little-endian wire representation.
-    pub fn to_bytes(&self) -> [u8; 16] {
+    pub fn to_bytes(self) -> [u8; 16] {
         let mut out = [0u8; 16];
         out[0..4].copy_from_slice(&self.magic);
         out[4..6].copy_from_slice(&self.src_cid.to_le_bytes());
