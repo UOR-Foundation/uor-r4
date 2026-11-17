@@ -47,8 +47,13 @@ impl TempDir {
     /// refuses an existing path, so a collision is retried under a new sequence number instead of
     /// silently sharing another caller's files.
     fn create(label: &str) -> io::Result<Self> {
+        Self::create_in(&std::env::temp_dir(), label)
+    }
+
+    fn create_in(root: &Path, label: &str) -> io::Result<Self> {
+        std::fs::create_dir_all(root)?;
         for _ in 0..TEMP_DIR_ATTEMPTS {
-            let path = std::env::temp_dir().join(format!(
+            let path = root.join(format!(
                 "uor-verify-{}-{}-{}-{}",
                 std::process::id(),
                 label,
@@ -297,6 +302,17 @@ mod tests {
         let b = TempDir::create("ct").expect("second temp dir");
         assert_ne!(a.path(), b.path());
         assert!(a.path().is_dir() && b.path().is_dir());
+    }
+
+    #[test]
+    fn missing_temp_root_is_created_and_survives_child_cleanup() {
+        let parent = TempDir::create("test-root").expect("parent");
+        let root = parent.path().join("missing").join("nested");
+        let child = TempDir::create_in(&root, "ct").expect("fresh child");
+        assert_eq!(child.path().parent(), Some(root.as_path()));
+        assert!(child.path().is_dir());
+        drop(child);
+        assert!(root.is_dir());
     }
 
     #[test]
