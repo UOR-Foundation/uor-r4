@@ -20,10 +20,10 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 32 |
+| ready | 31 |
 | held | 11 |
 | decision | 1 |
-| done | 112 |
+| done | 113 |
 | total | 156 |
 
 ## Start here
@@ -36,7 +36,6 @@ These items are ready and open to anyone.
 | [Track discrete Clippy drift, PR coverage and the K16 timing instrument](items/discrete-clippy-k16-coverage.md) | infra | [#3168](https://github.com/UOR-Foundation/uor-r4/issues/3168) |
 | [Reproduce the sealed S1.4 icosian transport comparison](items/icosian-snap-parity.md) | research | [#2655](https://github.com/UOR-Foundation/uor-r4/issues/2655) |
 | [Measure M1-class laptop cost on the accepted served model](items/m5-laptop-full-path-measurement.md) | M5 | [#2862](https://github.com/UOR-Foundation/uor-r4/issues/2862) |
-| [Isolate temporary files in concurrent M6 rustc verifier tests](items/m6-verifier-temp-isolation.md) | infra | [#3876](https://github.com/UOR-Foundation/uor-r4/issues/3876) |
 | [Build the library, CLI and browser bit-identity parity harness](items/m7-parity-library-cli-browser.md) | M7 | [#2867](https://github.com/UOR-Foundation/uor-r4/issues/2867) |
 | [Independently verify the alpha on consumer hardware](items/m8-independent-verification.md) | M8 | [#2869](https://github.com/UOR-Foundation/uor-r4/issues/2869) |
 | [Prepare the checksummed alpha release package and install path](items/m8-release-packaging.md) | M8 | [#2870](https://github.com/UOR-Foundation/uor-r4/issues/2870) |
@@ -226,7 +225,6 @@ These items are ready and open to anyone.
 |---|---|---|---|---|---|
 | [Track discrete Clippy drift, PR coverage and the K16 timing instrument](items/discrete-clippy-k16-coverage.md) | ready | anyone | no | none | [#3168](https://github.com/UOR-Foundation/uor-r4/issues/3168) |
 | [Maintain the loop harness and shared roadmap registration](items/infra-loop-harness.md) | ready | a lab | no | none | [#2904](https://github.com/UOR-Foundation/uor-r4/issues/2904) |
-| [Isolate temporary files in concurrent M6 rustc verifier tests](items/m6-verifier-temp-isolation.md) | ready | anyone | no | none | [#3876](https://github.com/UOR-Foundation/uor-r4/issues/3876) |
 | [Preserve RunPod pod cleanup across the API migration](items/runpod-reaper-api.md) | ready | anyone | no | none | [#3957](https://github.com/UOR-Foundation/uor-r4/issues/3957) |
 | [Create the separate scanned D37 float training module](items/float-training-module.md) | done | a lab | no | [owner-decision-float-path-scope](items/owner-decision-float-path-scope.md) | [#2823](https://github.com/UOR-Foundation/uor-r4/issues/2823) |
 | [Bench inbox rule: each lab reads the bench messages addressed to it](items/infra-bench-inbox-rule.md) | done | a lab | no | none | [#2955](https://github.com/UOR-Foundation/uor-r4/issues/2955) |
@@ -248,6 +246,7 @@ These items are ready and open to anyone.
 | [Let loop review count the render PR (or exempt it at the queue)](items/infra-loop-render-review.md) | done | a lab | no | [infra-loop-harness](items/infra-loop-harness.md) | [#3036](https://github.com/UOR-Foundation/uor-r4/issues/3036) |
 | [Adopt and verify outside-contribution repairs to the product crate and xtask](items/infra-outsider-repairs.md) | done | a lab | no | none | [#3433](https://github.com/UOR-Foundation/uor-r4/issues/3433) |
 | [Harden the render-PR review path](items/loop-render-review-hardening.md) | done | a lab | no | [infra-loop-render-review](items/infra-loop-render-review.md) | [#3044](https://github.com/UOR-Foundation/uor-r4/issues/3044) |
+| [Isolate temporary files in concurrent M6 rustc verifier tests](items/m6-verifier-temp-isolation.md) | done | anyone | no | none | [#3876](https://github.com/UOR-Foundation/uor-r4/issues/3876) |
 | [Settle the disputed D11 and Hopf observation statuses on the board](items/owner-decision-board-status-disputes.md) | done | a lab | no | none | [#2874](https://github.com/UOR-Foundation/uor-r4/issues/2874) |
 
 ## Waiting on the owner

@@ -3,7 +3,7 @@ id: m6-verifier-temp-isolation
 title: Isolate temporary files in concurrent M6 rustc verifier tests
 milestone: infra
 area: tooling
-status: ready
+status: done
 open_to: anyone
 needs_gpu: false
 depends_on: []
@@ -15,7 +15,7 @@ A shared temporary source file can make the verifier report a compilation failur
 
 ## What is missing
 
-Run 42534928710 exposed a collision between parallel verifier cases. PR #4038 proposed exclusive temporary directories. Its adoption also isolates the verifier work files per invocation. Closure requires the merged-main result. [Adoption PR](https://github.com/UOR-Foundation/uor-r4/pull/4065) The delivered verifier covers canonical reference programs. [PR 3821](https://github.com/UOR-Foundation/uor-r4/pull/3821) · [PR 4038](https://github.com/UOR-Foundation/uor-r4/pull/4038)
+Complete. Contributor PR #4038 was adopted in #4065. Each verifier invocation now owns an exclusively acquired directory for source, executable and diagnostic captures. On merged main `0c68133c4`, four isolation tests and seven integration tests passed, including all 80 canonical programs. [Adoption PR](https://github.com/UOR-Foundation/uor-r4/pull/4065) · [Original issue](https://github.com/UOR-Foundation/uor-r4/issues/3876)
 
 ## Done when
 
