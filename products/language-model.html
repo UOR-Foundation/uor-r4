@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b1879735.js";
+            window.path_to_searchindex_js = "../searchindex-31a119fa.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-78e3d836.js"></script>
@@ -179,7 +179,7 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/abfad060460503bbd468f5b8c74b892b2aaca800"><code>abfad0604</code></a> (2026-11-14); no later commit changes them.</small></p>
+                        <p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/abfad060460503bbd468f5b8c74b892b2aaca800"><code>abfad0604</code></a> (2026-11-14); 42 later commits change its sources.</small></p>
 
 <h1 id="the-language-model"><a class="header" href="#the-language-model">The language model</a></h1>
 <p>The core product is a language model: a program that reads text and predicts what comes next, so it
@@ -191,15 +191,15 @@ product does not ship yet.</strong> No model holds a useful conversation and no 
 <strong>hypothesis</strong> (untested). See <a href="../formal_vocabulary.html"><code>docs/formal_vocabulary.md</code></a> and the
 <a href="../start/glossary.html">glossary</a>.</p>
 <pre class="mermaid">flowchart LR
-  T["Train on GPUs&lt;br/&gt;discrete, or offline float"] --&gt; X["Export to UORLUT01&lt;br/&gt;and measure export gap"]
-  X --&gt; A["Audit: integer only;&lt;br/&gt;no float or dense matmul"]
+  T["Train one native integer state on GPU"] --&gt; X["Serialize the trained state losslessly"]
+  X --&gt; A["Verify raw-word replay and audit integer operations"]
   A --&gt; S["Serve on the device&lt;br/&gt;uor-r4-integer"]
   S --&gt; C1["Command line"]
   S --&gt; C2["WebAssembly"]
   S --&gt; C3["Native desktop"]
 </pre>
 
-<p><em>Training happens offline on a GPU. The exported integer artifact is the product boundary.</em></p>
+<p><em>D85 design. A device must reproduce the training path’s route, carry, read, memory-address and token decisions from the same prompt and starting state.</em></p>
 <h2 id="what-the-model-is-meant-to-be"><a class="header" href="#what-the-model-is-meant-to-be">What the model is meant to be</a></h2>
 <p><strong>A geometric autoregressive state model with exact addressed memory.</strong> Prime addresses, zeta
 phases, E8/H4/icosian rotations and SpiralCore/FBS routing replace transformer machinery. Exact
@@ -208,9 +208,9 @@ then coding and reasoning, on one model.</p>
 <p><strong>Fast and local.</strong> The lead metric is tokens per second on ordinary hardware, with context and
 decode reported separately. A small quality gap is acceptable if the model is much cheaper.</p>
 <p><strong>Integer at serving.</strong> D11 bans floating point and transcendental arithmetic and excludes dense
-matrix multiplication. Since D80 and D81 it allows the hardware integer multiply and divide. Offline
-training may use float under D37, but every float candidate must report its export gap and ship as
-an integer artifact.</p>
+matrix multiplication. Since D80 and D81 it allows the hardware integer multiply and divide. D85 requires the shared integer or fixed-point representation throughout training and serving. Floating point serves as a reference or diagnostic outside that path. <a href="../CHARTER.html#3-technical-constraints">Charter §3.7</a></p>
+<h2 id="the-current-model-experiment"><a class="header" href="#the-current-model-experiment">The current model experiment</a></h2>
+<p>The written-state experiment asks how much geometric routing and memory improve on a count model trained on the same text at equal bytes. On D87 DEV-tune, the order-2 modified Kneser–Ney scorer measured <strong>2.004736 bits per byte overall</strong> and <strong>2.194312 on novel targets</strong>. The frozen reference still needs its DEV-test score. The proposed model must then improve on that reference and pass the grounded-reply controls with memory removed or speakers shuffled. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-409/DECISION.md">Written-state decision</a> · <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-421/REPORT.md">Scorer measurement</a></p>
 <h2 id="what-exists-now"><a class="header" href="#what-exists-now">What exists now</a></h2>
 <p>The M1 closing artifact is antigravity-110's discrete <code>trunk-joint-pointer-v1-d11</code>, a 19-table
 <code>uor-r4.lut-discrete-trunk/1</code> model saved as two seeded <code>UORLUT01</code> files. It is not the separate
@@ -238,8 +238,7 @@ conversation.</p>
 <ul>
 <li><strong>The discrete path</strong> produced the M1 artifact. It trains integer geometric state and exports
 through table-native <code>UORLUT01</code> schemas.</li>
-<li><strong>The float-trained FBS trunk</strong> trains offline under D37 and exports with exact rotations and its DEV export gap inside the bar under <code>lut-stack/5</code>
-at DEV scope. It is the current complete-reply research line, not the M1 artifact.</li>
+<li><strong>The float-trained FBS trunk</strong> supplied the October complete-reply experiments. Its <code>lut-stack/5</code> export preserved exact rotations and met the export-gap bar on DEV.</li>
 </ul>
 <p>Claude-217's cycle-step experiment ends every registered loop but leaves content underpowered, so
 greedy remains the decode. Exact turn memory keys on exact first token ids and misses reworded
@@ -248,8 +247,7 @@ trunk-state keys offline; <a href="https://github.com/UOR-Foundation/uor-r4/blob
 then served the point key for the first reply token in free generation on fresh p-v. It improves
 templates by +13/+8/+12 and exact replies by +9/+8/+12 at three seeds, but reaches only 12–18% of
 the forced-opening lift. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-220/REPORT.md">Claude-220</a> then served the point key inside one float model on fresh p-w: templates improve by +41/+40/+42 at three seeds with exact claude-219 parity, while recalling TRAIN replies rather than generalizing. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-222/REPORT.md">Claude-222</a> has built the integer point table, search and <code>/8</code> record, with 380 library tests and a full serving audit. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-224/REPORT.md">Claude-224</a> has built the panel decode and grade. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-retention-rates/claude-227/REPORT.md">Claude-227</a> passed retention GPU parity within the 3% bar; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-228/REPORT.md">Claude-228</a> built the run's reference/read-back/BOS checks; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/point-key-integer/claude-229/REPORT.md">Claude-229</a> found an instrument fault: the integer session uses the native writer instead of the trained whole-table nearest readout, so no bar result or throughput is reported. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-231/REPORT.md">Claude-231</a> built the nearest readout and export on native and browser paths; <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/integer-nearest-readout/claude-232/REPORT.md">claude-232</a> then missed greedy parity in every cell.</p>
-<p>Since 10 Nov the work is recall in controlled conversations. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-358/REPORT.md">Claude-358</a>'s three <code>p</code> models state a value told earlier on 314, 320 and 325 of 578 recall questions. The pure-vector baseline, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-376/REPORT.md">claude-376</a>, served them over 2,218 rows: 377, 380 and 441 exact replies as exported, 171, 173 and 211 with the exact turn memory dropped. Almost every fact the model gets right comes from the turn memory's table. On 13 Nov D85 made one persistent integer geometric state, trained and served by the same typed operators, the default route. V1 (PR #3979) and V2(a) (PR #3978) are in progress.
-This is not a useful-chat result.</p>
+<p>The November FBS experiments measured recall in controlled conversations. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-358/REPORT.md">Claude-358</a>'s three <code>p</code> models state a value told earlier on 314, 320 and 325 of 578 recall questions. The pure-vector baseline, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-376/REPORT.md">claude-376</a>, served them over 2,218 rows: 377, 380 and 441 exact replies as exported, 171, 173 and 211 with the exact turn memory dropped. Almost every fact the model gets right comes from the turn memory's table. A later run carried state across training windows. In the vector-read comparison, Flock-g learned to select the requested fact, but its best held-out answer accuracy was 0.023 against the 0.90 bar. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-380/REPORT.md">Cross-window result</a> · <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-386/REPORT.md">Read comparison</a></p>
 <h2 id="the-artifact-format-and-serving-boundary"><a class="header" href="#the-artifact-format-and-serving-boundary">The artifact format and serving boundary</a></h2>
 <p><code>UORLUT01</code> begins with an 8-byte magic string and a JSON header, then aligned integer data sections.
 The reader checks offsets and lengths and computes the file's SHA-256 as it loads, so a release can
@@ -269,13 +267,13 @@ quality, CLI, session and audit path; M7's distribution check is separate.</p>
 </thead>
 <tbody>
 <tr><td>M1</td><td><strong>It predicts text.</strong> Six bars through the saved integer model, including fresh and held-out-phrasing transfer</td><td><strong>Complete</strong></td></tr>
-<tr><td>M2</td><td><strong>It answers from memory.</strong> ≥256/512 complete correct DEV replies and ≥40% fresh</td><td>In progress</td></tr>
+<tr><td>M2</td><td><strong>It answers from memory.</strong> On the same model, ≥256/512 complete, correct saved replies and ≥52/128 fresh opposite-role pairs with both replies complete and distinct</td><td>In progress</td></tr>
 <tr><td>M3</td><td><strong>It remembers across sessions.</strong> Provenance, correction, abstention, reset and restart</td><td>In progress</td></tr>
-<tr><td>M4</td><td><strong>It is served.</strong> Accepted model and export gap; held-out quality <strong>≤0.90 BPB</strong>; M1–M3 bars through <code>uor-chat</code>; bit-identical continuation after restore; full CLI/session/audit path</td><td>Not complete; accepted model path not started</td></tr>
-<tr><td>M5</td><td><strong>It is cheap on a laptop.</strong> Latency, memory, energy and selected access measured</td><td>Not started</td></tr>
-<tr><td>M6</td><td><strong>It reasons and codes.</strong> Frozen tasks with executable oracles and causal ablation</td><td>Not started</td></tr>
+<tr><td>M4</td><td><strong>It is served.</strong> Accepted model with lossless native serialization and raw-word parity; held-out quality <strong>≤0.90 BPB</strong>; M1–M3 bars through <code>uor-chat</code>; bit-identical continuation after restore; full CLI/session/audit path</td><td>Qualification requires the selected M3 model and its measured <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/roadmap/items/m4-export-uorlut01-cli.md">M4 artifact</a></td></tr>
+<tr><td>M5</td><td><strong>It is cheap on a laptop.</strong> Latency, memory, energy and selected access measured</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/roadmap/items/m5-laptop-full-path-measurement.md">Protocol registered</a>, accepted-model measurements open</td></tr>
+<tr><td>M6</td><td><strong>It reasons and codes.</strong> Frozen tasks with executable oracles and causal ablation</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/roadmap/items/m6-qualify-reasoning-coding.md">Reference verifier</a> checked 80 programs on 320 vectors, model qualification open</td></tr>
 <tr><td>M7</td><td><strong>It runs everywhere the same.</strong> Library, CLI and browser parity plus a local-by-default Studio with optional user-configured web API</td><td>Runtime/harness on synthetic stand-in; accepted model open</td></tr>
-<tr><td>M8</td><td><strong>It is released.</strong> One versioned, checksum-pinned artifact meeting M1–M7</td><td>Not started</td></tr>
+<tr><td>M8</td><td><strong>It is released.</strong> One versioned, checksum-pinned artifact meeting M1–M7</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/roadmap/items/m8-release-packaging.md">Packaging and independent reproduction</a> depend on the accepted artifact</td></tr>
 </tbody>
 </table>
 </div>

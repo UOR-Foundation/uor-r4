@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b1879735.js";
+            window.path_to_searchindex_js = "../searchindex-31a119fa.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-78e3d836.js"></script>
@@ -191,9 +191,7 @@ evidence, not the current best.</p>
 <p><strong>D85 changes the default route.</strong> The model to train next carries one persistent native
 integer/fixed-point geometric state through weights, activations, SpiralCore carry, routes,
 memory, gradients and optimizer updates. Training and serving must call the same typed
-operators and replay the same route, carry, read and token decisions bit for bit. The FBS path
-below is retained as historical/reference work; an F32 master plus export gap is not the
-default model boundary.</p>
+operators and replay the same route, carry, read and token decisions bit for bit. A finite Q31 training fixture matched CPU and CUDA after each of 64 updates. The fixture exercised a shared vector state. The remaining training contract calls for replay over every required field and a recorded planted fault. For the language experiment, the written-state decision sets a count reference on D87 ahead of the geometric comparison. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/native-space-state-contract/codex-5/REPORT.md">Q31 fixture</a> · <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/roadmap/items/native-space-state-contract.md">Contract requirements</a> · <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-409/DECISION.md">Written-state decision</a></p>
 <p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="../figures/model/discrete-learning-loop.svg" alt="The discrete learning loop: score every legal move, choose the lowest integer loss, commit only a strict gain, then verify the stored result. A side panel shows BVG-K scoring several coordinates per launch."><span class="img-wrapper"><img src="../figures/model/discrete-learning-loop.svg" alt="The discrete learning loop: score every legal move, choose the lowest integer loss, commit only a strict gain, then verify the stored result. A side panel shows BVG-K scoring several coordinates per launch."></span></label></p>
 <p><em>Discrete learning: exact counterfactual moves, strict acceptance and verification on the GPU.</em></p>
 <p>Labels follow <a href="../formal_vocabulary.html"><code>docs/formal_vocabulary.md</code></a>: <strong>proof</strong>, <strong>measurement</strong>,
