@@ -95,6 +95,23 @@ the **readout**: an address/value that survives the mix, in the same integer sta
    the item, and a checkpoint chosen at the end of an overfit run. Prove the item on a source that
    has the capability (the corpus itself, or an oracle) first.
 
+## 6b. The sheet and the writer (measured, codex-43)
+
+- The trainer's model shape is now parameterised: `--width`, `--layers`, `--vocab-size`, `--context`,
+  with the sheet's values as the defaults and `config.json` unchanged at them.
+- **The native vector writer's vocabulary is 256..8192** (`CELLS 256 × MAX_PER_CELL 32`). A 32k
+  tokenizer cannot be served by it; **8,192 is the ceiling** until the identity partition changes.
+  An 8,192-piece tokenizer exists (`blake3:226a2016…`).
+- **The writer's candidate-vector intermediate is capped at 1 GiB f32** (256 M elements). At 8 kept
+  cells and 32 slots that is 2,048 rows at width 512, so `candidates` is now **row-chunked**; the
+  sheet's own shape (4,096 × 256) still fits a whole panel in one call.
+- A **30 M model** (512 width, 12 layers, 8,192 vocab, 512 context) builds and steps on the real
+  corpus: 8 steps in 7 s at batch 8 → about **4,500 tokens/s**, so one 332 M-token epoch is **~20 h**
+  on this 4090.
+- **DEV is still the narrow pinned `ft/dev`** (its own shas, token count, eligible targets and
+  `SHEET_VOCAB`). Its readings for a donor run are meaningless until a donor DEV slice with its own
+  pins exists — that is the next unit before any long run.
+
 ## 7. Assets and pins that exist now
 
 | Asset | Where | Value |

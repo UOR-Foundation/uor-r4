@@ -298,7 +298,57 @@ impl NativeVectorWriter {
             .broadcast_add(&b.unsqueeze(1)?)?
             .reshape((rows, CELLS))?)
     }
+    /// The most rows one candidate-vector call can materialise at this vocabulary and width: the
+    /// 1 GiB intermediate bound divided by one row's `kept_cells × slots × width`, never above
+    /// `MAX_QUERY_ROWS`. At the sheet's shape this is the whole panel; at width 512 and 32 slots it
+    /// is 2,048 rows.
+    pub fn max_query_rows(&self) -> Result<usize> {
+        let per_row = self
+            .spec
+            .kept_cells
+            .checked_mul(self.slots)
+            .and_then(|n| n.checked_mul(self.spec.width))
+            .ok_or_else(|| invalid("native candidate-vector inventory overflow"))?;
+        Ok((MAX_CANDIDATE_VECTOR_ELEMENTS / per_row.max(1)).clamp(1, MAX_QUERY_ROWS))
+    }
+
+    /// The candidate inventory for `query`, in row chunks no larger than [`Self::max_query_rows`].
+    /// The rows come back in order, so a panel of 14,287 rows scores at a width whose one-shot
+    /// intermediate would exceed the cap.
     pub fn candidates(&self, query: &Tensor) -> Result<VectorCandidates> {
+        if query.dims().len() != 2 || query.dim(0)? == 0 || query.dim(0)? > MAX_QUERY_ROWS {
+            return Err(invalid(
+                "native writer query needs 1..8192 rows of complete vector blocks",
+            ));
+        }
+        let rows = query.dim(0)?;
+        let chunk = self.max_query_rows()?;
+        if rows <= chunk {
+            return self.candidates_unchunked(query);
+        }
+        let mut parts = Vec::new();
+        let mut start = 0;
+        while start < rows {
+            let len = (rows - start).min(chunk);
+            parts.push(self.candidates_unchunked(&query.narrow(0, start, len)?)?);
+            start += len;
+        }
+        let cat = |f: fn(&VectorCandidates) -> Tensor| -> Result<Tensor> {
+            let tensors: Vec<Tensor> = parts.iter().map(f).collect();
+            Ok(Tensor::cat(&tensors, 0)?)
+        };
+        Ok(VectorCandidates {
+            token_ids: cat(|p| p.token_ids.clone())?,
+            valid: cat(|p| p.valid.clone())?,
+            raw_scores: cat(|p| p.raw_scores.clone())?,
+            cell_ids: cat(|p| p.cell_ids.clone())?,
+            address_scores: cat(|p| p.address_scores.clone())?,
+            query: query.clone(),
+            table_id: self.table.id(),
+        })
+    }
+
+    fn candidates_unchunked(&self, query: &Tensor) -> Result<VectorCandidates> {
         if query.dims().len() != 2
             || query.dim(0)? == 0
             || query.dim(0)? > MAX_QUERY_ROWS
