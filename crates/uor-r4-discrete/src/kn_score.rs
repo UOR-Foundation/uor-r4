@@ -309,7 +309,7 @@ mod tests {
 
     #[test]
     fn kn_score_tables_refuse_bad_shapes() {
-        let tokens = kn_score_stream(0x419_0, 3_000);
+        let tokens = kn_score_stream(0x4190, 3_000);
         let mut orders: Vec<_> = (0..=2u32)
             .map(|k| oracle_adjusted(&tokens, k, 2).expect("adjusted"))
             .collect();
@@ -450,7 +450,7 @@ mod tests {
     #[test]
     fn kn_score_masses_sum_to_one_up_to_the_floors() {
         for highest in 1..=3u32 {
-            let tokens = kn_score_stream(0x419_1 + u64::from(highest), 6_000);
+            let tokens = kn_score_stream(0x4191 + u64::from(highest), 6_000);
             let tables = tables_from_oracle(&tokens, highest);
             let n = highest as usize;
             let mut histories: Vec<Vec<u16>> = (0..tokens.len())
@@ -493,7 +493,7 @@ mod tests {
     /// by one and through `scored_masses`.
     #[test]
     fn kn_score_matches_the_oracle_on_seeded_streams() {
-        for seed in [0x419_a_u64, 0x419_b, 0x419_c] {
+        for seed in [0x419a_u64, 0x419b, 0x419c] {
             let tokens = kn_score_stream(seed, 6_000);
             for highest in 1..=4u32 {
                 let orders: Vec<_> = (0..=highest)
