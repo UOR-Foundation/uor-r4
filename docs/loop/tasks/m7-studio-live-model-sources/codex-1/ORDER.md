@@ -21,3 +21,7 @@ The parent Codex session reviewed #3440, M1 #2029, the M7 client path, the CPU-t
 ## Fifth review amendment
 
 The top Codex session approved fixing the two findings at `20077ede6`. In the existing model-source loader, public M1 verifier and model-source tests, bind release verification to the card selected at load time, including a catalog refresh that drops its tokenizer pin. In the dedicated predictor and its component tests, bind ranked tokens to the submitted text even if the operator edits the field before the worker replies. Verify the staged candidate with Chrome and the pinned native receipt.
+
+## Sixth review amendment
+
+The parent approved the two findings at `449d87fbe`. Carry the page's generation guard into typed source changes before they mutate the selection. Exercise the bundled, published, file, URL and API paths and hold a prediction across the visible switch attempt. Check the public verifier's entire request log through the offline result, including the interval spent reading the tokenizer bytes. Use existing Studio adapter, UI, browser-verification and regression surfaces.

@@ -1988,12 +1988,17 @@
 
         function guardModelSourceOperations(sources, doc) {
             var latestOperationId = 0;
+            sources.modelChangeBlockReason = function () {
+                if (app.activePredictionRequestId) return 'Wait for the current prediction to finish before changing models.';
+                return app.generating ? 'Stop the current reply before changing models.' : null;
+            };
             ['loadBundled', 'loadPublished', 'loadFromUrl', 'loadLocalFile'].forEach(function (name) {
                 var original = sources[name];
                 if (typeof original !== 'function') return;
                 sources[name] = function (input, operation) {
-                    if (app.generating) {
-                        toast('Stop the current reply before changing models.', 'warn');
+                    var blocked = sources.modelChangeBlockReason();
+                    if (blocked) {
+                        toast(blocked, 'warn');
                         return Promise.resolve({ blocked: true, stale: true });
                     }
                     var current = operation;
@@ -2049,10 +2054,11 @@
                     }
                     var blocked = event.target.closest('[data-action="api-use"]')
                         || event.target.closest('[data-action="api-remove"]');
-                    if (blocked && app.generating) {
+                    var reason = blocked && sources.modelChangeBlockReason();
+                    if (reason) {
                         event.preventDefault();
                         event.stopImmediatePropagation();
-                        toast('Stop the current reply before changing models.', 'warn');
+                        toast(reason, 'warn');
                     }
                 }, true);
             }

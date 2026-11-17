@@ -5,7 +5,19 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeStudioCatalog } from '../../../../scripts/studio/catalog.mjs';
-import { publicM1Card, PUBLIC_M1_ID, validateM1CardPins, validateM1Receipt } from '../../../../scripts/studio/public-m1.mjs';
+import { publicM1Card, PUBLIC_M1_ID, validateM1CardPins, validateM1DownloadRequests, validateM1Receipt } from '../../../../scripts/studio/public-m1.mjs';
+
+test('M1 download validation checks late requests and the offline boundary independently', () => {
+    const origin = 'https://huggingface.co';
+    const roots = [origin + '/model', origin + '/tokenizer'];
+    const requests = roots.map(root => ({ method: 'GET', origin, root, startTime: 12 }));
+    validateM1DownloadRequests(requests, roots, 10, 2);
+
+    const late = { ...requests[1], origin: 'https://unlisted.example' };
+    assert.throws(() => validateM1DownloadRequests([...requests, late], roots, 10, 3), /Unexpected download origin/);
+    assert.throws(() => validateM1DownloadRequests([...requests, requests[1]], roots, 10, 2), /offline prediction/);
+    assert.throws(() => validateM1DownloadRequests([...requests, { ...requests[1], startTime: 9 }], roots, 10, 3), /before the trusted load click/);
+});
 
 function fixtureRoot() {
     const root = mkdtempSync(join(tmpdir(), 'uor-studio-catalog-'));

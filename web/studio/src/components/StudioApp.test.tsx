@@ -10,6 +10,7 @@ import type { Attachment } from '../adapters/workflow.js';
 import { createDesktopActions } from '../adapters/desktopActions.js';
 import { StudioApp } from './StudioApp.js';
 import { DiscretePredictor } from './DiscretePredictor.js';
+import { createModelSourceAdapter } from '../adapters/modelSourceAdapter.js';
 import { GENERATION_FINISHED_EVENT } from '../adapters/generation.js';
 import { makeFiles, makeModelAdapter, makeSessions, makeSources, makeUi } from './studioTestFixtures.js';
 
@@ -1217,6 +1218,37 @@ describe('StudioApp runtime task creation', () => {
 });
 
 describe('next-token prediction prefix', () => {
+    it('keeps the resident M1 selected and displays the pending result after a refused model load', async () => {
+        const sha256 = 'a'.repeat(64);
+        const sessions = makeSessions();
+        let pending = false;
+        vi.mocked(sessions.predict).mockImplementation(() => { pending = true; return 23; });
+        sessions.predictionResult = () => ({ artifactSha256: sha256, tokens: [{ id: 223, text: ' ' }] });
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'artifact/selected', sourceId: 'm1' });
+        store.dispatch({ type: 'artifact/ready', operation: store.getState().operation!, artifact: {
+            schema: 'uor-r4.lut-discrete-trunk/1', sha256, canGenerate: false, canPredict: true, engineSupported: true,
+        } });
+        const sources = makeSources();
+        sources.modelChangeBlockReason = () => pending ? 'Wait for the current prediction to finish before changing models.' : null;
+        const adapter = createModelSourceAdapter(store, sources, { postMessage: vi.fn() });
+        await act(async () => { render(<StudioApp store={store} adapter={adapter} sources={sources} files={makeFiles()} sessions={sessions} ui={makeUi()} download={vi.fn()} />, host); });
+        act(() => { destination('Models').click(); });
+        const input = host.querySelector<HTMLTextAreaElement>('[aria-label="Next-token predictor"] textarea')!;
+        act(() => { input.value = 'prefix A'; input.dispatchEvent(new Event('input', { bubbles: true })); });
+        act(() => { button('Predict next tokens').click(); });
+        const previousOperation = store.getState().operation;
+        await act(async () => { button('Load bundled demo').click(); });
+        expect(store.getState().selectedSource?.id).toBe('m1');
+        expect(store.getState().operation).toBe(previousOperation);
+        expect(sources.loadBundled).not.toHaveBeenCalled();
+        pending = false;
+        act(() => { document.dispatchEvent(new CustomEvent(GENERATION_FINISHED_EVENT, { detail: { generationId: 23, outcome: 'complete' } })); });
+        expect(store.canRun()).toBe(true);
+        const result = host.querySelector('[aria-label="Next-token predictions"]')!;
+        expect(result.textContent).toContain('prefix A');
+        expect(result.textContent).toContain('ID 223');
+    });
     it('labels the result with the submitted text through edits during and after prediction', () => {
         const sha256 = 'a'.repeat(64);
         const sessions = makeSessions();

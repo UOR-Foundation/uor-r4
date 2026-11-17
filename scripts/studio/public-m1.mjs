@@ -102,3 +102,14 @@ export function publicM1Card(selector, dest) {
     note: 'Downloads 86.5 MB of public model weights and a matching tokenizer on request. Ranks eight next tokens locally.',
   };
 }
+
+export function validateM1DownloadRequests(requests, permittedRoots, clickedAt, countBeforeOffline) {
+  for (const request of requests) {
+    assert.ok(Number.isFinite(request.startTime) && request.startTime >= clickedAt, 'external request began before the trusted load click');
+    assert.equal(request.method, 'GET');
+    assert.ok(permittedRoots.includes(request.root), 'Unexpected download root: ' + request.root);
+    assert.ok(request.origin === 'https://huggingface.co' || /^https:\/\/(?:[a-z0-9-]+\.)+cdn\.hf\.co$/.test(request.origin), 'Unexpected download origin: ' + request.origin);
+  }
+  assert.deepEqual([...new Set(requests.map(request => request.root))].sort(), [...permittedRoots].sort());
+  assert.equal(requests.length, countBeforeOffline, 'external request observed during offline prediction');
+}

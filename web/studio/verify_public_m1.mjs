@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { chromium } from 'playwright';
-import { PUBLIC_M1_ID, validateM1CardPins } from '../../scripts/studio/public-m1.mjs';
+import { PUBLIC_M1_ID, validateM1CardPins, validateM1DownloadRequests } from '../../scripts/studio/public-m1.mjs';
 
 const url = new URL(process.argv[2]);
 const sha = '04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d';
@@ -38,7 +38,6 @@ try {
     });
     const page = await context.newPage();
     const external = [];
-    const externalRequests = [];
     const downloadsByRoot = new Map();
     const errors = [];
     const releaseBase = 'https://huggingface.co/caseyallard/uor-r4-m1-model/resolve/1fec0d4c42d4d5929a0cf08b1a0f17291d1dbc55/';
@@ -48,8 +47,7 @@ try {
         if (!/^https?:$/.test(target.protocol) || target.origin === url.origin) return;
         let root = request;
         while (root.redirectedFrom()) root = root.redirectedFrom();
-        externalRequests.push(request);
-        external.push({ method: request.method(), origin: target.origin, root: root.url() });
+        external.push({ method: request.method(), origin: target.origin, root: root.url(), request });
     });
     context.on('response', response => {
         if (response.status() !== 200) return;
@@ -111,19 +109,12 @@ try {
     assert.match(model.modelTokenizer, /stack-bound byte-bpe/);
     const clickedAt = await page.evaluate(() => window.__m1LoadClickTime);
     assert.ok(Number.isFinite(clickedAt), 'model-load click timestamp missing');
-    const externalBeforeLoad = externalRequests.filter(request => request.timing().startTime < clickedAt).length;
-    assert.equal(externalBeforeLoad, 0, 'external request started before the trusted model-load click');
-    assert.deepEqual([...new Set(external.map(request => request.root))].sort(), [...permittedRoots].sort());
-    for (const request of external) {
-        assert.equal(request.method, 'GET');
-        assert.ok(request.origin === 'https://huggingface.co' || /^https:\/\/(?:[a-z0-9-]+\.)+cdn\.hf\.co$/.test(request.origin), 'Unexpected download origin: ' + request.origin);
-    }
     const tokenizerResponse = downloadsByRoot.get(permittedRoots[1]);
     assert.ok(tokenizerResponse, 'missing browser tokenizer download');
     const tokenizerBytes = await tokenizerResponse.body();
     assert.equal(tokenizerBytes.length, measured.tokenizer.bytes);
     assert.equal(createHash('sha256').update(tokenizerBytes).digest('hex'), measured.tokenizer.sha256);
-    const downloads = external.length;
+    const countBeforeOffline = external.length;
     await context.setOffline(true);
     await page.getByRole('textbox', { name: 'Prediction prefix', exact: true }).fill(prompt);
     await predict.click();
@@ -139,9 +130,10 @@ try {
     assert.deepEqual(calls[0].reply, { sha256: sha, top8: workload.native_serving.top8, token: workload.native_serving.token, cells: workload.native_serving.admitted_cells });
     assert.deepEqual(tokens.map(text => Number(/^ID (\d+)/.exec(text)?.[1])), expected);
     assert.equal(await page.locator('html').getAttribute('data-predictor-prompt-length'), '7');
-    assert.equal(external.length, downloads);
+    const requests = external.map(({ request, ...entry }) => ({ ...entry, startTime: request.timing().startTime }));
+    validateM1DownloadRequests(requests, permittedRoots, clickedAt, countBeforeOffline);
     assert.deepEqual(errors, []);
-    console.log(JSON.stringify({ prompt, worker_prefix: calls[0].prefix, artifact_sha256: sha, tokenizer_sha256: measured.tokenizer.sha256, tokenizer: model.modelTokenizer, tokens, external_before_load: externalBeforeLoad, download_requests: external, offline_prediction: true }));
+    console.log(JSON.stringify({ prompt, worker_prefix: calls[0].prefix, artifact_sha256: sha, tokenizer_sha256: measured.tokenizer.sha256, tokenizer: model.modelTokenizer, tokens, external_before_load: 0, download_requests: requests, offline_prediction: true }));
 } finally {
     await browser.close();
 }
