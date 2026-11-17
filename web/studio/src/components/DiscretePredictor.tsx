@@ -7,19 +7,23 @@ type Candidate = { id: number; text: string };
 export function DiscretePredictor({ sessions, sha256 }: { sessions: SessionApi; sha256: string }) {
     const [prompt, setPrompt] = useState('');
     const [busy, setBusy] = useState(false);
-    const [tokens, setTokens] = useState<Candidate[]>([]);
+    const [result, setResult] = useState<{ prefix: string; tokens: Candidate[] } | null>(null);
     const [failure, setFailure] = useState('');
-    const pending = useRef<number | null>(null);
+    const pending = useRef<{ id: number; prefix: string } | null>(null);
 
     useEffect(() => {
         const finish = (event: Event) => {
             const { generationId, outcome, error } = (event as CustomEvent).detail || {};
-            if (pending.current === null || generationId !== pending.current) return;
+            const submitted = pending.current;
+            if (!submitted || generationId !== submitted.id) return;
             pending.current = null;
             setBusy(false);
-            const result = sessions.predictionResult?.(generationId);
-            if (outcome === 'complete' && result?.artifactSha256 === sha256) setTokens(result.tokens);
-            else setFailure(error || 'No prediction was returned for this model.');
+            const prediction = sessions.predictionResult?.(generationId);
+            if (outcome === 'complete' && prediction?.artifactSha256 === sha256) {
+                setResult({ prefix: submitted.prefix, tokens: prediction.tokens });
+            } else {
+                setFailure(error || 'No prediction was returned for this model.');
+            }
         };
         document.addEventListener(GENERATION_FINISHED_EVENT, finish);
         return () => document.removeEventListener(GENERATION_FINISHED_EVENT, finish);
@@ -28,14 +32,14 @@ export function DiscretePredictor({ sessions, sha256 }: { sessions: SessionApi; 
     function predict(event: Event) {
         event.preventDefault();
         if (pending.current !== null || !prompt.trim()) return;
-        setTokens([]);
+        setResult(null);
         setFailure('');
         const id = sessions.predict(prompt);
         if (id === false) {
             setFailure('Prediction could not start. Check that the model has a matching tokenizer and no generation is active.');
             return;
         }
-        pending.current = id;
+        pending.current = { id, prefix: prompt };
         setBusy(true);
     }
 
@@ -46,8 +50,10 @@ export function DiscretePredictor({ sessions, sha256 }: { sessions: SessionApi; 
             <button type="submit" disabled={busy || !prompt.trim()}>Predict next tokens</button>
         </form>
         {failure && <p role="alert">{failure}</p>}
-        {tokens.length > 0 && <section aria-label="Next-token predictions" aria-live="polite">
-            <h3>Top next tokens</h3><ol>{tokens.map(({ id, text }) => <li key={id}>ID {id} · <code>{JSON.stringify(text)}</code></li>)}</ol>
+        {result && result.tokens.length > 0 && <section aria-label="Next-token predictions" aria-live="polite">
+            <h3>Top next tokens</h3>
+            <p>Submitted prefix: <code>{JSON.stringify(result.prefix)}</code></p>
+            <ol>{result.tokens.map(({ id, text }) => <li key={id}>ID {id} · <code>{JSON.stringify(text)}</code></li>)}</ol>
         </section>}
     </section>;
 }

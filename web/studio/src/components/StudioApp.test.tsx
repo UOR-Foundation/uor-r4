@@ -9,6 +9,8 @@ import { createAgentStore, type AgentIncomingEvent } from '../state/agent.js';
 import type { Attachment } from '../adapters/workflow.js';
 import { createDesktopActions } from '../adapters/desktopActions.js';
 import { StudioApp } from './StudioApp.js';
+import { DiscretePredictor } from './DiscretePredictor.js';
+import { GENERATION_FINISHED_EVENT } from '../adapters/generation.js';
 import { makeFiles, makeModelAdapter, makeSessions, makeSources, makeUi } from './studioTestFixtures.js';
 
 vi.mock('@xterm/xterm', () => ({
@@ -1211,6 +1213,37 @@ describe('StudioApp runtime task creation', () => {
             expect(host.querySelector<HTMLButtonElement>('.send-button')?.disabled).toBe(true),
         );
         expect(host.textContent).not.toContain('Select a task before sending');
+    });
+});
+
+describe('next-token prediction prefix', () => {
+    it('labels the result with the submitted text through edits during and after prediction', () => {
+        const sha256 = 'a'.repeat(64);
+        const sessions = makeSessions();
+        vi.mocked(sessions.predict).mockReturnValue(17);
+        sessions.predictionResult = vi.fn(() => ({ artifactSha256: sha256, tokens: [{ id: 223, text: ' ' }] }));
+        act(() => { render(<DiscretePredictor sessions={sessions} sha256={sha256} />, host); });
+        const input = host.querySelector('textarea')!;
+        const edit = (value: string) => act(() => {
+            input.value = value;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        edit('The capital of France is');
+        act(() => { button('Predict next tokens').click(); });
+        expect(sessions.predict).toHaveBeenCalledWith('The capital of France is');
+        edit('Another prefix');
+        act(() => {
+            document.dispatchEvent(new CustomEvent(GENERATION_FINISHED_EVENT, { detail: { generationId: 17, outcome: 'complete' } }));
+        });
+        const results = host.querySelector('[aria-label="Next-token predictions"]')!;
+        expect(results.querySelector('p code')?.textContent).toBe('"The capital of France is"');
+        expect(results.textContent).toContain('ID 223');
+        edit('Third prefix');
+        expect(results.textContent).toContain('"The capital of France is"');
+        expect(results.textContent).not.toContain(input.value);
+        act(() => { button('Predict next tokens').click(); });
+        expect(host.querySelector('[aria-label="Next-token predictions"]')).toBeNull();
+        expect(sessions.predict).toHaveBeenLastCalledWith('Third prefix');
     });
 });
 

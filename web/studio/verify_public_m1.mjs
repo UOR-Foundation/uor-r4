@@ -15,6 +15,10 @@ try {
     await context.addInitScript(() => {
         // Observe the ordinary page-to-worker call without replacing its payload or result.
         const post = Worker.prototype.postMessage;
+        window.__m1LoadedEntries = [];
+        document.addEventListener('uor-model-source-changed', ({ detail }) => {
+            if (detail.kind === 'wasm' && detail.publishedEntry) window.__m1LoadedEntries.push(detail.publishedEntry);
+        });
         const observations = [];
         window.__m1WorkerPredictions = observations;
         Worker.prototype.postMessage = function (message, ...args) {
@@ -86,6 +90,19 @@ try {
     await load.click();
     const predict = page.getByRole('button', { name: 'Predict next tokens', exact: true });
     await predict.waitFor({ timeout: 180000 });
+    // A Models-panel refresh can replace the boot catalog. Inspect the entry the loader
+    // actually used for these bytes, including the receipt associated with that entry.
+    const loadedEntries = await page.evaluate(() => window.__m1LoadedEntries);
+    assert.equal(loadedEntries.length, 1, 'expected one completed published model load');
+    const [loaded] = loadedEntries;
+    assert.equal(loaded.id, 'published-' + PUBLIC_M1_ID);
+    assert.equal(loaded.url, permittedRoots[0]);
+    assert.equal(loaded.tokenizerUrl, permittedRoots[1]);
+    assert.equal(loaded.auditSchema, measured.schema);
+    assert.ok(loaded.auditUrl, 'missing receipt URL on the loaded M1 card');
+    assert.equal(new URL(loaded.auditUrl, url).href, receiptUrl.href);
+    assert.equal(loaded.auditSha256, receiptSha);
+    validateM1CardPins({ sha256: loaded.sha256, tokenizer_sha256: loaded.tokenizerSha256, schema: loaded.schema, size_bytes: loaded.sizeBytes }, measured);
     const model = await page.locator('html').evaluate(node => ({ ...node.dataset }));
     assert.equal(model.modelSha256, sha);
     assert.equal(model.modelSize, '86536132');
@@ -112,6 +129,7 @@ try {
     await predict.click();
     const result = page.getByRole('region', { name: 'Next-token predictions' });
     await result.waitFor();
+    assert.equal(await result.locator('p code').textContent(), JSON.stringify(prompt));
     const tokens = await result.getByRole('listitem').allTextContents();
     const calls = await page.evaluate(() => window.__m1WorkerPredictions);
     assert.equal(calls.length, 1);

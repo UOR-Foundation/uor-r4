@@ -43,3 +43,15 @@ node web/studio/verify_public_m1.mjs http://127.0.0.1:<port>/
 ```
 
 The parent session owns production publication from freshly merged main. Its separate live check uses `node web/studio/verify_public_m1.mjs https://uor-foundation.github.io/uor-r4/studio/` after Pages serves the candidate.
+
+## Fifth adversarial review and candidate check
+
+The boot catalog could pass even when a later fetch dropped the tokenizer digest from the card the operator selected. Ranked tokens could also appear beside an edited prefix. The loader now snapshots the current card, refuses an incomplete reserved M1 entry before downloading, and includes the selected entry in the successful load event. The browser verifier checks both the initial catalog and the selected entry against the release receipt. Each rendered result shows its submitted prefix, including after an edit during the worker request.
+
+On macOS arm64 with Chrome 157.0.8103.79, a two-response catalog fixture served a complete boot card and omitted the tokenizer digest on the Models-panel refresh. The UI reported the missing release pins, made zero off-origin requests and offered no prediction. The complete staged candidate matched the seven prefix IDs and eight native candidates recorded above, with zero off-origin requests before loading and a successful offline prediction for the displayed prefix.
+
+Host checks completed with Node 26.4.0:
+
+- `node --test web/studio/assets/js/model_sources.test.mjs web/studio/assets/js/stage_dist_catalog.test.mjs` passed 46 tests, including the second-catalog regression.
+- `npm --prefix web/studio test` passed 1,012 tests across 73 files, including prompt edits during and after a prediction. TypeScript and the typed production build passed.
+- `scripts/stage-studio-site.sh --typed web/studio <empty-directory> '' 'Public model' --trained-manifest scripts/studio/public-m1.json` staged 18 allowlisted files and verified three catalog-bound artifacts. `node web/studio/verify_public_m1.mjs <local-stage-url>` passed the candidate smoke. Public deployment and its fresh readback belong to the separate release step.
