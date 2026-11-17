@@ -71,6 +71,10 @@ path = "src/bin/teacher-paraphrase.rs"
 required-features = ["historical-reference"]
 
 [[bin]]
+name = "instr-panel-freeze"
+path = "src/bin/instr-panel-freeze.rs"
+
+[[bin]]
 name = "prepare-chat-jsonl"
 path = "src/bin/prepare-chat-jsonl.rs"
 

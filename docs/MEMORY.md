@@ -151,3 +151,15 @@ tables, dev table, bounds and window logic is the "new sheet" unit.
   needed. How to train that gain in the native state, under D85's one-state rule, is the open unit.
 - Does the routed-gather transport scale? Unknown at every size above 1.1 M values.
 - Is the 1B corpus complete? D87 is open until it is sealed; 457 k answered rows exist today.
+
+## 10. Test-validity incidents (keep this list current)
+
+- **The DEV leak (17 Nov, caught before use).** The first full 8k training corpus was built from
+  **all 225 shards**, including the two the DEV slice came from. A run on it would have reported a
+  leak-inflated curve. Caught by checking the corpus manifest's `input_files` before trusting the
+  run; stopped, and rebuilt as `tokens-8k-clean-2026-11-17` with shards 3–4 excluded. **Rule: a split
+  is only held out if the training corpus's manifest does not name its shards.**
+- **The echo panel (16 Nov).** `value_present` scored a reply that repeated the prompt; 254 of 256
+  replies were prompt spans and 0 were answers.
+- **The missing Memory turn (17 Nov).** The item omitted the corpus's `System: Memory:` turn, so the
+  model was asked a shape it never trained on.
