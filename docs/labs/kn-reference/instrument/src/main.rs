@@ -370,6 +370,10 @@ fn run(args: &[String]) -> Result<(), Failure> {
         );
     }
     let (all, novel) = tally(query, &masses, &id_bytes, classes)?;
+    // claude-422: a mass of one Q48 unit is the scorer's floor under an
+    // underflowed gamma chain; the record counts the targets that sit on it.
+    let masses_at_floor = masses.iter().filter(|&&m| m == 1).count();
+    eprintln!("masses at the one-unit floor: {masses_at_floor}");
     let mass_bytes: Vec<u8> = masses.iter().flat_map(|m| m.to_le_bytes()).collect();
     let summary = serde_json::json!({
         "unit": "claude-421",
@@ -388,6 +392,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
         },
         "orders": order_json,
         "masses_sha256": sha256_hex(&mass_bytes),
+        "masses_at_floor": masses_at_floor,
         "all": all.json(),
         "novel": novel.json(),
     });

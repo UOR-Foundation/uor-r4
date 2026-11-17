@@ -197,6 +197,17 @@ fn kn_score_cuda_matches_the_host_scorer_with_fallback_discounts() {
     }
 }
 
+/// claude-422: the GPU floors an underflowed chain at one Q48 unit, as the host does.
+#[test]
+fn kn_score_cuda_floors_an_underflowed_chain_as_the_host_does() {
+    let host = crate::kn_score::kn_underflow_tables();
+    let query = [5u16, 7, 5];
+    let want = host.scored_masses(&query).expect("host masses");
+    assert_eq!(want[1], 1, "the host floors the unseen id");
+    let scorer = KnScorer::new(0, &host).expect("scorer");
+    assert_eq!(scorer.score(&query).expect("gpu masses"), want);
+}
+
 #[test]
 fn kn_score_cuda_empty_and_bos_only_queries_score_nothing() {
     let train = kn_score_stream(0x421c, 6_000);
