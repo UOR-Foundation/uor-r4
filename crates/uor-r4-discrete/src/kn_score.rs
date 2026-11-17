@@ -170,6 +170,13 @@ impl KnTables {
         self.highest
     }
 
+    /// Order k's discounts, triples and contexts, in canonical order, for the
+    /// GPU scorer's upload (claude-421).
+    pub fn order_tables(&self, k: u32) -> Option<(KnDiscounts, &[NgramTriple], &[NgramContext])> {
+        let order = self.orders.get(k as usize)?;
+        Some((order.discounts, &order.triples, &order.contexts))
+    }
+
     /// The Q48 mass of the target `tokens[j]` after its history. Refuses a
     /// BOS target, which a stream never scores, and a zero mass.
     pub fn score_target(&self, tokens: &[u16], j: usize) -> Result<u64> {
