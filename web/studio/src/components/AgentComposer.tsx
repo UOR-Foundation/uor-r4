@@ -204,18 +204,15 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
         : selected.kind === 'artifact' && !residentMatches ? 'Selected model; not ready'
         : selected.kind === 'api' && !store.canRun() ? 'Invalid API endpoint'
         : unavailable ? 'Generation unavailable'
+        : predictionMode && agentClient ? 'Next-token prediction is available in Models'
         : predictionMode ? 'Local next-token prediction'
         : selected.kind === 'artifact' ? 'Local generation' : 'API chat';
 
     const activeTaskRun = isActiveRun(activeRun) ? activeRun : null;
     const taskCount = runtimeTaskCount ?? agentClient?.store.snapshot().tasks.length ?? 0;
-    const lastGeneration = state.session.lastGeneration;
-    const predictionResult = predictionMode && !activeGeneration && lastGeneration && state.session.phase === 'complete'
-        ? sessions.predictionResult?.(lastGeneration.generationId) : null;
-    const modelPrediction = predictionMode && !showTaskDetail && !activeTaskRun;
-    const runtimeOwned = agentClient !== null && !modelPrediction;
+    const runtimeOwned = agentClient !== null;
     const runtimeTaskPath = runtimeOwned && runtimeTasksReady && taskCount > 0;
-    const legacyAllowed = agentClient === null || modelPrediction;
+    const legacyAllowed = agentClient === null;
     const agentMode = runtimeOwned;
     const legacyReady = store.canRun();
     const autoCreateTask = runtimeOwned && taskCount === 0 && onCreateTask !== undefined;
@@ -493,9 +490,7 @@ export function AgentComposer({ store, sessions, files, ui, generation, copy, do
                     {state.session.error && <p role="alert" class="workbench-alert">{state.session.error}</p>}
                     {runtimeError !== null && <p role="alert" class="workbench-alert">{runtimeError}</p>}
                     {activeGeneration && <p class="generation-banner">Generating with {activeGeneration.source.id} ({activeGeneration.privacy})</p>}
-                    {predictionMode && predictionResult && predictionResult.artifactSha256 === state.residentArtifact?.sha256
-                        ? <section aria-label="Next-token predictions" aria-live="polite"><h2>Top next tokens</h2><ol>{predictionResult.tokens.map(({ id, text }) => <li key={id}>ID {id} · <code>{JSON.stringify(text)}</code></li>)}</ol></section>
-                        : <AgentTranscript messages={messages} canRun={store.canRun()} busy={generating} copy={copy} insert={(content) => files.insertText(content, nextInsertName())} download={(content) => download('studio-message.md', content)} retry={(content) => generation.send(content)} />}
+                    <AgentTranscript messages={messages} canRun={store.canRun()} busy={generating} copy={copy} insert={(content) => files.insertText(content, nextInsertName())} download={(content) => download('studio-message.md', content)} retry={(content) => generation.send(content)} />
                 </>}
             <details class="context-drawer" aria-label="Context attachments"><summary><span><Icon name="attach" />Context</span><span class="attachment-count">{attachments.length}</span></summary><div class="context-content">
                 <div class="context-actions"><button type="button" disabled={!activeFile} onClick={() => { const file = files.activeFile(); if (file) void addBudgetedAttachment({ name: file.path, content: file.content, source: 'editor' }); }}>Attach current file</button><button type="button" disabled={!attachments.length} onClick={clearAllAttachments}>Clear attachments</button></div>

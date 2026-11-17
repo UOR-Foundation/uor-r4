@@ -214,6 +214,11 @@ export function writeStudioCatalog({ dest, publicUrl = '', publicLabel = 'Public
       note: 'Optional public UORLUT01 model supplied at publish time. The browser fetches it once; the host must serve CORS headers. Its sha256 is not pinned here.',
     });
   }
+  const ids = new Set();
+  for (const card of manifest.models) {
+    if (ids.has(card.id)) throw new Error('Duplicate Studio model id: ' + card.id);
+    ids.add(card.id);
+  }
   writeFileSync(join(dest, 'models.json'), JSON.stringify(manifest, null, 2) + '\n');
   console.log('models.json: ' + manifest.models.map((m) => m.id).join(', '));
   return manifest;

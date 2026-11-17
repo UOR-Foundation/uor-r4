@@ -13,6 +13,7 @@ try {
     const context = await browser.newContext();
     const page = await context.newPage();
     const external = [];
+    const externalRequests = [];
     const errors = [];
     const releaseBase = 'https://huggingface.co/caseyallard/uor-r4-m1-model/resolve/1fec0d4c42d4d5929a0cf08b1a0f17291d1dbc55/';
     const permittedRoots = [releaseBase + 't16-frozen-zero-seed1-trunk.d11', releaseBase + 'tokenizer-seed-1.json'];
@@ -21,6 +22,7 @@ try {
         if (!/^https?:$/.test(target.protocol) || target.origin === url.origin) return;
         let root = request;
         while (root.redirectedFrom()) root = root.redirectedFrom();
+        externalRequests.push(request);
         external.push({ method: request.method(), origin: target.origin, root: root.url() });
     });
     page.on('pageerror', error => errors.push(error.message));
@@ -39,6 +41,10 @@ try {
     const receiptSha = createHash('sha256').update(await receipt.body()).digest('hex');
     assert.equal(receiptSha, 'ff370aefd6ba8062e2316c5478a8d428b8e220f8c5da2d47f7b0eeed24bfe479');
     assert.equal(card.served_forward_audit_sha256, receiptSha);
+    await load.evaluate(button => button.addEventListener('click', event => {
+        if (event.isTrusted) window.__m1LoadClickTime = performance.timeOrigin + event.timeStamp;
+    }, { capture: true, once: true }));
+    assert.equal(external.length, 0, 'unexpected external request before the model-load click');
     await load.click();
     const predict = page.getByRole('button', { name: 'Predict next tokens', exact: true });
     await predict.waitFor({ timeout: 180000 });
@@ -48,6 +54,10 @@ try {
     assert.equal(model.modelSchema, 'uor-r4.lut-discrete-trunk/1');
     assert.equal(model.modelShaVerified, 'true');
     assert.match(model.modelTokenizer, /stack-bound byte-bpe/);
+    const clickedAt = await page.evaluate(() => window.__m1LoadClickTime);
+    assert.ok(Number.isFinite(clickedAt), 'model-load click timestamp missing');
+    const externalBeforeLoad = externalRequests.filter(request => request.timing().startTime < clickedAt).length;
+    assert.equal(externalBeforeLoad, 0, 'external request started before the trusted model-load click');
     assert.deepEqual([...new Set(external.map(request => request.root))].sort(), [...permittedRoots].sort());
     for (const request of external) {
         assert.equal(request.method, 'GET');
@@ -55,7 +65,7 @@ try {
     }
     const downloads = external.length;
     await context.setOffline(true);
-    await page.getByRole('textbox', { name: 'Prompt', exact: true }).fill(prompt);
+    await page.getByRole('textbox', { name: 'Prediction prefix', exact: true }).fill(prompt);
     await predict.click();
     const result = page.getByRole('region', { name: 'Next-token predictions' });
     await result.waitFor();
@@ -64,7 +74,7 @@ try {
     assert.equal(await page.locator('html').getAttribute('data-predictor-prompt-length'), '7');
     assert.equal(external.length, downloads);
     assert.deepEqual(errors, []);
-    console.log(JSON.stringify({ prompt, artifact_sha256: sha, tokenizer: model.modelTokenizer, tokens, external_before_load: 0, download_requests: external, offline_prediction: true }));
+    console.log(JSON.stringify({ prompt, artifact_sha256: sha, tokenizer: model.modelTokenizer, tokens, external_before_load: externalBeforeLoad, download_requests: external, offline_prediction: true }));
 } finally {
     await browser.close();
 }

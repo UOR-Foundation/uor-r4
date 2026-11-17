@@ -557,14 +557,14 @@ async function fetchTokenizerArtifact(entry, stackSha256, vocabSize) {
     if (!response.ok) {
         throw new Error('The tokenizer download from ' + url.host + ' failed with HTTP ' + response.status + '.');
     }
-    var text = await response.text();
-    var tokenizerHash = await sha256Hex(new TextEncoder().encode(text));
+    var bytes = new Uint8Array(await response.arrayBuffer());
+    var tokenizerHash = await sha256Hex(bytes);
     if (entry.tokenizerSha256 && tokenizerHash !== entry.tokenizerSha256) {
         throw new Error('Tokenizer sha256 ' + shortSha(tokenizerHash) + ' does not match the catalog pin ' + shortSha(entry.tokenizerSha256) + '; refusing to load.');
     }
     var artifact;
     try {
-        artifact = JSON.parse(text);
+        artifact = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
     } catch (_error) {
         throw new Error('The tokenizer_url did not return a JSON tokenizer artifact.');
     }

@@ -1213,3 +1213,37 @@ describe('StudioApp runtime task creation', () => {
         expect(host.textContent).not.toContain('Select a task before sending');
     });
 });
+
+describe('task actions with a resident next-token model', () => {
+    it.each(['New task', 'New run'])('%s still sends to the selected task', async action => {
+        const client = action === 'New run' ? runtimeClient() : new AgentClient({ transport: new FixtureTransport() });
+        if (action === 'New run') client.store.apply(runtimeEvent(2, 'run.finished', { status: 'finished', finished_at_ms: 1_794_283_200_002, duration_ms: 2 }));
+        const start = vi.spyOn(client, 'startRun');
+        const sessions = makeSessions();
+        const store = new LifecycleStore();
+        store.dispatch({ type: 'artifact/selected', sourceId: 'm1' });
+        store.dispatch({ type: 'artifact/ready', operation: store.getState().operation!, artifact: {
+            schema: 'uor-r4.lut-discrete-trunk/1', sha256: 'a'.repeat(64), canGenerate: false, canPredict: true, engineSupported: true,
+        } });
+        await act(async () => {
+            render(<StudioApp store={store} adapter={makeModelAdapter()} sources={makeSources()} files={makeFiles()} sessions={sessions} ui={makeUi()} download={vi.fn()} agentClient={client} />, host);
+        });
+        if (action === 'New run') {
+            await act(async () => { host.querySelector<HTMLButtonElement>(`[data-task-id="${RUNTIME_TASK}"] .task-select`)!.click(); });
+            await vi.waitFor(() => expect(button('New run')).toBeDefined());
+            await act(async () => { button('New run').click(); });
+        } else {
+            act(() => { destination('Models').click(); });
+            expect(host.querySelector('[aria-label="Next-token predictor"]')).not.toBeNull();
+            await vi.waitFor(() => expect(host.querySelector('[data-action="new-task"]')).not.toBeNull());
+            await act(async () => { host.querySelector<HTMLButtonElement>('[data-action="new-task"]')!.click(); });
+        }
+        await vi.waitFor(() => expect(client.store.snapshot().selectedTask).not.toBeNull());
+        const taskId = client.store.snapshot().selectedTask!.taskId;
+        const input = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Prompt"]')!;
+        act(() => { input.value = 'Run the selected task'; input.dispatchEvent(new Event('input', { bubbles: true })); });
+        await act(async () => { button('Send').click(); });
+        expect(start).toHaveBeenCalledWith({ taskId, prompt: 'Run the selected task' });
+        expect(sessions.predict).not.toHaveBeenCalled();
+    });
+});

@@ -164,6 +164,16 @@ class ReleaseReceiptTests(unittest.TestCase):
             self.assertEqual(remote["served_forward_audit_sha256"], audit_sha)
             self.assertNotIn("audit_url", remote)
 
+            # Both source entries are independently valid, but their published IDs collide.
+            ordinary = json.loads(manifest.read_text(encoding="utf-8"))[1]
+            ordinary["id"] = "m1-discrete-trunk-seed-1"
+            fixed = {"public_release": "m1-discrete-trunk-seed-1"}
+            for entries in ([ordinary, fixed], [fixed, ordinary]):
+                manifest.write_text(json.dumps(entries), encoding="utf-8")
+                rejected = subprocess.run(completed.args, capture_output=True, text=True)
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertIn("Duplicate Studio model id", rejected.stderr)
+
     def test_studio_refuses_missing_and_tampered_receipts_before_copy(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -1030,3 +1030,16 @@ test('a published model rejects a changed schema, artifact hash or tokenizer has
     await assert.rejects(api.loadPublished({ ...entry, tokenizerUrl: 'https://example.com/tokenizer', tokenizerSha256: '0'.repeat(64) }), /Tokenizer sha256/);
     assert.equal(events.some((event) => event.type === 'uor-model-source-changed'), false);
 });
+
+test('a BOM prepended to an otherwise pinned tokenizer changes its byte identity', async () => {
+    const bytes = artifactBytes();
+    const text = new TextEncoder().encode('{}');
+    const digest = Buffer.from(await crypto.subtle.digest('SHA-256', text)).toString('hex');
+    const bomTokenizer = new Uint8Array([0xef, 0xbb, 0xbf, ...text]);
+    const { api, events } = await fresh(async (url) => response(String(url).endsWith('tokenizer') ? bomTokenizer : bytes));
+    await assert.rejects(api.loadPublished({
+        id: 'pinned', label: 'Pinned', url: 'https://example.com/model',
+        tokenizerUrl: 'https://example.com/tokenizer', tokenizerSha256: digest,
+    }), /Tokenizer sha256/);
+    assert.equal(events.some((event) => event.type === 'uor-model-source-changed'), false);
+});

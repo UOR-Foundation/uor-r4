@@ -1001,7 +1001,7 @@
                 var input = $('#chatInput');
                 if (input && window.matchMedia('(max-width: 780px)').matches) input.focus();
             }
-            document.dispatchEvent(new CustomEvent('uor-view-changed', { detail: { view: view } }));
+            document.dispatchEvent(new CustomEvent('uor-view-changed', { detail: { view: view, typedView: options && options.typedView } }));
         }
 
         /* ------------------------------------------------------------ next-token predictor (discrete M1 model) */
@@ -2147,7 +2147,11 @@
                     app.loadStartedAt = (window.performance && performance.now) ? performance.now() : Date.now();
                     app.worker.postMessage({ action: 'load_model', id: app.currentLoadId, payload: payload });
                 }
-                setView('chat');
+                if (detail.headerMeta && /^uor-r4\.lut-discrete(?:-trunk)?\/1$/.test(detail.headerMeta.schema)) {
+                    setView('chat', { typedView: 'model', focus: false });
+                } else {
+                    setView('chat');
+                }
                 return;
             }
             if (detail.kind === 'api' && detail.apiConfig) {
