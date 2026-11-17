@@ -294,6 +294,11 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
     }
     let (teacher_forced, paired_first) = rank_switches(&args)?;
     let no_turn_memory = parse_switch("no-turn-memory", args.get("no-turn-memory"))?;
+    let corpus_ack = args
+        .get("corpus-ack")
+        .map(String::as_str)
+        .unwrap_or(CORPUS_SHAPE_ACK)
+        .to_owned();
     if no_turn_memory && engine_switch(&args)? != Engine::Integer {
         return Err("--no-turn-memory applies to --engine integer".to_owned());
     }
@@ -404,7 +409,7 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
         let stratum = strata
             .get(&label.pair_id)
             .ok_or(format!("{}: no plan history", label.pair_id))?;
-        let (prompt_text, prompt) = render(&tokenizer, &encoder, case, rendering)?;
+        let (prompt_text, prompt) = render(&tokenizer, &encoder, case, rendering, &corpus_ack)?;
         let (reply_ids, stop) = match &fresh_forward {
             Some(fresh) => {
                 let mut forward = fresh.clone();
@@ -605,6 +610,7 @@ fn render(
     encoder: &DialogueEncoder<'_>,
     case: &InputCase,
     rendering: &str,
+    corpus_ack: &str,
 ) -> Result<(String, Vec<u32>)> {
     let mut contexts: Vec<&Segment> = case
         .segments
@@ -645,14 +651,14 @@ fn render(
                 },
                 Message {
                     role: "assistant",
-                    content: CORPUS_SHAPE_ACK,
+                    content: &corpus_ack,
                 },
                 Message {
                     role: "user",
                     content: &question,
                 },
             ];
-            let content = format!("{facts}\n{CORPUS_SHAPE_ACK}\n{question}");
+            let content = format!("{facts}\n{corpus_ack}\n{question}");
             let ids = encoder.encode_assistant_prefix(&messages).tokens;
             (content, ids)
         }
@@ -832,7 +838,7 @@ fn teacher_forced_row(
     stratum: &str,
     rendering: &str,
 ) -> Result<TeacherForcedRow> {
-    let (_, prompt) = render(tokenizer, encoder, case, rendering)?;
+    let (_, prompt) = render(tokenizer, encoder, case, rendering, CORPUS_SHAPE_ACK)?;
     let (answer, reference_ids) = reference_ids(encoder, &label.answers)?;
     let mut forward = fresh.clone();
     if prompt.is_empty() {
@@ -1019,7 +1025,7 @@ fn paired_first_row(
     teacher: &TeacherForcedRow,
     rendering: &str,
 ) -> Result<PairedFirstRow> {
-    let (_, prompt) = render(tokenizer, encoder, case, rendering)?;
+    let (_, prompt) = render(tokenizer, encoder, case, rendering, CORPUS_SHAPE_ACK)?;
     let (other_answer, other_ids) = reference_ids(encoder, &other.answers)?;
     let asked_token = *teacher
         .reference_ids
@@ -1392,7 +1398,7 @@ fn pair_metric(rows: &[(String, String, bool, String)]) -> Result<Vec<(String, u
 }
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<BTreeMap<String, String>> {
-    const FLAGS: [&str; 15] = [
+    const FLAGS: [&str; 16] = [
         "windows-out",
         "engine",
         "content-readout",
@@ -1408,6 +1414,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<BTreeMap<String, Str
         "teacher-forced",
         "paired-first",
         "no-turn-memory",
+        "corpus-ack",
     ];
     let mut values = BTreeMap::new();
     let mut args = args;
