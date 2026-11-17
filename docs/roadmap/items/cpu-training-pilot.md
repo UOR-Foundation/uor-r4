@@ -88,7 +88,7 @@ the tested one-code gain configuration rather than the geometric path.
 
 ## What is missing
 
-**November 17, 2026.** D84 authorizes this CPU development pilot. Its grading, carry and checkpoint results are recorded below and in the linked experiment history. The grouped carry-hold audit proposed in #3889 and the final disposition of the historical training families belong to this item. Milestone qualification still requires the selected GPU-scored model. [PR #3889](https://github.com/UOR-Foundation/uor-r4/pull/3889)
+**November 17, 2026.** D84 authorizes this CPU development pilot. Its grading, carry and checkpoint results are recorded below and in the linked experiment history. The grouped carry-hold audit merged in #3889. Its eight-checkpoint CPU comparison preserves 96 diagnostic values. The final disposition of the historical training families remains open. Milestone qualification still requires the selected GPU-scored model. [PR #3889](https://github.com/UOR-Foundation/uor-r4/pull/3889)
 
 The bounded public pilot supplies cost, exact-export, admission and ranking
 evidence, but it is not a fresh capability test. The full item still needs
