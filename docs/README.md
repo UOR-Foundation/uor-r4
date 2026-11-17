@@ -3,9 +3,9 @@
 
 **Can geometry and exact memory support a language model on an ordinary laptop?** Start with [the illustrated explanation](start/what-is-uor-r4.md), follow [one prediction through the model](model/pipeline-map.md), or inspect [the released M1 weights](https://huggingface.co/caseyallard/uor-r4-m1-model).
 
-![A highlighted path selects several cells from a wider geometric field.](figures/start/sparse-read.jpg)
+[![Studio’s Models view shows where to load the published M1 seed-1 predictor.](figures/start/m1-studio-models.png)](https://uor-foundation.github.io/uor-r4/studio/)
 
-*This illustration represents sparse lookup. The model computes an address, reads a small set of cells, then ranks the next tokens. [Follow a prediction through the model](model/pipeline-map.md).*
+*Open **Models** and select the published seed-1 predictor. Follow the [web client walkthrough](products/web-client.md#run-the-seed-1-example) to inspect the downloaded model and its prediction.*
 
 **One of eight milestones is complete.** M1 measured next-token prediction on templated conversations. The next capability milestone asks for complete answers grounded in earlier turns. The current experiment tests whether storing counts at geometric addresses improves predictions over a strong count model. [Measured results](start/where-we-are.md) · [Research direction](start/where-were-going.md) · [Try the Studio](https://uor-foundation.github.io/uor-r4/studio/)
 

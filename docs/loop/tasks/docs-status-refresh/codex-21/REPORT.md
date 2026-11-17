@@ -4,11 +4,11 @@ Lab: codex. References #2028. [ORDER](ORDER.md).
 
 ## What did not work
 
-The earlier tabletop picture did not explain what a geometric address buys a reader. Its bytes remain in the figures archive of the repository. The prediction image only shows one prefix and the comparison chart only covers the templated M1 development panel.
+The earlier tabletop picture did not explain what a geometric address buys a reader. Its original file is preserved under docs/figures/start/. The prediction image only shows one prefix and the comparison chart only covers the templated M1 development panel.
 
 ## What changed
 
-The README uses an explicitly conceptual picture for sparse lookup, a screenshot of the public seed-1 predictor, and the existing two-seed measurement chart at the corresponding parts of the text. The book entry uses the same captioned lookup illustration. The reference-model paragraph now links the sealed result merged in #4058; the geometric model still needs its own test.
+The README leads with the real public Studio. Two more captures identify the verified resident artifact and show the ranked response. A plot of the actual 32-coordinate native query and eight admitted cell IDs explains the serving path. The two-seed chart shows the measured DEV result. The book home and web-client guide use the matching screenshots. The reference-model paragraph now links the sealed result merged in #4058; the geometric model still needs its own test.
 
 ## Measurements
 
@@ -20,7 +20,7 @@ Verified each image and the captions visually, offline prediction via the reposi
 
 ## Skills used
 
-The built-in image generator produced the editorial sparse-read illustration. Its brief requested a wide dark-blue field of discrete cells with one gold path branching into a few teal neighbours, without axes, text or a data overlay. The screenshot and chart are measured evidence.
+An initial image-generation draft illustrated sparse lookup. The owner requested direct product views; the entry pages now show the public browser and recorded model execution. The native trace was plotted directly from scripts/studio/public-m1-served-forward.json, after verifying equality with its independent CPU record.
 
 ## Still open
 
