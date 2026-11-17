@@ -15,7 +15,7 @@ A missing or silently zeroed loss can reverse the interpretation of a long-conte
 
 ## What is missing
 
-Four malformed-input cases and the default invocation’s compatibility were reported after the original past-window run. PR #4039 proposed repairs. Its adoption also validates the context actually used for carry scoring. [Adoption and remaining checks](https://github.com/UOR-Foundation/uor-r4/pull/4062) [PR 4039](https://github.com/UOR-Foundation/uor-r4/pull/4039)
+Four malformed-input cases and the default invocation’s compatibility were reported after the original past-window run. PR #4039 supplied the repairs for findings 1–4. Finding 5 remains open for default-output compatibility. Merged adoption #4062 also validates the context actually used for carry scoring. [Adoption and remaining checks](https://github.com/UOR-Foundation/uor-r4/pull/4062) [PR 4039](https://github.com/UOR-Foundation/uor-r4/pull/4039)
 
 ## Done when
 

@@ -12,11 +12,23 @@ The README and book entry points lead with the research question, the M1 weights
 
 Reviewed all 52 issues open when the unit started. The roadmap now registers previously standalone defects against their existing IDs, preserves the pilot chronology, and identifies the frozen-reference experiment (#4063) and shared interfaces (#4064). The parent, seven milestone bodies and compute board preserve the earlier descriptions as dated history. #3801 closed on delivered instrumentation. #2846, #3450, #3462 and #3594 closed as not planned, with their historical evidence and revival conditions retained. The M1 milestone closed after its final untriggered fallback was moved. Source, render and live tracker have distinct verification steps.
 
-## Checks
+## Measurements
+
+The issue census counted 52 originally open issues and found 156 source-backed issue mappings after registration. The historical pilot text contains 842 lines and 56,170 preserved bytes.
+
+## Checks run at the head
 
 - 156 roadmap items validated and mapped. Roadmap render is current. Before publication, the reviewed sync preview proposed 47 existing issue edits, six child-checklist updates and zero new issues or automatic closures.
-- Pinned mdBook 0.5.4 and mdbook-mermaid 0.17.1 built the book. The built link check counted 107 HTML pages and zero broken links. The claim-wording gate passed.
+- Pinned mdBook 0.5.4 and mdbook-mermaid 0.17.1 built the book. The 241 xtask tests passed. The built link check counted 107 HTML pages and zero broken links. The claim-wording gate passed.
 - Compared the preserved CPU pilot text with its source, checked the new local links, and ran the branch diff whitespace check. No research execution or scientific bar changed in this unit.
+
+## Skills used
+
+The parallel audit skill separated issue reconciliation, PR review and live Studio checks. The image-generation skill supplied the editorial illustration.
+
+## Plain summary
+
+The research guide now gives a reproducible M1 example and a dated account of the next experiment. The roadmap records what was delivered, superseded or still requires a measurement.
 
 ## Still open
 
