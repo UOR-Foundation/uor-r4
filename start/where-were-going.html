@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4917469e.js";
+            window.path_to_searchindex_js = "../searchindex-cecb64cb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-78e3d836.js"></script>
@@ -193,7 +193,7 @@ promise.</p>
 <p><em>M1 is complete. Current work targets replies that come from the model's own state, and one useful model end to end.</em></p>
 <p>Terms are in the <a href="glossary.html">glossary</a>. Labels are <strong>proof</strong>, <strong>measurement</strong> or <strong>hypothesis</strong>.</p>
 <h2 id="the-current-experiment"><a class="header" href="#the-current-experiment">The current experiment</a></h2>
-<p>The 16 November research decision starts with a count model on D87, a corpus for which training, tuning and test streams are separately sealed. Tune the reference on DEV-tune and score the frozen choice on DEV-test. Then measure what geometric routing and memory add at equal bytes. The proposed scale is one billion cells in at most 4 GB and at least 1,000 decoded tokens/s. The experiment also calls for grounded replies to beat both the no-memory and shuffled-speaker controls. These are targets. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-409/DECISION.md">Decision and thresholds</a> · <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-420/REPORT.md">Split construction</a> · <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">Plan</a></p>
+<p>The 16 November research decision starts with a count model on D87, a corpus for which training, tuning and test streams are separately sealed. The tuning sweep selected order 10. The frozen reference has now been scored on DEV-test. The remaining comparison measures what geometric routing and memory add at equal bytes. The proposed scale is one billion cells in at most 4 GB and at least 1,000 decoded tokens/s. The experiment also calls for grounded replies to beat both the no-memory and shuffled-speaker controls. These are targets. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-409/DECISION.md">Decision and thresholds</a> · <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-420/REPORT.md">Split construction</a> · <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">Plan</a></p>
 <h2 id="the-eight-milestones"><a class="header" href="#the-eight-milestones">The eight milestones</a></h2>
 <div class="table-wrapper">
 <table>
@@ -294,7 +294,7 @@ come almost entirely from the turn memory's table. Useful conversation has not b
 <tr><td>Milestones complete</td><td><strong>1 of 8 (M1)</strong></td><td><a href="https://github.com/UOR-Foundation/uor-r4/issues/2029">#2029</a></td></tr>
 <tr><td>Next milestone</td><td>M2: grounded complete replies</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">PLAN</a></td></tr>
 <tr><td>Immediate problem</td><td>Facts come from the exact turn memory's table, not the learned state: 171–211 exact replies of 2,218 without it, 377–441 with it</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-376/REPORT.md">V0, claude-376</a></td></tr>
-<tr><td>Work in progress</td><td>The November 16 written-state study measured 2.004736 bits per byte on DEV-tune with its order-2 count reference. Selecting and sealing the reference precedes the geometric comparison</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md#approved-sequences">Phase order</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-421/REPORT.md">P0 calibration</a>, <a href="https://github.com/UOR-Foundation/uor-r4/pull/4058">sealed-reference follow-up</a></td></tr>
+<tr><td>Work in progress</td><td>The selected order-10 reference measured 1.418136 bits per byte overall and 1.743746 on novel targets on the sealed DEV-test. The geometric model comparison remains open</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md#approved-sequences">Phase order</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-421/REPORT.md">P0 calibration</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-422/REPORT.md">sealed reference</a></td></tr>
 <tr><td>M4</td><td>Lawful likelihood built; full accepted-model serving and held-out score open</td><td><a href="../model/serving-and-export.html">serving and export</a></td></tr>
 <tr><td>Products shipped</td><td>None</td><td><a href="../products/index.html">products</a></td></tr>
 </tbody>
