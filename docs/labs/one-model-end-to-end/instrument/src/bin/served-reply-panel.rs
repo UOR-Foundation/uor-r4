@@ -293,6 +293,10 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
         ));
     }
     let (teacher_forced, paired_first) = rank_switches(&args)?;
+    let no_turn_memory = parse_switch("no-turn-memory", args.get("no-turn-memory"))?;
+    if no_turn_memory && engine_switch(&args)? != Engine::Integer {
+        return Err("--no-turn-memory applies to --engine integer".to_owned());
+    }
     let engine = engine_switch(&args)?;
     let read = |name: &str| -> Result<(Vec<u8>, String)> {
         let path = PathBuf::from(flag(name)?);
@@ -340,6 +344,9 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
         ));
     }
     let mut model = IntegerStackModel::parse(&artifact).map_err(|e| format!("artifact: {e}"))?;
+    if no_turn_memory && !model.drop_turn_memory() {
+        return Err("--no-turn-memory needs an artifact that carries a turn memory".to_owned());
+    }
     if !model.shape().head_nearest() {
         return Err(
             "artifact serves the writer head; this scorer reads the nearest head".to_owned(),
@@ -530,7 +537,8 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
         },
         "settings": {"reply_tokens": cap, "head": "nearest", "decoding": "greedy",
                      "context_length": context_length, "eos_id": EOS, "bos_id": BOS},
-        "rendering": {"name": rendering, "protocol": SCHEMA_V2, "ending": "assistant-prefix"},
+        "rendering": {"name": rendering, "protocol": SCHEMA_V2, "ending": "assistant-prefix",
+                      "no_turn_memory": no_turn_memory},
         "totals": {
             "rows": rows.len(),
             "complete": rows.iter().filter(|row| row.complete).count(),
@@ -1384,7 +1392,7 @@ fn pair_metric(rows: &[(String, String, bool, String)]) -> Result<Vec<(String, u
 }
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<BTreeMap<String, String>> {
-    const FLAGS: [&str; 14] = [
+    const FLAGS: [&str; 15] = [
         "windows-out",
         "engine",
         "content-readout",
@@ -1399,6 +1407,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<BTreeMap<String, Str
         "rendering",
         "teacher-forced",
         "paired-first",
+        "no-turn-memory",
     ];
     let mut values = BTreeMap::new();
     let mut args = args;

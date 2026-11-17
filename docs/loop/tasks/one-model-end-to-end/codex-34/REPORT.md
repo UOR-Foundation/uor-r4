@@ -73,3 +73,20 @@ Pinned recipe: nine fingerprints and step 0 matched exactly. Two snapshots, two 
 panels on the 8× run (23 and 56 of 256), one panel on the baseline (57, deterministic). Dev readings
 are the run's own `progress.jsonl`. Corpus novelty and mixture read from both manifests and the token
 files directly.
+
+## Correction (codex-38): the novelty figures were read 32 tokens out of alignment
+
+`tokens.u16` opens with a 32-token header, so the response mask aligns with `tokens[32:]`, not with
+`tokens[0:]`. Recomputing every figure in §2 on the aligned stream:
+
+| | original | 8× |
+|---|---|---|
+| assistant responses | 214,271 | 1,717,821 |
+| distinct responses | **61,766** (28.8 %) | **450,501** (26.2 %) |
+| of the 8× distinct set, absent from the original | — | **442,542 = 98.2 %** |
+| repeats inside the 8× corpus | — | 1,267,320 = 73.8 % |
+
+The conclusion stands and is stronger: 8× the volume carries **7.3× the distinct replies**, 98.2 %
+of them new. The earlier 117,370 / 703,473 / 94.9 % were the same measurement shifted, and are
+superseded by these. The 73.8 % internal repeat rate is the generator's finite template space, and
+it is why the distinct count grows slightly sublinearly.
