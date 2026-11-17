@@ -86,3 +86,37 @@ garbles the rare second word (`loggia` → `loggany`).
 - The remaining failures are specific: (a) the reply format (the model never answers with a bare
   value because the corpus's replies are sentences), and (b) the rare-word spelling (a copy-payload
   or tokenization question).
+
+## The value-present gate, now in the tool
+
+`served-reply-panel` reports `value_present` per row, per stratum and in the totals — any accepted
+answer appearing in the reply, trimmed and case-insensitive — beside the exact `complete`. The
+accepted lists already include the sentence forms ("The current job is basalt loggia."), so a
+correct sentence scores complete; a framing sentence with a garbled value scores present only.
+
+Three arms, same host, same panel, default rendering, `--reply-tokens 16`:
+
+| Arm | length2 | length4 | length8 | reassert | update | total | complete | tok/s |
+|---|---|---|---|---|---|---|---|---|
+| arm Q (`/10`, asks+carry off, other run) | 0 | 0 | **3** | 0 | 0 | 3 / 256 | 0 | 272 |
+| asks + carry 8 (`/7`) | 8 | **5** | 0 | 6 | 0 | 19 / 256 | 0 | 379 |
+| **arm r copy (`/7`)** | **18** | 1 | 0 | 6 | 0 | **25 / 256** | 0 | 343 |
+
+- **The copy recipe wins the copy stratum**: 18 of 64 `length2` rows carry the accepted value,
+  against 8 for asks+carry and 0 for arm Q. The claude-345 prior (0.749–0.782) holds at the panel.
+- The asks+carry arm is better on `length4` (5 against 1), so the two recipes have different
+  strengths rather than one being uniformly worse.
+- `complete` is 0 for all three, so no arm produces the exact accepted sentence.
+
+## What the remaining failure is, precisely
+
+The reply is a framing sentence with a garbled rare word: `" My current job is basalt loggany Thank
+His"` for `basalt loggia.`. So the copy finds the statement and the first value token, and the
+**second token of a rare word** is wrong, plus the reply does not stop. The next unit is that trace
+(the copy read's kept positions at the value's second token) and a reply-format arm (bare answers or
+the exact sentence the accepted list holds), not another recipe sweep.
+
+## Checks
+
+`served-reply-panel` at the head with `value_present`; the three runs above; the panel's manifest
+hashes matched.

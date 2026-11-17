@@ -142,6 +142,10 @@ struct Row {
     reply_text: String,
     stop: Stop,
     complete: bool,
+    /// Whether an accepted answer appears anywhere in the reply, trimmed and case-insensitive.
+    /// The item's value-present measure: a framing sentence with the right value scores here and
+    /// not in `complete`.
+    value_present: bool,
 }
 
 #[derive(Serialize)]
@@ -224,6 +228,7 @@ struct NearestRank {
 struct Tally {
     rows: usize,
     complete: usize,
+    value_present: usize,
     pairs: usize,
     pairs_both_complete_distinct: usize,
 }
@@ -399,6 +404,7 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
         }));
         let bytes = tokenizer.decode_bytes(&reply_ids);
         let (reply_text, complete) = score(stop, &bytes, &label.answers, &protocol);
+        let value_present = row_value_present(&label.answers, &reply_text);
         pair_rows.push((
             label.pair_id.clone(),
             stratum.clone(),
@@ -414,6 +420,7 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
             reply_text,
             stop,
             complete,
+            value_present,
         });
     }
     let wall_milliseconds = started.elapsed().as_millis().max(1);
@@ -471,6 +478,7 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
         let tally = per_stratum.entry(row.stratum.clone()).or_default();
         tally.rows += 1;
         tally.complete += usize::from(row.complete);
+        tally.value_present += usize::from(row.value_present);
     }
     for (stratum, pairs, distinct) in pair_metric(&pair_rows)? {
         let tally = per_stratum.entry(stratum).or_default();
@@ -504,6 +512,7 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
         "totals": {
             "rows": rows.len(),
             "complete": rows.iter().filter(|row| row.complete).count(),
+            "value_present": rows.iter().filter(|row| row.value_present).count(),
             "eos_stops": stops(Stop::Eos),
             "bos_stops": stops(Stop::Bos),
             "cap_stops": stops(Stop::Cap),
@@ -1256,6 +1265,17 @@ fn prime_cpu_prompt(forward: &mut CpuFbsForward, prompt: &[u32]) -> Result<CpuFb
         );
     }
     step.ok_or_else(|| "empty prompt".to_owned())
+}
+
+/// Whether any accepted answer appears in the reply, trimmed and case-insensitive. This is the
+/// item's value-present measure beside the exact `complete`: a framing sentence carrying the right
+/// value is present, not complete.
+fn row_value_present(answers: &FrozenAnswers, text: &str) -> bool {
+    let text = text.to_lowercase();
+    answers
+        .accepted
+        .iter()
+        .any(|answer| text.contains(&answer.trim().to_lowercase()))
 }
 
 /// The reply text (lossy when not UTF-8) and whether the row is complete.
