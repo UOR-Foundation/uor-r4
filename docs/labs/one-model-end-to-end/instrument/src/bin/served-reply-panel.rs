@@ -146,6 +146,12 @@ struct Row {
     /// The item's value-present measure: a framing sentence with the right value scores here and
     /// not in `complete`.
     value_present: bool,
+    /// Whether the reply shares a four-token span with its prompt: an echo of the user's own
+    /// sentence rather than the model's answer (codex-36).
+    echo: bool,
+    /// The value is present and the reply is not a prompt echo: the measure that can tell an
+    /// answer from a repetition.
+    answered: bool,
 }
 
 #[derive(Serialize)]
@@ -229,6 +235,8 @@ struct Tally {
     rows: usize,
     complete: usize,
     value_present: usize,
+    echo: usize,
+    answered: usize,
     pairs: usize,
     pairs_both_complete_distinct: usize,
 }
@@ -405,6 +413,8 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
         let bytes = tokenizer.decode_bytes(&reply_ids);
         let (reply_text, complete) = score(stop, &bytes, &label.answers, &protocol);
         let value_present = row_value_present(&label.answers, &reply_text);
+        let echo = shares_span(&prompt, &reply_ids, ECHO_SPAN);
+        let answered = value_present && !echo;
         pair_rows.push((
             label.pair_id.clone(),
             stratum.clone(),
@@ -421,6 +431,8 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
             stop,
             complete,
             value_present,
+            echo,
+            answered,
         });
     }
     let wall_milliseconds = started.elapsed().as_millis().max(1);
@@ -479,6 +491,8 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
         tally.rows += 1;
         tally.complete += usize::from(row.complete);
         tally.value_present += usize::from(row.value_present);
+        tally.echo += usize::from(row.echo);
+        tally.answered += usize::from(row.answered);
     }
     for (stratum, pairs, distinct) in pair_metric(&pair_rows)? {
         let tally = per_stratum.entry(stratum).or_default();
@@ -513,6 +527,8 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
             "rows": rows.len(),
             "complete": rows.iter().filter(|row| row.complete).count(),
             "value_present": rows.iter().filter(|row| row.value_present).count(),
+            "echo": rows.iter().filter(|row| row.echo).count(),
+            "answered": rows.iter().filter(|row| row.answered).count(),
             "eos_stops": stops(Stop::Eos),
             "bos_stops": stops(Stop::Bos),
             "cap_stops": stops(Stop::Cap),
@@ -1265,6 +1281,19 @@ fn prime_cpu_prompt(forward: &mut CpuFbsForward, prompt: &[u32]) -> Result<CpuFb
         );
     }
     step.ok_or_else(|| "empty prompt".to_owned())
+}
+
+/// The span length an echo is measured at: a reply that shares this many consecutive tokens with
+/// its prompt is repeating the user's own sentence (codex-36).
+const ECHO_SPAN: usize = 4;
+
+/// Whether the reply shares `span` consecutive tokens with the prompt, in order.
+fn shares_span(prompt: &[u32], reply: &[u32], span: usize) -> bool {
+    if reply.len() < span {
+        return false;
+    }
+    let prompt: std::collections::HashSet<&[u32]> = prompt.windows(span).collect();
+    reply.windows(span).any(|w| prompt.contains(w))
 }
 
 /// Whether any accepted answer appears in the reply, trimmed and case-insensitive. This is the

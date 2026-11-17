@@ -181,6 +181,18 @@ multi-token composition.
 **The compatibility gate, proven.** `fbs-export --legacy-artifact` reproduces arm r's artifact **byte
 for byte** (`f21046823640ea40…`), before and after the `terms`/`counts` change in codex-30 slice 2.
 
+**Decision 17 — `value_present` is not answering, and the item's baseline is 0 answers.** The panel's
+prompt states the fact in the same frame an answer could take, and its accepted answers are the bare
+values, so a reply that repeats the user's sentence passes. Measured: **254 of 256 replies share a
+four-token span with their prompt, and 0 are both value-correct and non-echo**; the direct
+`uor-chat` episodes show the model never emits the corpus's own answer frame (`You live in {v}.`),
+saying instead `Got it.`, the question back, or the user's sentence. The panel now reports `echo` and
+`answered` beside `value_present`, and **every capability number on this panel before this decision
+counted echo fidelity, not answering.** The order that follows: (1) an item in the corpus's own
+dialogue shape (`User: fact`, `Assistant: ack`, `User: question`, `Assistant:`), (2) the non-echo
+measure, (3) only then a capability number — and only then read or capacity work, which cannot be
+judged by a measure a parrot passes.
+
 ## 3. Decision 10 — which path, measured on one corpus
 
 | Axis | FBS trunk + read | Discrete D11 (M1 line) |

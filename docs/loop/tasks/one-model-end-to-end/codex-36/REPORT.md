@@ -64,3 +64,30 @@ against the test, and it scored the echo.
 `--windows-out` and the artifact's reply ids). Four `uor-chat` episodes on
 `/tmp/opencode/armr-step002048.uorlut` (sha `5bb0f95d…`), greedy, 12–16 tokens, decoded by hand from
 the tokenizer. No GPU, no training run.
+
+## The measure, now in the tool
+
+`served-reply-panel` reports three counts beside `value_present` (`codex-36`):
+
+- `echo` — the reply shares a four-token span with its prompt (`ECHO_SPAN = 4`);
+- `answered` — the value is present **and** the reply is not an echo.
+
+Both artifacts, same panel, default rendering:
+
+| artifact | value-present | echo | **answered** | of |
+|---|---|---|---|---|
+| small, step 2,048 (`5bb0f95d…`) | 57 | **254** | **0** | 256 |
+| 8×, step 6,144 (`98e6e3a3…`) | 56 | **223** | **0** | 256 |
+
+**No reply on either artifact is both value-correct and not a prompt echo.** The two non-echo replies
+are degenerate loops (`I now live.`, `I now live now live now live…`). Spot checks confirm the flag:
+`My current job is basalt loggia.` against the prompt's `My current job is basalt loggia.` is an echo,
+as it should be.
+
+So the honest baseline of the item is **0 answers**, and every earlier capability number on this
+panel — 3, 19, 25, 56, 57 — counted the right value appearing in a repetition. The checkpoint
+comparison (57 against 25) did measure something real, but it measured **echo fidelity**, not
+answering.
+
+This is the position the item's own discipline asks for: the falsifier was inspected against the
+test, and it failed.
