@@ -5,8 +5,8 @@
 | Disposition | Issues | Basis |
 |---|---|---|
 | Retire older operator experiments | #2822, #2871, #2878, #2880, #2888, #2889 | Stage T ended. The orbit gate, whole-engine hinge, revisit schedule, forced-copy oracle, VSA writer and bound Flock/Relation read lack an active consumer for their original controlled runs. P1–P3 select distinct count, address or pointer operators. |
-| Retire FBS engineering comparisons | #3391, #3392, #3678 | The synthetic rival speedup, two-table session and finite fusion parity retain their measured scope. Outstanding tests are the RTX 5090 backward-stage profile or b64L selector A/B (#3391), real-checkpoint controls (#3392), and the matched RTX 5090 training-default comparison or separate context-2,048 cached-decode timing (#3678). |
-| Retire the remaining legacy scorer compatibility request | #3714 | Four refusal fixes and carry-context validation merged through contributor adoption #4062. Finding 5 needs a concrete user of the old default scorer before its compatibility comparison is scheduled. |
+| Retire FBS engineering comparisons | #3391, #3392, #3678 | The synthetic rival speedup, two-table session and finite fusion parity retain their measured scope. Outstanding tests are the RTX 5090 backward-stage profile, original two-seed arm (a) selector-only comparison or separate b64L fused-search quality/cost comparison (#3391), real-checkpoint controls (#3392), and the matched RTX 5090 training-default comparison or separate context-2,048 cached-decode timing (#3678). |
+| Retire the remaining legacy scorer compatibility request | #3714 | Four refusal fixes and carry-context validation merged through contributor adoption #4062. Finding 5 records the windowing error now comes first on doubly invalid panels. The default-output comparison needs a concrete user of the old scorer. |
 
 Retain the nine standing project, milestone and compute trackers (#2028, #2030–#2037). The other 28 open items are #2655, #2657, #2825, #2850, #2853, #2858, #2859, #2862, #2865, #2867, #2869, #2870, #2873, #2904, #3168, #3394, #3407, #3472, #3500, #3506, #3569, #3572, #3939, #3957, #3972, #3973, #4063 and #4064.
 

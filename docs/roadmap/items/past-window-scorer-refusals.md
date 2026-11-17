@@ -10,7 +10,7 @@ depends_on: []
 scope: [crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, docs/roadmap/items/past-window-scorer-refusals.md, docs/loop/tasks/past-window-scorer-refusals/**]
 ---
 
-**November 17, 2026 · retired from the schedule under D68.** Contributor PR #4039 and its merged adoption #4062 addressed the four malformed-input cases and validated the carry-scoring context. Finding 5, default-output compatibility and refusal ordering, remains unverified. The written-state scorers under #4063 use a separate path. Reopen if a named legacy scorer consumer requires the default-path comparison on matched inputs. [November queue decision](../../loop/tasks/infra-loop-harness/codex-10/DECISION.md) · [Written-state experiment](https://github.com/UOR-Foundation/uor-r4/issues/4063) · [Merged contributor adoption](https://github.com/UOR-Foundation/uor-r4/pull/4062)
+**November 17, 2026 · retired from the schedule under D68.** Contributor PR #4039 and its merged adoption #4062 addressed the four malformed-input cases and validated the carry-scoring context. For finding 5, the default scorer now checks windows before parsing panel queries, so a panel failing both checks returns the windowing error first. The matched default-output compatibility comparison remains outstanding. The written-state scorers under #4063 use a separate path. Reopen if a named legacy scorer consumer requires the default-path comparison on matched inputs. [November queue decision](../../loop/tasks/infra-loop-harness/codex-10/DECISION.md) · [Written-state experiment](https://github.com/UOR-Foundation/uor-r4/issues/4063) · [Merged contributor adoption](https://github.com/UOR-Foundation/uor-r4/pull/4062)
 
 ### Historical registration and evidence
 
