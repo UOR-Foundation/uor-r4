@@ -14,7 +14,7 @@ A push to main builds and checks the book with a read-only token. A manual dispa
 
 ## Measurements
 
-All 213 files in the built book matched by SHA-256 before and after the workflow’s artifact handoff. Eight Rust publishing regressions and eight pre-existing typed runtime checks passed. The full harness library suite passed 689 tests with one ignored.
+All 217 files in a clean build of the rebased book matched by SHA-256 before and after the workflow’s artifact handoff. Eight Rust publishing regressions and eight pre-existing typed runtime checks passed. The full harness library suite passed 689 tests with one ignored. The focused harness protection group passed all seven checks after the forward-lease repair.
 
 ## Checks run at the head
 
