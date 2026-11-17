@@ -20,9 +20,9 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 31 |
+| ready | 32 |
 | held | 11 |
-| decision | 1 |
+| decision | 0 |
 | done | 113 |
 | total | 156 |
 
@@ -75,8 +75,8 @@ These items are ready and open to anyone.
 
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
+| [Register a number for the multi-turn reply bar blocked under R14](items/m2-multi-turn-bar-number.md) | ready | a lab | no | none | [#2850](https://github.com/UOR-Foundation/uor-r4/issues/2850) |
 | [Train the student for grounded replies from exact memory](items/m2-train-grounded-replies.md) | ready | a lab | yes | [m2-donor-corpus-generation](items/m2-donor-corpus-generation.md), [m2-fresh-heldout-panel](items/m2-fresh-heldout-panel.md), [m2-pin-train-mask-sheet](items/m2-pin-train-mask-sheet.md), [m1-close-saved-model](items/m1-close-saved-model.md), [m1-d11-exporter-discrete](items/m1-d11-exporter-discrete.md) | [#2853](https://github.com/UOR-Foundation/uor-r4/issues/2853) |
-| [Register a number for the multi-turn reply bar blocked under R14](items/m2-multi-turn-bar-number.md) | decision | a lab | no | none | [#2850](https://github.com/UOR-Foundation/uor-r4/issues/2850) |
 | [Optimize the driver math and run the ~1M-token pilot (D41 item 3)](items/d41-driver-math-pilot.md) | done | a lab | yes | none | [#2821](https://github.com/UOR-Foundation/uor-r4/issues/2821) |
 | [Assemble and train the full lawful trunk (Stage 3)](items/m1-trunk-assembly-and-training.md) | done | a lab | yes | [m1-position-mechanism](items/m1-position-mechanism.md), [m1-normalization-mechanism](items/m1-normalization-mechanism.md), [m1-bvg-k-stage-t-training](items/m1-bvg-k-stage-t-training.md), [m1-d11-exporter-discrete](items/m1-d11-exporter-discrete.md) | [#2844](https://github.com/UOR-Foundation/uor-r4/issues/2844) |
 | [Generate the one-time offline donor answer corpus (distill-d1)](items/m2-donor-corpus-generation.md) | done | a lab | yes | [d41-driver-math-pilot](items/d41-driver-math-pilot.md) | [#2848](https://github.com/UOR-Foundation/uor-r4/issues/2848) |
@@ -251,9 +251,7 @@ These items are ready and open to anyone.
 
 ## Waiting on the owner
 
-These items need an owner decision before work can start.
-
-- [Register a number for the multi-turn reply bar blocked under R14](items/m2-multi-turn-bar-number.md) (M2)
+Nothing is waiting on the owner.
 
 ## Dependencies
 

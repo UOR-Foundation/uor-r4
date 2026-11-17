@@ -1,11 +1,13 @@
 # Studio (`web/studio`) — the browser client
 
-**Live:** https://uor-foundation.github.io/uor-r4/studio/ — the current gh-pages `6540e2717d3a606330dbd141e3642f3f13b87ecf` publish serves the neutral UOR Harness workbench and 806,759-byte wasm bundle (sha256 `4a111daf…`) and preserves the model catalog with both M1 seeds and both research FBS seeds. It was built from merged `a8e51c0f4d0ed6e999b6d9e13f8289215efbd684`; Pages run `42668187497` succeeded. Previous `ab752d595` served 794,677 bytes (`e03b6cd5…`) and is the rollback identity. Earlier `eb832431a` and `233b97fb9` are historical.
+The [public Studio](https://uor-foundation.github.io/uor-r4/studio/) runs the integer engine in a browser. On 17 November its published catalog contained `synthetic-seed-5`. A staged build paired the trained M1 seed-1 model with its tokenizer and reproduced the native top-eight predictions for `The capital of France is`. Public availability of that loader needs a fresh deployed-catalog check and the same prediction on the live site. [Published catalog at `90dea3e24`](https://github.com/UOR-Foundation/uor-r4/blob/90dea3e24042ae0ba381136d29ccdefd72b1d90f/studio/models.json) · [Seed-1 example](../../docs/products/web-client.md#run-the-seed-1-example)
+
+The earlier `6540e2717d3a606330dbd141e3642f3f13b87ecf` typed preview served an 806,759-byte WASM bundle (`4a111daf…`). Its [pinned catalog](https://github.com/UOR-Foundation/uor-r4/blob/6540e2717d3a606330dbd141e3642f3f13b87ecf/studio/models.json) also listed only the synthetic stack. It was built from `a8e51c0f4d0ed6e999b6d9e13f8289215efbd684` in Pages run `42668187497`. Its predecessor `ab752d595` served 794,677 bytes (`e03b6cd5…`). Earlier `eb832431a` and `233b97fb9` are historical.
 
 The Studio is the project's in-browser interface: editor, chat panel and model manager, with the
 integer serving engine (`crates/uor-r4-integer`, `--features serving-wasm`) running in a Web
 Worker. It is served from the project's documentation site at **`/studio/`**
-(<https://uor-foundation.github.io/uor-r4/studio/>). The current live publish is gh-pages `6540e2717d3a606330dbd141e3642f3f13b87ecf`; `ab752d595` was the previous publish and rollback identity. The publisher accepts an opt-in `--typed` flag that builds `web/studio/dist` and stages it through the typed allowlist while preserving the legacy default; protected merge and the actual typed publication are complete, with live desktop/mobile verification.
+(<https://uor-foundation.github.io/uor-r4/studio/>). The publisher accepts an opt-in `--typed` flag that builds `web/studio/dist` and stages it through the typed allowlist while preserving the legacy default; protected merge and the actual typed publication are complete, with live desktop/mobile verification.
 
 ### Neutral cowork workbench recovery (8 November 2026)
 
@@ -17,7 +19,7 @@ The Terminal panel uses `portable-pty = "0.9.0"`, `@xterm/xterm = "6.0.0"`, and 
 
 The source now opens into one quiet dark conversation column instead of the former panel-heavy IDE. First run automatically loads the bundled synthetic demo; the empty state offers working offline-demo, model-choice and native-setup actions. Connections, Workspace, sessions and diagnostics remain available outside the main chat flow. System typography, rounded message bubbles, a floating composer, mobile-safe 16px input text and compact phone controls are covered by browser inspection at 1440×900 and 390×852 plus focused regressions. Enter/Shift+Enter, IME-safe submission, ArrowUp/Down history, long pastes, attachments, image decomposition and exact metrics retain their existing paths.
 
-Static GitHub Pages still cannot host an API, and HTTPS Pages must not call insecure HTTP loopback. The new [studio-native-runner-v0.1.0 prerelease](https://github.com/UOR-Foundation/uor-r4/releases/tag/studio-native-runner-v0.1.0) supplies a hash-pinned Apple silicon `uor-chat`, a runtime-only Studio archive, `native-runner.sh` and `SHA256SUMS`. The runner serves the same UI and authenticated native API together on `127.0.0.1:8000`, with an in-memory launch token and no public tunnel or token output. Fresh public downloads and an empty-cache launch passed. A real native short-prompt stream returned 16 completion tokens with exact `19/16/35` usage, measured tok/s and TTFT; a longer prompt correctly returned HTTP 413 at 69 of 64 context positions without truncation. These are synthetic protocol results, not useful conversation, visual understanding, M7/M8 completion or production readiness. The live-Pages publish is `6540e2717d3a606330dbd141e3642f3f13b87ecf`; the earlier hosted desktop generation, mobile layout inspection and Native setup verification at `ab752d595` and `eb832431a` is historical evidence.
+Static GitHub Pages still cannot host an API, and HTTPS Pages must not call insecure HTTP loopback. The new [studio-native-runner-v0.1.0 prerelease](https://github.com/UOR-Foundation/uor-r4/releases/tag/studio-native-runner-v0.1.0) supplies a hash-pinned Apple silicon `uor-chat`, a runtime-only Studio archive, `native-runner.sh` and `SHA256SUMS`. The runner serves the same UI and authenticated native API together on `127.0.0.1:8000`, with an in-memory launch token and no public tunnel or token output. Fresh public downloads and an empty-cache launch passed. A real native short-prompt stream returned 16 completion tokens with exact `19/16/35` usage, measured tok/s and TTFT; a longer prompt correctly returned HTTP 413 at 69 of 64 context positions without truncation. These are synthetic protocol results, not useful conversation, visual understanding, M7/M8 completion or production readiness. The Pages publish recorded for that work was `6540e2717d3a606330dbd141e3642f3f13b87ecf`; the earlier hosted desktop generation, mobile layout inspection and Native setup verification at `ab752d595` and `eb832431a` is historical evidence.
 
 ### First console redesign (superseded by v2)
 
@@ -193,9 +195,7 @@ find site -mindepth 1 -maxdepth 1 ! -name .git ! -name studio -exec rm -rf {} +
 ```
 
 So a built Studio published once to `gh-pages` / `gh-pages-preview` **persists across every later
-book deploy**. The current live app at `/studio/` is gh-pages `6540e2717d3a606330dbd141e3642f3f13b87ecf`,
-with an 806,759-byte M1-capable wasm bundle at SHA-256 `4a111daf…` and both M1 seeds in `models.json`
-verified by HTTP and hash checks. The earlier `ab752d595` publish served 794,677 bytes (`e03b6cd5…`),
+book deploy**. The historical `6540e2717d3a606330dbd141e3642f3f13b87ecf` publication served an 806,759-byte M1-capable WASM bundle at SHA-256 `4a111daf…`. Its catalog contained only the synthetic fixture. The earlier `ab752d595` publish served 794,677 bytes (`e03b6cd5…`),
 and `454bb30fc` and `d8e67c66` are historical identities. Publishing a newer page means replacing that directory once.
 
 **The publisher.** `scripts/studio/build-and-publish.sh` does the whole unit:
@@ -314,7 +314,7 @@ The trained M1 model is the M1-closing 19-table discrete trunk (`uor-r4.lut-disc
 <https://huggingface.co/caseyallard/uor-r4-m1-model> with both stack-bound tokenizers; the 4-table
 Stage-T base exports are at <https://huggingface.co/caseyallard/uor-r4-m1-discrete> and the research
 FBS trunk pair at <https://huggingface.co/caseyallard/uor-r4-fbs-dual-c131> (no token writer, so it
-loads but cannot generate). The primary Model Source card is **remote-only**: the page makes no
+loads but cannot generate). When the catalog includes this card, the primary Model Source card is **remote-only**: the page makes no
 external request at load, and the 86.5 MB artifact is downloaded only after an explicit Load click,
 with sha256 and tokenizer validation, then loaded into the discrete wasm runtime and served as
 **top-8 next-token prediction** (greedy continuation repeats tokens; the page says so and refuses

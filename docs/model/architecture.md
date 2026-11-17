@@ -4,19 +4,13 @@
 UOR-R4 turns text into whole-number token ids, carries those ids through geometric state and exact
 memory, and chooses the next token without softmax or dense matrix multiplication. **M1 is
 complete**: a saved discrete model passed all six bars on two seeds. No model holds a useful
-conversation. Two model paths exist and have not joined: the discrete M1 path and the float-trained
-FBS trunk.
+conversation. The diagrams below trace the saved discrete M1 model and the separate float-trained FBS trunk.
 
 <!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
 
 **D85 status:** the persistent native state/operator implementation is pending; all float-to-integer measurements on this page are historical/export evidence.
 
-**D85 correction:** these two paths record how the model arrived at M1. Under D85, the default
-path is required to carry one persistent native integer/fixed-point geometric state through the
-same typed training and serving operators. The first implementation item is
-[`native-space-state-contract`](../roadmap/items/native-space-state-contract.md). The diagrams and
-measurements below remain historical evidence until that contract and a joined native-space model
-replace them.
+D85 requires training and serving to apply the same typed operators to one integer geometric state. A Q31 vector fixture matched CPU and CUDA after each of 64 updates. The complete operator inventory, replay of every required raw word and a recorded planted fault remain open. The written-state design specifies the state and operators for the next model comparison. [Q31 fixture](../loop/tasks/native-space-state-contract/codex-5/REPORT.md) · [Contract requirements](../roadmap/items/native-space-state-contract.md) · [Written-state decision](../loop/tasks/written-state-count-model/claude-409/DECISION.md)
 
 ![Two separate pipelines: the completed discrete M1 lane uses PositionHolonomyV1, Flock plus an orbit-root causal pointer, discrete Hamilton mixing, OrbitRootSnapNormV1 and OuterL1V1 readout; the float-trained FBS lane separately uses SpiralCore position, FBS recurrence, Hamming copy heads, exact turn memory and whole-table nearest readout.](../figures/model/pipeline.svg)
 

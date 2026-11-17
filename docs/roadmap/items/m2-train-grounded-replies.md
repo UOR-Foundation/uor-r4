@@ -22,7 +22,7 @@ Replies must be grounded in the exact memory and the object store, with relation
 
 ## Done when
 
-M2 bar: '>= 256/512 saved questions and >= 40% of genuinely fresh ones, with the existing graders unchanged'; the student stays on the discrete path unless the owner decides otherwise (D41); it exports to D11 with the export gap reported (D37).
+The selected native student produces complete, correct replies on at least 256/512 saved questions and at least 40% of genuinely fresh ones under the existing graders. D85 requires lossless D11 serialization and bit-identical native train/serve replay. The historical D37 float route reported an export gap.
 
 ## How to start
 

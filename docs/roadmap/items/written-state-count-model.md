@@ -7,7 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [m2-donor-corpus-generation]
-scope: [crates/uor-r4-discrete/**, docs/loop/tasks/written-state-count-model/**, docs/roadmap/items/written-state-count-model.md]
+scope: [crates/uor-r4-discrete/**, crates/uor-r4-integer/src/discrete_d11.rs, crates/uor-r4-integer/src/bin/uor-chat.rs, crates/uor-r4-integer/tests/discrete*, docs/labs/kn-reference/**, docs/loop/tasks/written-state-count-model/**, docs/roadmap/items/written-state-count-model.md]
 done_class: gpu
 ---
 
@@ -17,7 +17,7 @@ The November 16 decision puts the current training and serving experiment on one
 
 ## What is missing
 
-P0 freezes the data split, reference models and scoring instruments. On November 17, PR #4057 delivered the modified Kneser–Ney GPU scorer and bits instrument on DEV-tune. The sealed reference score and the model's own results have separate receipts. The model phases P1–P5 remain governed by the recorded gates. [Scorer report](../../loop/tasks/written-state-count-model/claude-421/REPORT.md)
+P0 freezes the data split, reference models and scoring instruments. PR #4057 measured 2.004736 bits per byte with the order-2 modified Kneser–Ney reference on D87 DEV-tune. Order selection and the sealed DEV-test reference are the follow-up in #4058 and still await a merged result. The geometric model’s P1–P5 comparisons remain to be measured under their own gates. [Calibration report](../../loop/tasks/written-state-count-model/claude-421/REPORT.md) · [Sealed reference follow-up](https://github.com/UOR-Foundation/uor-r4/pull/4058)
 
 ## Done when
 

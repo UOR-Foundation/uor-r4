@@ -3,10 +3,11 @@ id: m2-multi-turn-bar-number
 title: Register a number for the multi-turn reply bar blocked under R14
 milestone: M2
 area: evaluation
-status: decision
+status: ready
 open_to: lab
 needs_gpu: false
 depends_on: []
+scope: [docs/harness/milestones.json, docs/harness/panels/m2-multi-turn*.json, docs/harness/panels/v5-reply.json, docs/harness/prep/m2-multi-turn*, crates/uor-r4-harness/src/panels.rs, crates/uor-r4-harness/src/panel_m2_multi_turn.rs, crates/uor-r4-harness/tests/panel_m2_multi_turn.rs, docs/research/notebook/m2-grounded-reply.md, docs/roadmap/items/m2-multi-turn-bar-number.md, docs/loop/tasks/m2-multi-turn-bar-number/**]
 ---
 
 ## Why it matters
@@ -25,10 +26,7 @@ A threshold is registered with deterministic graders (D28) and the R14 block is 
 
 ## How to start
 
-Open these first:
-
-- `docs/integration/DECISIONS.md`
-- `ROADMAP.md`
+Inspect the suspended diagnostic, its noise and deterministic graders in [the historical multi-turn panel](../../harness/panels/v5-reply.json). Use those data to propose a threshold and document the named panel, exact grader and controls on a D68 card. Keep multi-turn outside the M2 gate until registration and retain the existing saved and fresh reply bars. [M2 notebook](../../research/notebook/m2-grounded-reply.md) · [Milestone registry](../../harness/milestones.json)
 
 ## Rules that apply
 

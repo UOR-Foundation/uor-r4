@@ -18,7 +18,7 @@ The issue census counted 52 originally open issues and found 156 source-backed i
 
 ## Checks run at the head
 
-- 156 roadmap items validated and mapped. Roadmap render is current. Before publication, the reviewed sync preview proposed 47 existing issue edits, six child-checklist updates and zero new issues or automatic closures.
+- 156 roadmap items validated and mapped. After the #2850 decision, the roadmap rendered 32 ready items, 11 held and 113 done. The final prepublication sync preview at this stage proposed 48 existing issue edits, changes to the M1 and M2 child checklists, zero new issues and zero closures. The scoped #2850 preview removed `owner-decision`. The 77 Markdown table headers checked on changed pages matched their delimiter rows.
 - Pinned mdBook 0.5.4 and mdbook-mermaid 0.17.1 built the book. The 241 xtask tests passed. The built link check counted 107 HTML pages and zero broken links. The claim-wording gate passed.
 - Compared the preserved CPU pilot text with its source, checked the new local links, and ran the branch diff whitespace check. No research execution or scientific bar changed in this unit.
 

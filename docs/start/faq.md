@@ -99,7 +99,7 @@ Start with [PLAN.md](../../PLAN.md) and rendered [STATE.md](../../STATE.md), the
 
 ### 18. What are the labs, and who decides?
 
-A **lab** is any contributor, human or AI, working under the charter. Four labs are registered: claude, antigravity, deepseek and kimi, with Kimi in the project-manager seat. Codex left the registry (claude-138). The owner, Casey, decides the charter, technical constraints and GPU caps. Labs approve their own runs through whole-project pre-run reviews and make other decisions through decision reviews; D41's donor pass still needs the owner at dispatch. The project manager sequences work from `PLAN.md`. Subagents review and test but never make critical decisions. See [the rules](../rules/README.md#who-decides-what).
+Five labs are registered under the charter: Antigravity, Claude, Codex, DeepSeek and Kimi. Kimi holds the PM seat and sequences work. Casey sets the charter, technical constraints and GPU caps. Labs conduct their own whole-project pre-run and decision reviews. D41 required owner approval at donor dispatch. D86 authorized the campaign and D87/D89 delivered the sealed corpus. [Lab registry](../harness/labs.json) · [Donor receipt](https://github.com/UOR-Foundation/uor-r4/pull/4028) · [Decision authority](../rules/README.md#who-decides-what)
 
 ### 19. What do ACTIVE, READY and PARKED mean? Is PARKED dead?
 
