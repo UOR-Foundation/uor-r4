@@ -55,7 +55,7 @@ The split of the count phases:
 Per order:
 - the sort grows with the order, from 3.4 s at order 0 to 34 s at order 9;
 - `select` stays at about 24 s;
-- the host phases grow with the grams, from 0.3 s at order 1 to 190 s at order 9.
+- the host phases (records, runs, adjust, push and keep) grow with the grams, from 1.6 s at order 1 to 229 s at order 9.
 
 ## What the numbers say
 
@@ -63,9 +63,9 @@ Each candidate fix, with the most it can save (bounded by the times above):
 1. **Filter on the GPU, before the copy.** Keep only the grams whose context the query reads, and the order-k+1 grams whose suffix is one of them. That leaves about 0.27% of the grams for the host. It removes most of the copies, record building, runs, adjust and keep: **up to about 1,036 s (57%)**. The whole-order digest (`push`, 241 s) still needs every gram, unless it moves to the GPU (**up to 1,277 s, 70%**) or runs as a separate audit pass.
 2. **One bucketing pass per order instead of a stream pass per partition.** Bucket targets by their partition token once. That cuts `select` from 261 s to about two passes per order: **up to about 250 s (14%)**.
 3. **Count each order once.** Orders k and k+1 split on the same partition token (`partition_offset` = 1), so one count of order k+1 per range can serve both steps. That removes the 375 s extension count, part of which item 1 already removes.
-4. **The N sweep.** An order-k adjusted table is the same for every N > k. So one N = 10 run already holds every lower N's tables except the top order's raw counts. The 2 h sweep could be one run plus ten small top-order counts.
+4. **The N sweep.** An order-k adjusted table is the same for every N > k. This is checked here: orders 0–3 of the N = 4 and N = 10 runs have identical triple and context digests, counts of counts and discounts. Order 4 differs, because at N = 4 it is the top order and keeps raw counts. So one N = 10 run already holds every lower N's tables except the top order's raw counts. The 2 h sweep could be one run plus ten top-order raw counts.
 
-With items 1–3, counting is bounded below by the sort and emit (about 230 s, and about half that once each order is counted once). So the 30-minute count could plausibly become **3–5 minutes**. That is an estimate from the profile, not a measurement.
+With items 1–3, counting is bounded below by the sort and emit: about 230 s, and about half that once each order is counted once. That holds **only if the whole-order SHA-256 also leaves the host**. With it still there, the bound is about 230 + 241 s, roughly 8 minutes. So the 30-minute count could plausibly become **3–5 minutes**, or about 8 with the host digest kept. These are estimates from the profile, not measurements.
 
 ## Checks run at the head
 
@@ -73,6 +73,7 @@ With items 1–3, counting is bounded below by the sort and emit (about 230 s, a
 - **G2, wick:** the CUDA tests `ngram_count_cuda kn_score_cuda kn_filter` pass, 14 / 14, including the new phase-totals test.
 - **G3, wick:** the N = 10 JSON is `cmp`-identical to claude-422's `sweep-10.json` but for `masses_at_floor`. The timers and synchronizes change no output.
 - **G4:** this REPORT.
+- **Not run:** a negative of the new test. It asserts `extension_count_ns > 0` directly, so dropping that tick would fail it by construction. It was not run on wick.
 
 ## Skills used
 
