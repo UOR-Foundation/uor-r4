@@ -38,8 +38,26 @@ They print in seconds, so a mismatch costs seconds, not a run. Then train to ste
 the run's own readings exactly: `train_loss 0.97650`, `dev top-1 447/14287`, `nearest 11916
 (openings 600/1226)`, `dev_loss 2.24677`.
 
-**Cancel:** if two reconstructions miss the fingerprints, stop and report — do not train on an
-unpinned recipe, because the comparison below would not mean anything.
+**Done — pinned on the first attempt.** The recipe is documented in
+`docs/model/STACK-CONTRACT.md:117`; run as
+
+```text
+train-in-space --data-root /tmp/opencode/next02-inputs \
+  --train-split /tmp/opencode/next02-inputs/mw-balp/train \
+  --train-sha256 1fc3f4ec…941f --train-mask-sha256 81aa5ed0…b0b7 \
+  --out OUT --objective cell --retain-rates 1 --decay-mult 1 --lr 0.001 --lr-end 0 \
+  --context 256 --width 256 --hamming-read 4 --batch 16 \
+  --turn-memory 8 --turn-memory-reply 1 --turn-memory-dropout 500 \
+  --turn-memory-leave-copied 1 --hamming-copy-latest 1 \
+  --steps 16384 --eval-every 2048 --samples 6 --reply-tokens 48 --seed 2
+```
+
+**All nine `[memory]` fingerprints and step 0 match exactly** — 60,366 TRAIN windows, 428 DEV, 6,021
+of 13,584 opening keys left, table keys 7,563, 186,261 of 329,340 reply keys left, 143,079 reply keys
+at share 0.5, TRAIN openings 214,190/163,540, DEV 1,226/950, TRAIN reply rows 2,233,156/1,393,810,
+DEV 13,061/7,641, and `dev_loss 2.78726` with `nearest 5 (openings 3/1226, commonest 161)`, `top-8
+27`, `admitted 526`. The default TRAIN pin (`3dee858f…`) is the older corpus; the run's is
+`1fc3f4ec…`, so `--train-split` plus both sha flags are required.
 
 ## 2. The 8× corpus (already generated)
 
