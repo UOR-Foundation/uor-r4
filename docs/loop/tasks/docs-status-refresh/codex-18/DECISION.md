@@ -9,3 +9,5 @@
 - Close #3801 on delivered instrumentation. The cache's real-data research use remains a separate question. Keep the seven conditional mechanism experiments with technical prerequisites on the roadmap.
 
 These decisions change tracker scope. Each issue preserves its original bar, evidence and reversal path. The [charter](../../../../../CHARTER.md), [M1 close](https://github.com/UOR-Foundation/uor-r4/issues/2029), [Q5 stop](https://github.com/UOR-Foundation/uor-r4/pull/3544), [written-state decision](../../written-state-count-model/claude-409/DECISION.md) and [owner's roadmap tracker](https://github.com/UOR-Foundation/uor-r4/issues/2028) identify the controlling records.
+
+The top Codex session reviewed the M7–M8 path after fresh review of `ffafa07d8`. M7 needs a candidate-selectable three-host harness and matching receipts. Independent verification can receive a checksum-pinned candidate while packaging is open, after the M4–M7 prerequisites. The owner retains the alpha declaration, and packaging still closes after that decision. This removes a scheduler cycle without changing a milestone bar.

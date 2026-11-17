@@ -27,7 +27,7 @@ M7 bar: "giving bit-identical tokens across the library, command line and browse
 
 ## How to start
 
-Pin the accepted M4 artifact and its matching inputs. Run the registered `m7-parity-prompts-v1` panel through the existing library, CLI and browser harness, keeping the eight prompts, greedy settings and fresh-process 32 + 16 split. Compare the exact IDs and snapshot bytes, repeat the tamper controls, attach the three-host receipts and append the result to the serving notebook. [Panel and harness entry points](../../harness/panels/m7-parity.json)
+First extend the three-host harness to accept a candidate artifact and its bound tokenizer. Its rehearsal generates seed 5 and a 40-token tokenizer and overrides the browser stack path. Keep that fixture as a regression. Require the library, CLI and browser receipts to measure and match the candidate artifact and tokenizer hashes, and fail if any host substitutes the fixture. Pin the accepted M4 files, then run the registered `m7-parity-prompts-v1` panel through the candidate-capable harness, keeping the eight prompts, greedy settings and fresh-process 32 + 16 split. Compare the exact IDs and snapshot bytes, repeat the tamper controls, attach the three-host receipts and append the result to the serving notebook. [Panel and harness entry points](../../harness/panels/m7-parity.json)
 
 <details>
 <summary>Original harness design, registration and synthetic rehearsal instructions (historical)</summary>

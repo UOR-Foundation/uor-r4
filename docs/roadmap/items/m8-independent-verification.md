@@ -6,7 +6,7 @@ area: evaluation
 status: ready
 open_to: anyone
 needs_gpu: true
-depends_on: [m8-release-packaging]
+depends_on: [m4-export-uorlut01-cli, m5-laptop-full-path-measurement, m6-qualify-reasoning-coding, m7-parity-library-cli-browser]
 notebook: docs/research/notebook/m4-serving.md
 scope: [xtask/**, docs/products/**, docs/labs/m8-independent-verification/**, docs/research/notebook/m4-serving.md]
 ---
@@ -28,6 +28,8 @@ One rule shapes the kit. Under CHARTER §3.5 and §3.6, panel scoring, qualifica
 A third party reproduces the install and the M1 to M7 bars from the checksum-pinned artifact: the serving-side bars on consumer hardware, and the panel-scored bars on a GPU as CHARTER §3.6 requires. The bars are the rows of the M1 to M7 table in `ROADMAP.md`; M1's integer top-1 condition was set by the owner on 19 October 2026. The owner declares alpha; this item produces the evidence for that decision and does not make it.
 
 ## How to start
+
+Take the checksum-pinned release candidate, installation instructions and score manifest from the open [packaging item](m8-release-packaging.md). The four dependencies above establish the accepted model and its measurements. The candidate handoff permits independent verification before the owner decides on alpha. Record its immutable digest in every receipt. A change of candidate invalidates verification of the changed bytes.
 
 1. Read the M8 row and the M1 to M7 rows of `ROADMAP.md`, the M8 checklist in `docs/products/releases-and-artifacts.md` (from line 52), and `docs/roadmap/items/m8-release-packaging.md`. Note which bars each earlier milestone froze and what each one needs to run.
 2. Post a design note on the issue: a proposed definition of consumer hardware and of a third party, listing the machine specs to record, and which bars run on the consumer machine and which on a GPU (CHARTER §3.6). Use the lab’s whole-project D68 decision review for those definitions. Have its top session approve and log the decision card for Casey, who can reverse it. The owner declares alpha after independent verification.

@@ -144,7 +144,7 @@ These items are ready and open to anyone.
 
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
-| [Independently verify the alpha on consumer hardware](items/m8-independent-verification.md) | ready | anyone | yes | [m8-release-packaging](items/m8-release-packaging.md) | [#2869](https://github.com/UOR-Foundation/uor-r4/issues/2869) |
+| [Independently verify the alpha on consumer hardware](items/m8-independent-verification.md) | ready | anyone | yes | [m4-export-uorlut01-cli](items/m4-export-uorlut01-cli.md), [m5-laptop-full-path-measurement](items/m5-laptop-full-path-measurement.md), [m6-qualify-reasoning-coding](items/m6-qualify-reasoning-coding.md), [m7-parity-library-cli-browser](items/m7-parity-library-cli-browser.md) | [#2869](https://github.com/UOR-Foundation/uor-r4/issues/2869) |
 | [Prepare the checksummed alpha release package and install path](items/m8-release-packaging.md) | ready | anyone | no | [m4-export-uorlut01-cli](items/m4-export-uorlut01-cli.md), [m5-laptop-full-path-measurement](items/m5-laptop-full-path-measurement.md), [m6-qualify-reasoning-coding](items/m6-qualify-reasoning-coding.md), [m7-parity-library-cli-browser](items/m7-parity-library-cli-browser.md) | [#2870](https://github.com/UOR-Foundation/uor-r4/issues/2870) |
 
 ## Research
@@ -491,15 +491,19 @@ flowchart LR
   n_m4_export_uorlut01_cli --> n_m5_laptop_full_path_measurement
   n_m4_export_uorlut01_cli --> n_m6_qualify_reasoning_coding
   n_m4_export_uorlut01_cli --> n_m7_parity_library_cli_browser
+  n_m4_export_uorlut01_cli --> n_m8_independent_verification
   n_m4_export_uorlut01_cli --> n_m8_release_packaging
   n_m4_lawful_likelihood_bpb --> n_m4_export_uorlut01_cli
+  n_m5_laptop_full_path_measurement --> n_m8_independent_verification
   n_m5_laptop_full_path_measurement --> n_m8_release_packaging
   n_m6_causal_ablation_instrument --> n_m6_qualify_reasoning_coding
   n_m6_exact_arithmetic_mechanism --> n_m6_qualify_reasoning_coding
+  n_m6_qualify_reasoning_coding --> n_m8_independent_verification
   n_m6_qualify_reasoning_coding --> n_m8_release_packaging
   n_m6_reasoning_panel_freeze --> n_m6_causal_ablation_instrument
   n_m6_reasoning_panel_freeze --> n_m6_code_task_rustc_verifier
   n_m6_reasoning_panel_freeze --> n_m6_qualify_reasoning_coding
+  n_m7_parity_library_cli_browser --> n_m8_independent_verification
   n_m7_parity_library_cli_browser --> n_m8_release_packaging
   n_m7_studio_connect_wasm_engine --> n_infra_desktop_client_tauri
   n_m7_studio_connect_wasm_engine --> n_m7_parity_library_cli_browser
@@ -507,7 +511,6 @@ flowchart LR
   n_m7_studio_live_model_sources --> n_m7_lexlean_studio_tools
   n_m7_studio_live_model_sources --> n_studio_typed_shell_upgrade
   n_m7_studio_self_host_page_assets --> n_m7_studio_live_model_sources
-  n_m8_release_packaging --> n_m8_independent_verification
   n_native_space_state_contract --> n_end_to_end_integration
   n_object_store_consumer_m3 --> n_m3_qualify_memory
   n_one_decoder --> n_integer_nearest_readout

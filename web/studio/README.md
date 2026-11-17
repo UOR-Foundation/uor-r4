@@ -320,16 +320,10 @@ with sha256 and tokenizer validation, then loaded into the discrete wasm runtime
 **top-8 next-token prediction** (greedy continuation repeats tokens; the page says so and refuses
 chat generation on the discrete engine). The page/worker artifact cap is 128 MB.
 
-```json
-[{"id": "m1-trunk-seed1", "label": "M1 model (19-table trunk, seed 1)", "primary": true,
-  "hf_url": "https://huggingface.co/caseyallard/uor-r4-m1-model/resolve/main/t16-frozen-zero-seed1-trunk.d11",
-  "hf_tokenizer_url": "https://huggingface.co/caseyallard/uor-r4-m1-model/resolve/main/tokenizer-seed-1.json",
-  "sha256": "04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d",
-  "size_bytes": 86536132, "schema": "uor-r4.lut-discrete-trunk/1", "note": "..."}]
-```
+The typed publisher uses the checked-in [seed-1 selector](../../scripts/studio/public-m1.json). It verifies the release receipt and pinned model and tokenizer metadata. Run from the repository root on current `main`:
 
 ```sh
-scripts/studio/build-and-publish.sh --target gh-pages --push --yes --trained-manifest /tmp/m1-trained.json
+scripts/studio/build-and-publish.sh --typed --trained-manifest scripts/studio/public-m1.json --target gh-pages --push --yes
 ```
 
 ### The /7 turn memory
