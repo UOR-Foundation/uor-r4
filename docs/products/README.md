@@ -18,7 +18,7 @@ Labels: **proof**, **measurement**, **hypothesis** ([`docs/formal_vocabulary.md`
 | Product | What it is meant to be | What exists today | Main gate |
 |---|---|---|---|
 | [Language model](./language-model.md) | A geometric language model exported as one checksum-pinned `UORLUT01` file | The discrete M1 pair and a separate FBS `lut-stack/5` export with exact rotations and its DEV export gap inside the bar; no conversational product release | M2–M4, then M8 |
-| [Web client](./web-client.md) | A local model in the browser: download once, run in WebAssembly on the device | Synthetic parity harness plus public M1 top-8 next-token prediction in the live Studio; no chat or qualified bundle | M7 |
+| [Web client](./web-client.md) | A local model in the browser: download once, run in WebAssembly on the device | Synthetic parity harness, public M1 model files and a top-8 prediction engine. See the web-client guide for the deployed catalog | M7 |
 | [Desktop client](./desktop-client.md) | A Tauri app sharing the interface, with native engine, file access, durable memory and offline use | [`src-tauri/`](../../src-tauri/) backend, Studio host and GUI shell with seven integration controls on the synthetic stand-in; no qualified bundle | M3, M4, M5, M7 |
 
 [Releases and artifacts](./releases-and-artifacts.md) covers the file format, future M8 release,
@@ -46,7 +46,7 @@ comparison exists.
 | Saved discrete M1 model, two seeds | DEV 7,002 / 7,001 of 14,287; Fresh V2 7,215 / 7,228 of 14,479; p-f 7,850 / 7,872 of 15,953; Apple M1 decode 10,876 / 10,566 tok/s. On p-f, 62.5% of reference replies are verbatim TRAIN replies: reference-data overlap, not a generated-copy rate or useful-chat qualification | [M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md) |
 | Separate FBS trunk | Unsnapped `lut-stack/5` export; exact rotations; DEV export gap inside the bar; not joined to the M1 artifact | [pipeline map](../model/pipeline-map.md) |
 | Integer serving engine, native and WebAssembly | Audits green; integer multiply and divide allowed; float remains banned | [serving dossier](../mechanisms/lut-serving.md) |
-| Studio connected to the integer engine | Synthetic parity harness passes; the live Studio serves the public M1 model as top-8 next-token prediction, not chat; desktop remains synthetic-only | [web client](./web-client.md), [desktop client](./desktop-client.md) |
+| Studio connected to the integer engine | Synthetic parity harness passes. M1 ranks the next token with its matching tokenizer. The web-client guide records the deployed model sources | [web client](./web-client.md), [desktop client](./desktop-client.md) |
 | Public website deploy | DeepSeek's Studio is live at `/studio/`; mdBook preview publishes on main, production only by manual dispatch | [`deploy.yml`](../../.github/workflows/deploy.yml), [`docs-site.yml`](../../.github/workflows/docs-site.yml), [web client](./web-client.md) |
 
 A passing audit shows that a forbidden instruction is absent. It is not a trained capability, and

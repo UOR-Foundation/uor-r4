@@ -7,7 +7,7 @@ closes only when its full bar is met on a saved model. The evidence and limitati
 
 ![The project road: M1 marked complete on the saved discrete model, while the current end-to-end line works toward grounded replies, durable memory and the remaining milestones.](docs/figures/start/roadmap.svg)
 
-*M1 is complete; the current work is replies from the model's own state and one useful model end to end.*
+The current experiment asks whether geometric reads improve on a count model at equal memory. It has separate tests for predictive quality, grounded replies, resident bytes and laptop decode speed. [Written-state decision](docs/loop/tasks/written-state-count-model/claude-409/DECISION.md)
 
 | Milestone | Bar to close it | Status |
 |---|---|---|

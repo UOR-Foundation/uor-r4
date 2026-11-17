@@ -20,6 +20,10 @@ flowchart TD
 Terms follow the [glossary](../start/glossary.md). Claims are **proof**, **measurement** or
 **hypothesis**.
 
+## What does geometry add beyond counts?
+
+On the written-state track the comparison is a fixed count model evaluated on unseen D87 text. The proposed model must improve bits per byte against that reference and demonstrate a difference when its memory is removed or the speaker roles are shuffled. Each test answers a different question about what the state has learned. [Research decision and controls](../loop/tasks/written-state-count-model/claude-409/DECISION.md) · [Current measurement](../start/where-we-are.md#a-count-baseline-for-the-next-experiment)
+
 ## Answered at M1's scope
 
 The saved 19-table `uor-r4.lut-discrete-trunk/1` model passes all six bars on two seeds:
@@ -36,7 +40,7 @@ p-f has no prompt value-masked templates in TRAIN at K = 1,024, so it tests new 
 kinds, not new reply kinds or useful conversation
 ([M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md)).
 
-## The central unknown: correct reply opening on new phrasing
+## Earlier reply-opening experiments
 
 Claude-217 gives the sharpest current measurement:
 

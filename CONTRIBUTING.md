@@ -21,6 +21,8 @@ flowchart LR
 
 ## For outside contributors
 
+Pick an open question or a reproducible defect. A useful first contribution might reproduce one measured count from the M1 report, add a failure case to an evaluator, or clarify a result whose test panel is hard to identify. For a new mechanism, explain which roadmap question it answers and what observation would change your mind. Formal implementation work has a separate home in [LexLean-R4](https://github.com/Casey-allard/lexlean-r4).
+
 ### Build and test
 
 Rust 1.97.1 is pinned by `rust-toolchain.toml` and selected by rustup. From the repository root:

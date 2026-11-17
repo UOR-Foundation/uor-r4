@@ -15,6 +15,10 @@ promise.
 
 Terms are in the [glossary](./glossary.md). Labels are **proof**, **measurement** or **hypothesis**.
 
+## The current experiment
+
+The 16 November research decision starts with a count model on D87, a corpus for which training, tuning and test streams are separately sealed. Tune the reference on DEV-tune and score the frozen choice on DEV-test. Then measure what geometric routing and memory add at equal bytes. The proposed scale is one billion cells in at most 4 GB and at least 1,000 decoded tokens/s. The experiment also calls for grounded replies to beat both the no-memory and shuffled-speaker controls. These are targets. [Decision and thresholds](../loop/tasks/written-state-count-model/claude-409/DECISION.md) · [Split construction](../loop/tasks/written-state-count-model/claude-420/REPORT.md) · [Plan](../../PLAN.md)
+
 ## The eight milestones
 
 | | Milestone | In plain words | Status | Issue |
@@ -46,7 +50,7 @@ The limitation is equally important: 62.5% of p-f's reference replies are verbat
 M1 reads new prompt phrasings into known reply kinds; it does not show new reply kinds or useful
 conversation. See [CHARTER §4.8](../../CHARTER.md#4-evidence), the [M1 close](../labs/m1-close-saved-model/README.md), [Fresh V2](../labs/m1-fresh-panel-transfer/README.md), and the [bar-f report](../loop/tasks/m1-heldout-phrasing-transfer/claude-211/REPORT.md).
 
-## The current order of work
+## The native training and serving contract
 
 Since 13 Nov the route is D85: one persistent native geometric state, in one declared integer or
 fixed-point representation, that training and serving share, with the same typed operators and
@@ -65,9 +69,7 @@ bit-identical replay. Float master weights and a float-to-integer export gap bec
 On the current FBS models the measured gap is clear. Served without their exact turn memory, the
 models give 171 to 211 exact replies of 2,218 against 377 to 441 with it, and almost every fact
 comes from the memory's table ([V0, claude-376](../loop/tasks/one-model-end-to-end/claude-376/REPORT.md)).
-Work in progress on 14 Nov carries the state across training windows (V1,
-[#3979](https://github.com/UOR-Foundation/uor-r4/pull/3979)) and adds vector-native reads (V2(a),
-[#3978](https://github.com/UOR-Foundation/uor-r4/pull/3978)). M2 and M3, then M4, follow one
+Cross-window state and three optional vector reads were implemented in November. In the later two-seed test, none of the reads met the held-out fact-selection threshold. [Cross-window report](../loop/tasks/one-model-end-to-end/claude-380/REPORT.md) · [Read comparison](../loop/tasks/one-model-end-to-end/claude-386/REPORT.md). M2 and M3, then M4, follow one
 useful model; after that come laptop cost, reasoning and coding, distribution and the alpha release.
 
 The late-October point-key and nearest-readout units (claude-217 to claude-232) are recorded in
