@@ -20,8 +20,8 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 25 |
-| held | 17 |
+| ready | 26 |
+| held | 16 |
 | decision | 0 |
 | done | 114 |
 | total | 156 |
@@ -156,6 +156,7 @@ These items are ready and open to anyone.
 | [Build a lawful GPU comparator for the historical S1.4 icosian snap replay](items/icosian-snap-parity.md) | ready | anyone | yes | none | [#2655](https://github.com/UOR-Foundation/uor-r4/issues/2655) |
 | [Define one persistent native training/serving state and its operator parity](items/native-space-state-contract.md) | ready | a lab | no | none | [#3973](https://github.com/UOR-Foundation/uor-r4/issues/3973) |
 | [Score one model end to end on prompts it has not seen, with tokens per second](items/one-model-end-to-end.md) | ready | a lab | yes | [turn-memory-reply](items/turn-memory-reply.md) | [#3407](https://github.com/UOR-Foundation/uor-r4/issues/3407) |
+| [Make the native writer's admission hold at every seed](items/writer-admission.md) | ready | a lab | yes | [one-decoder](items/one-decoder.md) | [#3394](https://github.com/UOR-Foundation/uor-r4/issues/3394) |
 | [Test the written-state geometric count model against the frozen reference](items/written-state-count-model.md) | ready | a lab | yes | [m2-donor-corpus-generation](items/m2-donor-corpus-generation.md) | [#4063](https://github.com/UOR-Foundation/uor-r4/issues/4063) |
 | [Build a sigmoid-free gate for E8 orbit memory and rerun it on GPU](items/e8-orbit-memory-sigmoid-free-iteration.md) | held | a lab | yes | [float-training-module](items/float-training-module.md) | [#2822](https://github.com/UOR-Foundation/uor-r4/issues/2822) |
 | [One kernel list for the float crate, and fused kernels for the served quantizers](items/float-kernel-fusion.md) | held | a lab | yes | none | [#3678](https://github.com/UOR-Foundation/uor-r4/issues/3678) |
@@ -173,7 +174,6 @@ These items are ready and open to anyone.
 | [Bring training as served back inside the 2x operational gate](items/served-rounding-cost.md) | held | a lab | yes | none | [#3594](https://github.com/UOR-Foundation/uor-r4/issues/3594) |
 | [Split the training backward, and run a cheaper rival search against (a)](items/training-step-cost.md) | held | a lab | yes | [fbs-cost-profile](items/fbs-cost-profile.md) | [#3391](https://github.com/UOR-Foundation/uor-r4/issues/3391) |
 | [Serve the turn memory from the integer artifact on the laptop](items/turn-memory-integer.md) | held | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | [#3392](https://github.com/UOR-Foundation/uor-r4/issues/3392) |
-| [Make the native writer's admission hold at every seed](items/writer-admission.md) | held | a lab | yes | [one-decoder](items/one-decoder.md) | [#3394](https://github.com/UOR-Foundation/uor-r4/issues/3394) |
 | [Build a hard-selection step for carrier credit](items/carrier-credit-hard-selection.md) | done | a lab | yes | none | [#2819](https://github.com/UOR-Foundation/uor-r4/issues/2819) |
 | [Port exact CPU reads, counterfactual updates and BVG-K](items/cpu-discrete-training-path.md) | done | a lab | no | [cpu-discrete-writer-core](items/cpu-discrete-writer-core.md) | [#3501](https://github.com/UOR-Foundation/uor-r4/issues/3501) |
 | [Build an exact CPU discrete writer and admission oracle](items/cpu-discrete-writer-core.md) | done | a lab | no | [cpu-training-program](items/cpu-training-program.md) | [#3502](https://github.com/UOR-Foundation/uor-r4/issues/3502) |
