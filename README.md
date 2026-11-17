@@ -19,6 +19,17 @@ Here we can test competing designs, retain a negative and change direction withi
 
 ## Try the M1 predictor
 
+From the repository root, run the released seed-1 model on the token IDs for `The capital of France is`:
+
+```sh
+curl -fL -o seed1.d11 https://huggingface.co/caseyallard/uor-r4-m1-model/resolve/1fec0d4c42d4d5929a0cf08b1a0f17291d1dbc55/t16-frozen-zero-seed1-trunk.d11
+printf '%s  %s\n' 04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d seed1.d11 | shasum -a 256 -c - && \
+  cargo run --locked -p uor-r4-integer --features serving-wasm --bin uor-chat -- \
+    --discrete seed1.d11 --prompt-ids 413,2743,3695,372,3704,1651,435 --max-tokens 1 --temperature 0
+```
+
+The JSON result contains `"generated_ids": [223]`. This is one next-token prediction.
+
 In the [Studio version with the M1 predictor](https://github.com/UOR-Foundation/uor-r4/pull/4066), open **Models**, choose **Load M1 next-token predictor (seed 1)** and enter `The capital of France is`. Select **Predict next tokens** to see eight ranked candidates. The first token ID for that exact input is **223**. The first load downloads about 87 MB of weights and tokenizer. The prediction runs on your device. The Agent task replay is a separate tool. [Open Studio](https://uor-foundation.github.io/uor-r4/studio/) · [Public model files](https://huggingface.co/caseyallard/uor-r4-m1-model/tree/1fec0d4c42d4d5929a0cf08b1a0f17291d1dbc55)
 
 ## Current research direction
