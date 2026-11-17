@@ -5,6 +5,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeStudioCatalog } from '../../../../scripts/studio/catalog.mjs';
+import { validateM1Receipt } from '../../../../scripts/studio/public-m1.mjs';
 
 function fixtureRoot() {
     const root = mkdtempSync(join(tmpdir(), 'uor-studio-catalog-'));
@@ -49,4 +50,28 @@ test('public M1 publication takes only its fixed release selector', () => {
     assert.equal(card.tokenizer_sha256, 'a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377');
     assert.throws(() => stage({ ...selector, hf_url: 'https://example.org/other.d11' }), /override/);
     assert.throws(() => stage({ public_release: 'fbs' }), /Unknown/);
+});
+
+test('the measured M1 workload and raw decisions are required even when the two claimed outputs agree', () => {
+    const path = new URL('../../../../scripts/studio/public-m1-served-forward.json', import.meta.url);
+    const receipt = JSON.parse(readFileSync(path, 'utf8'));
+    validateM1Receipt(receipt);
+    for (const mutate of [
+        r => { r.artifact.bytes -= 1; },
+        r => { r.artifact.sha256 = '0'.repeat(64); },
+        r => { r.tokenizer.sha256 = '0'.repeat(64); },
+        r => { r.cpu_panel.mask_sha256 = '0'.repeat(64); },
+        r => { r.browser_workload.prefix[0] += 1; },
+        r => { r.browser_workload.independent_cpu.admitted_cells.reverse(); },
+        r => { r.browser_workload.native_serving.query_q12[0] += 1; },
+        r => { r.browser_workload.browser_top8.reverse(); },
+        r => {
+            r.browser_workload.independent_cpu.query_q12[0] += 1;
+            r.browser_workload.native_serving.query_q12[0] += 1;
+        },
+    ]) {
+        const changed = structuredClone(receipt);
+        mutate(changed);
+        assert.throws(() => validateM1Receipt(changed));
+    }
 });

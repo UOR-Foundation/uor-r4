@@ -13,3 +13,7 @@ Trace the existing publication gate, match public weights and tokenizer to their
 ## Stop list
 
 Use only the already released M1 artifact. Preserve existing gates and evidence. No research training, panel scoring, private artifacts, paid resources, changes to owner rules, workflow edits or direct public writes.
+
+## Scope amendment after exact-head review
+
+The parent Codex session reviewed #3440, M1 #2029, the M7 client path, the CPU-training release gate (#3609), the 19-table parity inventory and Charter §§3–5. It approved the decision recorded in [DECISION.md](DECISION.md) for this single prior release. The amendment covers a discrete served-forward receipt, validator and negative tests, browser download-origin checks, and repairing the existing positive staging fixture in `scripts/tests/test_release_served_forward_gate.py`. The done check now also requires raw matched CPU and native integer decision words, including the eight ordered candidates rendered in Chrome.

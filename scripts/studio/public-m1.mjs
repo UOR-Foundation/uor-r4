@@ -1,40 +1,97 @@
+import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
-const parityPath = 'docs/labs/one-model-end-to-end/evidence-deepseek-11-trunk-parity.json';
-const devPath = 'docs/labs/m1-close-saved-model/evidence/t16-frozen-zero-seed1-trunk-dev-score.json';
+const releaseId = 'm1-discrete-trunk-seed-1';
 const revision = '1fec0d4c42d4d5929a0cf08b1a0f17291d1dbc55';
 const release = 'https://huggingface.co/caseyallard/uor-r4-m1-model/resolve/' + revision;
+const receiptPath = 'scripts/studio/public-m1-served-forward.json';
+const receiptSha = 'ff370aefd6ba8062e2316c5478a8d428b8e220f8c5da2d47f7b0eeed24bfe479';
+const decisionSha = 'a009e0cbdc2a485583803ba9c9cc92e00810a2497c9413fc4a40057331e4cbbe';
+const exportSha = '2d94fb873be0b4d60e8b5b79c551917b9009d429862af33d9f26363dd6a1719a';
+const paritySha = 'd93d61bf0ee25825812522f49f7d82552d95c4f9601f54f0baa4cf49a843c12c';
+const devSha = '685226d637bc541237b230a89b370f24bf02129c0bef57fed33aa77c8fe88add';
+const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
-// The historical M1 discrete predictor has its own measured CPU/integer and CUDA
-// evidence. Only this exact published pair can use this profile.
-function readEvidence(path, digest) {
+function evidenceBytes(path, digest) {
   const bytes = readFileSync(new URL('../../' + path, import.meta.url));
-  if (createHash('sha256').update(bytes).digest('hex') !== digest) throw new Error('M1 evidence digest differs: ' + path);
-  return JSON.parse(bytes);
+  assert.equal(sha256(bytes), digest, 'M1 evidence digest differs: ' + path);
+  return bytes;
 }
 
-export function publicM1Card(selector) {
-  if (selector.public_release !== 'm1-discrete-trunk-seed-1' || Object.keys(selector).length !== 1) {
+// The CPU reader and native serving model expose different interfaces. Compare the
+// same integer words, including candidate order, before checking the browser top-8.
+function decisionDigest(prefix, decision) {
+  assert.equal(decision.query_q12.length, 32);
+  assert.equal(decision.admitted_cells.length, 8);
+  assert.equal(decision.top8.length, 8);
+  assert.equal(decision.token, decision.top8[0]);
+  const words = [...prefix, ...decision.query_q12, ...decision.admitted_cells, ...decision.top8, decision.token];
+  const bytes = Buffer.alloc(words.length * 4);
+  words.forEach((word, index) => {
+    assert.ok(Number.isInteger(word), 'decision word must be an integer');
+    bytes.writeInt32LE(word, index * 4);
+  });
+  return sha256(bytes);
+}
+
+export function validateM1Receipt(receipt) {
+  const exports = JSON.parse(evidenceBytes('docs/labs/m1-close-saved-model/evidence/t16-frozen-zero-seed1-trunk-export.json', exportSha));
+  const parity = JSON.parse(evidenceBytes('docs/labs/one-model-end-to-end/evidence-deepseek-11-trunk-parity.json', paritySha));
+  const dev = JSON.parse(evidenceBytes('docs/labs/m1-close-saved-model/evidence/t16-frozen-zero-seed1-trunk-dev-score.json', devSha));
+  assert.equal(receipt.schema, 'uor-r4.m1-discrete-served-forward/1');
+  assert.equal(receipt.release_revision, revision);
+  assert.equal(receipt.artifact.schema, 'uor-r4.lut-discrete-trunk/1');
+  assert.equal(receipt.artifact.bytes, exports.bytes);
+  assert.equal(receipt.artifact.sha256, exports.file_sha256);
+  assert.equal(receipt.artifact.sha256, parity.artifact.sha256);
+  assert.equal(receipt.artifact.sha256, dev.artifact_sha256);
+  assert.equal(receipt.tokenizer.sha256, parity.tokenizer.sha256);
+  assert.equal(receipt.tokenizer.bytes, 265393);
+  assert.equal(receipt.export_sha256, exportSha);
+  assert.equal(receipt.gpu_dev_score_sha256, devSha);
+  assert.equal(receipt.cpu_panel.parity_sha256, paritySha);
+  assert.equal(receipt.cpu_panel.tokens_sha256, parity.panel.tokens_sha256);
+  assert.equal(receipt.cpu_panel.mask_sha256, parity.panel.mask_sha256);
+  assert.equal(receipt.cpu_panel.manifest_sha256, parity.panel.manifest_sha256);
+  const cpu = parity.cpu_engine_parity;
+  assert.equal(parity.artifact.tables, 19);
+  assert.equal(cpu.rows, parity.panel.response_targets);
+  assert.equal(cpu.rows, 616);
+  assert.equal(cpu.query_coordinates_checked, cpu.rows * 32);
+  assert.equal(cpu.query_coordinate_mismatches, 0);
+  assert.equal(cpu.admitted_cell_mismatches, 0);
+  assert.equal(cpu.top8_mismatches, 0);
+  assert.equal(cpu.token_mismatches, 0);
+  assert.equal(dev.reference.checked, 14287);
+  assert.equal(dev.reference.agreed, dev.reference.checked);
+  assert.equal(dev.planted_fault_b4.b4_pass, true);
+
+  const { prompt, prefix, independent_cpu, native_serving, browser_top8 } = receipt.browser_workload;
+  assert.equal(prompt, 'The capital of France is');
+  assert.deepEqual(prefix, [413, 2743, 3695, 372, 3704, 1651, 435]);
+  assert.deepEqual(independent_cpu, native_serving, 'CPU and native serving decisions differ');
+  assert.equal(decisionDigest(prefix, native_serving), decisionSha, 'raw decision differs from measured oracle');
+  assert.deepEqual(browser_top8, native_serving.top8, 'browser and native top-8 differ');
+}
+
+export function publicM1Card(selector, dest) {
+  if (selector.public_release !== releaseId || Object.keys(selector).length !== 1) {
     throw new Error('Unknown public release or attempt to override its pins');
   }
-  const paritySha = 'd93d61bf0ee25825812522f49f7d82552d95c4f9601f54f0baa4cf49a843c12c';
-  const devSha = '685226d637bc541237b230a89b370f24bf02129c0bef57fed33aa77c8fe88add';
-  const parity = readEvidence(parityPath, paritySha);
-  const dev = readEvidence(devPath, devSha);
-  const cpu = parity.cpu_engine_parity;
-  if (dev.artifact_sha256 !== parity.artifact.sha256 || dev.reference.agreed !== 14287 ||
-      dev.reference.checked !== 14287 || !dev.planted_fault_b4.b4_pass ||
-      parity.artifact.tables !== 19 || cpu.rows !== 616 || cpu.query_coordinates_checked !== 19712 ||
-      cpu.query_coordinate_mismatches !== 0 || cpu.admitted_cell_mismatches !== 0 ||
-      cpu.top8_mismatches !== 0 || cpu.token_mismatches !== 0) throw new Error('M1 release evidence mismatch');
+  const bytes = evidenceBytes(receiptPath, receiptSha);
+  const receipt = JSON.parse(bytes);
+  validateM1Receipt(receipt);
+  const auditName = releaseId + '.uorlut.audit.json';
+  mkdirSync(join(dest, 'models'), { recursive: true });
+  writeFileSync(join(dest, 'models', auditName), bytes);
   return {
-    id: 'm1-discrete-trunk-seed-1', kind: 'published', primary: true,
-    label: 'M1 next-token predictor (seed 1)',
+    id: releaseId, kind: 'published', primary: true, label: 'M1 next-token predictor (seed 1)',
     url: release + '/t16-frozen-zero-seed1-trunk.d11', tokenizer_url: release + '/tokenizer-seed-1.json',
-    format: 'UORLUT01', schema: 'uor-r4.lut-discrete-trunk/1', size_bytes: 86536132,
-    sha256: parity.artifact.sha256, tokenizer_sha256: parity.tokenizer.sha256,
-    discrete_parity_sha256: paritySha, gpu_dev_score_sha256: devSha,
+    format: 'UORLUT01', schema: receipt.artifact.schema, size_bytes: receipt.artifact.bytes,
+    sha256: receipt.artifact.sha256, tokenizer_sha256: receipt.tokenizer.sha256,
+    served_forward_audit_schema: receipt.schema, served_forward_audit_sha256: receiptSha, audit_url: './models/' + auditName,
     note: 'Downloads 86.5 MB of public model weights and a matching tokenizer on request. Ranks eight next tokens locally.',
   };
 }

@@ -91,7 +91,7 @@ export function writeStudioCatalog({ dest, publicUrl = '', publicLabel = 'Public
     mkdirSync(join(dest, 'models'), { recursive: true });
     for (const entry of entries) {
       if (entry && Object.hasOwn(entry, 'public_release')) {
-        manifest.models.push(publicM1Card(entry));
+        manifest.models.push(publicM1Card(entry, dest));
         continue;
       }
       const id = String((entry && entry.id) || '').trim();

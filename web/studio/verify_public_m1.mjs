@@ -1,5 +1,6 @@
 // Usage: node web/studio/verify_public_m1.mjs <staged or live Studio URL>
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { chromium } from 'playwright';
 
 const url = new URL(process.argv[2]);
@@ -13,9 +14,14 @@ try {
     const page = await context.newPage();
     const external = [];
     const errors = [];
+    const releaseBase = 'https://huggingface.co/caseyallard/uor-r4-m1-model/resolve/1fec0d4c42d4d5929a0cf08b1a0f17291d1dbc55/';
+    const permittedRoots = [releaseBase + 't16-frozen-zero-seed1-trunk.d11', releaseBase + 'tokenizer-seed-1.json'];
     context.on('request', request => {
         const target = new URL(request.url());
-        if (/^https?:$/.test(target.protocol) && target.origin !== url.origin) external.push([request.method(), target.hostname]);
+        if (!/^https?:$/.test(target.protocol) || target.origin === url.origin) return;
+        let root = request;
+        while (root.redirectedFrom()) root = root.redirectedFrom();
+        external.push({ method: request.method(), origin: target.origin, root: root.url() });
     });
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(url.href);
@@ -23,6 +29,16 @@ try {
     const load = page.getByRole('button', { name: 'Load M1 next-token predictor (seed 1)', exact: true });
     await load.waitFor();
     assert.deepEqual(external, []);
+    const catalog = await (await context.request.get(new URL('models.json', url).href)).json();
+    const card = catalog.models.find(entry => entry.id === 'm1-discrete-trunk-seed-1');
+    assert.equal(card.served_forward_audit_schema, 'uor-r4.m1-discrete-served-forward/1');
+    const receiptUrl = new URL(card.audit_url, url);
+    assert.equal(receiptUrl.origin, url.origin);
+    const receipt = await context.request.get(receiptUrl.href);
+    assert.equal(receipt.status(), 200);
+    const receiptSha = createHash('sha256').update(await receipt.body()).digest('hex');
+    assert.equal(receiptSha, 'ff370aefd6ba8062e2316c5478a8d428b8e220f8c5da2d47f7b0eeed24bfe479');
+    assert.equal(card.served_forward_audit_sha256, receiptSha);
     await load.click();
     const predict = page.getByRole('button', { name: 'Predict next tokens', exact: true });
     await predict.waitFor({ timeout: 180000 });
@@ -32,7 +48,11 @@ try {
     assert.equal(model.modelSchema, 'uor-r4.lut-discrete-trunk/1');
     assert.equal(model.modelShaVerified, 'true');
     assert.match(model.modelTokenizer, /stack-bound byte-bpe/);
-    assert.ok(external.some(([method, host]) => method === 'GET' && host === 'huggingface.co'));
+    assert.deepEqual([...new Set(external.map(request => request.root))].sort(), [...permittedRoots].sort());
+    for (const request of external) {
+        assert.equal(request.method, 'GET');
+        assert.ok(request.origin === 'https://huggingface.co' || /^https:\/\/(?:[a-z0-9-]+\.)+cdn\.hf\.co$/.test(request.origin), 'Unexpected download origin: ' + request.origin);
+    }
     const downloads = external.length;
     await context.setOffline(true);
     await page.getByRole('textbox', { name: 'Prompt', exact: true }).fill(prompt);
