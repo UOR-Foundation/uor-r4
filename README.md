@@ -4,7 +4,9 @@
 
 [Research book](https://uor-foundation.github.io/uor-r4/) · [Studio](https://uor-foundation.github.io/uor-r4/studio/) · [M1 model files](https://huggingface.co/caseyallard/uor-r4-m1-model) · [Roadmap and open work](https://github.com/UOR-Foundation/uor-r4/issues/2028)
 
-![A brass geometric frame on graph paper beside a laptop, casting a shadow across a field of points.](docs/figures/start/geometric-workbench.jpg)
+![A gold path reaches a small group of illuminated cells within a larger field.](docs/figures/start/sparse-read.jpg)
+
+*An artist’s illustration of the lookup question. The model uses a geometric address to choose a small set of cells to read. The gold path represents that choice. The [pipeline map](docs/model/pipeline-map.md) traces the implemented steps.*
 
 **Pre-alpha · 1 of 8 milestones complete.** We have published a trained integer model that ranks the next token. Producing complete replies grounded in earlier turns is an open problem. The target is one model that can carry a conversation, remember across sessions and eventually reason and write code on ordinary hardware.
 
@@ -32,11 +34,15 @@ The JSON result contains `"generated_ids": [223]`. This is one next-token predic
 
 The CLI returns one greedy token, ID **223** (a space). To see the eight ranked candidates for the same prefix, open **Models** in the public Studio, choose **Load M1 next-token predictor (seed 1)**, enter `The capital of France is` in **Prediction prefix**, then choose **Predict next tokens**. On November 17, the browser ranked 223 first with its network disabled after loading. [Public Studio](https://uor-foundation.github.io/uor-r4/studio/) · [Full result and model hashes](docs/products/web-client.md#run-the-seed-1-example) · [Published catalog](https://github.com/UOR-Foundation/uor-r4/blob/2878cdc029c1d232e7468e4751a610cc91fc8ab0/studio/models.json)
 
+![The public Studio shows the submitted prefix and eight ranked token IDs returned by seed 1.](docs/figures/start/m1-studio-result.png)
+
+*The released model’s actual answer to this prefix is a ranking. The first candidate, token 223, decodes to a space. The [public Studio](https://uor-foundation.github.io/uor-r4/studio/) produced this screenshot with the network disabled after the model loaded.*
+
 ## Current research direction
 
 On 16 November the lab adopted an experiment in **writing observations directly into addressed integer cells**. Counts establish what follows each token sequence. Phase P2 asks whether geometry improves which observations the model retrieves. With equal table bytes, it must use at least 1% fewer DEV-test bits than the best of token context, re-seeded transport and SplitMix, with the paired 95% interval excluding zero. Training and serving must replay the same persistent integer state. [Research decision](docs/research/reviews/pi-review-2026-11-16/DECISION.md) · [Native state and replay contract](docs/loop/tasks/written-state-count-model/claude-409/NATIVE-SPACE.md)
 
-The separate whole-model quality gate requires at most **0.80 times the bits per byte of R\*** on sealed D87 DEV-test. R\* is an unpruned modified Kneser–Ney count model. At order 2 its scorer measured **2.004736 bits per byte** on D87 DEV-tune and **2.194312** on novel targets. Lower is better. The sealed reference and the geometric model comparison still await merged results. [Calibration measurement](docs/loop/tasks/written-state-count-model/claude-421/REPORT.md) · [Experiment sequence](PLAN.md)
+The whole-model quality gate is measured against R\*, an unpruned modified Kneser–Ney count model. Order 10 won the tuning sweep. On the sealed D87 test, R\* measured **1.418136 bits per byte** overall and **1.743746** on novel targets. Lower is better. These numbers set the reference for the geometric model, whose own sealed comparison is still ahead. [Sealed reference and quality thresholds](docs/loop/tasks/written-state-count-model/claude-422/REPORT.md) · [Experiment sequence](PLAN.md)
 
 ## Where we are
 
@@ -46,6 +52,10 @@ from its own training text:
 
 - the **unigram** table, which always guesses by overall word frequency;
 - the **T2** table, which looks at the previous word and guesses the word most often seen after it.
+
+![M1 development-panel predictions: seed 1 got 7,002 correct and seed 2 got 7,001, compared with 6,300 for the previous-token table and 1,226 for unigram.](docs/figures/start/status-vs-baselines.svg)
+
+*Each bar counts correct next-token predictions on the same 14,287 positions. The table below shows whether the gain persisted on two additional panels. [Two-seed measurement](docs/labs/m1-close-saved-model/README.md)*
 
 | Test panel | Saved model, seed 1 / seed 2 | Unigram | T2 | Outcome |
 |---|---:|---:|---:|---|
