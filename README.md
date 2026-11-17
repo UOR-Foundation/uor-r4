@@ -17,6 +17,10 @@
 
 Here we can test competing designs, retain a negative and change direction within the [research charter](CHARTER.md). LexLean-R4 takes the same goal toward a product through a separate formal implementation in LexLean and PrismPM. Each repository records the evidence for its own implementation.
 
+## Try the M1 predictor
+
+In the [Studio version with the M1 predictor](https://github.com/UOR-Foundation/uor-r4/pull/4066), open **Models**, choose **Load M1 next-token predictor (seed 1)** and enter `The capital of France is`. Select **Predict next tokens** to see eight ranked candidates. The first token ID for that exact input is **223**. The first load downloads about 87 MB of weights and tokenizer. The prediction runs on your device. The Agent task replay is a separate tool. [Open Studio](https://uor-foundation.github.io/uor-r4/studio/) · [Public model files](https://huggingface.co/caseyallard/uor-r4-m1-model/tree/1fec0d4c42d4d5929a0cf08b1a0f17291d1dbc55)
+
 ## Current research direction
 
 On 16 November the lab adopted an experiment in **writing observations directly into addressed integer cells**. First count what follows each token sequence. Then ask whether geometric reads improve on those counts with the same memory budget. This gives geometry a strong, reproducible competitor. The intended end state is one persistent integer state shared by training and serving. [Research decision](docs/loop/tasks/written-state-count-model/claude-409/DECISION.md) · [Native state and replay contract](docs/loop/tasks/written-state-count-model/claude-409/NATIVE-SPACE.md)

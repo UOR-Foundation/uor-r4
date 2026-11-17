@@ -3,6 +3,10 @@
 
 **M1 model and tokenizer.** The published M1 stack ranks eight possible next tokens. Seed 1 is 86,536,132 bytes and its BPE tokenizer is 265,393 bytes. A verified stack digest identifies the weights. Text prediction also requires the matching tokenizer. On 17 November the public Studio catalog offered the synthetic fixture. Importing the stack URL alone left the tokenizer unbound. The typed workbench's task replay is a separate demonstration. [Pinned M1 release](https://huggingface.co/caseyallard/uor-r4-m1-model/tree/1fec0d4c42d4d5929a0cf08b1a0f17291d1dbc55) · [Studio](https://uor-foundation.github.io/uor-r4/studio/)
 
+## Run the seed-1 example
+
+The paired loader in [the M1 Studio update](https://github.com/UOR-Foundation/uor-r4/pull/4066) checks both SHA-256 digests. In **Models**, select **Load M1 next-token predictor (seed 1)**. Enter `The capital of France is` and click **Predict next tokens**. For those seven BPE tokens, the native runtime and the staged browser returned IDs **223, 952, 2359, 2471, 23, 263, 964, 1520** in that order. The ranked list is a next-token measurement. It does not generate a complete answer.
+
 ## Publication history
 
 **14 November 2026 status.** The project is pre-alpha: M1 is complete (1 of 8), and no model holds a useful conversation. The live `/studio/` was still the 9 November publish below (gh-pages `4a435ab8a`), and its status text already read "Pre-alpha · M1 complete · 1 of 8". The browser-owned task workspace of [#3915](https://github.com/UOR-Foundation/uor-r4/pull/3915) (kimi-1, merged 11 November) was in the source on `main` only, to be carried live by a republish with the same typed options. The Studio still loads the public M1 model only as a top-8 next-token predictor, and its catalog lists only the synthetic demo.

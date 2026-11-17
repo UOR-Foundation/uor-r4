@@ -96,7 +96,7 @@ conversion and runs the same shared transition: after 64 trained steps, the rest
 transition results match as raw words. No token generation is claimed ([codex-8](../loop/tasks/native-space-state-contract/codex-8/REPORT.md)). The discrete path's CUDA training, CPU training and integer serving now
 agree on the same fixture bytes, on two fixtures ([claude-372](../loop/tasks/one-model-end-to-end/claude-372/REPORT.md)).
 
-**Cross-window state and vector reads.** V1 carried the state across training windows. V2(a) added three optional reads. On the later held-out fact-selection task, none of the reads reached the registered threshold at either seed. [V1](../loop/tasks/one-model-end-to-end/claude-380/REPORT.md) · [V2 follow-up](../loop/tasks/one-model-end-to-end/claude-386/REPORT.md)
+**Cross-window state and vector reads.** V1 carried the state across training windows. V2(a) added three optional reads. At 16,384 steps Flock-g chose the correct fact on 494–504 of 512 questions in each of the four far-distance seed/bucket combinations. Its best answer accuracy was 0.023 against the 0.90 bar. The remaining gap was using the selected fact to answer. [V1](../loop/tasks/one-model-end-to-end/claude-380/REPORT.md) · [V2 follow-up](../loop/tasks/one-model-end-to-end/claude-386/REPORT.md)
 
 The point-key and nearest-readout units of late October (claude-217 to claude-232) are recorded
 in the [float-training notebook](../research/notebook/float-training.md) and the

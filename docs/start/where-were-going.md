@@ -69,7 +69,7 @@ bit-identical replay. Float master weights and a float-to-integer export gap bec
 On the current FBS models the measured gap is clear. Served without their exact turn memory, the
 models give 171 to 211 exact replies of 2,218 against 377 to 441 with it, and almost every fact
 comes from the memory's table ([V0, claude-376](../loop/tasks/one-model-end-to-end/claude-376/REPORT.md)).
-Cross-window state and three optional vector reads were implemented in November. In the later two-seed test, none of the reads met the held-out fact-selection threshold. [Cross-window report](../loop/tasks/one-model-end-to-end/claude-380/REPORT.md) · [Read comparison](../loop/tasks/one-model-end-to-end/claude-386/REPORT.md). M2 and M3, then M4, follow one
+Cross-window state and three optional vector reads were implemented in November. In the two-seed test Flock-g learned which fact to select, while its best held-out answer accuracy was 0.023 against the 0.90 bar. [Cross-window report](../loop/tasks/one-model-end-to-end/claude-380/REPORT.md) · [Read comparison](../loop/tasks/one-model-end-to-end/claude-386/REPORT.md). M2 and M3, then M4, follow one
 useful model; after that come laptop cost, reasoning and coding, distribution and the alpha release.
 
 The late-October point-key and nearest-readout units (claude-217 to claude-232) are recorded in
