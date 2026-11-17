@@ -2,15 +2,8 @@
 # Build the Studio web client and publish (or dry-run publish) its runtime files to the docs
 # site's /studio/, without changing any tracked file in the current checkout.
 #
-# WHY A SCRIPT AND NOT A WORKFLOW CHANGE YET
-#   .github/workflows/docs-site.yml rebuilds the mdBook and replaces everything at the target
-#   branch root EXCEPT a directory named studio/
-#       find site -mindepth 1 -maxdepth 1 ! -name .git ! -name studio -exec rm -rf {} +
-#   so a built Studio published once to gh-pages / gh-pages-preview stays live across every later
-#   book deploy. Making the build automatic needs .github/workflows/docs-site.yml changed, and
-#   .github/** is an OWNER-ONLY path (docs/harness/owner-paths.json): a lab PR touching it fails the
-#   owner-paths gate. The Lead's report carries the proposed workflow diff for the owner; until it
-#   lands, this script is the manual publisher.
+# The manual docs publisher replaces the book on gh-pages while preserving studio/.
+# This helper stages and inspects a Studio update locally unless explicitly published.
 #
 # SAFETY
 #   * default is a DRY RUN: builds, stages, makes a local commit in a throwaway worktree of the
@@ -24,7 +17,7 @@
 #   scripts/studio/build-and-publish.sh [options]
 #     --typed                build and stage the Vite app with the public M1 predictor card
 #                            (default: legacy; --trained-manifest replaces the typed card selection)
-#     --target <branch>       gh-pages-preview (default) or gh-pages (live; requires HEAD=main)
+#     --target <branch>       gh-pages only; required explicitly for a live push
 #     --push                  push the publish commit (otherwise dry run)
 #     --no-build              reuse web/studio/pkg/ as built
 #     --skip-verify           skip the Studio verification harnesses
@@ -47,7 +40,7 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$root"
 
-target=gh-pages-preview
+target=''
 typed=0
 push=0
 yes=0
@@ -79,13 +72,20 @@ while [ "$#" -gt 0 ]; do
         *) die "unknown argument $1 (try --help)" ;;
     esac
 done
-case "$target" in gh-pages|gh-pages-preview) ;; *) die "--target must be gh-pages or gh-pages-preview" ;; esac
+if [ "$push" = 1 ] && [ -z "$target" ]; then
+    die "--push needs an explicit --target gh-pages"
+fi
+target=${target:-gh-pages}
+[ "$target" = gh-pages ] || die "--target must be gh-pages"
 if [ "$push" = 1 ] && [ "$yes" != 1 ]; then
     die "--push also needs --yes: publishing is a deliberate action (dry run is the default)"
 fi
 branch=$(git symbolic-ref -q --short HEAD || true)
-if [ "$target" = gh-pages ] && [ "$push" = 1 ]; then
+if [ "$push" = 1 ]; then
     [ "$branch" = main ] || die "refusing to push live: the checkout must be on branch main (it is '${branch:-detached}')"
+    [ -z "$(git status --porcelain)" ] || die "refusing to push live from a dirty checkout"
+    git fetch -q --no-prune --no-tags origin refs/heads/main:refs/remotes/origin/main ||
+        die "cannot verify current origin/main"
     head_sha=$(git rev-parse HEAD)
     main_sha=$(git rev-parse origin/main 2>/dev/null || true)
     [ -n "$main_sha" ] || die "origin/main is not fetched; run git fetch origin main"
@@ -222,7 +222,7 @@ fi
 # 4. Make the publish commit in a throwaway worktree of the target branch, then (optionally) push.
 say ""
 say "== fetch origin $target"
-git fetch -q origin "$target" || die "git fetch origin $target failed; is the branch present?"
+git fetch -q --no-prune --no-tags origin "refs/heads/$target:refs/remotes/origin/$target" || die "git fetch origin $target failed; is the branch present?"
 if ! git rev-parse --verify --quiet "refs/remotes/origin/$target" >/dev/null; then
     die "origin/$target does not exist"
 fi
@@ -300,8 +300,7 @@ else
     else
         say ""
         say "DRY RUN: nothing pushed. To publish:"
-        say "  git -C '$site_wt' push origin HEAD:$target"
-        say "or re-run this script with --push from a clean main checkout."
+        say "  Re-run this script with --target gh-pages --push --yes from a clean main checkout."
         say "The next docs-site book deploy keeps studio/: docs-site.yml deletes only non-studio root entries."
     fi
 fi
