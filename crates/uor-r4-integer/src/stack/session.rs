@@ -306,8 +306,13 @@ struct Layer {
 /// and the eight signed-axis codes of its Cl(0,6) state (`code & 7` the source
 /// axis, `code & 8` a negation). Served as a gather and a sign; no weights.
 struct FbsMap {
+    /// One entry a (block, term): the input atom the term reads.
     atoms: Vec<u16>,
+    /// One entry a (block, term): the eight signed-axis codes of the term's Cl(0,6) state.
     codes: Vec<[u8; 8]>,
+    /// Terms an output block sums. The layout is `out_blocks * terms`; one term (the default) is
+    /// the historical single gather, and `terms` is derived from the table's length.
+    terms: usize,
 }
 
 /// One recurrence layer of a SpiralCore/FBS trunk: route tables in place of
@@ -426,6 +431,8 @@ pub struct FbsLayerImage<'a> {
 pub struct FbsMapImage<'a> {
     pub atoms: &'a [u16],
     pub codes: &'a [[u8; 8]],
+    /// Terms per output block; `atoms`/`codes` hold `out_blocks * terms`.
+    pub terms: usize,
 }
 
 impl FbsImage<'_> {
@@ -448,6 +455,7 @@ impl<'a> FbsMapImage<'a> {
         Self {
             atoms: &map.atoms,
             codes: &map.codes,
+            terms: map.terms,
         }
     }
 }
@@ -663,9 +671,23 @@ fn fbs_model(artifact: &Container, shape: &StackShape) -> Result<FbsModel, Stack
     };
     let route = |name: &str, in_blocks: usize, out_blocks: usize| -> Result<FbsMap, StackError> {
         let entries = artifact.table_u32(name)?;
-        length(name, entries.len(), out_blocks)?;
-        let mut atoms = Vec::with_capacity(out_blocks);
-        let mut route_codes = Vec::with_capacity(out_blocks);
+        // The table is `out_blocks * terms` words; the terms are the table's length over the
+        // block count, so a one-term map is the historical table byte for byte.
+        if out_blocks == 0 || !entries.len().is_multiple_of(out_blocks) {
+            return Err(StackError::TableLength {
+                name: name.to_owned(),
+                len: entries.len(),
+                expected: out_blocks,
+            });
+        }
+        let terms = entries.len() / out_blocks;
+        if !(1..=4).contains(&terms) {
+            return Err(StackError::Numerics(format!(
+                "{name}: {terms} terms a block is outside 1..=4"
+            )));
+        }
+        let mut atoms = Vec::with_capacity(entries.len());
+        let mut route_codes = Vec::with_capacity(entries.len());
         for &entry in &entries {
             let (atom, state) = ((entry & 0xffff) as usize, (entry >> 16) as usize);
             if atom >= in_blocks || state >= 64 {
@@ -679,6 +701,7 @@ fn fbs_model(artifact: &Container, shape: &StackShape) -> Result<FbsModel, Stack
         Ok(FbsMap {
             atoms,
             codes: route_codes,
+            terms,
         })
     };
     let mut layers = Vec::with_capacity(shape.layers());
@@ -4145,19 +4168,31 @@ fn stack_swiglu(model: &IntegerStackModel, gate: &[i32], up: &[i32], out: &mut [
 /// from `x_exp` to the residual exponent. A gather and a sign: no weights.
 #[inline(never)]
 fn stack_fbs_gather<T: Copy + Into<i64>>(map: &FbsMap, x: &[T], x_exp: i32, out: &mut [i32]) {
-    for ((block, &atom), codes) in out.chunks_exact_mut(8).zip(&map.atoms).zip(&map.codes) {
-        let base = usize::from(atom) << 3;
-        let Some(values) = x.get(base..base + 8) else {
-            // The loader keeps every atom inside its input.
-            debug_assert!(false, "stack_fbs_gather: an atom lies outside the input");
-            return;
-        };
-        for (slot, &code) in block.iter_mut().zip(codes) {
-            let v: i64 = values[usize::from(code & 7)].into();
-            let v = if code & 8 == 0 { v } else { v.saturating_neg() };
+    let terms = map.terms.max(1);
+    for (o, block) in out.chunks_exact_mut(8).enumerate() {
+        let mut lanes = [0i32; 8];
+        for term in 0..terms {
+            let at = o * terms + term;
+            let atom = map.atoms[at];
+            let codes = &map.codes[at];
+            let base = usize::from(atom) << 3;
+            let Some(values) = x.get(base..base + 8) else {
+                // The loader keeps every atom inside its input.
+                debug_assert!(false, "stack_fbs_gather: an atom lies outside the input");
+                return;
+            };
+            for (slot, &code) in lanes.iter_mut().zip(codes) {
+                let v: i64 = values[usize::from(code & 7)].into();
+                let v = if code & 8 == 0 { v } else { v.saturating_neg() };
+                // A one-term map writes the converted value exactly as it always did; further
+                // terms saturate at the residual exponent.
+                *slot = slot.saturating_add(to_exp_i32(v, x_exp, RESIDUAL_EXP));
+            }
+        }
+        for (slot, &lane) in block.iter_mut().zip(lanes.iter()) {
             // `black_box` keeps LLVM from packing the block's eight lanes into
             // SIMD registers, which the step audit refuses (as `kernels.rs`).
-            *slot = core::hint::black_box(to_exp_i32(v, x_exp, RESIDUAL_EXP));
+            *slot = core::hint::black_box(lane);
         }
     }
 }
@@ -6461,3 +6496,51 @@ pub use crate::report_output::{
     validate_protocol_v3_energy_receipt_with_mode, verify_step_disassembly_text,
     ProtocolV3ValidationError,
 };
+
+#[cfg(test)]
+mod route_terms_tests {
+    use super::*;
+
+    /// A signed gather: lane `j` reads `input[atom*8 + (code & 7)]`, negated on `code & 8`.
+    fn gather_one(atom: u16, codes: [u8; 8], x: &[i32]) -> [i32; 8] {
+        let map = FbsMap {
+            atoms: vec![atom],
+            codes: vec![codes],
+            terms: 1,
+        };
+        let mut out = [0i32; 8];
+        stack_fbs_gather(&map, x, RESIDUAL_EXP, &mut out);
+        out
+    }
+
+    #[test]
+    fn a_two_term_route_is_the_sum_of_its_two_gathers_and_one_term_is_unchanged() {
+        let x: Vec<i32> = (0..16).map(|i| i as i32).collect();
+        let identity: [u8; 8] = std::array::from_fn(|j| j as u8);
+        let negated: [u8; 8] = std::array::from_fn(|j| (j as u8) | 8);
+
+        // One term is the historical gather, lane for lane.
+        assert_eq!(gather_one(0, identity, &x), std::array::from_fn(|j| j as i32));
+        assert_eq!(gather_one(1, negated, &x), std::array::from_fn(|j| -((8 + j) as i32)));
+
+        // Two terms sum their gathers.
+        let map = FbsMap {
+            atoms: vec![0, 1],
+            codes: vec![identity, negated],
+            terms: 2,
+        };
+        let mut out = [0i32; 8];
+        stack_fbs_gather(&map, &x, RESIDUAL_EXP, &mut out);
+        let a = gather_one(0, identity, &x);
+        let b = gather_one(1, negated, &x);
+        assert_eq!(
+            out,
+            std::array::from_fn(|j| a[j].saturating_add(b[j])),
+            "a two-term route is exactly the sum of its two one-term gathers"
+        );
+
+        // The count is derived from the table: two entries a block is two terms.
+        let entries: Vec<u32> = vec![0, (1 << 16) | 1];
+        assert_eq!(entries.len() / 1, 2);
+    }
+}

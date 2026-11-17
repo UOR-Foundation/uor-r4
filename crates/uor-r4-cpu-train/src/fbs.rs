@@ -182,6 +182,7 @@ struct CpuFbsSessionCheckpoint {
 struct Map {
     atoms: Vec<u16>,
     codes: Vec<[u8; 8]>,
+    terms: usize,
 }
 
 impl Map {
@@ -189,6 +190,7 @@ impl Map {
         Self {
             atoms: image.atoms.to_vec(),
             codes: image.codes.to_vec(),
+            terms: image.terms.max(1),
         }
     }
 }
@@ -1176,12 +1178,12 @@ fn validate_layer(layer: &Layer, width: usize, mlp: usize) -> Result<()> {
         || layer.conv_bias.len() != width
         || layer.gate_bias.len() != gate_rows
         || layer.decay_offset.len() != lanes
-        || layer.rec_in.atoms.len() != 2 * width / 8
-        || layer.rec_gate.atoms.len() != gate_rows / 8
-        || layer.rec_out.atoms.len() != width / 8
-        || layer.mlp_gate.atoms.len() != mlp / 8
-        || layer.mlp_up.atoms.len() != mlp / 8
-        || layer.mlp_down.atoms.len() != width / 8
+        || layer.rec_in.atoms.len() != layer.rec_in.terms * (2 * width / 8)
+        || layer.rec_gate.atoms.len() != layer.rec_gate.terms * (gate_rows / 8)
+        || layer.rec_out.atoms.len() != layer.rec_out.terms * (width / 8)
+        || layer.mlp_gate.atoms.len() != layer.mlp_gate.terms * (mlp / 8)
+        || layer.mlp_up.atoms.len() != layer.mlp_up.terms * (mlp / 8)
+        || layer.mlp_down.atoms.len() != layer.mlp_down.terms * (width / 8)
     {
         return Err(invalid("FBS layer table dimensions do not match the trunk"));
     }
@@ -1218,16 +1220,24 @@ fn validate_atoms(map: &Map, input_blocks: usize) -> Result<()> {
 }
 
 fn gather<T: Copy + Into<i64>>(map: &Map, input: &[T], from_exp: i32, out: &mut [i32]) {
-    for ((block, &atom), codes) in out.chunks_exact_mut(8).zip(&map.atoms).zip(&map.codes) {
-        let base = usize::from(atom) * 8;
-        for (slot, &code) in block.iter_mut().zip(codes) {
-            let value: i64 = input[base + usize::from(code & 7)].into();
-            let value = if code & 8 == 0 {
-                value
-            } else {
-                value.saturating_neg()
-            };
-            *slot = to_exp_i32(value, from_exp, RESIDUAL_EXP);
+    let terms = map.terms.max(1);
+    for (o, block) in out.chunks_exact_mut(8).enumerate() {
+        let mut lanes = [0i32; 8];
+        for term in 0..terms {
+            let at = o * terms + term;
+            let base = usize::from(map.atoms[at]) * 8;
+            for (slot, &code) in lanes.iter_mut().zip(&map.codes[at]) {
+                let value: i64 = input[base + usize::from(code & 7)].into();
+                let value = if code & 8 == 0 {
+                    value
+                } else {
+                    value.saturating_neg()
+                };
+                *slot = slot.saturating_add(to_exp_i32(value, from_exp, RESIDUAL_EXP));
+            }
+        }
+        for (slot, &lane) in block.iter_mut().zip(lanes.iter()) {
+            *slot = lane;
         }
     }
 }
