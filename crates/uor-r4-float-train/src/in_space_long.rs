@@ -7783,6 +7783,24 @@ fn score_context_override<'a>(
     Ok(Some(c))
 }
 
+/// Carry panels run at C, but TRAIN cache windows were cut at W. Use W for
+/// that forward, then restore C for the following decodes and memory mode.
+fn with_train_cache_context<T>(
+    model: &mut StackModel,
+    carry_context: Option<usize>,
+    train_context: usize,
+    capture: impl FnOnce(&StackModel) -> Result<T>,
+) -> Result<T> {
+    let previous = model.config.context;
+    if carry_context.is_none() || train_context == previous {
+        return capture(model);
+    }
+    model.set_context(train_context)?;
+    let result = capture(model);
+    model.set_context(previous)?;
+    result
+}
+
 /// A panel cut by a past-window rule (claude-287): the rule, W, the context the panel's windows
 /// run at (W, or C under `carry`), each document's BOS position, and the `blocks` queries whose
 /// inputs run past W.
@@ -7808,7 +7826,7 @@ impl PastCut {
 /// One band of a past-window file's rows (claude-287): targets whose input's offset from their
 /// document's BOS is in `from..to`, their nearest and writer hits, and the checkpoint's own
 /// `query_loss` summed and averaged over them. `score_rows` refuses a past-window pass whose run
-/// objective is not found (#3714), so a written band carries both; they stay optional fields.
+/// objective is not found (#3714). A written band has a sum and, when it has targets, a mean.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct PastWindowBand {
     pub from: usize,
@@ -10051,7 +10069,6 @@ pub fn score_rows(
     if let Some(c) = model_context {
         model.set_context(c)?;
     }
-    let model = model;
     // The run's objective, read and required above whenever a past-window rule is set.
     let objective = past_objective;
     if past_window.is_some() {
@@ -10357,19 +10374,12 @@ pub fn score_rows(
         if cache_on {
             if let (Some(cache), Some(train)) = (query_cache.as_mut(), cache_train.as_ref()) {
                 let mut writer = cache.start_split(&train.name, label, on, train.context)?;
-                let picks = row_picks(
-                    &model,
-                    &train.windows,
-                    &train.mask,
-                    seed,
-                    step,
-                    trained_as_served,
-                    None,
-                    |query, _| {
+                let picks = with_train_cache_context(&mut model, model_context, train.context, |model| {
+                    row_picks(model, &train.windows, &train.mask, seed, step, trained_as_served, None, |query, _| {
                         writer.write_tensor(query)?;
                         Ok(())
-                    },
-                )?;
+                    })
+                })?;
                 let positions = picks
                     .iter()
                     .map(|pick| {
@@ -25635,6 +25645,36 @@ mod tests {
         let checkpoint_window = 4096;
         assert_eq!(carry(&[("short", 2048)]).unwrap().unwrap_or(checkpoint_window), 2048);
         assert_eq!(score_context_override(None, [("short", 2048)].into_iter()).unwrap(), None);
+    }
+
+    #[test]
+    fn past_window_train_cache_uses_w_then_restores_c() -> Result<()> {
+        let w = 4096;
+        let mut model = build_fbs_model_at(FbsArm::OneAtomActive, 1, 32, &Device::Cpu)?;
+        model.set_context(w)?;
+        let panel = score_context_override(Some(PastWindowRule::Carry), [("short", 2048)].into_iter())?;
+        model.set_context(panel.expect("carry panel"))?;
+        let mut tokens = vec![1; w + 1];
+        tokens[0] = 0;
+        let (windows, _) = hs::build_document_windows(&tokens, &vec![1; tokens.len()], w, 0)?;
+        assert_eq!(windows[0].input_ids.len(), w);
+        let check_train_window = |m: &StackModel| {
+            if windows[0].input_ids.len() > m.config.context {
+                return Err(invalid("TRAIN cache window exceeds the model context"));
+            }
+            Ok(m.config.context)
+        };
+        // Negative control: keeping the panel width would refuse this same TRAIN window.
+        assert!(with_train_cache_context(&mut model, None, w, check_train_window).is_err());
+        assert_eq!(with_train_cache_context(&mut model, panel, w, check_train_window)?, w);
+        assert_eq!(model.config.context, 2048);
+        let failure = with_train_cache_context(&mut model, panel, w, |m| {
+            assert_eq!(m.config.context, w);
+            Err::<(), _>(invalid("cache write failed"))
+        });
+        assert!(failure.is_err());
+        assert_eq!(model.config.context, 2048);
+        Ok(())
     }
 
     /// claude-287: the queries by their note's distance in widths of W: every query counts, a
