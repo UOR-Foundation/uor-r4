@@ -760,6 +760,25 @@ mod tests {
         ])
     }
 
+    fn retain_receipt(source: &Path, destination: &Path) -> Result<()> {
+        let bytes =
+            std::fs::read(source).map_err(|error| format!("{}: {error}", source.display()))?;
+        write_new(destination, &bytes)
+    }
+
+    #[test]
+    fn retained_receipt_collision_preserves_the_original_bytes() {
+        let dir = TestDir::new("retention");
+        let source = dir.0.join("report.json");
+        let destination = dir.0.join("retained.json");
+        let original = b"first receipt with trailing bytes\n";
+        std::fs::write(&source, original).unwrap();
+        retain_receipt(&source, &destination).unwrap();
+        std::fs::write(&source, b"new\n").unwrap();
+        assert!(retain_receipt(&source, &destination).is_err());
+        assert_eq!(std::fs::read(&destination).unwrap(), original);
+    }
+
     #[test]
     fn synthetic_report_is_complete_and_deterministic() {
         let dir = TestDir::new("report");
@@ -818,8 +837,8 @@ mod tests {
         assert!(run_with(&args)
             .unwrap_err()
             .contains("reports are never replaced"));
-        if let Ok(path) = std::env::var("UOR_KEEP_CARRY_HOLD_AUDIT_EVIDENCE") {
-            std::fs::write(path, std::fs::read(&out).unwrap()).unwrap();
+        if let Some(path) = std::env::var_os("UOR_KEEP_CARRY_HOLD_AUDIT_EVIDENCE") {
+            retain_receipt(&out, Path::new(&path)).unwrap();
         }
     }
 
@@ -923,9 +942,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn batch_preserves_order_and_repeats_byte_for_byte() {
-        let dir = TestDir::new("batch");
+    fn write_batch_fixture(dir: &TestDir) -> PathBuf {
         let first = dir.0.join("first");
         let second = dir.0.join("second");
         std::fs::create_dir(&first).unwrap();
@@ -961,6 +978,26 @@ mod tests {
             serde_json::to_vec_pretty(&manifest).unwrap(),
         )
         .unwrap();
+        manifest_path
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn batch_refuses_a_valid_manifest_without_linux_descriptor_checks() {
+        let dir = TestDir::new("batch-refusal");
+        let manifest_path = write_batch_fixture(&dir);
+        let out = dir.0.join("batch.json");
+        let error = run_batch(&manifest_path, &out, 2).unwrap_err();
+        assert!(error.contains("manifest checkpoint containment needs Linux /proc/self/fd"));
+        assert!(error.contains("use single-checkpoint mode"));
+        assert!(!out.exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn batch_preserves_order_and_repeats_byte_for_byte() {
+        let dir = TestDir::new("batch");
+        let manifest_path = write_batch_fixture(&dir);
         let out = dir.0.join("batch.json");
         run_batch(&manifest_path, &out, 2).unwrap();
         let report: serde_json::Value =
@@ -978,8 +1015,8 @@ mod tests {
             std::fs::read(&out).unwrap(),
             std::fs::read(&repeat).unwrap()
         );
-        if let Ok(path) = std::env::var("UOR_KEEP_CARRY_HOLD_BATCH_EVIDENCE") {
-            std::fs::write(path, std::fs::read(&out).unwrap()).unwrap();
+        if let Some(path) = std::env::var_os("UOR_KEEP_CARRY_HOLD_BATCH_EVIDENCE") {
+            retain_receipt(&out, Path::new(&path)).unwrap();
         }
         assert!(run_batch(&manifest_path, &out, 2)
             .unwrap_err()
