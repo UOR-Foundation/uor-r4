@@ -7,6 +7,7 @@ status: ready
 open_to: lab
 needs_gpu: false
 depends_on: []
+scope: [web/studio/assets/js/uor_model_worker.js, web/studio/assets/js/studio_ui.js, web/studio/verify_studio_worker.mjs, web/studio/src/adapters/generation*, web/studio/src/components/TaskTimeline*, web/studio/src/components/TimelineEvent.tsx, web/studio/src/components/TokenActivity*, web/studio/src/studio.css, web/studio/tests/e2e/cursor-tasks.spec.ts, docs/roadmap/items/studio-token-activity-trace.md, docs/loop/tasks/studio-token-activity-trace/**]
 ---
 
 ## Why it matters

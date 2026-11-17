@@ -7,7 +7,7 @@ status: ready
 open_to: anyone
 needs_gpu: false
 depends_on: []
-scope: [crates/uor-r4-discrete/src/d11_export.rs, crates/uor-r4-discrete/src/e_means.rs, crates/uor-r4-discrete/src/kn_score.rs, crates/uor-r4-discrete/src/ngram_count.rs, crates/uor-r4-discrete/src/ngram_count_cuda.rs, crates/uor-r4-discrete/src/ngram_count_device.rs, crates/uor-r4-discrete/src/pick_read_cuda.rs, crates/uor-r4-discrete/tests/native_vector_cuda.rs, docs/loop/tasks/discrete-clippy-k16-coverage/**]
+scope: [crates/uor-r4-discrete/src/d11_export.rs, crates/uor-r4-discrete/src/e_means.rs, crates/uor-r4-discrete/src/kn_score.rs, crates/uor-r4-discrete/src/ngram_count.rs, crates/uor-r4-discrete/src/ngram_count_cuda.rs, crates/uor-r4-discrete/src/ngram_count_device.rs, crates/uor-r4-discrete/src/pick_read_cuda.rs, crates/uor-r4-discrete/tests/native_vector_cuda.rs, crates/uor-r4-discrete/src/training.rs, crates/uor-r4-discrete/src/kn_score_cuda.rs, docs/labs/k16-timing-2026-10-15/instrument/**, scripts/pod/uor-cuda-check-remote, .github/workflows/ci.yml, docs/roadmap/items/discrete-clippy-k16-coverage.md, docs/loop/tasks/discrete-clippy-k16-coverage/**]
 ---
 
 ## Why it matters
@@ -24,7 +24,7 @@ Resolve the registered lint, CI-coverage and K16 timing findings with the corres
 
 ## How to start
 
-Review the merged and pending partial fixes and reproduce the remaining findings separately.
+Review the merged and pending partial fixes, then check the remaining lint, K16 instrument and PR coverage separately. A workflow edit requires the owner approval recorded for `.github/**`. [Owner paths](../../harness/owner-paths.json)
 
 ## Rules that apply
 

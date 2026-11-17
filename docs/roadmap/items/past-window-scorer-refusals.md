@@ -7,6 +7,7 @@ status: ready
 open_to: anyone
 needs_gpu: false
 depends_on: []
+scope: [crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, docs/roadmap/items/past-window-scorer-refusals.md, docs/loop/tasks/past-window-scorer-refusals/**]
 ---
 
 ## Why it matters

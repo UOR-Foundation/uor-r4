@@ -7,6 +7,7 @@ status: ready
 open_to: anyone
 needs_gpu: true
 depends_on: []
+scope: [crates/uor-r4-training/examples/stack-snap-parity.rs, crates/uor-r4-training/src/stack_snap_parity.rs, docs/harness/prep/icosian-snap-parity*, docs/labs/icosian-snap-parity/**, docs/roadmap/items/icosian-snap-parity.md, docs/loop/tasks/icosian-snap-parity/**]
 ---
 
 ## Why it matters
@@ -23,7 +24,7 @@ Under the reviewed sheet, report selections, root mismatches and top-1 agreement
 
 ## How to start
 
-Use the contributor instructions and public inputs linked below. Attach hardware specifications and use the registered non-author FIT for the model execution.
+Use the contributor instructions and public inputs linked below. Attach hardware specifications and verify the sheet’s non-author FIT before running the historical comparison.
 
 ## Rules that apply
 

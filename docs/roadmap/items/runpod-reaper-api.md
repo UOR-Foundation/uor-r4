@@ -7,6 +7,7 @@ status: ready
 open_to: anyone
 needs_gpu: false
 depends_on: []
+scope: [scripts/pod/uor-reaper.sh, scripts/pod/tests/uor-reaper*, docs/roadmap/items/runpod-reaper-api.md, docs/loop/tasks/runpod-reaper-api/**]
 ---
 
 ## Why it matters

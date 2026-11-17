@@ -7,6 +7,7 @@ status: ready
 open_to: anyone
 needs_gpu: false
 depends_on: []
+scope: [crates/uor-r4-integer/src/stack/memory.rs, xtask/src/main.rs, xtask/src/d5b_coaccess.rs, docs/labs/d5b-coaccess-assignment/**, docs/roadmap/items/d5b-coaccess-assignment.md, docs/loop/tasks/d5b-coaccess-assignment/**]
 ---
 
 ## Why it matters
