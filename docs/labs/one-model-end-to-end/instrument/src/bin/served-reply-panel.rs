@@ -42,6 +42,13 @@ const SCHEMA: &str = "uor-r4.served-reply-panel/1";
 const WINDOWS_SCHEMA: &str = "uor-r4.panel-windows/1";
 const RENDERING: &str = "one-user-turn/v1";
 const PER_TURN_RENDERING: &str = "per-turn/v1";
+/// The corpus's own shape (codex-36): the facts in one user turn, the assistant's acknowledgment,
+/// then the question in its own turn. `one-user-turn` never shows the model this shape, and
+/// `per-turn` joins two user turns with no assistant turn between, which the corpus never shows
+/// either.
+const CORPUS_SHAPE_RENDERING: &str = "corpus-shape/v1";
+/// The acknowledgment that stands between the facts and the question, as the corpus writes them.
+const CORPUS_SHAPE_ACK: &str = "Got it.";
 const BOS: u32 = 0;
 const EOS: u32 = 1;
 const STRATA: [(&str, usize); 5] = [
@@ -279,9 +286,10 @@ fn run_with_args(args: impl Iterator<Item = String>) -> Result<()> {
         .get("rendering")
         .map(String::as_str)
         .unwrap_or(RENDERING);
-    if rendering != RENDERING && rendering != PER_TURN_RENDERING {
+    if rendering != RENDERING && rendering != PER_TURN_RENDERING && rendering != CORPUS_SHAPE_RENDERING
+    {
         return Err(format!(
-            "--rendering wants {RENDERING} or {PER_TURN_RENDERING}"
+            "--rendering wants {RENDERING}, {PER_TURN_RENDERING} or {CORPUS_SHAPE_RENDERING}"
         ));
     }
     let (teacher_forced, paired_first) = rank_switches(&args)?;
@@ -610,6 +618,34 @@ fn render(
                     content: &content,
                 }])
                 .tokens;
+            (content, ids)
+        }
+        CORPUS_SHAPE_RENDERING => {
+            if parts.len() < 2 {
+                return Err(format!(
+                    "{}: the corpus shape needs facts and a question",
+                    case.id
+                ));
+            }
+            let (facts, question) = parts.split_at(parts.len() - 1);
+            let facts = facts.join(" ");
+            let question = question[0].clone();
+            let messages = [
+                Message {
+                    role: "user",
+                    content: &facts,
+                },
+                Message {
+                    role: "assistant",
+                    content: CORPUS_SHAPE_ACK,
+                },
+                Message {
+                    role: "user",
+                    content: &question,
+                },
+            ];
+            let content = format!("{facts}\n{CORPUS_SHAPE_ACK}\n{question}");
+            let ids = encoder.encode_assistant_prefix(&messages).tokens;
             (content, ids)
         }
         PER_TURN_RENDERING => {
