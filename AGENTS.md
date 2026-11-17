@@ -39,6 +39,7 @@ Only the owner changes it; changes are logged in [docs/rules/changes.md](docs/ru
 | What | Where |
 |---|---|
 | Rules | [CHARTER.md](CHARTER.md) |
+| **Whole-project memory — read first** | [docs/MEMORY.md](docs/MEMORY.md) |
 | Documentation hub | [docs/README.md](docs/README.md) |
 | Current plan and approved sequences | [PLAN.md](PLAN.md) |
 | The loop: sessions, orders, reports, review, build plan | [docs/loop/README.md](docs/loop/README.md) (§5.10) |
