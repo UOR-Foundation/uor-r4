@@ -6,8 +6,9 @@ epochs) and claude-152 ("13 times more training text, as mixed, hurt").
 ## Why this unit exists, and why it is not "more steps"
 
 `codex-33` measured the run's own curve: dev loss bottoms at **0.54 epochs** (2.247 at step 2,048)
-and rises after, while train loss falls. The corpus is **8,131,713 tokens** for a ~5 M-parameter
-trunk — under two tokens a parameter. The limit is data volume, not optimisation.
+and rises after, while train loss falls. The corpus is **8,131,713 tokens** for a trunk of **1,112,576
+values** (GO-FORWARD §6) — 7.3 tokens a value, where language models are usually trained at 20 or
+more. The limit is data volume, not optimisation.
 
 claude-152 already tried more text and it hurt, but the data was **13× larger *mixed* text, mostly
 long general chat, unlike the test's dialogues**. So the lesson is about the *mixture*, not the

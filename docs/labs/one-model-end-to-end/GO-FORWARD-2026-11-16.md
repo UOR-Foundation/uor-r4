@@ -130,6 +130,50 @@ Each item is a unit with its own ORDER/REPORT and its own gate. Sizes are honest
 21. **The transport-key harvest**: the per-token transport quaternion (and optionally the decay
     bucket and Hamilton gate) appended to the read's address, measured on the existing dumps.
 
+## 2d. Decisions of the late-16-Nov sitting (binding)
+
+**Decision 13 — score the checkpoint dev picked, not the last one.** The served arm r artifact was
+step 16,384, the *worst* point of its run: dev loss bottoms at **0.54 epochs** (2.247 at step 2,048)
+and rises to 2.371 by 4.34 epochs while train loss keeps falling. Exported at the same recipe and
+scored on the same fresh panel:
+
+| checkpoint | epoch | dev loss | value-present | right attribute | grammatical frame |
+|---|---|---|---|---|---|
+| **step 2,048** | 0.54 | **2.247** | **57 / 256** | 57 / 57 | 34 / 57 |
+| step 4,096 | 1.09 | 2.335 | 56 / 256 | — | — |
+| step 16,384 (what we had) | 4.34 | 2.371 | 25 / 256 | — | — |
+
+The panel tracks dev. **2.3× was the cost of having scored the last checkpoint.** The served artifact
+is `/tmp/opencode/armr-step002048.uorlut` (sha `5bb0f95d…`). A checkpoint is chosen by dev loss
+*before* the panel is spent, and the panel then checks that rule.
+
+**Decision 14 — the k-term family is met exactly, so post-hoc k is dead.** `route-terms-probe` read
+every projection's effective dense map through the model's own CUDA projection on the unit basis:
+**1,584 of 1,584 blocks are exactly one signed Cl(0,6) gather** (residual 0.000000000 at k = 1).
+Exporting the same master at `terms = 2` or `4` is a provable no-op. The earlier "rank-1 covers 1.7 %
+of a random dense projection" figure describes a *random* map; trained maps adapt to the family. A
+k-term gain can only come from **training with the terms in the forward** (codex-30 slice 3), and
+it is now a capacity question rather than an export-fidelity one.
+
+**Decision 15 — the reply is the owner sentence; bare values only where justified.** The owner's
+rule of 16 Nov: a general model answers in sentences unless a single word is justified. The panel's
+`membership_only` labels accept the bare value, so `complete` stays 0 for a correct sentence; the
+item's measure is **value-present**, with **right attribute** and **grammatical frame** beside it.
+At the dev-best checkpoint all 57 carried the right attribute and 34 of 57 a well-formed frame; the
+23 that blend the corpus's reply phrasings (`I current job is`) are a **corpus-shape defect**, not a
+memory or read failure. Codex-32's "the sentence is not composed" was read off the worst checkpoint
+and is corrected here.
+
+**Decision 16 — "training scale" means data volume at the same mixture, not more steps.** The recipe
+overfits from 0.54 epochs at 8.13 M tokens for a 1.11 M-value trunk. claude-152's "13× more text
+hurt" was *13× more mixed text* (long general chat), so mixture and volume are separated: codex-34
+generates 8× the **same** mixture with the same seed and shares and trains the same 16,384 steps to
+the same pass count. If dev loss does not improve at the same pass count, the trunk is not
+data-limited and capacity (the k-term arm) is the fork.
+
+**The compatibility gate, proven.** `fbs-export --legacy-artifact` reproduces arm r's artifact **byte
+for byte** (`f21046823640ea40…`), before and after the `terms`/`counts` change in codex-30 slice 2.
+
 ## 3. Decision 10 — which path, measured on one corpus
 
 | Axis | FBS trunk + read | Discrete D11 (M1 line) |
