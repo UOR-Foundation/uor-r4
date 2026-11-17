@@ -293,15 +293,46 @@ fn run(args: &[String]) -> Result<(), Failure> {
         for k in 0..=args.highest {
             let mut assembler = NgramAssembler::new_adjusted(k, false)?;
             let mut filter = wanted.filter(k)?;
+            // claude-423: the sink's host time, apart from the counter's phases.
+            let (mut push_ns, mut keep_ns) = (0u64, 0u64);
+            let nanos = |since: std::time::Instant| {
+                u64::try_from(since.elapsed().as_nanos()).unwrap_or(u64::MAX)
+            };
+            let order_started = std::time::Instant::now();
             let plan = counter.count_order_adjusted_with(
                 k,
                 args.highest,
                 args.budget,
                 &mut |partition| {
+                    let at = std::time::Instant::now();
                     assembler.push(partition)?;
-                    filter.keep(partition)
+                    push_ns += nanos(at);
+                    let at = std::time::Instant::now();
+                    let kept = filter.keep(partition);
+                    keep_ns += nanos(at);
+                    kept
                 },
             )?;
+            let order_ns = nanos(order_started);
+            let p = counter.take_phases();
+            let ms = |ns: u64| ns / 1_000_000;
+            eprintln!(
+                "order {k} phases ms: wall {} | own count {} extension count {} | histogram {} select {} sort {} emit {} download {} records {} | runs {} adjust {} | push {} keep {} | {} partitions counted",
+                ms(order_ns),
+                ms(p.own_count_ns),
+                ms(p.extension_count_ns),
+                ms(p.histogram_ns),
+                ms(p.select_ns),
+                ms(p.sort_ns),
+                ms(p.emit_ns),
+                ms(p.download_ns),
+                ms(p.records_ns),
+                ms(p.runs_ns),
+                ms(p.adjust_ns),
+                ms(push_ns),
+                ms(keep_ns),
+                p.partitions
+            );
             let (digest, _, _) = assembler.finish();
             let (triples, contexts) = filter.finish();
             eprintln!(
