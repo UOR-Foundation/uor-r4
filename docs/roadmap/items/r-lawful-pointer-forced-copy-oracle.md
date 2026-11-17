@@ -10,7 +10,7 @@ depends_on: []
 scope: [crates/uor-r4-training/**, docs/harness/prep/r-lawful-pointer-forced-copy-oracle*, docs/labs/r-lawful-pointer-forced-copy-oracle/**]
 ---
 
-**November 17, 2026 · closed as not planned.** The finite pointer preparation left the forced-copy intervention without a bound checkpoint or measured oracle-off result. P3 under #4063 has a separately specified S4 pointer. Reopen the original oracle if a particular checkpoint needs that intervention, with legal pointer construction and registered oracle-off and intervention controls. [November queue decision](../../loop/tasks/infra-loop-harness/codex-10/DECISION.md) · [Written-state experiment](https://github.com/UOR-Foundation/uor-r4/issues/4063) · [antigravity-69](https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/r-lawful-pointer-forced-copy-oracle/antigravity-69/REPORT.md)
+**November 17, 2026 · retired from the schedule under D68.** The finite pointer preparation left the forced-copy intervention without a bound checkpoint or measured oracle-off result. P3 under #4063 has a separately specified S4 pointer. Reopen the original oracle if a particular checkpoint needs that intervention, with legal pointer construction and registered oracle-off and intervention controls. [November queue decision](../../loop/tasks/infra-loop-harness/codex-10/DECISION.md) · [Written-state experiment](https://github.com/UOR-Foundation/uor-r4/issues/4063) · [antigravity-69](https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/r-lawful-pointer-forced-copy-oracle/antigravity-69/REPORT.md)
 
 ### Historical registration and evidence
 

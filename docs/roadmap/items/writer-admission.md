@@ -11,7 +11,7 @@ notebook: docs/research/notebook/float-training.md
 scope: [crates/uor-r4-float-train/src/native_vector_writer.rs, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, docs/harness/prep/writer-admission*, docs/loop/tasks/writer-admission/**, docs/research/notebook/float-training.md, docs/roadmap/items/writer-admission.md]
 ---
 
-**November 17, 2026 · closed as not planned.** Seed 2’s writer collapsed toward the center. Finite anchor controls landed, but every-seed admission and the matched two-seed comparison with whole-table nearest remain unmeasured. P1/P2 under #4063 specify their own Pick expert. Reopen if the selected model uses the old writer and the anchor-versus-nearest comparison would determine its readout. [November queue decision](../../loop/tasks/infra-loop-harness/codex-10/DECISION.md) · [Written-state experiment](https://github.com/UOR-Foundation/uor-r4/issues/4063) · [Writer anchor controls](https://github.com/UOR-Foundation/uor-r4/pull/3727)
+**November 17, 2026 · retired from the schedule under D68.** Seed 2’s writer collapsed toward the center. Finite anchor controls landed, but every-seed admission and the matched two-seed comparison with whole-table nearest remain unmeasured. P1/P2 under #4063 specify their own Pick expert. Reopen if the selected model uses the old writer and the anchor-versus-nearest comparison would determine its readout. [November queue decision](../../loop/tasks/infra-loop-harness/codex-10/DECISION.md) · [Written-state experiment](https://github.com/UOR-Foundation/uor-r4/issues/4063) · [Writer anchor controls](https://github.com/UOR-Foundation/uor-r4/pull/3727)
 
 ### Historical registration and evidence
 
