@@ -3,7 +3,7 @@ id: m6-code-task-rustc-verifier
 title: Add the rustc --test verifier the frozen M6 code-task bar names
 milestone: M6
 area: evaluation
-status: ready
+status: done
 open_to: anyone
 needs_gpu: false
 depends_on: [m6-reasoning-panel-freeze]
@@ -22,6 +22,10 @@ Keep the claim modest. The verifier compiles and runs each frozen CodeTasks row'
 The milestone dependency that D77 asks for is #2865's registered bar: `m6-qualify-reasoning-coding` (`docs/roadmap/items/m6-qualify-reasoning-coding.md`) is the item that will score this frozen panel, and its frozen code-task bar contains the literal clause quoted above; this item supplies the instrument cross-check over the panel's canonical programs, and #2865's pre-registration must decide whether that clause binds model-facing grading or is dropped or reworded. M6 sits behind M4, which is not done, so this unit is not on the current lab critical path; it is ready and open to an outside contributor now.
 
 ## What is missing
+
+**Completed on main.** The std-only verifier checks all 80 canonical programs and 320 held-out vector assertions. This closes instrument implementation. The model-scored M6 panel and the separate concurrency repair remain open. [Merged verifier](https://github.com/UOR-Foundation/uor-r4/pull/3821) · [Temp-directory collision](https://github.com/UOR-Foundation/uor-r4/issues/3876)
+
+**At registration**
 
 - **A bounded `rustc --test` runner.** `crates/uor-r4-core/src/native_geometric/workspace_coding.rs` has a bounded host-compiler pattern — `compile_single` (`:438`), `execute_binary` (`:546`), `iterative_repair` (`:568`), a 5 s process deadline (`:16`) and a pid-only kill (`:56-85`) — but no `--test`, no test-count parsing, no `cargo` and no offline handling (grep finds no `--test`, `test result`, `passed` or `offline` in that file). It belongs to a PARKED mechanism's crate and must not be extended for this ([mechanism board](../../mechanisms/README.md); [native-geometric reopen conditions](../../mechanisms/native-geometric.md)).
 - **One entry point in `crates/uor-r4-harness`, beside the panel,** std only and additive: it takes the emitted source the caller already holds and returns pass/fail counts, or a typed error (compile error, failed assertion, timeout). It runs `rustc --edition 2021 --test <file> -o <bin>` in a fresh temporary directory (no Cargo project and no network, so `--offline` is moot), with a wall-clock deadline on both compile and run, killing only the spawned child's own pid (never a name or pattern, [L-005](../../harness/mistakes/L-005.md)), with `GIT_*` removed from the child environment and no extra environment given. It then runs the binary and parses its `test result: … N passed; M failed` line, and removes the temporary directory afterwards.

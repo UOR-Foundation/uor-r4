@@ -17,6 +17,8 @@ An integer path is not an efficiency result until it is measured (CHARTER §3.9:
 
 ## What is missing
 
+**November 17, 2026.** The measurement protocol is registered. The outstanding receipt covers full-path latency, throughput, energy, RSS and touched weights on the accepted M4 artifact. Existing small-model and synthetic measurements retain their recorded scopes. [Issue #2033](https://github.com/UOR-Foundation/uor-r4/issues/2033) · [Issue #2657](https://github.com/UOR-Foundation/uor-r4/issues/2657) · [Issue #2859](https://github.com/UOR-Foundation/uor-r4/issues/2859)
+
 m5-cost is 0/1 qualified. Only synthetic-stack measurements exist: macmon M1 runs (4.13 vs 0.96 mJ/tok) and a provisional Linux RAPL receipt (17,190 tok/s, 3.172 mJ/tok gross, 1.530 mJ/tok net, on a 15,968 weights-per-token synthetic fixture, not a trained model). The maintainer annotation in the protocol (section 4) records two defects in that receipt: `work_rate_w` (40.5 W) disagrees with gross energy times tok/s (about 54.5 W), and the confidence interval used a z-value for three samples where a t-based interval gives about ±0.080 mJ instead of ±0.037 mJ. The owner's M1 run on the accepted M4 artifact is the authoritative record.
 
 ## Done when

@@ -16,6 +16,8 @@ This confirms the alpha claims without the authors' own setup. A result that onl
 
 ## What is missing
 
+**November 17, 2026.** The independent check follows #2870. Reproduce the release install and serving measurements using its exact artifact, and reproduce the panel bars on qualifying GPU hardware. [Issue #2036](https://github.com/UOR-Foundation/uor-r4/issues/2036)
+
 The M8 criteria (`docs/integration/project-track.md`, M8) require independent verification on consumer hardware of the one `UORLUT01` artifact. Nothing exists to verify yet: no trained model has been exported, and no checksum-pinned release exists. The bar is not yet registered for what counts as consumer hardware (M5 uses "an M1-class laptop") or who counts as a third party.
 
 One rule shapes the kit. Under CHARTER §3.5 and §3.6, panel scoring, qualification and milestone evaluation of an exported artifact are GPU research compute; only product serving, and measuring its tokens per second and energy, run on client devices. So a consumer machine can check the install, the checksum, bit-identical tokens across the library, command line and browser, and tokens per second, memory and energy. The bars that score a panel (for example M1 integer top-1 and M2 graded questions) are scored on a GPU, never a CPU. How that GPU re-scoring counts toward "independent verification on consumer hardware" is a bar question for the decision card in step 2.

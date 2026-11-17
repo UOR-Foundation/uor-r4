@@ -87,6 +87,8 @@ unavailable because this artifact carries neither mechanism. See
 
 ## What is missing
 
+**November 17, 2026.** The original census and subsequent free-generation results remain below. The November 16 written-state decision specifies the current path to complete held-out replies and a served model. Score P3 replies and P4 raw-word replay under their own gates. The merged timed place-read parity diagnostic measures a narrower operator boundary. The P0 reference scorer does not measure replies or artifact replay. [Written-state experiment](https://github.com/UOR-Foundation/uor-r4/issues/4063) · [Integration item](https://github.com/UOR-Foundation/uor-r4/issues/4064) [PR #4046](https://github.com/UOR-Foundation/uor-r4/pull/4046) · [PR #4057](https://github.com/UOR-Foundation/uor-r4/pull/4057) · [PR #3937](https://github.com/UOR-Foundation/uor-r4/pull/3937)
+
 **The one track (owner direction, 6 Nov, #2028 6675163438): the trunk learns human text.** Every claude unit
 goes to the trunk's no-memory top-1 on the human held-out panel until it beats both its TRAIN's unigram and T2
 beyond the paired band, at every seed. P6 and all serving, speed, integer, long-context and size work are

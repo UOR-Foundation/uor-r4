@@ -1,6 +1,6 @@
 ---
 id: infra-loop-harness
-title: Build the loop harness (the loop subcommands of uor-harness)
+title: Maintain the loop harness and shared roadmap registration
 milestone: infra
 area: tooling
 status: ready
@@ -22,6 +22,8 @@ The loop gives every unit of work:
 It also renders the shared status pages from committed inputs, so nobody edits them by hand. See [the loop page](../../loop/README.md). It is adapted from the Loop Kit by Ron Brazil.
 
 ## What is missing
+
+**November 17, 2026.** The build and onboarding requirements were met in the October 27 audit. This issue remains the maintenance home for shared loop records, item registration, and repairs to the existing commands. [claude-139 report](https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/infra-loop-harness/claude-139/REPORT.md)
 
 **For the build: nothing,** as of the claude-139 audit (27 Oct 2026).
 - Every `loop …` subcommand on the build plan is on `main`: `next`, `arrive`, `claim`, `gates`, `render`, `review`, `queue`, `close`, `drive`, `guard`, `install` and `onboard`.

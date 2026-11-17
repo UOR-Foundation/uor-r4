@@ -17,6 +17,8 @@ M4 (issue #2032) is the step that turns the selected M1-to-M3 work into one acce
 
 ## What is missing
 
+**November 17, 2026.** The M1 D11 artifacts and CLI provide an earlier serving case. M4 still requires a selected M3-qualified model, the held-out 0.90 BPB bar, static audits, exact restore and throughput. On the D85 default, native raw-word parity and lossless state serialization supersede the historical float export-gap route. [PR #4000](https://github.com/UOR-Foundation/uor-r4/pull/4000) · [PR #4046](https://github.com/UOR-Foundation/uor-r4/pull/4046) · [Issue #2032](https://github.com/UOR-Foundation/uor-r4/issues/2032)
+
 One M3-qualified model must be exported as a single UORLUT01 file, serve through `uor-chat`, report its training-to-D11 export gap and meet the held-out quality bar. The M1 pair is exported and served with exact 14,287-row DEV agreement, but no model has passed M4. M4 remains open under D67, not under a blanket owner hold.
 
 The explicit `System: Memory: {value}.` serving turn now exists. On both public

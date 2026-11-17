@@ -38,6 +38,8 @@ The project's first hurdle is one working model end to end, served from its inte
 
 ## What is missing
 
+**November 17, 2026.** The owner stopped Q5 on 2 November. Its partial replay, disagreements and unmerged code are preserved in the stop report. The tracker closes this stopped configuration as not planned. A further Q5 run needs a new decision. The current native parity target is tracked in #3973. [PR #3544](https://github.com/UOR-Foundation/uor-r4/pull/3544)
+
 - **Held on 2 Nov 2026 by Casey, who stopped the Q5 track** ([claude-257](../../loop/tasks/integer-nearest-readout/claude-257/REPORT.md)): "This whole Q track seems like an enormous waste of time and a derailment of our project"; then "Stop Q5 now (Recommended)". Q1 to Q4 held in claude-246: R picks the reference token as often as the trained model. Q5 explains the leftover disagreements and changes no pick, so no unit takes it up. The project's next work is one model end to end, trained on the exact values it is served with.
 - **(Held) the trace instrument, then the sheet that reads Q5,** under claude-247's card.
   - **The instrument** records every decision of the card's five kinds on F, T and R: Hamming codes, kept sets, memory lookups, rate buckets and the nearest. It forces codes and rate buckets, and writes each side's query at the traced positions, so each side can score the other's pick.

@@ -17,6 +17,8 @@ This is the closing bar of M7 (issue #2035): the same model must give the same t
 
 ## What is missing
 
+**November 17, 2026.** The eight-prompt, 48-token parity protocol is registered. Its qualification still needs the accepted M4 artifact and cross-process library, CLI and browser token/snapshot comparisons on that file. [m7-parity.json](https://github.com/UOR-Foundation/uor-r4/blob/main/docs/harness/panels/m7-parity.json) · [Issue #2859](https://github.com/UOR-Foundation/uor-r4/issues/2859)
+
 No harness yet compares tokens and session snapshots across the Rust library (`IntegerCapabilityApi`), the `uor-chat` command line and the browser worker on one artifact. The Node save and restore check (`docs/wasm-serving/verify.mjs`) passes only on a synthetic stand-in model, and it does not run from a clean clone: it reads `uor_r4_integer_bg.wasm` and `uor_r4_integer.js` (the `wasm-pack` output) and `synthetic-stack.lut` from the current directory, and none of the three is committed.
 
 ## Done when
