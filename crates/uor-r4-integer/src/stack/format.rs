@@ -66,6 +66,40 @@ pub const STACK_FBS_MEMORY_SCHEMA: &str = "uor-r4.lut-stack/7";
 /// Header schema of a turn-memory stack that also carries the served point key (claude-222): an
 /// engine that does not serve the key refuses it by its schema instead of dropping it.
 pub const STACK_FBS_POINT_SCHEMA: &str = "uor-r4.lut-stack/8";
+/// Header schema of a turn-memory stack whose reply table holds the memory chain's three key
+/// forms (claude-345), with or without a point key: an engine that asks the head key alone
+/// refuses it by its schema instead of serving the tail and ends keys as misses.
+pub const STACK_FBS_CHAIN_SCHEMA: &str = "uor-r4.lut-stack/9";
+/// Header schema of a SpiralCore/FBS artifact whose contract and tokenizer
+/// identity are mandatory. It may carry any `/6`–`/9` feature record.
+pub const STACK_FBS_BOUND_SCHEMA: &str = "uor-r4.lut-stack/10";
+/// A SpiralCore/FBS stack that serves an address table (claude-366): an unbound stack of schema
+/// `/6` to `/9` with the `address` record and one `address.l{layer}` table a layer, read after
+/// each layer's Hamilton block. A research schema: no stack contract names it yet.
+pub const STACK_FBS_ADDRESS_SCHEMA: &str = "uor-r4.lut-stack/11";
+/// Header schema of a SpiralCore/FBS stack that carries the exact 48-byte native Q31 recurrence
+/// state (D85): an engine that does not serve the state refuses it by its schema instead of
+/// dropping the trained recurrence.
+pub const STACK_FBS_Q31_SCHEMA: &str = "uor-r4.lut-stack/12";
+/// Header schema of a SpiralCore/FBS stack that serves a native Q31 first-pick read
+/// (claude-390): the `q31_read` record and the read's exact bytes in the `q31.read` table. `/13`
+/// is left to the per-lane gate state (codex-13). A research schema: no stack contract names it
+/// yet.
+pub const STACK_FBS_Q31_READ_SCHEMA: &str = "uor-r4.lut-stack/14";
+/// The table holding the native Q31 state: twelve little-endian `u32` words, the exact 48 bytes.
+pub const Q31_STATE_TABLE: &str = "q31.state";
+/// The exact native Q31 model state length.
+pub const Q31_STATE_BYTES: usize = 48;
+/// Header schema of a SpiralCore/FBS stack that carries the per-lane native Q31 state (D85): an
+/// engine that serves one gate refuses it by its schema instead of dropping the other lanes.
+pub const STACK_FBS_Q31_LANES_SCHEMA: &str = "uor-r4.lut-stack/13";
+/// The table holding the per-lane state: `8K + 4` little-endian `u32` words (K gates + cursor).
+pub const Q31_LANES_TABLE: &str = "q31.gates";
+/// A SpiralCore/FBS stack that serves pair rows (claude-384): an unbound stack of schema `/6` to
+/// `/9` with the `pair_rows` record and the `pair_rows.addresses` (u32) and `pair_rows.values`
+/// (i16) tables. Not served together with an address table or a native Q31 record. A research
+/// schema: no stack contract names it yet.
+pub const STACK_FBS_PAIR_ROWS_SCHEMA: &str = "uor-r4.lut-stack/15";
 /// The memory's move weights at `2^MEMORY_WEIGHT_EXP`.
 pub const MEMORY_WEIGHT_EXP: i32 = -24;
 /// The point key's points at `2^POINT_KEY_EXP`: the writer query's Q12.
@@ -111,6 +145,36 @@ impl StackTurnMemory {
         }
         if self.reply_key_len != MEMORY_REPLY_KEY_LEN || self.weight_exp != MEMORY_WEIGHT_EXP {
             return Err(StackError::Shape("the turn memory's key length or exponent is not this engine's"));
+        }
+        Ok(())
+    }
+}
+
+/// The header record of a reply table that holds the memory chain (claude-345): beside today's
+/// head key (the turn's first `reply_turn` ids), a tail key (`MEMORY_PAD`, then the turn's last
+/// `tail` ids) and an ends key (the turn's first and last `reply_turn` ids), asked ends, tail,
+/// then head at each reply row.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StackMemoryChain {
+    /// The most turn ids a tail key holds.
+    pub tail: usize,
+}
+
+impl StackMemoryChain {
+    /// Refuse a record the stack cannot carry: no turn memory with a reply table beside it, a
+    /// tail of 0 or past the reply row's room (`tail + 5`), or a reply turn whose ends key
+    /// (`2 * reply_turn + 4`) does not fit the row.
+    pub fn check(&self, memory: Option<&StackTurnMemory>) -> Result<(), StackError> {
+        let Some(turn) = memory.and_then(|m| m.reply_turn) else {
+            return Err(StackError::Shape("a memory chain needs a turn memory with a reply table"));
+        };
+        // Compared without adding to `tail` or doubling `turn`: both come from the header as read.
+        if self.tail == 0 || self.tail > MEMORY_REPLY_KEY_LEN - 5 {
+            return Err(StackError::Shape("a memory chain's tail must be from 1 to 15 ids"));
+        }
+        if turn > (MEMORY_REPLY_KEY_LEN - 4) / 2 {
+            return Err(StackError::Shape("a memory chain's ends key does not fit the reply row"));
         }
         Ok(())
     }
@@ -190,6 +254,43 @@ pub struct StackHamming {
     /// field refuses a mixed one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copy_keys: Option<Vec<usize>>,
+    /// The copy heads' rule (claude-345): true when each reads its latest exact match, at full
+    /// weight, in place of the mean of its nearest `kept` (`CopyRule::LatestExact`), as the float
+    /// read's `HammingReads::with_copy_latest` trains. Left out of the header under the mean,
+    /// so such an artifact is byte for byte as before, and an engine without the field refuses
+    /// one that sets it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub copy_latest: bool,
+    /// The longest rule's reply marker (claude-357): the two token ids that stand before a
+    /// reply's first token. When set, each copy head reads the latest exact match whose token
+    /// before the key also agrees, and the latest exact match at the row whose previous and own
+    /// tokens are the marker (`CopyRule::LongestAfterOpening`, the opening row found from the
+    /// tokens), as the float read's `HammingReads::with_copy_longest` trains. Needs
+    /// `copy_latest` and one-token copy keys. Left out of the header when not set, so such an
+    /// artifact is byte for byte as before, and an engine without the field refuses one that
+    /// sets it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub copy_longest: Option<[u32; 2]>,
+    /// Which reads' type heads ask (claude-330, served by claude-336): one flag per read, in depth
+    /// order, not all off. A read that asks has a `hamming.d{depth}.ask` section (i16, `vocab *
+    /// width`, Q12). Left out of the header when no read asks, so such an artifact is byte for
+    /// byte as before, and an engine without the field refuses one with ask heads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asks: Option<Vec<bool>>,
+    /// The readout read's question carry (claude-335, served by claude-336): its reach `h`, the
+    /// rows before a position whose question it sums, from 1 to [`super::ASK_CARRY_MAX`]. Only the
+    /// readout read (the last, at the layer count) carries, and only when it asks; its gains are
+    /// the `hamming.d{depth}.carry` section (i32, `vocab`, Q16). Left out without a carry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub carry_rows: Option<usize>,
+    /// The readout read's place read (claude-351): the ids that frame a conversation, by which
+    /// the engine tells turns apart in the token stream. With it the readout read's ask heads
+    /// find a place and do not read, and the read has a `hamming.d{depth}.place` section (i16,
+    /// `vocab`: bit 0 the stop, bit 1 the arm, bit 2 the open). Left out without a place read, so
+    /// such an artifact is byte for byte as before, and an engine without the field refuses one
+    /// that sets it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub place: Option<crate::fbs_snapshot::PlaceMarks>,
 }
 
 impl StackHamming {
@@ -204,6 +305,11 @@ impl StackHamming {
             weight_exp: HAMMING_WEIGHT_EXP,
             copy_key: 1,
             copy_keys: None,
+            copy_latest: false,
+            copy_longest: None,
+            asks: None,
+            carry_rows: None,
+            place: None,
         }
     }
 
@@ -211,6 +317,16 @@ impl StackHamming {
     /// `copy_key`.
     pub fn head_copy_key(&self, head: usize) -> usize {
         self.copy_keys.as_ref().map_or(self.copy_key, |keys| keys[head])
+    }
+
+    /// Whether read `read` (an index into `depths`) asks with ask heads (claude-336).
+    pub fn read_asks(&self, read: usize) -> bool {
+        self.asks.as_ref().is_some_and(|asks| asks.get(read) == Some(&true))
+    }
+
+    /// Read `read`'s question carry reach: the record's `carry_rows` at the last read, else `None`.
+    pub fn read_carry(&self, read: usize) -> Option<usize> {
+        self.carry_rows.filter(|_| read + 1 == self.depths.len())
     }
 
     /// Refuse a record the stack `shape` cannot carry: a non-FBS stack; an odd head count, or one
@@ -254,6 +370,16 @@ impl StackHamming {
                 "copy key 2 needs heads of whole 8-coordinate blocks, so each half is whole lanes",
             ));
         }
+        if let Some(marker) = self.copy_longest {
+            let one_token = (0..heads / 2).all(|h| self.head_copy_key(h) == 1);
+            let in_vocab = marker.iter().all(|&id| (id as usize) < shape.vocab);
+            if !self.copy_latest || !one_token || !in_vocab {
+                return Err(StackError::Shape(
+                    "the longest rule needs the latest exact rule, one-token copy keys and a \
+                     marker of two vocabulary ids",
+                ));
+            }
+        }
         let ordered = self.depths.windows(2).all(|w| w[0] < w[1]);
         let inside = self.depths.iter().all(|&d| (1..=shape.layers()).contains(&d));
         if self.depths.is_empty() || !ordered || !inside {
@@ -263,6 +389,41 @@ impl StackHamming {
         }
         if self.kept == 0 {
             return Err(StackError::Shape("a Hamming read keeps at least one position"));
+        }
+        if let Some(asks) = &self.asks {
+            if asks.len() != self.depths.len() || !asks.contains(&true) {
+                return Err(StackError::Shape(
+                    "Hamming ask heads name one flag per read, not all off",
+                ));
+            }
+        }
+        if let Some(reach) = self.carry_rows {
+            if self.depths.last() != Some(&shape.layers()) {
+                return Err(StackError::Shape(
+                    "a Hamming question carry is served on the readout read only",
+                ));
+            }
+            if !self.read_asks(self.depths.len() - 1) {
+                return Err(StackError::Shape("a Hamming question carry needs its read to ask"));
+            }
+            if reach == 0 || reach > super::ASK_CARRY_MAX {
+                return Err(StackError::Shape(
+                    "a Hamming question carry reaches from 1 to ASK_CARRY_MAX rows",
+                ));
+            }
+        }
+        if let Some(marks) = &self.place {
+            if self.depths.last() != Some(&shape.layers()) || !self.read_asks(self.depths.len() - 1) {
+                return Err(StackError::Shape(
+                    "a Hamming place read is served on a readout read that asks",
+                ));
+            }
+            if !head_width.is_multiple_of(8) {
+                return Err(StackError::Shape(
+                    "a Hamming place read needs heads of whole 8-coordinate blocks, so each half is whole lanes",
+                ));
+            }
+            marks.check(shape.vocab).map_err(StackError::Shape)?;
         }
         let exps = (self.rotation_exp, self.margin_exp, self.weight_exp);
         if exps != (HAMMING_ROTATION_EXP, HAMMING_MARGIN_EXP, HAMMING_WEIGHT_EXP) {
@@ -795,6 +956,43 @@ pub struct StackTransportSnap {
     pub roots_sha256: String,
 }
 
+/// The exact native Q31 model state carried by the artifact (D85). The 48 bytes live in the
+/// table [`Q31_STATE_TABLE`]; this record names them and binds their digest and the trainer's
+/// cursor. The bytes are authoritative: loading never converts them.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StackQ31State {
+    /// The table name, [`Q31_STATE_TABLE`].
+    pub state: String,
+    /// SHA-256 over the exact 48 state bytes.
+    pub sha256: String,
+    /// The trainer's serialized epoch.
+    pub epoch: u64,
+    /// The trainer's serialized step shift.
+    pub step_shift: u32,
+    /// The state's version byte (the 45th byte of the 48).
+    pub version: u8,
+}
+
+/// The per-lane native Q31 state carried by a `/13` artifact (D85): the table [`Q31_LANES_TABLE`]
+/// holds the exact `32K + 16` bytes, and this record binds their digest, `K` and the shared cursor.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StackQ31Lanes {
+    /// The table name, [`Q31_LANES_TABLE`].
+    pub state: String,
+    /// SHA-256 over the exact `32K + 16` state bytes.
+    pub sha256: String,
+    /// The number of lane gates, `K = shape.width / 4`.
+    pub lanes: usize,
+    /// The trainer's serialized epoch (one shared cursor).
+    pub epoch: u64,
+    /// The trainer's serialized step shift.
+    pub step_shift: u32,
+    /// The state's version byte.
+    pub version: u8,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 struct Header {
     schema: String,
@@ -818,6 +1016,26 @@ struct Header {
     /// The served point key, under [`STACK_FBS_POINT_SCHEMA`]; absent on a stack without one.
     #[serde(default)]
     point: Option<StackPointKey>,
+    /// The memory chain, under [`STACK_FBS_CHAIN_SCHEMA`]; absent on a stack without one.
+    #[serde(default)]
+    memory_chain: Option<StackMemoryChain>,
+    /// The address table, under [`STACK_FBS_ADDRESS_SCHEMA`]; absent on a stack without one.
+    #[serde(default)]
+    address: Option<super::StackAddress>,
+    /// The native Q31 recurrence state, under [`STACK_FBS_Q31_SCHEMA`]; absent on a stack
+    /// without one.
+    #[serde(default)]
+    q31: Option<StackQ31State>,
+    /// The per-lane native Q31 state, under [`STACK_FBS_Q31_LANES_SCHEMA`]; absent otherwise.
+    #[serde(default)]
+    q31_lanes: Option<StackQ31Lanes>,
+    /// The native Q31 first-pick read, under [`STACK_FBS_Q31_READ_SCHEMA`]; absent on a stack
+    /// without one.
+    #[serde(default)]
+    q31_read: Option<super::StackQ31Read>,
+    /// The pair rows, under [`STACK_FBS_PAIR_ROWS_SCHEMA`]; absent on a stack without them.
+    #[serde(default)]
+    pair_rows: Option<super::StackPairRows>,
 }
 
 /// One 4-bit matrix of a parsed container, borrowed from its bytes.
@@ -831,9 +1049,12 @@ pub(crate) struct MatrixView<'a> {
 
 /// A parsed and structurally validated stack container.
 pub(crate) struct Container<'a> {
+    pub schema: String,
     pub shape: StackShape,
+    pub source: serde_json::Value,
     pub numerics: StackNumerics,
     pub sha256: String,
+    pub sections: Vec<String>,
     /// The validated transport snap record, if the header carries one.
     pub transport_snap: Option<StackTransportSnap>,
     /// The validated Hamming read record, if the header carries one.
@@ -842,10 +1063,92 @@ pub(crate) struct Container<'a> {
     pub memory: Option<StackTurnMemory>,
     /// The validated point key record, if the header carries one.
     pub point: Option<StackPointKey>,
+    /// The validated memory chain record, if the header carries one.
+    pub memory_chain: Option<StackMemoryChain>,
+    /// The validated address table record, if the header carries one.
+    pub address: Option<super::StackAddress>,
+    /// The validated native Q31 state record, if the header carries one.
+    pub q31: Option<StackQ31State>,
+    /// The validated per-lane native Q31 state record, if the header carries one.
+    pub q31_lanes: Option<StackQ31Lanes>,
+    /// The validated native Q31 read record, if the header carries one.
+    pub q31_read: Option<super::StackQ31Read>,
+    /// The validated pair rows record, if the header carries one.
+    pub pair_rows: Option<super::StackPairRows>,
     data: &'a [u8],
     /// Sections by name (unique within each kind).
     matrices: HashMap<String, MatrixEntry>,
     tables: HashMap<String, TableEntry>,
+}
+
+/// Validated identity and mechanism metadata from one `UORLUT01` artifact.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct StackArtifactMetadata {
+    /// Artifact format family.
+    pub family: &'static str,
+    /// Header schema.
+    pub schema: String,
+    /// SHA-256 of the complete artifact bytes.
+    pub sha256: String,
+    /// Complete artifact length in bytes.
+    pub bytes: usize,
+    /// Serving shape.
+    pub shape: StackShape,
+    /// Exporter provenance. Serving never reads it as arithmetic.
+    pub source: serde_json::Value,
+    /// Sorted union of matrix and table section names.
+    pub sections: Vec<String>,
+    /// Validated transport snap.
+    pub transport_snap: Option<StackTransportSnap>,
+    /// Validated Hamming reads.
+    pub hamming: Option<StackHamming>,
+    /// Validated turn memory.
+    pub memory: Option<StackTurnMemory>,
+    /// Validated point key.
+    pub point: Option<StackPointKey>,
+    /// Validated memory chain.
+    pub memory_chain: Option<StackMemoryChain>,
+    /// Validated address table. Left out of the written metadata when the stack has none, so a
+    /// stack without one inspects as it did before the table existed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<super::StackAddress>,
+    /// Validated native Q31 state record. Left out when the stack has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub q31: Option<StackQ31State>,
+    /// Validated per-lane native Q31 state record. Left out when the stack has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub q31_lanes: Option<StackQ31Lanes>,
+    /// Validated native Q31 read record. Left out when the stack has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub q31_read: Option<super::StackQ31Read>,
+    /// Validated pair rows. Left out of the written metadata when the stack has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pair_rows: Option<super::StackPairRows>,
+}
+
+/// Parse and validate an artifact, then return the metadata an external audit
+/// needs without exposing the container's internal tables.
+pub fn inspect_uorlut01(bytes: &[u8]) -> Result<StackArtifactMetadata, StackError> {
+    let artifact = Container::parse(bytes)?;
+    Ok(StackArtifactMetadata {
+        family: "uor-r4.lut-stack",
+        schema: artifact.schema,
+        sha256: artifact.sha256,
+        bytes: bytes.len(),
+        shape: artifact.shape,
+        source: artifact.source,
+        sections: artifact.sections,
+        transport_snap: artifact.transport_snap,
+        hamming: artifact.hamming,
+        memory: artifact.memory,
+        point: artifact.point,
+        memory_chain: artifact.memory_chain,
+        address: artifact.address,
+        q31: artifact.q31,
+        q31_lanes: artifact.q31_lanes,
+        q31_read: artifact.q31_read,
+        pair_rows: artifact.pair_rows,
+    })
 }
 
 /// The data range `offset..offset + bytes`, if it lies inside `len` bytes.
@@ -854,6 +1157,43 @@ fn range(span: Span, len: usize) -> Option<std::ops::Range<usize>> {
     let bytes = usize::try_from(span.bytes).ok()?;
     let end = start.checked_add(bytes)?;
     (end <= len).then_some(start..end)
+}
+
+fn check_artifact_binding(source: &serde_json::Value) -> Result<(), StackError> {
+    let contract = source
+        .get("stack_contract")
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| {
+            StackError::ArtifactBinding("a bound artifact needs stack_contract".to_owned())
+        })?;
+    for field in ["source", "sha256", "semantic_blake3", "tokenizer_sha256"] {
+        let value = if field == "tokenizer_sha256" {
+            source.get(field)
+        } else {
+            contract.get(field)
+        }
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| {
+            let name = if field == "tokenizer_sha256" {
+                field.to_owned()
+            } else {
+                format!("stack_contract.{field}")
+            };
+            StackError::ArtifactBinding(format!("a bound artifact needs {name}"))
+        })?;
+        if field == "source" {
+            if value.trim().is_empty() {
+                return Err(StackError::ArtifactBinding(
+                    "a bound artifact's contract source is empty".to_owned(),
+                ));
+            }
+        } else if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err(StackError::ArtifactBinding(format!(
+                "a bound artifact's {field} is not a SHA-256/BLAKE3 hex value"
+            )));
+        }
+    }
+    Ok(())
 }
 
 impl<'a> Container<'a> {
@@ -877,13 +1217,41 @@ impl<'a> Container<'a> {
             })?;
         let header: Header =
             serde_json::from_slice(&bytes[16..header_end]).map_err(StackError::Header)?;
-        // A stack with the point key is `lut-stack/8`, one with a turn memory `/7`, one with
-        // Hamming reads alone `/6`; any other is the schema its shape implies.
-        let expected = match (&header.point, &header.memory, &header.hamming) {
-            (Some(_), _, _) => STACK_FBS_POINT_SCHEMA,
-            (None, Some(_), _) => STACK_FBS_MEMORY_SCHEMA,
-            (None, None, Some(_)) => STACK_FBS_HAMMING_SCHEMA,
-            (None, None, None) => stack_schema_for(&header.shape),
+        // `/10` requires the complete binding. Historical stacks retain their
+        // `/6`–`/9` schema even if they carry optional provenance from before
+        // binding became an admission rule.
+        // An address table has its own schema, so a reader from before the table refuses the
+        // stack by its schema; it would otherwise pass over the record and serve without the rows.
+        // Pair rows likewise; they are served with no address table and no native Q31 record.
+        if header.pair_rows.is_some() {
+            if header.address.is_some() {
+                return Err(StackError::Shape("an address table and pair rows are not served together"));
+            }
+            if header.q31.is_some() || header.q31_lanes.is_some() || header.q31_read.is_some() {
+                return Err(StackError::Shape("a native Q31 record and pair rows are not served together"));
+            }
+        }
+        let expected = if header.pair_rows.is_some() {
+            STACK_FBS_PAIR_ROWS_SCHEMA
+        } else if header.q31_read.is_some() {
+            STACK_FBS_Q31_READ_SCHEMA
+        } else if header.q31_lanes.is_some() {
+            STACK_FBS_Q31_LANES_SCHEMA
+        } else if header.q31.is_some() {
+            STACK_FBS_Q31_SCHEMA
+        } else if header.address.is_some() {
+            STACK_FBS_ADDRESS_SCHEMA
+        } else if header.schema == STACK_FBS_BOUND_SCHEMA {
+            check_artifact_binding(&header.source)?;
+            STACK_FBS_BOUND_SCHEMA
+        } else {
+            match (&header.point, &header.memory, &header.hamming) {
+                _ if header.memory_chain.is_some() => STACK_FBS_CHAIN_SCHEMA,
+                (Some(_), _, _) => STACK_FBS_POINT_SCHEMA,
+                (None, Some(_), _) => STACK_FBS_MEMORY_SCHEMA,
+                (None, None, Some(_)) => STACK_FBS_HAMMING_SCHEMA,
+                (None, None, None) => stack_schema_for(&header.shape),
+            }
         };
         if header.schema != expected {
             return Err(StackError::Schema(header.schema));
@@ -919,6 +1287,15 @@ impl<'a> Container<'a> {
         if let Some(point) = &header.point {
             point.check(&header.shape, header.memory.as_ref())?;
         }
+        if let Some(chain) = &header.memory_chain {
+            chain.check(header.memory.as_ref())?;
+        }
+        if let Some(address) = &header.address {
+            address.check(&header.shape)?;
+        }
+        if let Some(pair_rows) = &header.pair_rows {
+            pair_rows.check(&header.shape)?;
+        }
         if let Some(snap) = &header.transport_snap {
             let known = snap.name == "icosian"
                 && snap.roots == 120
@@ -951,6 +1328,7 @@ impl<'a> Container<'a> {
         let data = &bytes[data_start..];
         // Sections are indexed by name as they are checked, which finds a
         // duplicate in one pass.
+        let mut sections = Vec::with_capacity(header.matrices.len() + header.tables.len());
         let mut matrices = HashMap::with_capacity(header.matrices.len());
         for m in header.matrices {
             if matrices.contains_key(&m.name) {
@@ -970,6 +1348,7 @@ impl<'a> Container<'a> {
             {
                 return Err(StackError::MatrixSection(m.name));
             }
+            sections.push(m.name.clone());
             matrices.insert(m.name.clone(), m);
         }
         let mut tables = HashMap::with_capacity(header.tables.len());
@@ -984,20 +1363,187 @@ impl<'a> Container<'a> {
             if !sized || range(t.span, data.len()).is_none() {
                 return Err(StackError::TableSection(t.name));
             }
+            sections.push(t.name.clone());
             tables.insert(t.name.clone(), t);
         }
-        Ok(Self {
+        if let Some(record) = &header.q31_lanes {
+            if record.state != Q31_LANES_TABLE
+                || header.q31.is_some()
+                || header.q31_read.is_some()
+                || header.address.is_some()
+                || header.point.is_some()
+                || header.memory.is_some()
+                || header.hamming.is_some()
+                || header.memory_chain.is_some()
+                || !header.shape.projection_fbs()
+                || !header.shape.pattern.bytes().any(|kind| kind == b'r')
+            {
+                return Err(StackError::Shape(
+                    "a per-lane Q31 state needs an FBS stack with a recurrence layer and no other optional record",
+                ));
+            }
+            let lanes = header.shape.width / 4;
+            if lanes == 0 || record.lanes != lanes {
+                return Err(StackError::Shape(
+                    "a per-lane Q31 state needs K = width / 4 lanes",
+                ));
+            }
+            let table = tables
+                .get(&record.state)
+                .ok_or_else(|| StackError::MissingSection(record.state.clone()))?;
+            if table.kind != TableKind::U32 || table.len != 8 * lanes + 4 {
+                return Err(StackError::Numerics(
+                    "q31.gates must be 8K + 4 u32 words (32K + 16 bytes)".to_owned(),
+                ));
+            }
+            let bytes = range(table.span, data.len())
+                .map(|range| &data[range])
+                .ok_or(StackError::MissingData)?;
+            let parsed = uor_r4_native_vector::Q31LaneGates::from_bytes(bytes)
+                .map_err(|e| StackError::Numerics(format!("q31.gates: {e}")))?;
+            if parsed.lanes() != record.lanes
+                || parsed.epoch() != record.epoch
+                || parsed.step_shift() != record.step_shift
+                || bytes[bytes.len() - 4] != record.version
+            {
+                return Err(StackError::Numerics(
+                    "q31.gates metadata does not match the stored words".to_owned(),
+                ));
+            }
+            let digest = hex::encode(Sha256::digest(bytes));
+            if digest != record.sha256 {
+                return Err(StackError::Numerics(
+                    "q31.gates sha256 does not match the stored words".to_owned(),
+                ));
+            }
+        }
+        if let Some(record) = &header.q31 {
+            // One finite state path: this schema carries the Q31 state and no other optional
+            // mechanism record, so no reader can combine two schemas under one name.
+            if record.state != Q31_STATE_TABLE
+                || header.address.is_some()
+                || header.point.is_some()
+                || header.memory.is_some()
+                || header.hamming.is_some()
+                || header.memory_chain.is_some()
+                || !header.shape.projection_fbs()
+                || !header.shape.pattern.bytes().any(|kind| kind == b'r')
+            {
+                return Err(StackError::Shape(
+                    "a native Q31 state needs an FBS stack with a recurrence layer and no other optional record",
+                ));
+            }
+            let table = tables
+                .get(&record.state)
+                .ok_or_else(|| StackError::MissingSection(record.state.clone()))?;
+            let sized = table.kind == TableKind::U32
+                && table.len.checked_mul(4) == Some(Q31_STATE_BYTES);
+            if !sized {
+                return Err(StackError::Numerics(
+                    "q31.state must be twelve u32 words (48 bytes)".to_owned(),
+                ));
+            }
+            let bytes = range(table.span, data.len())
+                .map(|r| &data[r])
+                .ok_or(StackError::MissingData)?;
+            let mut state = [0u8; Q31_STATE_BYTES];
+            for (word, chunk) in bytes.chunks_exact(4).enumerate() {
+                state[word * 4..word * 4 + 4].copy_from_slice(chunk);
+            }
+            let digest = hex::encode(Sha256::digest(state));
+            if digest != record.sha256 {
+                return Err(StackError::Numerics(
+                    "q31.state sha256 does not match the stored words".to_owned(),
+                ));
+            }
+            let model = uor_r4_native_vector::Q31HamiltonModel::from_bytes(state)
+                .map_err(|e| StackError::Numerics(format!("q31.state: {e}")))?;
+            if model.epoch() != record.epoch
+                || model.step_shift() != record.step_shift
+                || state[44] != record.version
+            {
+                return Err(StackError::Numerics(
+                    "q31.state metadata does not match the stored words".to_owned(),
+                ));
+            }
+        }
+        if let Some(record) = &header.q31_read {
+            // One finite read path: the read's order with every other optional mechanism at the
+            // same seam is not defined yet, so this schema carries no other optional record.
+            if header.address.is_some()
+                || header.point.is_some()
+                || header.memory.is_some()
+                || header.hamming.is_some()
+                || header.memory_chain.is_some()
+                || header.q31.is_some()
+                || header.q31_lanes.is_some()
+            {
+                return Err(StackError::Shape(
+                    "a native Q31 read needs an FBS stack with no other optional record",
+                ));
+            }
+            record.check(&header.shape)?;
+        }
+        sections.sort();
+        let container = Self {
+            schema: header.schema,
             shape: header.shape,
+            source: header.source,
             numerics: header.numerics,
             sha256: hex::encode(Sha256::digest(bytes)),
+            sections,
             transport_snap: header.transport_snap,
             hamming: header.hamming,
             memory: header.memory,
             point: header.point,
+            memory_chain: header.memory_chain,
+            address: header.address,
+            q31: header.q31,
+            q31_lanes: header.q31_lanes,
+            q31_read: header.q31_read,
+            pair_rows: header.pair_rows,
             data,
             matrices,
             tables,
-        })
+        };
+        // The read's bytes are authoritative: a table they do not restore from is refused here,
+        // so no reader or audit passes over a damaged read.
+        super::q31_read::q31_read_image(&container)?;
+        Ok(container)
+    }
+
+    /// The exact 48 native Q31 state bytes the header names, if it carries them. `parse`
+    /// validated the digest, the closed domain and the trainer's cursor; this reassembles the words
+    /// without converting them.
+    pub fn q31_state_bytes(&self) -> Result<Option<[u8; Q31_STATE_BYTES]>, StackError> {
+        let Some(record) = &self.q31 else {
+            return Ok(None);
+        };
+        let table = self
+            .tables
+            .get(&record.state)
+            .ok_or_else(|| StackError::MissingSection(record.state.clone()))?;
+        let bytes = self.section(table.span)?;
+        let mut state = [0u8; Q31_STATE_BYTES];
+        for (word, chunk) in bytes.chunks_exact(4).enumerate() {
+            state[word * 4..word * 4 + 4].copy_from_slice(chunk);
+        }
+        Ok(Some(state))
+    }
+
+    /// The exact per-lane state bytes the header names, if it carries them. `parse` validated the
+    /// digest, the domain and the cursor; this only returns the section. The serving slice reads
+    /// it; until then it is exercised by the container test.
+    #[allow(dead_code)]
+    pub fn q31_lane_state_bytes(&self) -> Result<Option<Vec<u8>>, StackError> {
+        let Some(record) = &self.q31_lanes else {
+            return Ok(None);
+        };
+        let table = self
+            .tables
+            .get(&record.state)
+            .ok_or_else(|| StackError::MissingSection(record.state.clone()))?;
+        Ok(Some(self.section(table.span)?.to_vec()))
     }
 
     fn section(&self, span: Span) -> Result<&'a [u8], StackError> {
@@ -1618,6 +2164,30 @@ pub struct FbsExportSnaps {
     pub transition: bool,
 }
 
+/// Identity of the stack contract that produced an artifact. It is stored under
+/// the artifact header's `stack_contract` object and checked by the stack audit.
+/// Serving arithmetic does not read it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct StackContractProvenance {
+    /// Repository-relative path or caller-supplied immutable locator.
+    pub source: String,
+    /// SHA-256 of the contract source bytes.
+    pub sha256: String,
+    /// BLAKE3 of the parsed contract document.
+    pub semantic_blake3: String,
+}
+
+/// Mandatory provenance written beside the serving source object for `/10`.
+/// The interaction runtime enforces the tokenizer identity before generation;
+/// serving arithmetic does not read either field.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct FbsExportProvenance {
+    /// The exact stack contract that produced the export.
+    pub stack_contract: StackContractProvenance,
+    /// SHA-256 of the tokenizer paired with the artifact.
+    pub tokenizer_sha256: String,
+}
+
 impl FbsExportSnaps {
     /// Everything snapped, the `uor-r4.lut-stack/4` contract.
     pub const SNAPPED: Self = Self {
@@ -1649,7 +2219,35 @@ pub fn export_fbs_trunk_uorlut01_with(
     snap: &FbsTrunkSnapshot,
     snaps: FbsExportSnaps,
 ) -> Result<Vec<u8>, StackError> {
-    export_fbs_trunk(snap, snaps, None)
+    export_fbs_trunk(snap, snaps, None, None, None, None, None)
+}
+
+/// [`export_fbs_trunk_uorlut01_with`] with the exact 48-byte native Q31 model state written under
+/// [`STACK_FBS_Q31_SCHEMA`]. The bytes are stored losslessly and loading attaches them to the real
+/// recurrence; the shared operator validates them before they are written.
+pub fn export_fbs_trunk_uorlut01_with_q31(
+    snap: &FbsTrunkSnapshot,
+    snaps: FbsExportSnaps,
+    q31: &[u8; Q31_STATE_BYTES],
+) -> Result<Vec<u8>, StackError> {
+    export_fbs_trunk(snap, snaps, None, None, None, Some(q31), None)
+}
+
+/// [`export_fbs_trunk_uorlut01_with`] with the exact per-lane native Q31 state under
+/// [`STACK_FBS_Q31_LANES_SCHEMA`]: `K = width / 4` gates plus the shared cursor, stored losslessly.
+pub fn export_fbs_trunk_uorlut01_with_lane_gates(
+    snap: &FbsTrunkSnapshot,
+    snaps: FbsExportSnaps,
+    state: &[u8],
+) -> Result<Vec<u8>, StackError> {
+    let parsed = uor_r4_native_vector::Q31LaneGates::from_bytes(state)
+        .map_err(|e| StackError::Numerics(format!("q31.gates: {e}")))?;
+    if parsed.lanes() != snap.width / 4 {
+        return Err(StackError::Shape(
+            "a per-lane Q31 state needs K = width / 4 lanes",
+        ));
+    }
+    export_fbs_trunk(snap, snaps, None, None, None, None, Some(state))
 }
 
 /// [`export_fbs_trunk_uorlut01_with`] served past the trained window (claude-288): the shape's
@@ -1661,20 +2259,79 @@ pub fn export_fbs_trunk_uorlut01_carry(
     snaps: FbsExportSnaps,
     context: usize,
 ) -> Result<Vec<u8>, StackError> {
+    check_carry_context(snap, context)?;
+    export_fbs_trunk(snap, snaps, Some(context), None, None, None, None)
+}
+
+/// [`export_fbs_trunk_uorlut01_with`] (`context: None`) or [`export_fbs_trunk_uorlut01_carry`]
+/// (`Some(context)`) with the memory chain's record (claude-345) written into the header under
+/// [`STACK_FBS_CHAIN_SCHEMA`]: the reply table's keys may take the head, tail (at most `tail` turn
+/// ids) and ends forms, and the read-back reads them at exactly that tail. A tail of 0, a snapshot
+/// without a reply table, or a record [`StackMemoryChain::check`] refuses is refused.
+pub fn export_fbs_trunk_uorlut01_chain(
+    snap: &FbsTrunkSnapshot,
+    snaps: FbsExportSnaps,
+    context: Option<usize>,
+    tail: usize,
+) -> Result<Vec<u8>, StackError> {
+    if tail == 0 {
+        return Err(StackError::Shape("a memory chain's tail must be at least 1"));
+    }
+    if let Some(context) = context {
+        check_carry_context(snap, context)?;
+    }
+    export_fbs_trunk(snap, snaps, context, Some(tail), None, None, None)
+}
+
+/// Export with stack-contract provenance. With no provenance this reproduces
+/// the corresponding legacy `/6`–`/9` export byte for byte.
+pub fn export_fbs_trunk_uorlut01_with_provenance(
+    snap: &FbsTrunkSnapshot,
+    snaps: FbsExportSnaps,
+    context: Option<usize>,
+    tail: usize,
+    provenance: Option<&FbsExportProvenance>,
+) -> Result<Vec<u8>, StackError> {
+    if tail > 0 && snap.memory.as_ref().and_then(|memory| memory.reply.as_ref()).is_none() {
+        return Err(StackError::Shape(
+            "a memory chain needs a snapshot with a reply table",
+        ));
+    }
+    if let Some(context) = context {
+        check_carry_context(snap, context)?;
+    }
+    export_fbs_trunk(
+        snap,
+        snaps,
+        context,
+        (tail > 0).then_some(tail),
+        provenance,
+        None,
+        None,
+    )
+}
+
+/// A carry context runs from the trained context to [`MAX_CONTEXT`].
+fn check_carry_context(snap: &FbsTrunkSnapshot, context: usize) -> Result<(), StackError> {
     if context < snap.context {
         return Err(StackError::Shape("a carry context must be at least the trained context"));
     }
     if context > MAX_CONTEXT {
         return Err(StackError::Shape("a carry context must be at most MAX_CONTEXT (65,536)"));
     }
-    export_fbs_trunk(snap, snaps, Some(context))
+    Ok(())
 }
 
-/// The FBS export; `carry` is the served context of a carry export, `None` the trained one.
+/// The FBS export; `carry` is the served context of a carry export, `None` the trained one, and
+/// `chain` the memory chain's tail, `None` for a stack without the record.
 fn export_fbs_trunk(
     snap: &FbsTrunkSnapshot,
     snaps: FbsExportSnaps,
     carry: Option<usize>,
+    chain: Option<usize>,
+    provenance: Option<&FbsExportProvenance>,
+    q31: Option<&[u8; Q31_STATE_BYTES]>,
+    q31_lanes: Option<&[u8]>,
 ) -> Result<Vec<u8>, StackError> {
     let shape = StackShape {
         vocab: snap.vocab,
@@ -1856,6 +2513,61 @@ fn export_fbs_trunk(
             Some(record)
         }
     };
+    // The memory chain (claude-345) is written with the export, so the read-back below reads the
+    // reply keys at its exact tail and a plain export stays strict.
+    let chain = chain.map(|tail| StackMemoryChain { tail });
+    if let Some(record) = &chain {
+        record.check(memory.as_ref())?;
+    }
+
+    // The exact native Q31 state (D85): twelve little-endian u32 words and a header record that
+    // binds their digest and the trainer's cursor. Only a stack carrying the state writes the key,
+    // so a plain export stays byte for byte as before.
+    let q31 = match q31 {
+        None => None,
+        Some(state) => {
+            let model = uor_r4_native_vector::Q31HamiltonModel::from_bytes(*state)
+                .map_err(|e| StackError::Numerics(format!("q31.state: {e}")))?;
+            let words: Vec<u32> = state
+                .chunks_exact(4)
+                .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                .collect();
+            b.push_u32(Q31_STATE_TABLE, &words);
+            Some(StackQ31State {
+                state: Q31_STATE_TABLE.to_owned(),
+                sha256: hex::encode(Sha256::digest(state)),
+                epoch: model.epoch(),
+                step_shift: model.step_shift(),
+                version: state[44],
+            })
+        }
+    };
+
+    let q31_lanes = match q31_lanes {
+        None => None,
+        Some(state) => {
+            let parsed = uor_r4_native_vector::Q31LaneGates::from_bytes(state)
+                .map_err(|e| StackError::Numerics(format!("q31.gates: {e}")))?;
+            if parsed.lanes() != shape.width / 4 {
+                return Err(StackError::Shape(
+                    "a per-lane Q31 state needs K = width / 4 lanes",
+                ));
+            }
+            let words: Vec<u32> = state
+                .chunks_exact(4)
+                .map(|chunk| u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+                .collect();
+            b.push_u32(Q31_LANES_TABLE, &words);
+            Some(StackQ31Lanes {
+                state: Q31_LANES_TABLE.to_owned(),
+                sha256: hex::encode(Sha256::digest(state)),
+                lanes: parsed.lanes(),
+                epoch: parsed.epoch(),
+                step_shift: parsed.step_shift(),
+                version: state[state.len() - 4],
+            })
+        }
+    };
 
     let eps_exp = -48i32;
     let eps_mantissa = (snap.rms_eps * 2f64.powi(-eps_exp)).round() as i64;
@@ -1881,10 +2593,19 @@ fn export_fbs_trunk(
         roots: 120,
         roots_sha256: super::ICOSIAN_ROOTS_SHA256.to_owned(),
     };
-    let schema = match (&memory, &hamming) {
-        (Some(_), _) => STACK_FBS_MEMORY_SCHEMA,
-        (None, Some(_)) => STACK_FBS_HAMMING_SCHEMA,
-        (None, None) => stack_schema_for(&shape),
+    let schema = if q31_lanes.is_some() {
+        STACK_FBS_Q31_LANES_SCHEMA
+    } else if q31.is_some() {
+        STACK_FBS_Q31_SCHEMA
+    } else if provenance.is_some() {
+        STACK_FBS_BOUND_SCHEMA
+    } else {
+        match (&memory, &hamming) {
+            _ if chain.is_some() => STACK_FBS_CHAIN_SCHEMA,
+            (Some(_), _) => STACK_FBS_MEMORY_SCHEMA,
+            (None, Some(_)) => STACK_FBS_HAMMING_SCHEMA,
+            (None, None) => stack_schema_for(&shape),
+        }
     };
     let mut header = json!({
         "schema": schema,
@@ -1912,9 +2633,25 @@ fn export_fbs_trunk(
     if let Some(record) = &memory {
         header["memory"] = json!(record);
     }
+    // And only a chain export has the memory chain's record.
+    if let Some(record) = &chain {
+        header["memory_chain"] = json!(record);
+    }
+    // And only a stack carrying the native Q31 state has its record.
+    if let Some(record) = &q31 {
+        header["q31"] = json!(record);
+    }
+    // And only a stack carrying the per-lane state has its record.
+    if let Some(record) = &q31_lanes {
+        header["q31_lanes"] = json!(record);
+    }
     // And only a carry export records its trained window (claude-288).
     if carry.is_some() {
         header["source"]["trained_context"] = json!(snap.context);
+    }
+    if let Some(provenance) = provenance {
+        header["source"]["stack_contract"] = json!(provenance.stack_contract);
+        header["source"]["tokenizer_sha256"] = json!(provenance.tokenizer_sha256);
     }
     let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
     let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + b.data.len());
@@ -1924,7 +2661,8 @@ fn export_fbs_trunk(
     out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
     out.extend_from_slice(&b.data);
     // The export never writes a memory the reader would refuse (claude-198): its keys in strictly
-    // ascending order, of the forms the session keys by, and every id inside the vocabulary.
+    // ascending order, of the forms the session keys by, and every id inside the vocabulary. The
+    // reply keys take the memory chain's forms (claude-345) only under its record, at its tail.
     if memory.is_some() {
         super::memory::memory_image(&Container::parse(&out)?)?;
     }
@@ -1964,7 +2702,12 @@ pub fn add_point_key_uorlut01(artifact: &[u8], image: &super::PointKeyImage) -> 
         .as_array_mut()
         .ok_or(StackError::MissingData)?
         .extend(b.tables);
-    header["schema"] = json!(STACK_FBS_POINT_SCHEMA);
+    // A memory chain's schema (claude-345) covers a stack with or without a point key: it stays.
+    if container.schema == STACK_FBS_BOUND_SCHEMA {
+        header["schema"] = json!(STACK_FBS_BOUND_SCHEMA);
+    } else if header.get("memory_chain").is_none_or(serde_json::Value::is_null) {
+        header["schema"] = json!(STACK_FBS_POINT_SCHEMA);
+    }
     header["point"] = json!(image.record());
     let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
     let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + b.data.len());
@@ -1974,6 +2717,432 @@ pub fn add_point_key_uorlut01(artifact: &[u8], image: &super::PointKeyImage) -> 
     out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
     out.extend_from_slice(&b.data);
     super::point_key::point_image(&Container::parse(&out)?)?;
+    Ok(out)
+}
+
+/// A Hamming stack with its reads' ask heads added (claude-336): every section of `artifact` byte
+/// for byte, then, for each read whose entry of `asks` (one per depth, in depth order) is `Some`,
+/// `hamming.d{depth}.ask` (i16, `vocab * width`, Q12) and, on the readout read with a carry,
+/// `hamming.d{depth}.carry` (i32, `vocab`, Q16 at [`super::ASK_CARRY_GAIN_EXP`]); the record's
+/// `asks` and `carry_rows` name them, and the schema is unchanged. The ask tables are integers
+/// already, so they are added to an exported stack, as the point key is. The result is read back
+/// before it is returned.
+pub fn add_hamming_ask_uorlut01(artifact: &[u8], asks: &[Option<super::AskImage>]) -> Result<Vec<u8>, StackError> {
+    let container = Container::parse(artifact)?;
+    let Some(mut record) = container.hamming.clone() else {
+        return Err(StackError::Shape("ask heads are added to a stack with Hamming reads"));
+    };
+    if record.asks.is_some() || record.carry_rows.is_some() {
+        return Err(StackError::Shape("ask heads are added to a stack without them"));
+    }
+    if asks.len() != record.depths.len() {
+        return Err(StackError::TableLength { name: "hamming.asks".to_owned(), len: asks.len(), expected: record.depths.len() });
+    }
+    let (vocab, width) = (container.shape.vocab, container.shape.width);
+    let declared = u64::from_le_bytes(artifact[8..16].try_into().map_err(|_| StackError::MissingData)?);
+    let header_end = 16 + usize::try_from(declared).map_err(|_| StackError::MissingData)?;
+    let data_start = header_end.div_ceil(ALIGN) * ALIGN;
+    let mut header: serde_json::Value =
+        serde_json::from_slice(&artifact[16..header_end]).map_err(StackError::Header)?;
+    let mut b = ExportBuilder::new();
+    b.data = artifact[data_start..].to_vec();
+    for (r, (depth, ask)) in record.depths.iter().zip(asks).enumerate() {
+        let Some(ask) = ask else { continue };
+        let ask = super::AskImage::checked(Some(ask.table.clone()), ask.carry.clone(), vocab, width)?
+            .ok_or(StackError::MissingData)?;
+        if ask.carry.is_some() && r + 1 != record.depths.len() {
+            return Err(StackError::Shape("a Hamming question carry is served on the readout read only"));
+        }
+        b.push_i16(&format!("hamming.d{depth}.ask"), &ask.table);
+        if let Some((reach, gains)) = &ask.carry {
+            b.push_i32(&format!("hamming.d{depth}.carry"), gains);
+            record.carry_rows = Some(*reach);
+        }
+    }
+    record.asks = Some(asks.iter().map(Option::is_some).collect());
+    record.check(&container.shape)?;
+    header["tables"]
+        .as_array_mut()
+        .ok_or(StackError::MissingData)?
+        .extend(b.tables);
+    header["hamming"] = json!(record);
+    let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
+    let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + b.data.len());
+    out.extend_from_slice(MAGIC);
+    out.extend_from_slice(&(header_bytes.len() as u64).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
+    out.extend_from_slice(&b.data);
+    super::hamming::hamming_image(&Container::parse(&out)?)?;
+    Ok(out)
+}
+
+/// A Hamming stack whose readout read asks, with the place read added (claude-351): every section
+/// of `artifact` byte for byte, then `hamming.d{depth}.place` (i16, `vocab`: bit 0 the stop, bit 1
+/// the arm, bit 2 the open) on the readout read; the record's `place` carries the marks, and the
+/// schema is unchanged. The classes are integers already, so they are added to an exported stack,
+/// as the ask heads are. The result is read back before it is returned.
+pub fn add_hamming_place_uorlut01(artifact: &[u8], place: &super::PlaceImage) -> Result<Vec<u8>, StackError> {
+    let container = Container::parse(artifact)?;
+    let Some(mut record) = container.hamming.clone() else {
+        return Err(StackError::Shape("a place read is added to a stack with Hamming reads"));
+    };
+    if record.place.is_some() {
+        return Err(StackError::Shape("a place read is added to a stack without one"));
+    }
+    let place = super::PlaceImage::checked(place.marks.clone(), place.class.clone(), container.shape.vocab).map_err(StackError::Numerics)?;
+    let depth = *record.depths.last().ok_or(StackError::MissingData)?;
+    let declared = u64::from_le_bytes(artifact[8..16].try_into().map_err(|_| StackError::MissingData)?);
+    let header_end = 16 + usize::try_from(declared).map_err(|_| StackError::MissingData)?;
+    let data_start = header_end.div_ceil(ALIGN) * ALIGN;
+    let mut header: serde_json::Value =
+        serde_json::from_slice(&artifact[16..header_end]).map_err(StackError::Header)?;
+    let mut b = ExportBuilder::new();
+    b.data = artifact[data_start..].to_vec();
+    b.push_i16(&format!("hamming.d{depth}.place"), &place.class);
+    record.place = Some(place.marks);
+    record.check(&container.shape)?;
+    header["tables"]
+        .as_array_mut()
+        .ok_or(StackError::MissingData)?
+        .extend(b.tables);
+    header["hamming"] = json!(record);
+    let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
+    let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + b.data.len());
+    out.extend_from_slice(MAGIC);
+    out.extend_from_slice(&(header_bytes.len() as u64).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
+    out.extend_from_slice(&b.data);
+    super::hamming::hamming_image(&Container::parse(&out)?)?;
+    Ok(out)
+}
+
+/// A SpiralCore/FBS stack with the address table added (claude-366): every section of `artifact`
+/// byte for byte, then `address.l{layer}` for every layer (i16, `(width / 8) * 240` rows of
+/// `width` values at 2^-16); the header gains the `address` record and takes
+/// [`STACK_FBS_ADDRESS_SCHEMA`]. The trainer rounds the rows to this grid, so they are integers
+/// already and are added to an exported stack, as the ask heads and the place read are. It is
+/// the last addition: the others write their own schema. A bound stack is refused, because its
+/// contract names no address table. The result is read back before it is returned.
+pub fn add_address_uorlut01(artifact: &[u8], image: &super::AddressImage) -> Result<Vec<u8>, StackError> {
+    let container = Container::parse(artifact)?;
+    if container.address.is_some() {
+        return Err(StackError::Shape("an address table is added to a stack without one"));
+    }
+    if container.schema == STACK_FBS_BOUND_SCHEMA {
+        return Err(StackError::Shape("an address table is not added to a bound stack"));
+    }
+    let record = image.record();
+    record.check(&container.shape)?;
+    if image.width() != container.shape.width {
+        return Err(StackError::Shape("an address table's rows are as wide as the stack"));
+    }
+    let declared = u64::from_le_bytes(artifact[8..16].try_into().map_err(|_| StackError::MissingData)?);
+    let header_end = 16 + usize::try_from(declared).map_err(|_| StackError::MissingData)?;
+    let data_start = header_end.div_ceil(ALIGN) * ALIGN;
+    let mut header: serde_json::Value =
+        serde_json::from_slice(&artifact[16..header_end]).map_err(StackError::Header)?;
+    let mut b = ExportBuilder::new();
+    b.data = artifact[data_start..].to_vec();
+    for layer in 0..image.layers() {
+        b.push_i16(&super::address::address_table_name(layer), image.layer(layer));
+    }
+    header["tables"]
+        .as_array_mut()
+        .ok_or(StackError::MissingData)?
+        .extend(b.tables);
+    header["address"] = json!(record);
+    header["schema"] = json!(STACK_FBS_ADDRESS_SCHEMA);
+    let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
+    let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + b.data.len());
+    out.extend_from_slice(MAGIC);
+    out.extend_from_slice(&(header_bytes.len() as u64).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
+    out.extend_from_slice(&b.data);
+    super::address::address_image(&Container::parse(&out)?)?;
+    Ok(out)
+}
+
+/// The same artifact with a native Q31 first-pick read (claude-390), schema
+/// [`STACK_FBS_Q31_READ_SCHEMA`]: the `q31_read` record and the read's exact `to_bytes()` in the
+/// `q31.read` table, appended after every earlier section, which keeps its bytes. Refuses a stack
+/// that already has a read, a bound stack, a stack with any other optional record, and a read of
+/// another width or of a depth outside `1..=layers`. The result is read back before it is returned.
+pub fn add_q31_read_uorlut01(artifact: &[u8], image: &super::Q31SessionRead) -> Result<Vec<u8>, StackError> {
+    let container = Container::parse(artifact)?;
+    if container.q31_read.is_some() {
+        return Err(StackError::Shape("a native Q31 read is added to a stack without one"));
+    }
+    if container.schema == STACK_FBS_BOUND_SCHEMA {
+        return Err(StackError::Shape("a native Q31 read is not added to a bound stack"));
+    }
+    if container.address.is_some()
+        || container.point.is_some()
+        || container.memory.is_some()
+        || container.hamming.is_some()
+        || container.memory_chain.is_some()
+        || container.q31.is_some()
+        || container.q31_lanes.is_some()
+        || container.pair_rows.is_some()
+    {
+        return Err(StackError::Shape(
+            "a native Q31 read is added to an FBS stack with no other optional record",
+        ));
+    }
+    let record = image.record();
+    record.check(&container.shape)?;
+    let declared = u64::from_le_bytes(artifact[8..16].try_into().map_err(|_| StackError::MissingData)?);
+    let header_end = 16 + usize::try_from(declared).map_err(|_| StackError::MissingData)?;
+    let data_start = header_end.div_ceil(ALIGN) * ALIGN;
+    let mut header: serde_json::Value =
+        serde_json::from_slice(&artifact[16..header_end]).map_err(StackError::Header)?;
+    let mut b = ExportBuilder::new();
+    b.data = artifact[data_start..].to_vec();
+    b.push_u32(super::Q31_READ_TABLE, &image.words());
+    header["tables"]
+        .as_array_mut()
+        .ok_or(StackError::MissingData)?
+        .extend(b.tables);
+    header["q31_read"] = json!(record);
+    header["schema"] = json!(STACK_FBS_Q31_READ_SCHEMA);
+    let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
+    let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + b.data.len());
+    out.extend_from_slice(MAGIC);
+    out.extend_from_slice(&(header_bytes.len() as u64).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
+    out.extend_from_slice(&b.data);
+    if super::q31_read::q31_read_image(&Container::parse(&out)?)?.as_ref() != Some(image) {
+        return Err(StackError::Numerics("q31.read does not read back as written".to_owned()));
+    }
+    Ok(out)
+}
+
+/// A SpiralCore/FBS stack with pair rows added (claude-384): every section of `artifact` byte for
+/// byte, then `pair_rows.addresses` (u32, one a pair) and `pair_rows.values` (i16, pair-major
+/// rows of `width` values at 2^-12); the header gains the `pair_rows` record and takes
+/// [`STACK_FBS_PAIR_ROWS_SCHEMA`]. A bound stack is refused, because its contract names no pair
+/// rows; so is a stack with an address table or a native Q31 record, and one that has pair rows
+/// already. The result is read back before it is returned.
+pub fn add_pair_rows_uorlut01(artifact: &[u8], image: &super::PairRowsImage) -> Result<Vec<u8>, StackError> {
+    let container = Container::parse(artifact)?;
+    if container.pair_rows.is_some() {
+        return Err(StackError::Shape("pair rows are added to a stack without them"));
+    }
+    if container.address.is_some() {
+        return Err(StackError::Shape("an address table and pair rows are not served together"));
+    }
+    if container.q31.is_some() || container.q31_lanes.is_some() || container.q31_read.is_some() {
+        return Err(StackError::Shape("a native Q31 record and pair rows are not served together"));
+    }
+    if container.schema == STACK_FBS_BOUND_SCHEMA {
+        return Err(StackError::Shape("pair rows are not added to a bound stack"));
+    }
+    let record = super::StackPairRows::of(image);
+    record.check(&container.shape)?;
+    let declared = u64::from_le_bytes(artifact[8..16].try_into().map_err(|_| StackError::MissingData)?);
+    let header_end = 16 + usize::try_from(declared).map_err(|_| StackError::MissingData)?;
+    let data_start = header_end.div_ceil(ALIGN) * ALIGN;
+    let mut header: serde_json::Value =
+        serde_json::from_slice(&artifact[16..header_end]).map_err(StackError::Header)?;
+    let mut b = ExportBuilder::new();
+    b.data = artifact[data_start..].to_vec();
+    b.push_u32(super::pair_rows::PAIR_ROWS_ADDRESSES, image.dict().addresses());
+    let values: Vec<i16> = (0..image.dict().len()).flat_map(|r| image.row(r).iter().copied()).collect();
+    b.push_i16(super::pair_rows::PAIR_ROWS_VALUES, &values);
+    header["tables"]
+        .as_array_mut()
+        .ok_or(StackError::MissingData)?
+        .extend(b.tables);
+    header["pair_rows"] = json!(record);
+    header["schema"] = json!(STACK_FBS_PAIR_ROWS_SCHEMA);
+    let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
+    let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + b.data.len());
+    out.extend_from_slice(MAGIC);
+    out.extend_from_slice(&(header_bytes.len() as u64).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
+    out.extend_from_slice(&b.data);
+    super::pair_rows::pair_rows_image(&Container::parse(&out)?)?;
+    Ok(out)
+}
+
+/// The same artifact with its Hamming record's copy rule set to the latest exact match
+/// (`copy_latest`, claude-345): the rule a run trained with `--hamming-copy-latest` serves. The
+/// rule is in the run's `config.json`, not in the snapshot, so `fbs-export --run-config` sets it
+/// here. Only the header changes: every matrix and table keeps its bytes and its offset from the
+/// data start. An artifact without Hamming reads is refused, and the result is read back before
+/// it is returned.
+pub fn set_hamming_copy_latest_uorlut01(artifact: &[u8]) -> Result<Vec<u8>, StackError> {
+    set_hamming_copy_rule(artifact, |record| record.copy_latest = true)
+}
+
+/// The same artifact with its Hamming record's longest rule set to `marker` (`copy_longest`,
+/// claude-357): the rule a run trained with `--hamming-copy-longest` serves, its reply openings
+/// found by the marker. The record must already hold the latest exact rule
+/// ([`set_hamming_copy_latest_uorlut01`]) and one-token copy keys. Only the header changes, as
+/// there; an artifact without Hamming reads is refused, and the result is read back before it is
+/// returned.
+pub fn set_hamming_copy_longest_uorlut01(artifact: &[u8], marker: [u32; 2]) -> Result<Vec<u8>, StackError> {
+    set_hamming_copy_rule(artifact, |record| record.copy_longest = Some(marker))
+}
+
+/// `artifact` with `set` applied to its Hamming record: the header alone changes.
+fn set_hamming_copy_rule(artifact: &[u8], set: impl FnOnce(&mut StackHamming)) -> Result<Vec<u8>, StackError> {
+    let container = Container::parse(artifact)?;
+    let Some(mut record) = container.hamming.clone() else {
+        return Err(StackError::Shape("the copy rule is set on a stack with Hamming reads"));
+    };
+    set(&mut record);
+    record.check(&container.shape)?;
+    let declared = u64::from_le_bytes(artifact[8..16].try_into().map_err(|_| StackError::MissingData)?);
+    let header_end = 16 + usize::try_from(declared).map_err(|_| StackError::MissingData)?;
+    let data = artifact.get(header_end.div_ceil(ALIGN) * ALIGN..).ok_or(StackError::MissingData)?;
+    let mut header: serde_json::Value =
+        serde_json::from_slice(&artifact[16..header_end]).map_err(StackError::Header)?;
+    header["hamming"] = json!(record);
+    let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
+    let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + data.len());
+    out.extend_from_slice(MAGIC);
+    out.extend_from_slice(&(header_bytes.len() as u64).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
+    out.extend_from_slice(data);
+    super::hamming::hamming_image(&Container::parse(&out)?)?;
+    Ok(out)
+}
+
+/// A Hamming stack with its readout question carry removed while every ask table stays byte for
+/// byte: `hamming.d{depth}.carry` and the record's `carry_rows` are removed, and every other
+/// matrix and table is copied in its original data order with new aligned offsets. The result is
+/// read back and its ask images are checked before it is returned. An artifact without a complete
+/// Hamming image or without a carry is refused.
+pub fn drop_hamming_carry_uorlut01(artifact: &[u8]) -> Result<Vec<u8>, StackError> {
+    #[derive(Clone, Copy)]
+    enum SpanAt {
+        MatrixNibbles(usize),
+        MatrixScales(usize),
+        Table(usize),
+    }
+
+    let container = Container::parse(artifact)?;
+    let original = super::hamming::hamming_image(&container)?
+        .ok_or(StackError::Shape("carry ablation needs a stack with Hamming reads"))?;
+    let Some(mut record) = container.hamming.clone() else {
+        return Err(StackError::Shape("carry ablation needs a stack with Hamming reads"));
+    };
+    if record.carry_rows.is_none() {
+        return Err(StackError::Shape("carry ablation needs a Hamming readout carry"));
+    }
+    let depth = *record
+        .depths
+        .last()
+        .ok_or(StackError::Shape("carry ablation needs a readout read"))?;
+    let carry_name = format!("hamming.d{depth}.carry");
+
+    let declared =
+        u64::from_le_bytes(artifact[8..16].try_into().map_err(|_| StackError::MissingData)?);
+    let header_end = 16 + usize::try_from(declared).map_err(|_| StackError::MissingData)?;
+    let data_start = header_end.div_ceil(ALIGN) * ALIGN;
+    let old_data = artifact.get(data_start..).ok_or(StackError::MissingData)?;
+    let mut header: serde_json::Value =
+        serde_json::from_slice(&artifact[16..header_end]).map_err(StackError::Header)?;
+
+    let tables = header["tables"]
+        .as_array_mut()
+        .ok_or(StackError::MissingData)?;
+    let carry_index = tables
+        .iter()
+        .position(|table| table["name"] == carry_name)
+        .ok_or_else(|| StackError::MissingSection(carry_name.clone()))?;
+    tables.remove(carry_index);
+    record.carry_rows = None;
+    header["hamming"] = json!(record);
+
+    let span = |value: &serde_json::Value| -> Result<(u64, u64), StackError> {
+        Ok((
+            value["offset"].as_u64().ok_or(StackError::MissingData)?,
+            value["bytes"].as_u64().ok_or(StackError::MissingData)?,
+        ))
+    };
+    let mut sections = Vec::new();
+    for (index, matrix) in header["matrices"]
+        .as_array()
+        .ok_or(StackError::MissingData)?
+        .iter()
+        .enumerate()
+    {
+        sections.push((span(&matrix["nibbles"])?.0, SpanAt::MatrixNibbles(index)));
+        sections.push((span(&matrix["scales"])?.0, SpanAt::MatrixScales(index)));
+    }
+    for (index, table) in header["tables"]
+        .as_array()
+        .ok_or(StackError::MissingData)?
+        .iter()
+        .enumerate()
+    {
+        sections.push((span(&table["span"])?.0, SpanAt::Table(index)));
+    }
+    sections.sort_unstable_by_key(|(offset, _)| *offset);
+
+    let mut builder = ExportBuilder::new();
+    for (_, location) in sections {
+        let old_span = match location {
+            SpanAt::MatrixNibbles(index) => span(&header["matrices"][index]["nibbles"])?,
+            SpanAt::MatrixScales(index) => span(&header["matrices"][index]["scales"])?,
+            SpanAt::Table(index) => span(&header["tables"][index]["span"])?,
+        };
+        let start = usize::try_from(old_span.0).map_err(|_| StackError::MissingData)?;
+        let bytes = usize::try_from(old_span.1).map_err(|_| StackError::MissingData)?;
+        let end = start.checked_add(bytes).ok_or(StackError::MissingData)?;
+        let section = old_data.get(start..end).ok_or(StackError::MissingData)?;
+        let new_span = builder.push_section(section);
+        match location {
+            SpanAt::MatrixNibbles(index) => {
+                header["matrices"][index]["nibbles"] = new_span;
+            }
+            SpanAt::MatrixScales(index) => {
+                header["matrices"][index]["scales"] = new_span;
+            }
+            SpanAt::Table(index) => {
+                header["tables"][index]["span"] = new_span;
+            }
+        }
+    }
+
+    let header_bytes = serde_json::to_vec(&header).map_err(StackError::Header)?;
+    let mut out = Vec::with_capacity(16 + header_bytes.len() + ALIGN + builder.data.len());
+    out.extend_from_slice(MAGIC);
+    out.extend_from_slice(&(header_bytes.len() as u64).to_le_bytes());
+    out.extend_from_slice(&header_bytes);
+    out.resize(out.len().div_ceil(ALIGN) * ALIGN, 0);
+    out.extend_from_slice(&builder.data);
+
+    let ablated = super::hamming::hamming_image(&Container::parse(&out)?)?
+        .ok_or(StackError::Shape("carry ablation returned no Hamming image"))?;
+    if ablated.record.carry_rows.is_some()
+        || ablated.record.depths != original.record.depths
+        || ablated.record.asks != original.record.asks
+        || ablated.reads.len() != original.reads.len()
+    {
+        return Err(StackError::Numerics(
+            "carry ablation changed the Hamming read inventory".into(),
+        ));
+    }
+    for (before, after) in original.reads.iter().zip(&ablated.reads) {
+        let asks_match = match (&before.ask, &after.ask) {
+            (None, None) => true,
+            (Some(before), Some(after)) => before.table == after.table && after.carry.is_none(),
+            _ => false,
+        };
+        if !asks_match {
+            return Err(StackError::Numerics(
+                "carry ablation changed an ask table".into(),
+            ));
+        }
+    }
     Ok(out)
 }
 

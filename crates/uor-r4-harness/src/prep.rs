@@ -493,8 +493,8 @@ pub const COST_BUCKETS: [&str; 6] = [
 /// **Two lists of one rule is the defect class this whole line keeps producing.** The durable fix is
 /// to render from the registry rather than a constant, so there is one list; until then, this one is
 /// kept equal to Python's by `parity.render_agreement`, which is why the drift was found at all.
-pub const APPLICABLE_RULES: [&str; 10] = [
-    "D21", "D22", "D23", "D24", "D25", "D28", "D29", "D31", "D32", "D37",
+pub const APPLICABLE_RULES: [&str; 11] = [
+    "D21", "D22", "D23", "D24", "D25", "D28", "D29", "D31", "D32", "D37", "D85",
 ];
 
 /// D22 section 3: the minimum test power a decisive run must state.
@@ -521,6 +521,9 @@ pub struct NewSheet {
     pub steps: String,
     pub stop: String,
     pub cost: String,
+    /// The stack contract this run composes, as a repository-relative path and
+    /// revision.
+    pub stack_contract: String,
     pub seeds: Option<u32>,
     pub rows: Option<u32>,
 }
@@ -695,6 +698,10 @@ pub fn render_sheet(
 
     out.push(String::new());
     out.push("## Base artifact".into());
+    out.push(format!(
+        "- stack contract: {}",
+        missing(&sheet.stack_contract)
+    ));
     let base = if !sheet.base.trim().is_empty() {
         sheet.base.trim().to_string()
     } else if !milestone.base_artifact.is_empty() {
@@ -914,7 +921,7 @@ mod applicable_rules_tests {
     #[test]
     fn the_applicable_rules_include_the_current_owner_rules() {
         for rid in [
-            "D21", "D22", "D23", "D24", "D25", "D28", "D29", "D31", "D32", "D37",
+            "D21", "D22", "D23", "D24", "D25", "D28", "D29", "D31", "D32", "D37", "D85",
         ] {
             assert!(
                 APPLICABLE_RULES.contains(&rid),
@@ -923,8 +930,8 @@ mod applicable_rules_tests {
         }
         assert_eq!(
             APPLICABLE_RULES.len(),
-            10,
-            "the set is ten ids, asserted so a drift fails loudly"
+            11,
+            "the set is eleven ids, asserted so a drift fails loudly"
         );
     }
 

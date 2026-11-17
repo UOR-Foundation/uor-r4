@@ -2,7 +2,7 @@
 //! (d11-exporter-float-trunk Stage 4b, claude-126).
 //!
 //! ```text
-//! fbs-toks ARTIFACT [--prompt ID,ID,...] [--stages] [--parts]
+//! fbs-toks ARTIFACT [--prompt ID,ID,...] [--stages] [--parts] [--read]
 //! ```
 //!
 //! The protocol follows the step-6 one (`docs/labs/m1-d11-artifact-scorer`,
@@ -31,6 +31,11 @@
 //! which splits each layer's two blocks into nine parts. It adds `parts`: the
 //! same profile by part, and under `against_blocks` each block's parts summed
 //! against that block's median from the `--stages` run, per mille.
+//!
+//! `--read` (claude-348) runs the protocol once more with the prefill stepped as the chat feeds
+//! a prompt: every token but the last through `IntegerStackSession::read_step`, which chooses
+//! no token, and the last through `step_native`. It adds `read_prefill`: that run's timing and
+//! whether its reply is the plain protocol's. The plain protocol's numbers are unchanged.
 //!
 //! The Hamming read's trace (integer-hamming-read, claude-235):
 //! - `--hamming-trace D11_READOUT_JSON TRACE_JSON` steps a fresh session over each sequence of
@@ -107,11 +112,11 @@ use uor_r4_integer::fbs_snapshot::{
     HAMMING_TRACE_SCHEMA,
 };
 use uor_r4_integer::stack::{
-    hamming_trace_window, panel_reply, read_hamming_uorlut01, served_copy_codes_uorlut01,
-    IntegerStackModel, ReplyEnd,
+    drop_hamming_carry_uorlut01, hamming_trace_window, panel_reply, read_hamming_uorlut01,
+    served_copy_codes_uorlut01, IntegerStackModel, ReplyEnd,
 };
 
-const USAGE: &str = "usage: fbs-toks ARTIFACT [--prompt ID,ID,...] [--stages] [--parts]\n       fbs-toks ARTIFACT --replies PROMPTS_JSON --out FILE [--reply-tokens N]\n       fbs-toks ARTIFACT --forced PROMPTS_JSON --out FILE [--decision-trace TRACE_JSON] [--force FORCE_JSON]\n       fbs-toks ARTIFACT --hamming-trace D11_READOUT_JSON TRACE_JSON\n       fbs-toks --hamming-trace-compare FIRST_TRACE SECOND_TRACE\n       fbs-toks ARTIFACT --copy-codes FLOAT_TRACE INTEGER_TRACE OUT_JSON\n       fbs-toks ARTIFACT --context-sweep [--tokens TOKENS_U16]\n       fbs-toks --decision-deciles TRACE_JSON OUT_JSON\n       fbs-toks --decision-check TRACE_JSON --table TABLE --out OUT_JSON\n       fbs-toks --decision-grade REFERENCE_TRACE OTHER_TRACE --deciles DECILES_JSON --g10 G --reference-table TABLE --other-table TABLE [--force FORCE_JSON] [--at POSITION:OFFSET]... --out OUT_JSON\n       fbs-toks ARTIFACT --decision-replay REFERENCE_TRACE --prompts PROMPTS_JSON --deciles DECILES_JSON --g10 G --reference-table TABLE [--at POSITION:OFFSET]... --out OUT_JSON";
+const USAGE: &str = "usage: fbs-toks ARTIFACT [--prompt ID,ID,...] [--stages] [--parts] [--read]\n       fbs-toks ARTIFACT --replies PROMPTS_JSON --out FILE [--reply-tokens N]\n       fbs-toks ARTIFACT --forced PROMPTS_JSON --out FILE [--decision-trace TRACE_JSON] [--force FORCE_JSON]\n       fbs-toks ARTIFACT --hamming-trace D11_READOUT_JSON TRACE_JSON\n       fbs-toks --hamming-trace-compare FIRST_TRACE SECOND_TRACE\n       fbs-toks ARTIFACT --copy-codes FLOAT_TRACE INTEGER_TRACE OUT_JSON\n       fbs-toks ARTIFACT --drop-hamming-carry --out FILE\n       fbs-toks ARTIFACT --context-sweep [--tokens TOKENS_U16]\n       fbs-toks --decision-deciles TRACE_JSON OUT_JSON\n       fbs-toks --decision-check TRACE_JSON --table TABLE --out OUT_JSON\n       fbs-toks --decision-grade REFERENCE_TRACE OTHER_TRACE --deciles DECILES_JSON --g10 G --reference-table TABLE --other-table TABLE [--force FORCE_JSON] [--at POSITION:OFFSET]... --out OUT_JSON\n       fbs-toks ARTIFACT --decision-replay REFERENCE_TRACE --prompts PROMPTS_JSON --deciles DECILES_JSON --g10 G --reference-table TABLE [--at POSITION:OFFSET]... --out OUT_JSON";
 
 /// The prefills `--context-sweep` times, each followed by `DECODE` steps (claude-235).
 const SWEEP_PREFILLS: [usize; 4] = [32, 64, 96, 128];
@@ -197,6 +202,64 @@ fn hamming_trace_compare(first: &str, second: &str) -> Result<(), String> {
 /// A file's sha256, in hex.
 fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(<sha2::Sha256 as sha2::Digest>::digest(bytes))
+}
+
+/// `--drop-hamming-carry`: remove the readout question carry while retaining every ask table,
+/// writing the validated artifact only to a new path.
+fn drop_hamming_carry(artifact: &str, out: &str) -> Result<(), String> {
+    let bytes = std::fs::read(artifact).map_err(|e| format!("{artifact}: {e}"))?;
+    let before = read_hamming_uorlut01(&bytes)
+        .map_err(|e| format!("{artifact}: the Hamming reads: {e}"))?
+        .ok_or_else(|| format!("{artifact}: the artifact has no Hamming reads"))?;
+    let (depth, reach, gains) = before
+        .reads
+        .last()
+        .and_then(|read| {
+            read.ask
+                .as_ref()
+                .and_then(|ask| ask.carry.as_ref())
+                .map(|(reach, gains)| (read.depth, *reach, gains.len()))
+        })
+        .ok_or_else(|| format!("{artifact}: the artifact has no Hamming readout carry"))?;
+    let ablated = drop_hamming_carry_uorlut01(&bytes)
+        .map_err(|e| format!("{artifact}: carry ablation: {e}"))?;
+    let after = read_hamming_uorlut01(&ablated)
+        .map_err(|e| format!("carry ablation read-back: {e}"))?
+        .ok_or("carry ablation returned no Hamming image")?;
+    if after.record.carry_rows.is_some()
+        || after
+            .reads
+            .iter()
+            .any(|read| read.ask.as_ref().is_some_and(|ask| ask.carry.is_some()))
+    {
+        return Err("carry ablation read-back still carries".into());
+    }
+    write_new_file(std::path::Path::new(out), &ablated).map_err(|e| format!("{out}: {e}"))?;
+    println!(
+        "{}",
+        json!({
+            "schema": "uor-r4.hamming-carry-ablation/1",
+            "artifact": {
+                "path": artifact,
+                "sha256": sha256_hex(&bytes),
+                "bytes": bytes.len(),
+            },
+            "out": {
+                "path": out,
+                "sha256": sha256_hex(&ablated),
+                "bytes": ablated.len(),
+            },
+            "depth": depth,
+            "carry_rows": reach,
+            "removed_gains": gains,
+            "removed_gain_bytes": gains * 4,
+            "ask_depths": before.reads.iter()
+                .filter(|read| read.ask.is_some())
+                .map(|read| read.depth)
+                .collect::<Vec<_>>(),
+        })
+    );
+    Ok(())
 }
 
 /// The decision trace at `path` and its file's sha256.
@@ -1423,6 +1486,27 @@ impl Stepper for uor_r4_integer::stack::IntegerStackSession<'_> {
     }
 }
 
+/// A session whose first `reads` steps are read steps (claude-348): the prefill as the chat
+/// feeds a prompt, every token but the last read without a choice. A read step returns token 0,
+/// which the protocol never feeds: it keeps only the prefill's last choice.
+struct ReadPrefill<'m> {
+    session: uor_r4_integer::stack::IntegerStackSession<'m>,
+    reads: usize,
+}
+
+impl Stepper for ReadPrefill<'_> {
+    fn step(&mut self, token: u32) -> Result<u32, String> {
+        if self.reads == 0 {
+            return Stepper::step(&mut self.session, token);
+        }
+        self.reads -= 1;
+        self.session
+            .read_step(token)
+            .map(|()| 0)
+            .map_err(|e| e.to_string())
+    }
+}
+
 /// One timed run in a fresh session: the prefill over `prompt` and `decode`
 /// greedy steps after it, as `(prefill_ns, decode_ns, reply)`. The reply is
 /// the prefill's last choice followed by each decode step's.
@@ -1777,6 +1861,9 @@ fn run() -> Result<(), String> {
         }
     }
     match args.as_slice() {
+        [path, flag, o, out] if flag == "--drop-hamming-carry" && o == "--out" => {
+            return drop_hamming_carry(path, out);
+        }
         [flag, first, second] if flag == "--hamming-trace-compare" => {
             return hamming_trace_compare(first, second);
         }
@@ -1808,9 +1895,10 @@ fn run() -> Result<(), String> {
         .collect();
     let parts = args.iter().any(|a| a == "--parts");
     let stages = parts || args.iter().any(|a| a == "--stages");
+    let read = args.iter().any(|a| a == "--read");
     let args: Vec<String> = args
         .into_iter()
-        .filter(|a| a != "--stages" && a != "--parts")
+        .filter(|a| a != "--stages" && a != "--parts" && a != "--read")
         .collect();
     let (path, prompt_arg, tokens_arg) = match args.as_slice() {
         [path] => (path, None, None),
@@ -1926,6 +2014,16 @@ fn run() -> Result<(), String> {
             parted["against_blocks"] = blocks_against_parts(&report["stages"], &parted)?;
             report["parts"] = parted;
         }
+    }
+    if read {
+        let reads = prompt.len().saturating_sub(1);
+        let fresh = || ReadPrefill {
+            session: model.session(),
+            reads,
+        };
+        let read_timing = protocol(fresh, &prompt)?;
+        let same = read_timing["reply"] == report["timing"]["reply"];
+        report["read_prefill"] = json!({ "timing": read_timing, "replies_match": same });
     }
     println!("{report}");
     Ok(())
@@ -3038,5 +3136,73 @@ mod tests {
         );
         let named = deciles(json!({ "path": "t.json", "sha256": "ab" }));
         assert!(parse_deciles("d.json", &named).is_ok());
+    }
+
+    #[cfg(feature = "fbs-synthetic")]
+    #[test]
+    fn drop_hamming_carry_writes_once_and_keeps_the_ask_heads() {
+        use uor_r4_integer::stack::synthetic::{synthetic_fbs_trunk, synthetic_hamming};
+        use uor_r4_integer::stack::{
+            add_hamming_ask_uorlut01, export_fbs_trunk_uorlut01, AskImage,
+        };
+
+        let mut snapshot = synthetic_fbs_trunk(711);
+        snapshot.hamming = Some(synthetic_hamming(
+            snapshot.width,
+            snapshot.layers.len(),
+            4,
+            712,
+        ));
+        let plain = export_fbs_trunk_uorlut01(&snapshot).expect("plain export");
+        let (vocab, width) = (snapshot.vocab, snapshot.width);
+        let table = (0..vocab * width)
+            .map(|index| ((index % 8191) as i32 - 4096) as i16)
+            .collect::<Vec<_>>();
+        let mut gains = vec![0; vocab];
+        gains[1] = 1 << 16;
+        let carried = add_hamming_ask_uorlut01(
+            &plain,
+            &[
+                Some(AskImage {
+                    table: table.clone(),
+                    carry: None,
+                }),
+                Some(AskImage {
+                    table,
+                    carry: Some((3, gains)),
+                }),
+            ],
+        )
+        .expect("ask heads");
+
+        let root = std::env::temp_dir().join(format!(
+            "uor_fbs_toks_carry_ablation_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir(&root).expect("scratch directory");
+        let input = root.join("carried.uorlut");
+        let output = root.join("ablated.uorlut");
+        std::fs::write(&input, &carried).expect("carried artifact");
+        let input = input.to_str().expect("UTF-8 path");
+        let output_text = output.to_str().expect("UTF-8 path");
+        drop_hamming_carry(input, output_text).expect("ablation");
+
+        let ablated = std::fs::read(&output).expect("ablated artifact");
+        let image = read_hamming_uorlut01(&ablated)
+            .expect("parse")
+            .expect("Hamming reads");
+        assert_eq!(image.record.asks, Some(vec![true, true]));
+        assert!(image.record.carry_rows.is_none());
+        assert!(image
+            .reads
+            .iter()
+            .all(|read| read.ask.as_ref().is_some_and(|ask| ask.carry.is_none())));
+
+        let before = std::fs::read(&output).expect("output before refusal");
+        let error = drop_hamming_carry(input, output_text).expect_err("output exists");
+        assert!(error.contains("exists"), "{error}");
+        assert_eq!(std::fs::read(&output).expect("unchanged output"), before);
+        std::fs::remove_dir_all(root).expect("clean scratch");
     }
 }

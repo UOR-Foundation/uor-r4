@@ -41,7 +41,13 @@ fails, and so does a row whose path is gone. `uor-harness check`'s FILEMAP rule 
 | `archive/tools/` | Retired tooling |
 | `archive/transformerless/` | Retired transformerless-line records |
 | `archive/vendor-snapshots/` | Vendor state snapshots |
+| `bake-off/` | Frozen bake-off sockets, rules, candidate records, scoreboards and picks |
+| `bake-off/reply-control/` | First reply-control socket, retained as rule-development history |
+| `bake-off/reply-control-v2/` | Second reply-control socket, control and rule-history correction |
+| `bake-off/reply-control-v3/` | Scored reply-control socket, control, scoreboard and pick |
 | `conformance/` | Conformance fixtures |
+| `conformance/generated/` | Generated machine-readable views of registered contracts |
+| `conformance/stack/` | Authoritative model stack contracts |
 | `crates/` | The Rust workspace |
 | `crates/repo-conformance/` | Repository conformance checks |
 | `crates/repo-model/` | The repository model crate |
@@ -61,6 +67,7 @@ fails, and so does a row whose path is gone. `uor-harness check`'s FILEMAP rule 
 | `crates/uor-r4-lut/` | The UORLUT01 container format |
 | `crates/uor-r4-model-source/` | Model-source loading |
 | `crates/uor-r4-naf/` | The NAF crate |
+| `crates/uor-r4-native-vector/` | Dependency-free Q31 geometric vector state and shared Hamilton operators |
 | `crates/uor-r4-object-store/` | The exact object store and durable memory |
 | `crates/uor-r4-pod-provider/` | Pod provider bindings |
 | `crates/uor-r4-proof-model/` | The proof model |
@@ -68,6 +75,7 @@ fails, and so does a row whose path is gone. `uor-harness check`'s FILEMAP rule 
 | `crates/uor-r4-router/` | The router crate |
 | `crates/uor-r4-simd/` | SIMD helpers |
 | `crates/uor-r4-source-interface/` | The source-interface crate |
+| `crates/uor-r4-studio-agent/` | Studio agent event schema, canonical JSON, cursor and approval contracts |
 | `crates/uor-r4-tokenizer/` | The byte-level BPE tokenizer and trainer |
 | `crates/uor-r4-training/` | Training driver, grader and evaluation tooling |
 | `crates/uor-r4-vision/` | Deterministic integer RGBA-to-R4 patch decomposition |

@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 description = "M-world v2 held-out-phrasing panels and the CPU-only stratified evidence lane for one-model-end-to-end"
+autotests = false
 
 # A standalone instrument, outside the repository's workspace, like
 # docs/labs/m2-fresh-heldout-panel/instrument.
@@ -13,6 +14,7 @@ resolver = "2"
 [features]
 panel-writer = ["dep:uor-r4-training", "dep:uor-r4-core"]
 cpu-parity = ["dep:uor-r4-integer", "dep:uor-r4-cpu-train", "dep:uor-r4-core"]
+integer-reader = ["dep:uor-r4-integer"]
 
 [[bin]]
 name = "heldout-panel"
@@ -30,6 +32,16 @@ path = "src/bin/served-reply-panel.rs"
 required-features = ["cpu-parity"]
 
 [[bin]]
+name = "real-artifact-audit"
+path = "src/bin/real-artifact-audit.rs"
+required-features = ["cpu-parity"]
+
+[[bin]]
+name = "real-carry-geometry"
+path = "src/bin/real-carry-geometry.rs"
+required-features = ["cpu-parity"]
+
+[[bin]]
 name = "corpus-eos-exposure"
 path = "src/bin/corpus-eos-exposure.rs"
 
@@ -41,6 +53,24 @@ path = "src/bin/m2-sft-exclusions.rs"
 name = "corpus-panel-overlap"
 path = "src/bin/corpus-panel-overlap.rs"
 required-features = ["cpu-parity"]
+
+[[bin]]
+name = "raw-id-replies"
+path = "src/bin/raw-id-replies.rs"
+required-features = ["integer-reader"]
+
+[[bin]]
+name = "row-picks"
+path = "src/bin/row-picks.rs"
+required-features = ["integer-reader"]
+
+[[bin]]
+name = "whole-word-recall"
+path = "src/bin/whole-word-recall.rs"
+
+[[test]]
+name = "reply_control_bakeoff_v3_rules"
+path = "tests/reply_control_bakeoff_v3_rules.rs"
 
 [dependencies]
 uor-r4-training = { path = "../../../../crates/uor-r4-training", optional = true }

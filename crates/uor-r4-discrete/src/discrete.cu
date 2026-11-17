@@ -38,19 +38,41 @@ __device__ void root_cost(const int* x,const U* g,U root,U* distance,U* hamming)
     *distance=0;*hamming=0;
     for(U d=0;d<8;++d) { int y=(int)g[ROOT+root*8+d]; *distance+=(U)magnitude(x[d]-y); *hamming+=(x[d]!=y); }
 }
-__device__ bool route_vector(const int* input,const U* ids,const U* routes,const U* plan,const U* g,const U* s,U row,U kind,U index,U candidate,int* output) {
+// Route trace, flattened by row then block: header
+// [frontier count, output root, completed stages, terminal atom], then per-stage
+// [frame, parent root, selected port, goal root, composed action, next node].
+__device__ bool route_vector(const int* input,const U* ids,const U* routes,const U* plan,const U* g,const U* s,U row,U kind,U index,U candidate,int* output,U* trace) {
     plan+=row*(3+s[6]*4+16);
     U length=plan[0],nodes=plan[1],frontier=plan[2];plan+=3;
     if(length==0 || length>s[2] || nodes>s[6] || frontier==0 || frontier>16 || s[13]>1u || (s[13]==1u && kind==0u))return false;
-    if(s[13]==1u){for(U block=0;block<s[1];++block)input_block(input,ids,g,row,length-1,block,s,kind,index,candidate,output+block*8);return true;}
+    if(s[13]==1u){
+        for(U block=0;block<s[1];++block){
+            input_block(input,ids,g,row,length-1,block,s,kind,index,candidate,output+block*8);
+            // TRACE-BEGIN
+            if(trace){
+                U* rec=trace+(row*s[1]+block)*(4u+s[5]*6u);for(U i=0;i<4u+s[5]*6u;++i)rec[i]=ABSENT;rec[0]=frontier;rec[2]=0;
+                for(U r=0;r<16;++r){bool equal=true;for(U d=0;d<8;++d)equal&=output[block*8+d]==(int)g[ROOT+r*8+d];if(equal)rec[1]=r;}
+            }
+            // TRACE-END
+        }
+        return true;
+    }
     for(U block=0;block<s[1];++block) {
         int query[8];input_block(input,ids,g,row,length-1,block,s,kind,index,candidate,query);
         U node=ABSENT,root=0,total=g[IDENTITY];
+        // TRACE-BEGIN
+        U* rec=trace?trace+(row*s[1]+block)*(4u+s[5]*6u):0;
+        if(rec){for(U i=0;i<4u+s[5]*6u;++i)rec[i]=ABSENT;rec[0]=frontier;}
+        // TRACE-END
         for(U stage=0;stage<s[5];++stage) {
             U parameter=block*s[5]+stage;
             U frame=routes[parameter];
             if(frame>=64) return false;
             if(kind==0 && index==parameter && candidate) frame=compose(g,move_action(g,candidate),frame);
+            // TRACE-BEGIN
+            U* sr=rec?rec+4u+stage*6u:0;
+            if(sr){sr[0]=frame;sr[1]=root;}
+            // TRACE-END
             int q[8];action(g,frame,query,q);
             U count=stage==0?frontier:3;
             U best=ABSENT,best_distance=ABSENT,best_hamming=ABSENT,goal=0;
@@ -65,14 +87,23 @@ __device__ bool route_vector(const int* input,const U* ids,const U* routes,const
             total=compose(g,g[BFS+root*16+goal],total);root=goal;
             node=stage==0?plan[s[6]*4+best]:plan[node*4+best];
             if(node>=nodes) return false;
+            // TRACE-BEGIN
+            if(sr){sr[2]=best;sr[3]=goal;sr[4]=total;sr[5]=node;}
+            // TRACE-END
             U atom=plan[node*4+3];
             if(atom!=ABSENT) {
                 if(atom>=length) return false;
                 int carrier[8];input_block(input,ids,g,row,atom,block,s,kind,index,candidate,carrier);
+                // TRACE-BEGIN
+                if(rec){rec[2]=stage+1;rec[3]=atom;}
+                // TRACE-END
                 action(g,total,carrier,output+block*8);break;
             }
             if(stage+1==s[5]) return false;
         }
+        // TRACE-BEGIN
+        if(rec)for(U r=0;r<16;++r){bool equal=true;for(U d=0;d<8;++d)equal&=output[block*8+d]==(int)g[ROOT+r*8+d];if(equal)rec[1]=r;}
+        // TRACE-END
     }
     return true;
 }
@@ -319,11 +350,101 @@ __device__ bool flock_vector(const int* input,const U* ids,const int* gates,cons
     }
     return true;
 }
+// PICK-BEGIN
+// ---- Pick read (Claude, claude-408) ----
+// s[8] = 3. The lines between PICK-BEGIN and PICK-END are left out of the
+// generated bucket writer (bucket_source.rs), whose text stays the one its GPU
+// receipts qualified; the host refuses a Pick model there.
+// One row, t = length-1. code(x): bit 2d if x[d]>0, bit 2d+1 if x[d]<0, so for
+// orbit roots L1(a-b) = 2*popc(code(a)^code(b)). T[p][b] is block b of tok(p)
+// carried to t by s[14] (3 identity, 1 causal prefix holonomy). For 1<=p<=t-1,
+// d(p) = sum_b popc(code(T[p-1][b])^code(T[t-1][b])) + popc(code(T[p][b])^code(T[t][b]));
+// the pick is the least d, ties to the latest p. Per block, u = query_b +
+// gate_b*T[pick+1][b] (level-0 Gate trit), out = snap_{1+|gate_b|}(u). With
+// t < 2 there is no pick and the output is the query.
+// Optional trace (forward only) per (row, block), in the Flock record's first
+// words: [pick, d(pick), count of p tied at d(pick), gate+1, out root]; the
+// rest ABSENT. pick, d and ties are ABSENT, ABSENT, 0 when there is no pick.
+#define MODE_PICK 3u
+__device__ U root_code(const int* x) {
+    U code=0;
+    for(U d=0;d<8;++d){if(x[d]>0)code|=1u<<(2*d);else if(x[d]<0)code|=1u<<(2*d+1);}
+    return code;
+}
+// Block b of tok(p), carried to t. prefix holds this block's holonomy frames.
+__device__ bool pick_block(const int* input,const U* ids,const U* g,const U* s,const unsigned char* prefix,U row,U p,U t,U b,U kind,U index,U candidate,int* out) {
+    int v[8];input_block(input,ids,g,row,p,b,s,kind,index,candidate,v);
+    if(s[14]==3){for(U d=0;d<8;++d)out[d]=v[d];return true;}
+    action(g,compose(g,prefix[t],g[INVERSE+prefix[p]]),v,out);
+    return true;
+}
+__device__ bool pick_prefix(const int* input,const U* ids,const U* g,const U* s,const U* position_steps,U row,U length,U b,U kind,U index,U candidate,unsigned char* prefix) {
+    if(s[14]!=1)return true;
+    U acc=g[IDENTITY];
+    for(U p=0;p<length;++p) {
+        int fv[8];input_block(input,ids,g,row,p,b,s,kind,index,candidate,fv);
+        U root=root_id(fv,g);if(root==ABSENT)return false;
+        acc=compose(g,position_step(position_steps,b,root,g),acc);
+        prefix[p]=(unsigned char)acc;
+    }
+    return true;
+}
+__device__ bool pick_vector(const int* input,const U* ids,const int* gates,const U* plan,const U* g,const U* s,const U* position_steps,U row,U kind,U index,U candidate,int* output,U* trace) {
+    plan+=row*(3+s[6]*4+16);
+    U length=plan[0];
+    if(length==0 || length>s[2] || length>MAX_POSITIONS || (s[14]!=1 && s[14]!=3))return false;
+    U t=length-1;
+    unsigned char prefix[MAX_POSITIONS];
+    U distance[MAX_POSITIONS];
+    for(U p=0;p<length;++p)distance[p]=0;
+    U pick=ABSENT,best=ABSENT,ties=0;
+    if(t>=2) {
+        for(U b=0;b<s[1];++b) {
+            if(!pick_prefix(input,ids,g,s,position_steps,row,length,b,kind,index,candidate,prefix))return false;
+            int x[8];
+            if(!pick_block(input,ids,g,s,prefix,row,t,t,b,kind,index,candidate,x))return false;
+            U qt=root_code(x);
+            if(!pick_block(input,ids,g,s,prefix,row,t-1,t,b,kind,index,candidate,x))return false;
+            U qp=root_code(x);
+            if(!pick_block(input,ids,g,s,prefix,row,0,t,b,kind,index,candidate,x))return false;
+            U previous=root_code(x);
+            for(U p=1;p<t;++p) {
+                if(!pick_block(input,ids,g,s,prefix,row,p,t,b,kind,index,candidate,x))return false;
+                U current=root_code(x);
+                distance[p]+=(U)__popc(previous^qp)+(U)__popc(current^qt);
+                previous=current;
+            }
+        }
+        for(U p=1;p<t;++p){if(distance[p]<=best){pick=p;best=distance[p];}}
+        for(U p=1;p<t;++p)ties+=distance[p]==best;
+    }
+    for(U b=0;b<s[1];++b) {
+        int u[8];
+        input_block(input,ids,g,row,t,b,s,kind,index,candidate,u);
+        int gate=gate_value(gates,b*s[5],kind,index,candidate);
+        if(gate<-1 || gate>1)return false;
+        if(pick!=ABSENT && gate!=0) {
+            if(!pick_prefix(input,ids,g,s,position_steps,row,length,b,kind,index,candidate,prefix))return false;
+            int payload[8];
+            if(!pick_block(input,ids,g,s,prefix,row,pick+1,t,b,kind,index,candidate,payload))return false;
+            for(U d=0;d<8;++d)u[d]+=gate>0?payload[d]:-payload[d];
+        }
+        U out=snap(u,1u+(U)(gate<0?-gate:gate),g);
+        U* rec=trace ? trace+(row*s[1]+b)*(TRACE_ROW+s[5]*TRACE_LEVEL) : 0;
+        if(rec){for(U i=0;i<TRACE_ROW+s[5]*TRACE_LEVEL;++i)rec[i]=ABSENT;rec[0]=pick;rec[1]=best;rec[2]=ties;rec[3]=(U)(gate+1);rec[4]=out;}
+        for(U d=0;d<8;++d)output[b*8+d]=(int)g[ROOT+out*8+d];
+    }
+    return true;
+}
+// PICK-END
 // Mode dispatch: Route (default), Flock, or Relation. A Route proposal in
 // Flock/Relation mode and a Gate proposal in Route mode are refused (status 9).
 __device__ bool read_vector(const int* input,const U* ids,const U* routes,const int* gates,const U* plan,const U* g,const U* s,const U* position_steps,U row,U kind,U index,U candidate,int* output,U* trace) {
+// PICK-BEGIN Pick dispatches first; a Route proposal in Pick mode is refused too (status 9).
+    if(s[8]==MODE_PICK)return pick_vector(input,ids,gates,plan,g,s,position_steps,row,kind,index,candidate,output,trace);
+// PICK-END
     if(s[8]==MODE_FLOCK || s[8]==MODE_RELATION)return flock_vector(input,ids,gates,plan,g,s,position_steps,row,kind,index,candidate,output,trace);
-    return route_vector(input,ids,routes,plan,g,s,row,kind,index,candidate,output);
+    return route_vector(input,ids,routes,plan,g,s,row,kind,index,candidate,output,trace);
 }
 __device__ U address_distance(const int* q,const U* g,const U* s,U cell) {
     U a,ha,b,hb;root_cost(q,g,cell/16,&a,&ha);root_cost(q+(s[1]-1)*8,g,cell%16,&b,&hb);return a+b;
@@ -442,11 +563,11 @@ extern "C" __global__ void discrete_export_token_cells(const int* table,const U*
     if(cell==ABSENT || cell>255u){atomicExch(status,8u);return;}
     cells[token]=cell;
 }
-// trace: Flock/Relation mode only, rows*blocks*(TRACE_ROW+stages*TRACE_LEVEL) words
-// (+ rows*blocks*nodes_count relation score words in Relation mode); ignored in Route mode.
+// trace: mode-specific rows*blocks*(header+stages*level) words for Route and
+// active-leaf reads, plus rows*blocks*max_nodes Relation-score words.
 extern "C" __global__ void discrete_forward(const int* table,const U* routes,const int* gates,const U* ids,const int* input,const U* targets,const U* plan,const U* g,const U* s,const U* position_steps,int* out,U* predictions,W* losses,U* token_rivals,U* address_rivals,U* admitted,U* trace,U* status) {
     U row=blockIdx.x*blockDim.x+threadIdx.x;if(row>=s[4])return;
-    int q[MAX_WIDTH];if(!read_vector(input,ids,routes,gates,plan,g,s,position_steps,row,2,0,0,q,(s[8]==MODE_FLOCK || s[8]==MODE_RELATION)?trace:0)){atomicExch(status,2u);return;}
+    int q[MAX_WIDTH];if(!read_vector(input,ids,routes,gates,plan,g,s,position_steps,row,2,0,0,q,trace)){atomicExch(status,2u);return;}
     for(U d=0;d<s[1]*8;++d)out[row*s[1]*8+d]=q[d];
     U arithmetic_status=0;
     losses[row]=writer(q,table,g,s,targets[row],2,0,0,predictions+row,token_rivals+row,address_rivals+row,admitted+row*16,0,0,0,&arithmetic_status);
@@ -456,7 +577,7 @@ extern "C" __global__ void discrete_forward(const int* table,const U* routes,con
 extern "C" __global__ void discrete_counterfactual(const int* table,const U* routes,const int* gates,const U* ids,const int* input,const U* targets,const U* plan,const U* g,const U* s,const U* position_steps,U kind,U index,W* losses,U* status) {
     U candidate=blockIdx.x*blockDim.x+threadIdx.x;if(candidate>=16)return;
     W sum=0;U eligible=0;losses[candidate]=~(W)0;
-    bool gated=s[8]==MODE_FLOCK || s[8]==MODE_RELATION;
+    bool gated=s[8]==MODE_FLOCK || s[8]==MODE_RELATION || s[8]==MODE_PICK;
     if((kind==GATE_KIND && !gated) || (kind==0 && gated)){atomicExch(status,9u);return;}
     if(kind==GATE_KIND && index>=gate_count(s)){atomicExch(status,4u);return;}
     if(kind==GATE_KIND && candidate>=3)return;
@@ -503,7 +624,7 @@ extern "C" __global__ void discrete_choose(const W* losses,const W* epoch,const 
 extern "C" __global__ void discrete_apply(int* table,U* routes,int* gates,const U* g,const U* s,const U* position_steps,const W* proposal,U kind,U index,W* epoch,U* status) {
     if(blockIdx.x || threadIdx.x)return;
     if(proposal[3]!=*epoch){*status=3;return;}
-    bool gated=s[8]==MODE_FLOCK || s[8]==MODE_RELATION;
+    bool gated=s[8]==MODE_FLOCK || s[8]==MODE_RELATION || s[8]==MODE_PICK;
     if(kind==GATE_KIND) {
         if(!gated){*status=9;return;}
         if(proposal[0]>=3 || index>=gate_count(s)){*status=4;return;}
@@ -531,8 +652,9 @@ extern "C" __global__ void discrete_validate(const int* table,const U* routes,co
     if(i<s[1]*s[5] && routes[i]>=64)atomicExch(status,7u);
     if(i<gate_count(s) && (gates[i]<-1 || gates[i]>1))atomicExch(status,10u);
     if(i<s[1]*16 && position_steps[i]>=16)atomicExch(status,10u);
-    if(i==0 && (s[11]>1 || s[8]>MODE_RELATION || s[12]>2 || (s[12]!=0 && s[8]!=MODE_FLOCK && s[8]!=MODE_RELATION) || s[13]>1 || (s[13]!=0 && s[8]!=0)
-        || s[14]>3 || (s[14]!=0 && s[8]!=MODE_FLOCK && s[8]!=MODE_RELATION)
+    if(i==0 && (s[11]>1 || s[8]>MODE_PICK || s[12]>2 || (s[12]!=0 && s[8]!=MODE_FLOCK && s[8]!=MODE_RELATION) || s[13]>1 || (s[13]!=0 && s[8]!=0)
+        || s[14]>3 || (s[14]!=0 && s[8]!=MODE_FLOCK && s[8]!=MODE_RELATION && s[8]!=MODE_PICK)
+        || (s[8]==MODE_PICK && (s[9]!=0 || s[10]!=0 || (s[14]!=1 && s[14]!=3) || s[1]<1))
         || (s[8]==MODE_FLOCK && (s[9]==0 || s[9]>MAX_KEPT || s[10]!=0 || s[1]<2))
         || (s[8]==MODE_RELATION && (s[9]==0 || s[9]>MAX_KEPT || s[10]==0 || s[10]>MAX_SWEEPS || s[1]<2))))atomicExch(status,10u);
 }

@@ -153,6 +153,19 @@ pub struct LongConfig {
     /// (`HammingReads::with_copy_keys`, claude-268). Left out of `config.json` when none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hamming_copy_keys: Option<Vec<usize>>,
+    /// The Hamming read's copy heads read their latest exact match in place of the mean of their
+    /// nearest sixteen (`HammingReads::with_copy_latest`, claude-345): the rule the integer
+    /// session serves as `CopyRule::LatestExact`. Left out of `config.json` when false.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub hamming_copy_latest: bool,
+    /// The longest rule (`HammingReads::with_copy_longest`, claude-357), named by the reply
+    /// marker: the two token ids that stand before a reply's first token. A copy head then reads
+    /// the latest exact match whose token before it also agrees, and the latest exact match at a
+    /// reply's opening row, the rule the integer session serves as
+    /// `CopyRule::LongestAfterOpening`. Needs `hamming_copy_latest` and one-token copy keys.
+    /// Left out of `config.json` when not set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hamming_copy_longest: Option<[u32; 2]>,
     /// The Hamming read's type heads as ask heads (`HammingReads::with_ask`, claude-330): each
     /// asks with its token's point plus a learned question row, against the copy key. Off by
     /// default, and left out of `config.json` when off.
@@ -170,6 +183,25 @@ pub struct LongConfig {
     /// claude-333); it needs the ask heads. 0, the default, is off and left out of `config.json`.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub hamming_hold: usize,
+    /// claude-335's B2-aqC: the pull at the question rows and at the scored rows together
+    /// (`--hamming-attract-at both`); left out of `config.json` when false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hamming_attract_at_both: bool,
+    /// The readout read's question carried from this many rows back
+    /// (`HammingReads::with_carry`, claude-335); it needs the ask heads. 0, the default, is off
+    /// and left out of `config.json`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub hamming_carry_question: usize,
+    /// claude-351: the place read (`HammingReads::with_place`), named by the kit it trains from:
+    /// the labels, marks and stop tokens `--turn-census ... --places-out` writes from the corpus
+    /// this run trains on. It needs the ask heads and refuses the question carry. Left out of
+    /// `config.json` when off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hamming_place: Option<PathBuf>,
+    /// The place pull's weight λ in the loss (`HammingReads::place_step`); it needs the place
+    /// read. 0, the default, is off and left out of `config.json`.
+    #[serde(default, skip_serializing_if = "is_zero_f64")]
+    pub hamming_place_pull: f64,
     /// Pass no gradient from the input encoding into the shared table
     /// (`geometric_stack::set_input_table_fixed`); it changes training only, never a forward.
     pub fix_input_table: bool,
@@ -207,6 +239,20 @@ pub struct LongConfig {
     /// out when false.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub turn_memory_reply: bool,
+    /// The turn memory leaves to the copy read every key the copy read owns (claude-345): a key
+    /// of either table where the Hamming read's latest exact match ([`copy_names`]) already names
+    /// the target on more than half of the key's TRAIN rows is stored in neither table, so the
+    /// memory holds what the context cannot supply. Needs `turn_memory` and `hamming_copy_latest`.
+    /// Left out when false.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub turn_memory_leave_copied: bool,
+    /// The reply table's tail (claude-345): with `N` above 0 the table stores each TRAIN row under
+    /// three keys and the read asks them in order: both ends of the turn (its first 8 ids and the
+    /// last 8 of the rest), its last `N` ids, then its first 8 as before. The first 8 end before
+    /// the second operand of a sum and before the word of "What is the opposite of tall?"; the
+    /// tail holds them. Needs `turn_memory_reply`. 0 is off, and left out of `config.json`.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub turn_memory_tail: usize,
     /// Memory dropout (one-model-end-to-end protocol I-B, claude-207), in thousandths: each
     /// training window is dropped with this chance ([`memory_dropped`]), and in a dropped window
     /// the turn memory names no row, so the trunk also learns those windows without it. Training
@@ -256,6 +302,37 @@ pub struct LongConfig {
     /// schedule start fresh. Left out of `config.json` when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub init_from: Option<PathBuf>,
+    /// The address memory's arm (claude-346, [`crate::e8_address`]): a learned table inside the
+    /// trunk, read by each state's own address. Left out of `config.json` when absent, so a run
+    /// without it writes the same file as before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address_memory: Option<crate::e8_address::AddressArm>,
+    /// The address memory's band `τ`; the arm's default when absent. Needs `address_memory`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address_band: Option<f64>,
+    /// The pair rows' minimum turn count (`--pair-rows`), `None` when off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pair_rows: Option<u32>,
+    /// Whether each pair row is weighed by one over its count of different replies
+    /// (`--pair-weight replies`, claude-373).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pair_weight: bool,
+    /// With `pair_weight`, each row weighs `1 + 1 / R` in place of `1 / R`
+    /// (`--pair-weight boost`, claude-374). Left out of `config.json` when false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pair_weight_boost: bool,
+    /// The window carry (`--carry-windows K`, claude-380): each step's batch is `batch / K`
+    /// streams of K back-to-back windows of one conversation ([`carry_stream_windows`]), each
+    /// window's recurrence starting from the state its stream's previous window ended in, with
+    /// the gradient through the step's K windows and cut between steps. 0 is off. Left out of
+    /// `config.json` when 0, so a run without it writes the same file as before.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub carry_windows: usize,
+    /// A state-keyed look-back read after one layer (claude-381, [`crate::vector_reads`]), with
+    /// its margin credit in the loss. Left out of `config.json` when absent, so a run without it
+    /// writes the same file as before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vector_read: Option<crate::vector_reads::VectorReadArm>,
 }
 
 /// What TRAIN's scored targets are ([`LongConfig::train_targets`], claude-296).
@@ -318,14 +395,26 @@ struct ServedValues {
 impl ServedValues {
     /// Copy each variable's value, then round them in place with the export's own roundings
     /// (`fbs_export::round_tables_as_exported`, `round_hamming_as_exported`,
-    /// `round_memory_as_exported`). A rounding the export refuses leaves every value as it was.
+    /// `round_memory_as_exported`). A rounding the export refuses leaves every value as it was,
+    /// apart from an ask weight already held at the end of its range.
     fn round(
         model: &StackModel,
         reads: Option<&crate::flock_read_hamming::HammingReads>,
         memory: Option<&crate::flock_read_memory::TurnMemory>,
     ) -> Result<Self> {
+        // The address memory set on this thread (claude-346), which shares its variables with
+        // the run's own copy: its rows are rounded to the served 16 bits with the rest.
+        let address = crate::e8_address::address_memory();
         let mut vars: Vec<&candle_core::Var> = model.variables().values().collect();
+        if let Some(address) = address.as_ref() {
+            // Before the float copies, as for the ask weights below.
+            address.hold_in_exported_range()?;
+            vars.extend(address.variables());
+        }
         if let Some(reads) = reads {
+            // claude-339: before the float copies, so the float master stays at the range's
+            // end too and cannot run on past what the export can hold.
+            crate::fbs_export::hold_hamming_ask_in_exported_range(reads)?;
             vars.extend(reads.variables());
         }
         if let Some(memory) = memory {
@@ -346,6 +435,9 @@ impl ServedValues {
             }
             if let Some(memory) = memory {
                 crate::fbs_export::round_memory_as_exported(memory)?;
+            }
+            if let Some(address) = address.as_ref() {
+                address.round_as_exported()?;
             }
             Ok(())
         })();
@@ -639,6 +731,11 @@ impl Drop for ArmGuard {
         crate::flock_read_memory::set_turn_memory(None);
         crate::flock_read_memory::set_memory_rows(None);
         crate::flock_read_memory::set_reply_rows(None);
+        crate::e8_address::set_address_memory(None);
+        crate::vector_reads::set_vector_read(None);
+        crate::vector_reads::clear_credit();
+        let _ = crate::vector_reads::take_stats();
+        crate::pair_rows::set_pair_rows(None);
         set_trained_cut(None);
         crate::flock_read_hamming::set_row_cut(None);
     }
@@ -728,12 +825,55 @@ fn load_reads(directory: &Path, device: &Device) -> Result<()> {
     crate::flock_read_memory::set_turn_memory(crate::flock_read_memory::TurnMemory::load(
         directory, device,
     )?);
+    crate::e8_address::set_address_memory(crate::e8_address::AddressMemory::load(
+        directory, device,
+    )?);
+    crate::vector_reads::set_vector_read(crate::vector_reads::VectorRead::load(directory, device)?);
+    let pair = crate::pair_rows::PairRows::load(directory, device)?;
+    if let Some(rows) = &pair {
+        let (nonzero, rms) = rows.census()?;
+        println!(
+            "[pair] loaded {} pairs; dictionary sha256 {}; rows nonzero {nonzero}, rms {rms:.6}",
+            rows.dict().len(),
+            sha256_bytes(&rows.dict().to_bytes())
+        );
+        // claude-373: say whether the rows are weighed, in the trainer's census form, so a
+        // weighed checkpoint that lost its weights reads "none" here.
+        match rows.reply_counts_of_weights()? {
+            Some(counts) => println!(
+                "[pair] loaded weight replies: {}",
+                crate::pair_rows::reply_census(&counts)
+            ),
+            None => println!("[pair] loaded weight replies: none"),
+        }
+        // claude-374: which weight the loaded rows carry, for I-8 to compare with training.
+        println!("[pair] loaded weight kind: {}", rows.weight_kind());
+    }
+    crate::pair_rows::set_pair_rows(pair);
     Ok(())
+}
+
+/// The tokens of `\nUser:`, a user turn's marker; the same ids as `USER_MARKER` in
+/// `bin/train-question-reach.rs:26-28`.
+const PAIR_USER_MARKER: [u32; 3] = [55, 2728, 28];
+/// The tokens of `\nAssistant:`, a reply's header; the same ids as `ASSISTANT_HEADER` in
+/// `bin/train-question-reach.rs:26-28`.
+const PAIR_ASSISTANT_HEADER: [u32; 6] = [201, 35, 560, 652, 714, 28];
+
+/// The marks the pair rows find a turn and its reply by.
+pub(crate) fn pair_marks() -> crate::pair_rows::PairMarks {
+    crate::pair_rows::PairMarks {
+        user: PAIR_USER_MARKER.to_vec(),
+        assistant: PAIR_ASSISTANT_HEADER.to_vec(),
+    }
 }
 
 const INIT_RECORD_SCHEMA: &str = "uor-r4.train-in-space-init/1";
 const HAMMING_SIDECAR: &str = "hamming_read.safetensors";
-const UNSUPPORTED_INIT_SIDECARS: [&str; 6] = [
+const UNSUPPORTED_INIT_SIDECARS: [&str; 9] = [
+    "address_memory.safetensors",
+    crate::vector_reads::FILE,
+    "pair_rows.safetensors",
     "flock_read.safetensors",
     "content_read.safetensors",
     "opening_read.safetensors",
@@ -822,6 +962,25 @@ fn validate_checkpoint_selection(config: &LongConfig) -> Result<()> {
     let Some(checkpoint) = &config.init_from else {
         return Ok(());
     };
+    // claude-346: the address memory starts at zero rows beside a fresh trunk; adding one to a
+    // loaded trunk is a run of its own, not yet built.
+    if config.address_memory.is_some() {
+        return Err(invalid(
+            "--init-from does not start an address memory; --address-memory trains from a fresh start",
+        ));
+    }
+    // claude-370: the pair rows likewise start at zero beside a fresh trunk.
+    if config.pair_rows.is_some() {
+        return Err(invalid(
+            "--init-from does not start the pair rows; --pair-rows trains from a fresh start",
+        ));
+    }
+    // claude-381: so does a vector read's zero weight.
+    if config.vector_read.is_some() {
+        return Err(invalid(
+            "--init-from does not start a vector read; the vector reads train from a fresh start",
+        ));
+    }
     if !checkpoint.is_dir() {
         return Err(invalid(format!(
             "--init-from wants a saved checkpoint directory, not {}",
@@ -1023,6 +1182,9 @@ fn checkpoint_hamming(
                 "--hamming-copy-key and --hamming-copy-keys need the checkpoint's --hamming-read",
             ));
         }
+        if config.hamming_copy_longest.is_some() {
+            return Err(invalid("--hamming-copy-longest needs the checkpoint's --hamming-read"));
+        }
         return Ok(None);
     }
     let reads = crate::flock_read_hamming::HammingReads::load(directory, device)?.ok_or_else(
@@ -1085,9 +1247,67 @@ fn checkpoint_hamming(
             config.hamming_hold
         )));
     }
+    if reads.carry_rows() != config.hamming_carry_question {
+        return Err(invalid(format!(
+            "--init-from checkpoint carries the Hamming question from {} rows back, but this run names {}",
+            reads.carry_rows(),
+            config.hamming_carry_question
+        )));
+    }
+    // claude-357: the leave rule and the marker check read the run's marker, so the two agree.
+    if reads.copy_longest() != config.hamming_copy_longest {
+        return Err(invalid(format!(
+            "--init-from checkpoint's longest-rule marker is {:?}, but this run names {:?}",
+            reads.copy_longest(),
+            config.hamming_copy_longest
+        )));
+    }
+    let reads = start_place(config, reads)?;
     crate::flock_read_hamming::set_hamming_reads(Some(reads.clone()));
     let opt = crate::flock_read::FlockAdamW::for_vars(&reads.variables())?;
     Ok(Some((reads, opt)))
+}
+
+/// claude-351: `reads` with the place read `config` names, and its kit set as what the training
+/// step teaches from on this thread. Reads that carry a place read already, a checkpoint's, keep
+/// its counts, and must be framed as the kit is; reads without one start it at zero. The kit
+/// must name the corpus the run trains on. Without `--hamming-place` the thread's kit is
+/// cleared, and reads that carry a place read are refused.
+fn start_place(
+    config: &LongConfig,
+    reads: crate::flock_read_hamming::HammingReads,
+) -> Result<crate::flock_read_hamming::HammingReads> {
+    use crate::flock_read_hamming::{set_place_teach, PlaceKit};
+    let Some(path) = &config.hamming_place else {
+        set_place_teach(None);
+        if reads.place().is_some() {
+            return Err(invalid("--init-from checkpoint has the place read; name its kit with --hamming-place"));
+        }
+        return Ok(reads);
+    };
+    let kit = PlaceKit::load(path)?;
+    let corpus = config
+        .train_split
+        .as_ref()
+        .map_or(hs::PINNED_TRAIN_TOKENS_SHA256, |split| split.tokens_sha256.as_str());
+    if kit.tokens_sha256 != corpus {
+        return Err(invalid(format!(
+            "--hamming-place {} was read from another corpus than the one this run trains on",
+            path.display()
+        )));
+    }
+    let reads = match reads.place() {
+        Some(place) if place.framed_as(&kit.marks, &kit.stop) => reads,
+        Some(_) => {
+            return Err(invalid(format!(
+                "--init-from checkpoint's place read has other marks or stop tokens than --hamming-place {}",
+                path.display()
+            )))
+        }
+        None => reads.with_place(kit.marks.clone(), &kit.stop)?,
+    };
+    set_place_teach(Some((kit, config.hamming_place_pull)));
+    Ok(reads)
 }
 
 /// The Hamming reads `config` asks for, set on this thread, with their optimizer; none when off.
@@ -1104,6 +1324,9 @@ fn start_hamming(
     if config.hamming_hold > 0 && !config.hamming_ask {
         return Err(invalid("--hamming-hold carries the ask heads' write; turn them on with --hamming-ask 1"));
     }
+    if config.hamming_carry_question > 0 && !config.hamming_ask {
+        return Err(invalid("--hamming-carry-question carries the ask heads' question; turn them on with --hamming-ask 1"));
+    }
     if let Some(directory) = &config.init_from {
         return checkpoint_hamming(config, directory, device);
     }
@@ -1113,6 +1336,12 @@ fn start_hamming(
         }
         if config.hamming_copy_key != 1 || config.hamming_copy_keys.is_some() {
             return Err(invalid("--hamming-copy-key and --hamming-copy-keys key the Hamming read's copy heads; turn the read on with --hamming-read"));
+        }
+        if config.hamming_copy_latest {
+            return Err(invalid("--hamming-copy-latest sets the Hamming read's copy rule; turn the read on with --hamming-read"));
+        }
+        if config.hamming_copy_longest.is_some() {
+            return Err(invalid("--hamming-copy-longest sets the Hamming read's copy rule; turn the read on with --hamming-read"));
         }
         return Ok(None);
     }
@@ -1132,6 +1361,15 @@ fn start_hamming(
     if let Some(keys) = &config.hamming_copy_keys {
         reads = reads.with_copy_keys(keys)?;
     }
+    if config.hamming_copy_latest {
+        reads = reads.with_copy_latest();
+    }
+    if let Some(marker) = config.hamming_copy_longest {
+        if !config.hamming_copy_latest {
+            return Err(invalid("--hamming-copy-longest orders the latest exact matches: it needs --hamming-copy-latest 1"));
+        }
+        reads = reads.with_copy_longest(marker)?;
+    }
     if config.type_spin {
         reads = reads.with_type_spin()?;
     }
@@ -1143,6 +1381,11 @@ fn start_hamming(
         // One gain per token of the same shared table.
         reads = reads.with_hold(config.hamming_hold, hs::SHEET_VOCAB)?;
     }
+    if config.hamming_carry_question > 0 {
+        // claude-335: one carry gain per token of the same shared table.
+        reads = reads.with_carry(config.hamming_carry_question, hs::SHEET_VOCAB)?;
+    }
+    let reads = start_place(config, reads)?;
     crate::flock_read_hamming::set_hamming_reads(Some(reads.clone()));
     let opt = crate::flock_read::FlockAdamW::for_vars(&reads.variables())?;
     Ok(Some((reads, opt)))
@@ -1248,10 +1491,27 @@ fn start_memory(
         if config.turn_memory_reply {
             return Err(invalid("--turn-memory-reply needs --turn-memory K"));
         }
+        if config.turn_memory_leave_copied {
+            return Err(invalid("--turn-memory-leave-copied needs --turn-memory K"));
+        }
         if config.turn_memory_dropout > 0 {
             return Err(invalid("--turn-memory-dropout needs --turn-memory K"));
         }
+        if config.turn_memory_tail > 0 {
+            return Err(invalid("--turn-memory-tail needs --turn-memory K"));
+        }
         return Ok((None, Vec::new(), Vec::new()));
+    }
+    if config.turn_memory_tail > 0 && !config.turn_memory_reply {
+        return Err(invalid(
+            "--turn-memory-tail keys the reply table: it needs --turn-memory-reply 1",
+        ));
+    }
+    if config.turn_memory_tail > crate::flock_read_memory::MAX_REPLY_KEY - 5 {
+        return Err(invalid(format!(
+            "--turn-memory-tail holds 1 to {} ids of the turn",
+            crate::flock_read_memory::MAX_REPLY_KEY - 5
+        )));
     }
     if config.turn_memory_reply && config.turn_memory != TURN_KEY {
         return Err(invalid(format!(
@@ -1262,13 +1522,46 @@ fn start_memory(
         None => load_train_split(data_root)?,
         Some(split) => load_named_split(split)?,
     };
+    if config.turn_memory_leave_copied && !config.hamming_copy_latest {
+        return Err(invalid(
+            "--turn-memory-leave-copied leaves keys to the copy read's latest exact match: it needs --hamming-copy-latest 1",
+        ));
+    }
     let (windows, _) = hs::build_document_windows(&tokens, &mask, config.context, hs::SHEET_BOS_ID)?;
+    // Each copy head's key, as the run's Hamming read is built: the leave rule asks every head.
+    let leave_keys: Vec<usize> =
+        config.hamming_copy_keys.clone().unwrap_or_else(|| vec![config.hamming_copy_key]);
     let train = openings(&windows, &mask);
-    let table = if config.turn_memory_empty {
+    let mut table = if config.turn_memory_empty {
         std::collections::HashMap::new()
     } else {
         crate::flock_read_memory::build_table(&train, config.turn_memory)
     };
+    // claude-345: the opening keys the copy read owns are left to it.
+    if config.turn_memory_leave_copied {
+        let rows: Vec<(Vec<u32>, bool)> = opening_rows(&windows, &mask)
+            .into_iter()
+            .filter(|row| !row.prompt.is_empty())
+            .map(|row| {
+                let copied = copy_names_ruled(
+                    &leave_keys,
+                    config.hamming_copy_longest,
+                    &windows[row.window].input_ids,
+                    row.offset,
+                    row.target,
+                );
+                let key = row.prompt[..config.turn_memory.min(row.prompt.len())].to_vec();
+                (key, copied)
+            })
+            .collect();
+        let owned = crate::flock_read_memory::copy_owned_keys(&rows);
+        let before = table.len();
+        table.retain(|key, _| !owned.contains(key));
+        println!(
+            "[memory] opening keys left to the copy read {} of {before}",
+            before - table.len()
+        );
+    }
     println!(
         "[memory] key {} ids; TRAIN openings {}; table keys {}{}",
         config.turn_memory,
@@ -1285,22 +1578,51 @@ fn start_memory(
     // The reply table (claude-193): TRAIN's rows past their openings, at the probe's key and share.
     let mut replies = Vec::new();
     if config.turn_memory_reply {
-        let rows: Vec<(Vec<u32>, u32)> = reply_rows(&windows, &mask)
+        // Before any reply key is formed: the table's rows and the read's rows key alike.
+        crate::flock_read_memory::set_reply_tail(config.turn_memory_tail);
+        let later: Vec<ReplyRow> = reply_rows(&windows, &mask)
             .into_iter()
             .filter(|row| !row.opening)
-            .map(|row| (reply_key(&row), row.target))
             .collect();
-        let table = if config.turn_memory_empty {
-            std::collections::HashMap::new()
+        // claude-345: likewise the reply keys the copy read owns.
+        let copied: Option<Vec<bool>> = config.turn_memory_leave_copied.then(|| {
+            later
+                .iter()
+                .map(|row| {
+                    let ids = &windows[row.window].input_ids;
+                    copy_names_ruled(&leave_keys, config.hamming_copy_longest, ids, row.offset, row.target)
+                })
+                .collect()
+        });
+        let tail = config.turn_memory_tail;
+        let built = if config.turn_memory_empty {
+            ChainTable::default()
         } else {
-            crate::flock_read_memory::build_reply_table(&rows, REPLY_MEMORY_SHARE)
+            chain_reply_table(&later, tail, REPLY_MEMORY_SHARE, copied.as_deref())
         };
+        if copied.is_some() {
+            println!(
+                "[memory] reply keys left to the copy read {} of {}",
+                built.left, built.built
+            );
+        }
+        if tail > 0 {
+            println!(
+                "[memory] reply key chain: tail {tail}; keys that yield to a copied key {}; TRAIN rows named right {} of {}",
+                built.yielded,
+                built.named,
+                later.len()
+            );
+        }
         println!(
             "[memory] reply table: TRAIN rows past their openings {}; keys at share {REPLY_MEMORY_SHARE} {}",
-            rows.len(),
-            table.len()
+            later.len(),
+            built.table.len()
         );
-        memory = memory.with_reply(table)?;
+        memory = memory.with_reply(built.table)?;
+        if tail > 0 {
+            memory = memory.with_reply_tail(tail)?;
+        }
         replies = reply_offsets(usable, &mask);
     }
     crate::flock_read_memory::set_turn_memory(Some(memory.clone()));
@@ -1932,6 +2254,12 @@ fn weighted_step_loss(losses: &[Tensor], shares: &[f64], step: usize) -> Result<
 /// The gate hook carries the real step: at step 0 its backward runs diagnostics with host syncs,
 /// and a checkpoint's replies leave it at 0. Training as served (`served`) adds the complete
 /// quantization bridge and Q12 query used by the exported graph.
+///
+/// With `pull` (claude-337), each forward also adds `pull.attract` times the found-copy pull
+/// ([`HammingReads::ask_pull`](crate::flock_read_hamming::HammingReads::ask_pull)) over its
+/// scored rows with an earlier copy ([`language_pull_rows`]), weighted by its share of the step's
+/// copy rows, so a micro-batched step's pull gradient is the one a single forward gives. The
+/// returned loss is the task loss alone; `pull` records the step's pull.
 #[allow(clippy::too_many_arguments)]
 fn step_gradient(
     model: &StackModel,
@@ -1944,6 +2272,7 @@ fn step_gradient(
     step: usize,
     opening_weight: Option<(&[u8], usize)>,
     mut rows: impl FnMut(usize, usize) -> Result<()>,
+    mut pull: Option<&mut PullTally>,
 ) -> Result<(f64, candle_core::backprop::GradStore)> {
     let micro = if micro == 0 {
         windows.len()
@@ -1951,6 +2280,47 @@ fn step_gradient(
         micro.min(windows.len())
     };
     let total = opening_weighted_total(windows, opening_weight)?;
+    // claude-337: the pull's rows per forward, its reads and the shared table, when it is on.
+    let lambda = pull.as_deref().map_or(0.0, |t| t.attract);
+    let pulling = match pull.as_deref() {
+        Some(tally) if tally.attract > 0.0 => {
+            let reads = crate::flock_read_hamming::hamming_reads()
+                .filter(|r| r.has_ask())
+                .ok_or_else(|| invalid("--hamming-attract pulls the ask heads; turn them on with --hamming-ask 1"))?;
+            let table = model
+                .variables()
+                .get("embedding.weight")
+                .ok_or_else(|| invalid("the model has no shared vector table"))?
+                .as_tensor()
+                .clone();
+            let per: Vec<Vec<(usize, u32)>> = (0..windows.len())
+                .step_by(micro.max(1))
+                .map(|lo| language_pull_rows(&windows[lo..(lo + micro).min(windows.len())], context))
+                .collect();
+            let all: usize = per.iter().map(Vec::len).sum();
+            Some((reads, table, per, all))
+        }
+        _ => None,
+    };
+    // claude-351: the place read's reads, what the step teaches it from and the shared table,
+    // when it trains: every forward runs its register over the forward's windows, casts the two
+    // gains' votes and adds the place pull.
+    let placing = match (
+        crate::flock_read_hamming::place_teach(),
+        crate::flock_read_hamming::hamming_reads().filter(|reads| reads.place().is_some()),
+    ) {
+        (Some(teach), Some(reads)) => {
+            let table = model
+                .variables()
+                .get("embedding.weight")
+                .ok_or_else(|| invalid("the model has no shared vector table"))?
+                .as_tensor()
+                .clone();
+            Some((reads, teach, table))
+        }
+        _ => None,
+    };
+    let mut pulled: Vec<Tensor> = Vec::new();
     let mut grads: Option<candle_core::backprop::GradStore> = None;
     let mut losses = Vec::new();
     let mut shares = Vec::new();
@@ -1974,11 +2344,58 @@ fn step_gradient(
         if share.is_some() && scored.is_empty() {
             continue;
         }
+        let pull_here = pulling.as_ref().and_then(|(reads, table, per, all)| {
+            let rows = &per[lo / micro.max(1)];
+            (!rows.is_empty()).then(|| (reads, table, rows, rows.len() as f64 / *all as f64))
+        });
         let (loss, share, forward_grads) = with_training_forward(served, seed, step, || {
-            let loss = batch_loss(model, objective, &ids, &scored, &targets, hi - lo, served)?;
+            // claude-381: only this forward's credit, collected here and nowhere else.
+            crate::vector_reads::clear_credit();
+            let loss = crate::vector_reads::collecting(|| {
+                batch_loss(model, objective, &ids, &scored, &targets, hi - lo, served)
+            })?;
             let detached = loss.detach();
             let loss = match share {
                 Some(share) => loss.affine(share, 0.0)?,
+                None => loss,
+            };
+            let loss = match pull_here {
+                Some((reads, table, rows, weight)) => {
+                    let plain = assemble(&windows[lo..hi]).0;
+                    match reads.ask_pull(&plain, context, table, rows)? {
+                        Some(distance) => {
+                            pulled.push(distance.detach().affine(weight, 0.0)?);
+                            loss.add(&distance.affine(lambda * weight, 0.0)?)?
+                        }
+                        None => loss,
+                    }
+                }
+                None => loss,
+            };
+            // claude-351: the place step, weighted by this forward's share of the step's windows.
+            let loss = match &placing {
+                Some((reads, teach, table)) => {
+                    let plain = assemble(&windows[lo..hi]).0;
+                    let starts = window_starts(&windows[lo..hi]);
+                    match reads.place_step(&plain, context, table, &teach.kit, &starts)? {
+                        Some(distance) if teach.pull > 0.0 => {
+                            let weight = teach.pull * (hi - lo) as f64 / windows.len() as f64;
+                            loss.add(&distance.affine(weight, 0.0)?)?
+                        }
+                        _ => loss,
+                    }
+                }
+                None => loss,
+            };
+            // claude-381: a vector read's margin credit, at this forward's share of the windows
+            // (an average per window, where the cross-entropy's `share` is per scored row; a
+            // micro-batch skipped above for having no scored row adds no credit). With one
+            // forward a step, the weight is 1.
+            let loss = match crate::vector_reads::take_credit() {
+                Some(credit) => {
+                    let weight = (hi - lo) as f64 / windows.len() as f64;
+                    loss.add(&credit.affine(weight, 0.0)?)?
+                }
                 None => loss,
             };
             let grads = variables_only(&loss, loss.backward()?)?;
@@ -2002,7 +2419,364 @@ fn step_gradient(
     // objectives count in this one. The single read waits for every backward in the step.
     let value = weighted_step_loss(&losses, &shares, step)?;
     stage_clock::mark("objective.readback");
+    // claude-337: the step's pull, the copy-row-weighted sum of its forwards' mean distances, which
+    // is the mean a single forward gives; one read, after the last backward.
+    if let (Some(tally), Some((_, _, _, all))) = (pull.as_deref_mut(), pulling.as_ref()) {
+        let distance = match pulled.len() {
+            0 => None,
+            _ => Some(f64::from(Tensor::stack(&pulled, 0)?.sum_all()?.to_scalar::<f32>()?)),
+        };
+        tally.record(distance, *all);
+    }
     Ok((value, grads))
+}
+
+/// claude-351: each window's corpus start, its first scored target, less one, less that row's
+/// offset ([`window_input_mask`]); none for a window with no scored row, which is labelled with
+/// nothing.
+fn window_starts(windows: &[&CausalWindow]) -> Vec<Option<usize>> {
+    windows
+        .iter()
+        .map(|w| match (w.scored_corpus_positions.first(), w.scored_offsets.first()) {
+            (Some(&p), Some(&o)) if p > o => Some(p - 1 - o),
+            _ => None,
+        })
+        .collect()
+}
+
+/// claude-380 (V1): TRAIN cut for the window carry. Each BOS-opened conversation becomes its
+/// windows of `context` inputs back to back, the first at its BOS, none overlapping and none
+/// dropped: a window with no scored target still carries the state on. The last is padded with
+/// BOS past the conversation's last input, as [`hs::build_document_windows`] pads. Returns the
+/// windows and each conversation's range of them. A conversation that fits one window is cut as
+/// [`hs::build_document_windows`] cuts it. Tokens before the first BOS are skipped, as there.
+pub fn carry_stream_windows(
+    tokens: &[u32],
+    mask: &[u8],
+    context: usize,
+    bos_id: u32,
+) -> Result<(Vec<CausalWindow>, Vec<std::ops::Range<usize>>)> {
+    if mask.len() != tokens.len() {
+        return Err(invalid("the carry's TRAIN mask is not its tokens' length"));
+    }
+    if context < 4 {
+        return Err(invalid(
+            "a window carry wants windows of at least the convolution's width",
+        ));
+    }
+    let starts: Vec<usize> = tokens
+        .iter()
+        .enumerate()
+        .filter_map(|(i, &t)| (t == bos_id).then_some(i))
+        .collect();
+    let (mut windows, mut ranges) = (Vec::new(), Vec::new());
+    for (doc_id, &start) in starts.iter().enumerate() {
+        let end = starts.get(doc_id + 1).copied().unwrap_or(tokens.len());
+        if end - start <= 1 {
+            continue;
+        }
+        let first = windows.len();
+        let mut at = start;
+        // Inputs at `at..stop` predict the targets one position later.
+        while at < end - 1 {
+            let stop = (at + context).min(end - 1);
+            let mut input_ids = vec![bos_id; context];
+            input_ids[..stop - at].copy_from_slice(&tokens[at..stop]);
+            let (mut scored_offsets, mut scored_targets, mut scored_corpus_positions) =
+                (Vec::new(), Vec::new(), Vec::new());
+            for input in at..stop {
+                let p = input + 1;
+                if tokens[p] != bos_id && mask[p] == 1 {
+                    scored_offsets.push(input - at);
+                    scored_targets.push(tokens[p]);
+                    scored_corpus_positions.push(p);
+                }
+            }
+            windows.push(CausalWindow {
+                doc_id,
+                input_ids,
+                scored_offsets,
+                scored_targets,
+                scored_corpus_positions,
+            });
+            at = stop;
+        }
+        ranges.push(first..windows.len());
+    }
+    if ranges.is_empty() {
+        return Err(invalid("the carry's TRAIN holds no conversation"));
+    }
+    Ok((windows, ranges))
+}
+
+/// claude-380: which windows each step of a carried run trains. `lanes` streams each walk one
+/// conversation's windows in order, and take the next conversation of the epoch's shuffled order
+/// ([`epoch_order`] over conversations) when theirs ends; a new epoch reshuffles.
+#[derive(Clone, Debug)]
+pub struct CarrySchedule {
+    docs: Vec<std::ops::Range<usize>>,
+    seed: u64,
+    epoch: u64,
+    order: Vec<usize>,
+    next: usize,
+    /// Each lane's conversation and the index of its next window there.
+    lanes: Vec<(usize, usize)>,
+}
+
+impl CarrySchedule {
+    /// Refused without lanes, with fewer conversations than lanes, or with an empty conversation.
+    pub fn new(docs: Vec<std::ops::Range<usize>>, lanes: usize, seed: u64) -> Result<Self> {
+        if lanes == 0 || docs.len() < lanes || docs.iter().any(|d| d.is_empty()) {
+            return Err(invalid(
+                "a carry schedule wants lanes, and at least as many non-empty conversations",
+            ));
+        }
+        let order = epoch_order(docs.len(), seed, 0);
+        let mut schedule = Self {
+            docs,
+            seed,
+            epoch: 0,
+            order,
+            next: 0,
+            lanes: Vec::new(),
+        };
+        schedule.lanes = (0..lanes).map(|_| (schedule.draw(), 0)).collect();
+        Ok(schedule)
+    }
+
+    fn draw(&mut self) -> usize {
+        if self.next == self.order.len() {
+            self.epoch += 1;
+            self.order = epoch_order(self.docs.len(), self.seed, self.epoch);
+            self.next = 0;
+        }
+        self.next += 1;
+        self.order[self.next - 1]
+    }
+
+    /// The next step's `chunks · lanes` windows, chunk after chunk: chunk `j` holds each lane's
+    /// next window, in lane order. With each, whether it opens its conversation, so its lane's
+    /// state starts from zero.
+    pub fn step(&mut self, chunks: usize) -> Vec<(usize, bool)> {
+        let mut out = Vec::with_capacity(chunks * self.lanes.len());
+        for _ in 0..chunks {
+            for lane in 0..self.lanes.len() {
+                let (mut doc, mut k) = self.lanes[lane];
+                if k == self.docs[doc].len() {
+                    (doc, k) = (self.draw(), 0);
+                }
+                out.push((self.docs[doc].start + k, k == 0));
+                self.lanes[lane] = (doc, k + 1);
+            }
+        }
+        out
+    }
+
+    /// The epoch the next conversation is drawn from.
+    pub fn epoch(&self) -> u64 {
+        self.epoch
+    }
+}
+
+/// claude-380: the settings a carried run refuses, by flag: the reads, controls and cuts whose
+/// training forward the carry does not reach, and micro-batches, whose separate backwards would
+/// cut the gradient it carries.
+fn check_carry_flags(config: &LongConfig) -> Result<()> {
+    if config.carry_windows == 0 {
+        return Ok(());
+    }
+    if config.carry_windows > config.batch || !config.batch.is_multiple_of(config.carry_windows) {
+        return Err(invalid(format!(
+            "--carry-windows {} must divide --batch {}",
+            config.carry_windows, config.batch
+        )));
+    }
+    let refused: Vec<&str> = [
+        (config.micro_batch != 0, "--micro-batch"),
+        (config.train_targets != TrainTargets::Observed, "--train-targets"),
+        (config.hamming_attract > 0.0, "--hamming-attract"),
+        (config.hamming_place.is_some(), "--hamming-place"),
+        (config.flock_read > 0, "--flock-read"),
+        (config.content_read > 0, "--content-read"),
+        (config.opening_read > 0, "--opening-read"),
+        (config.prompt_register > 0, "--prompt-register"),
+        (config.type_spin, "--type-spin"),
+        (config.reply_read_train.is_some(), "--reply-read-train"),
+        (config.train_as_served, "--train-as-served"),
+        (config.pair_rows.is_some(), "--pair-rows"),
+        (config.address_memory.is_some(), "--address-memory"),
+        (config.profile > 0, "--profile"),
+        (config.opening_weight != 1, "--opening-weight"),
+        (
+            config.vector_read.is_some(),
+            "--starling-read, --prime-route-read and --state-flock-read",
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(on, name)| on.then_some(name))
+    .collect();
+    if refused.is_empty() {
+        return Ok(());
+    }
+    Err(invalid(format!(
+        "--carry-windows carries the recurrence only; it refuses {}",
+        refused.join(", ")
+    )))
+}
+
+/// claude-380: one carried step's loss and gradient. `windows` are `chunks · lanes` long, chunk
+/// after chunk ([`CarrySchedule::step`]); `opens[b]` says window `b` opens its conversation.
+/// Chunk `j`'s forward starts from the state chunk `j − 1` ended in (`carry` for the first
+/// chunk), each lane zeroed where its window opens a conversation. Every chunk's loss is weighted
+/// by its share of the step's scored rows, as [`step_gradient`] weights micro-batches, and one
+/// backward of their sum runs through all K chunks, so the gradient reaches K − 1 windows back.
+/// `carry` leaves holding the last chunk's state, detached: the gradient stops between steps.
+/// A chunk with no scored row still runs forward, to carry its state on.
+#[allow(clippy::too_many_arguments)]
+fn carry_step_gradient(
+    model: &StackModel,
+    objective: PointObjective,
+    windows: &[&CausalWindow],
+    opens: &[bool],
+    lanes: usize,
+    context: usize,
+    served: bool,
+    seed: u64,
+    step: usize,
+    opening_weight: Option<(&[u8], usize)>,
+    carry: &mut Vec<crate::geometric_stack::LayerCarry>,
+    mut rows: impl FnMut(usize, usize) -> Result<()>,
+) -> Result<(f64, candle_core::backprop::GradStore)> {
+    if lanes == 0 || windows.len() % lanes != 0 || opens.len() != windows.len() {
+        return Err(invalid("a carried step's windows are not whole chunks of its lanes"));
+    }
+    let chunks = windows.len() / lanes;
+    let total = opening_weighted_total(windows, opening_weight)?;
+    let (losses, shares, grads, state) = with_training_forward(served, seed, step, || {
+        let mut state = carry.clone();
+        let (mut losses, mut shares, mut sum): (Vec<Tensor>, Vec<f64>, Option<Tensor>) =
+            (Vec::new(), Vec::new(), None);
+        for chunk in 0..chunks {
+            let (lo, hi) = (chunk * lanes, (chunk + 1) * lanes);
+            rows(lo, hi)?;
+            let (ids, scored, targets) = match opening_weight {
+                Some((mask, weight)) => assemble_with_opening_weight(&windows[lo..hi], mask, weight)?,
+                None => assemble(&windows[lo..hi]),
+            };
+            if ids.len() != lanes * context {
+                return Err(invalid("a carried chunk's windows are not context-long"));
+            }
+            let keep: Vec<f32> = opens[lo..hi].iter().map(|&o| if o { 0.0 } else { 1.0 }).collect();
+            let keep = Tensor::from_vec(keep, lanes, model.device())?;
+            let incoming = state
+                .iter()
+                .map(|layer| layer.masked(&keep))
+                .collect::<Result<Vec<_>>>()?;
+            let share = (chunks > 1).then(|| scored.len() as f64 / total as f64);
+            let (loss, outgoing) = crate::geometric_stack::with_window_carry(incoming, || {
+                if scored.is_empty() {
+                    trained_points(model, &ids, lanes)?;
+                    return Ok(None);
+                }
+                Ok(Some(batch_loss(model, objective, &ids, &scored, &targets, lanes, served)?))
+            })?;
+            state = outgoing;
+            let Some(loss) = loss else {
+                continue;
+            };
+            losses.push(loss.detach());
+            shares.push(share.unwrap_or(1.0));
+            let weighted = match share {
+                Some(share) => loss.affine(share, 0.0)?,
+                None => loss,
+            };
+            sum = Some(match sum {
+                None => weighted,
+                Some(acc) => acc.add(&weighted)?,
+            });
+        }
+        let sum = sum.ok_or_else(|| invalid(format!("training step {step} has no scored row")))?;
+        let grads = variables_only(&sum, sum.backward()?)?;
+        stage_clock::mark("backward");
+        Ok((losses, shares, grads, state))
+    })?;
+    *carry = state.iter().map(|layer| layer.detached()).collect();
+    let value = weighted_step_loss(&losses, &shares, step)?;
+    stage_clock::mark("objective.readback");
+    Ok((value, grads))
+}
+
+/// claude-337: the found-copy pull's record over the steps since the last checkpoint, on a
+/// language run (`run_long` under `--hamming-attract λ`).
+#[derive(Debug, Clone, Default, PartialEq)]
+struct PullTally {
+    /// λ, the pull's weight in the loss.
+    attract: f64,
+    /// The sum of the steps' mean pull distances, over the steps with a copy row.
+    distance_sum: f64,
+    /// The steps with at least one copy row.
+    pulled_steps: usize,
+    /// The sum of the steps' copy rows.
+    rows: usize,
+    /// The steps recorded.
+    steps: usize,
+}
+
+impl PullTally {
+    fn new(attract: f64) -> Self {
+        Self { attract, ..Self::default() }
+    }
+
+    fn record(&mut self, distance: Option<f64>, rows: usize) {
+        if let Some(d) = distance {
+            self.distance_sum += d;
+            self.pulled_steps += 1;
+        }
+        self.rows += rows;
+        self.steps += 1;
+    }
+
+    /// The checkpoint's `pull.jsonl` line, then a fresh tally at the same λ.
+    fn line(&mut self, step: usize) -> serde_json::Value {
+        let line = serde_json::json!({
+            "step": step,
+            "hamming_attract": self.attract,
+            "pull_distance_mean": (self.pulled_steps > 0)
+                .then(|| self.distance_sum / self.pulled_steps as f64),
+            "pull_rows_mean": (self.steps > 0).then(|| self.rows as f64 / self.steps as f64),
+            "steps": self.steps,
+        });
+        *self = Self::new(self.attract);
+        line
+    }
+}
+
+/// claude-337: the found-copy pull's `(row, target)`s on language windows, laid out as
+/// [`assemble`] lays them: each scored row whose target stands at an earlier position `s` of its
+/// window, `1 ≤ s < t` (the rule of `pull_pairs`), so a row with no copy is not listed.
+fn language_pull_rows(windows: &[&CausalWindow], context: usize) -> Vec<(usize, u32)> {
+    let mut rows = Vec::new();
+    for (b, window) in windows.iter().enumerate() {
+        let start = b * context;
+        for (&off, &target) in window.scored_offsets.iter().zip(&window.scored_targets) {
+            if (1..off).any(|s| window.input_ids[s] == target) {
+                rows.push((start + off, target));
+            }
+        }
+    }
+    rows
+}
+
+/// claude-337: a language run trains the found-copy pull at its scored rows only; the question
+/// placements need the two-class task's question row, which only `--recall` has.
+fn refuse_pull_placement_outside_recall(config: &LongConfig) -> Result<()> {
+    if config.hamming_attract_at_question || config.hamming_attract_at_both {
+        let place = if config.hamming_attract_at_both { "both" } else { "question" };
+        return Err(invalid(format!(
+            "--hamming-attract-at {place} needs --recall's question rows; a language run pulls at its scored rows"
+        )));
+    }
+    Ok(())
 }
 
 /// One forward's turn-memory rows, reply rows and cut mask, set before it runs (claude-300).
@@ -2985,6 +3759,15 @@ fn unserved_reads() -> Vec<&'static str> {
     if crate::flock_read_register::prompt_register().is_some() {
         set.push("the prompt register");
     }
+    if crate::e8_address::address_memory().is_some() {
+        set.push("the address memory");
+    }
+    if crate::vector_reads::vector_read().is_some() {
+        set.push("the vector read");
+    }
+    if crate::pair_rows::pair_rows().is_some() {
+        set.push("the pair rows");
+    }
     set
 }
 
@@ -3044,6 +3827,16 @@ fn attract_rows(windows: &[&CausalWindow], back: usize) -> Result<Vec<(usize, u3
     Ok(rows)
 }
 
+/// claude-335: [`attract_rows`] at each of `backs` in turn, the rows of each placement after the
+/// one before, so `--hamming-attract-at both` pulls at the question rows and the scored rows.
+fn attract_rows_at(windows: &[&CausalWindow], backs: &[usize]) -> Result<Vec<(usize, u32)>> {
+    let mut rows = Vec::new();
+    for &back in backs {
+        rows.extend(attract_rows(windows, back)?);
+    }
+    Ok(rows)
+}
+
 /// claude-330: the found-copy pull's flags agree: a weight of at least 0, on the ask heads, and a
 /// placement only with a weight. [`start_hamming`] and [`run_recall`] (before its `config.json`)
 /// both check them.
@@ -3057,27 +3850,62 @@ fn check_pull_flags(config: &LongConfig) -> Result<()> {
     if config.hamming_attract_at_question && config.hamming_attract == 0.0 {
         return Err(invalid("--hamming-attract-at question places the pull; set --hamming-attract"));
     }
+    if config.hamming_attract_at_both && config.hamming_attract == 0.0 {
+        return Err(invalid("--hamming-attract-at both places the pull; set --hamming-attract"));
+    }
+    if config.hamming_attract_at_both && config.hamming_attract_at_question {
+        return Err(invalid("--hamming-attract-at takes one placement: scored, question or both"));
+    }
+    // claude-351: the place read and its pull.
+    if config.hamming_place_pull < 0.0 || !config.hamming_place_pull.is_finite() {
+        return Err(invalid("--hamming-place-pull is a weight of at least 0"));
+    }
+    if config.hamming_place_pull > 0.0 && config.hamming_place.is_none() {
+        return Err(invalid("--hamming-place-pull pulls the place read's questions; turn it on with --hamming-place"));
+    }
+    if config.hamming_place.is_some() && !config.hamming_ask {
+        return Err(invalid("--hamming-place finds with the ask heads; turn them on with --hamming-ask 1"));
+    }
+    if config.hamming_place.is_some() && config.hamming_carry_question > 0 {
+        return Err(invalid(
+            "--hamming-place and --hamming-carry-question both change the readout read's question; one is on at a time",
+        ));
+    }
     Ok(())
 }
 
 /// claude-330: where the found-copy pull sits under `config` and `form`: `None` when it is off
-/// (`λ = 0`), else how many rows before each scored row, 0, or under
-/// `--hamming-attract-at question` the header's length (`Q(K_j)`'s row), which needs the
-/// two-class task with a header.
-fn attract_plan(config: &LongConfig, form: RecallForm) -> Result<Option<usize>> {
-    if config.hamming_attract_at_question && !(form.query && form.header > 0) {
-        return Err(invalid("--hamming-attract-at question needs the two-class task with a header"));
+/// (`λ = 0`), else how many rows before each scored row, `[0]`, or under
+/// `--hamming-attract-at question` the header's length (`Q(K_j)`'s row), or under
+/// `--hamming-attract-at both` (claude-335) the header's length and then 0; a placement at the
+/// question row needs the two-class task with a header.
+fn attract_plan(config: &LongConfig, form: RecallForm) -> Result<Option<Vec<usize>>> {
+    let at_question = config.hamming_attract_at_question || config.hamming_attract_at_both;
+    if at_question && !(form.query && form.header > 0) {
+        let place = if config.hamming_attract_at_both { "both" } else { "question" };
+        return Err(invalid(format!(
+            "--hamming-attract-at {place} needs the two-class task with a header"
+        )));
     }
     if config.hamming_attract == 0.0 {
         return Ok(None);
     }
-    Ok(Some(if config.hamming_attract_at_question { form.header } else { 0 }))
+    Ok(Some(if config.hamming_attract_at_both {
+        vec![form.header, 0]
+    } else if config.hamming_attract_at_question {
+        vec![form.header]
+    } else {
+        vec![0]
+    }))
 }
 
 /// claude-330: the found-copy pull trains only in the recall runner; elsewhere it is refused, so a
 /// `config.json` never records a pull that did not run.
 fn refuse_pull_outside_recall(config: &LongConfig) -> Result<()> {
-    if config.hamming_attract != 0.0 || config.hamming_attract_at_question {
+    if config.hamming_attract != 0.0
+        || config.hamming_attract_at_question
+        || config.hamming_attract_at_both
+    {
         return Err(invalid("--hamming-attract trains only under --recall"));
     }
     Ok(())
@@ -4959,21 +5787,29 @@ pub struct PanelPrompt {
 }
 
 /// The prompts [`score_rows`] decodes on a split (claude-224):
-/// - the windows are [`sample_windows`]';
+/// - the windows are [`sample_windows`]', or [`last_openings`]' with `last_opening` (claude-352);
 /// - each prompt is its window's input through its first scored offset;
 /// - each reference is its [`reference_reply`].
 ///
 /// No model is involved.
-fn split_prompts(windows: &[CausalWindow], mask: &[u8], samples: usize, reply_tokens: usize) -> Vec<PanelPrompt> {
-    sample_windows(windows, mask, samples)
-        .into_iter()
-        .map(|window| PanelPrompt {
-            position: window.scored_corpus_positions[0],
-            prompt: window.input_ids[..=window.scored_offsets[0]].to_vec(),
-            reference: reference_reply(window, reply_tokens),
-            float_keyed: None,
-        })
-        .collect()
+fn split_prompts(
+    windows: &[CausalWindow],
+    mask: &[u8],
+    samples: usize,
+    reply_tokens: usize,
+    last_opening: bool,
+) -> Vec<PanelPrompt> {
+    let prompt = |window: &CausalWindow| PanelPrompt {
+        position: window.scored_corpus_positions[0],
+        prompt: window.input_ids[..=window.scored_offsets[0]].to_vec(),
+        reference: reference_reply(window, reply_tokens),
+        float_keyed: None,
+    };
+    if last_opening {
+        last_openings(windows, mask, samples).iter().map(prompt).collect()
+    } else {
+        sample_windows(windows, mask, samples).into_iter().map(prompt).collect()
+    }
 }
 
 /// `--panel-prompts` (claude-224): DEV's and each panel's prompts, as [`score_rows`] decodes them,
@@ -4984,26 +5820,38 @@ fn split_prompts(windows: &[CausalWindow], mask: &[u8], samples: usize, reply_to
 /// name. A served sample whose position, prompt or reference is not its prompt's is refused: the
 /// float arms decoded these prompts, so the two lists are one.
 ///
+/// `context` cuts each panel's windows as `--score-rows --context` cuts them, and DEV keeps
+/// [`SHEET_CONTEXT`]; with `last_opening` every split's prompts are [`last_openings`]', as
+/// `--score-rows --sample-opening last` decodes them (claude-352). At [`SHEET_CONTEXT`] and the
+/// first opening the files are the ones written before.
+///
 /// It returns each written file's name and rows.
+#[allow(clippy::too_many_arguments)]
 pub fn panel_prompts(
     data_root: &Path,
     panels: &[(String, PathBuf)],
     samples: usize,
     reply_tokens: usize,
+    context: usize,
+    last_opening: bool,
     served_runs: Option<&Path>,
     out: &Path,
 ) -> Result<Vec<(String, usize)>> {
     let windows_of = |tokens: &[u32], mask: &[u8]| -> Result<Vec<CausalWindow>> {
-        Ok(hs::build_document_windows(tokens, mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?.0)
+        Ok(hs::build_document_windows(tokens, mask, context, hs::SHEET_BOS_ID)?.0)
     };
     let (dev_windows, dev_mask) = load_dev(data_root)?;
-    let mut splits = vec![("dev".to_owned(), split_prompts(&dev_windows, &dev_mask, samples, reply_tokens))];
+    let mut splits =
+        vec![("dev".to_owned(), split_prompts(&dev_windows, &dev_mask, samples, reply_tokens, last_opening))];
     for (name, dir) in panels {
         if !panel_name_ok(name) || splits.iter().any(|(n, _)| n == name) {
             return Err(invalid(format!("--panel {name}: a panel name is one word, not dev")));
         }
         let (tokens, mask, _) = load_unpinned_uort(dir)?;
-        splits.push((name.clone(), split_prompts(&windows_of(&tokens, &mask)?, &mask, samples, reply_tokens)));
+        splits.push((
+            name.clone(),
+            split_prompts(&windows_of(&tokens, &mask)?, &mask, samples, reply_tokens, last_opening),
+        ));
     }
     fs::create_dir_all(out)?;
     let mut written = Vec::new();
@@ -5269,10 +6117,237 @@ struct ReplyRow {
     copy: bool,
 }
 
-/// The reply table's key for `row` (claude-193): the probe's `turn-8 + position + reply-last-1`,
-/// so the read keys exactly as the probe counted.
+/// Whether the copy read's latest exact match names `target` for the row predicted from window
+/// position `offset` of `ids` (claude-345): the latest position `s` in `1..offset` whose previous
+/// token is the row's own input token holds `target`. This is the choice the Hamming read's copy
+/// heads make under `HammingReads::with_copy_latest` and the integer session under
+/// `CopyRule::LatestExact`, read off the tokens.
+fn copy_names(ids: &[u32], offset: usize, target: u32) -> bool {
+    (1..offset)
+        .rev()
+        .find(|&s| ids[s - 1] == ids[offset])
+        .is_some_and(|s| ids[s] == target)
+}
+
+/// Whether every copy head's latest exact match names `target` (claude-345), `keys` holding each
+/// copy head's key. A one-token head is [`copy_names`]. A two-token head (claude-261) takes the
+/// latest `s` in `2..offset` whose two previous tokens are the row's previous and own tokens, in
+/// order. The turn memory leaves a key to the copy read only where the whole copy read names the
+/// target: under `--hamming-copy-keys 1,2` a row only the one-token head gets right stays in the
+/// table. With one-token keys alone this is [`copy_names`].
+fn copy_names_by(keys: &[usize], ids: &[u32], offset: usize, target: u32) -> bool {
+    keys.iter().all(|&key| match key {
+        2 => {
+            offset >= 1
+                && (2..offset)
+                    .rev()
+                    .find(|&s| ids[s - 2] == ids[offset - 1] && ids[s - 1] == ids[offset])
+                    .is_some_and(|s| ids[s] == target)
+        }
+        _ => copy_names(ids, offset, target),
+    })
+}
+
+/// Whether the copy read names `target` under the run's copy rule (claude-357): the turn memory's
+/// leave rule asks the copy read as it is built. Without the longest rule this is
+/// [`copy_names_by`]. With it, `longest` holding the reply marker: a row that opens a reply (its
+/// previous and own tokens are the marker) reads its latest exact match, as before; every other
+/// row reads the latest position `s` in `2..offset` whose two previous tokens are the row's
+/// previous and own tokens, and with none its latest exact match. This is the choice of
+/// `HammingReads::with_copy_longest` and of the integer session's
+/// `CopyRule::LongestAfterOpening`, read off the tokens.
+fn copy_names_ruled(
+    keys: &[usize],
+    longest: Option<[u32; 2]>,
+    ids: &[u32],
+    offset: usize,
+    target: u32,
+) -> bool {
+    let Some(marker) = longest else {
+        return copy_names_by(keys, ids, offset, target);
+    };
+    if offset >= 1 && ids[offset - 1] == marker[0] && ids[offset] == marker[1] {
+        return copy_names_by(keys, ids, offset, target);
+    }
+    let exact = |s: &usize| ids[*s - 1] == ids[offset];
+    (2..offset)
+        .rev()
+        .find(|s| exact(s) && ids[*s - 2] == ids[offset - 1])
+        .or_else(|| (1..offset).rev().find(exact))
+        .is_some_and(|s| ids[s] == target)
+}
+
+/// The reply marker against a split's reply mask (claude-357). Under the longest rule the copy
+/// read finds the row that chooses a reply's first token by the marker, the two token ids before
+/// it, and not by the mask. Refused unless the marker stands before every reply's first token of
+/// `tokens` and nowhere else; returns how many replies open.
+fn check_reply_marker(name: &str, tokens: &[u32], mask: &[u8], marker: [u32; 2]) -> Result<usize> {
+    if tokens.len() != mask.len() {
+        return Err(invalid(format!(
+            "{name}: {} tokens and {} mask bytes",
+            tokens.len(),
+            mask.len()
+        )));
+    }
+    let mut openings = 0;
+    for position in 1..tokens.len() {
+        let opens = mask[position] != 0 && mask[position - 1] == 0;
+        let marked = position >= 2
+            && tokens[position - 2] == marker[0]
+            && tokens[position - 1] == marker[1];
+        if opens != marked {
+            return Err(invalid(format!(
+                "--hamming-copy-longest {},{}: in {name}, the token at {position} {}",
+                marker[0],
+                marker[1],
+                if opens {
+                    "opens a reply without the marker before it"
+                } else {
+                    "follows the marker and opens no reply"
+                }
+            )));
+        }
+        openings += usize::from(opens);
+    }
+    Ok(openings)
+}
+
+/// [`check_reply_marker`] on the run's TRAIN and DEV splits, before anything is built; nothing
+/// without `--hamming-copy-longest`.
+fn check_run_markers(data_root: &Path, config: &LongConfig) -> Result<()> {
+    let Some(marker) = config.hamming_copy_longest else {
+        return Ok(());
+    };
+    let (tokens, mask) = match config.train_split.as_ref() {
+        None => load_train_split(data_root)?,
+        Some(split) => load_named_split(split)?,
+    };
+    let train = check_reply_marker("TRAIN", &tokens, &mask, marker)?;
+    let (tokens, mask) = load_dev_split(data_root)?;
+    let dev = check_reply_marker("DEV", &tokens, &mask, marker)?;
+    println!(
+        "[hamming] the longest rule's marker {},{} stands before every reply opening and nowhere else: TRAIN {train}, DEV {dev}",
+        marker[0], marker[1]
+    );
+    Ok(())
+}
+
+/// The forms a reply key holds, in the order the read asks them. Without a tail (claude-193),
+/// the probe's `turn-8 + position + reply-last-1` alone. With a tail of `tail` ids (claude-345):
+/// both ends of the turn, then its last `tail` ids, then its first 8, each with the position and
+/// the reply's last token, as `--reply-bound` counted them.
+fn reply_key_forms(tail: usize) -> Vec<ReplyKey> {
+    let head = ReplyKey::TurnPosition(1);
+    match tail {
+        0 => vec![head],
+        tail => vec![ReplyKey::HeadTail(TURN_KEY), ReplyKey::TailPosition(tail), head],
+    }
+}
+
+/// A reply row's key from its turn's ids and its reply so far: each of [`reply_key_forms`],
+/// joined by the memory's chain mark, which its lookup splits on. One form is that form's key.
+fn chained_key(prompt: &[u32], reply: &[u32], tail: usize) -> Vec<u32> {
+    let keys: Vec<Vec<u32>> = reply_key_forms(tail)
+        .iter()
+        .map(|form| form.of_parts(prompt, reply))
+        .collect();
+    keys.join(&crate::flock_read_memory::CHAIN)
+}
+
+/// The reply table's key for `row`, formed with the tail this thread's memory keys on
+/// ([`crate::flock_read_memory::reply_tail`]), so the read keys exactly as the table was built.
 fn reply_key(row: &ReplyRow) -> Vec<u32> {
-    ReplyKey::TurnPosition(1).of(row)
+    chained_key(&row.prompt, &row.reply, crate::flock_read_memory::reply_tail())
+}
+
+/// What [`chain_reply_table`] built (claude-345): the table and its counts.
+#[derive(Default)]
+struct ChainTable {
+    table: std::collections::HashMap<Vec<u32>, u32>,
+    /// Keys at the share, before any is left out.
+    built: usize,
+    /// Keys the copy read owns, left out.
+    left: usize,
+    /// Keys left out because a row whose more exact key the copy read owns fell through to them.
+    yielded: usize,
+    /// Rows the finished table names with their own target, asked as the read asks.
+    named: usize,
+}
+
+/// One reply table over every key form of `tail` (claude-345). Each of `rows` counts its target
+/// once under each distinct key it has, so a key's count is over every row holding that key in
+/// any form, and `share` keeps a key as [`crate::flock_read_memory::build_reply_table`] does.
+/// `copied`, given, says per row whether the copy read names its target. The keys the copy read
+/// owns are left out, and so is every key a row falls through to past a key the copy read owns:
+/// a wider key never writes over a position its more exact key gave to the copy read. Without a
+/// tail there is one form, nothing to fall through to, and the table is the one built before.
+fn chain_reply_table(
+    rows: &[ReplyRow],
+    tail: usize,
+    share: f64,
+    copied: Option<&[bool]>,
+) -> ChainTable {
+    use std::collections::HashSet;
+    let forms = reply_key_forms(tail);
+    // Every row's distinct keys, in the order the read asks them, flat; `spans` is each row's.
+    let mut pairs: Vec<(Vec<u32>, u32)> = Vec::with_capacity(rows.len() * forms.len());
+    let mut spans: Vec<std::ops::Range<usize>> = Vec::with_capacity(rows.len());
+    for row in rows {
+        let start = pairs.len();
+        for form in &forms {
+            let key = form.of(row);
+            if pairs[start..].iter().all(|(seen, _)| *seen != key) {
+                pairs.push((key, row.target));
+            }
+        }
+        spans.push(start..pairs.len());
+    }
+    let mut table = crate::flock_read_memory::build_reply_table(&pairs, share);
+    let built = table.len();
+    let owned: HashSet<Vec<u32>> = match copied {
+        Some(copied) => crate::flock_read_memory::copy_owned_keys_of(
+            spans
+                .iter()
+                .zip(copied)
+                .flat_map(|(span, &copied)| pairs[span.clone()].iter().map(move |(key, _)| (key.as_slice(), copied))),
+        ),
+        None => HashSet::new(),
+    };
+    table.retain(|key, _| !owned.contains(key));
+    let left = built - table.len();
+    // A removal can uncover a still wider key, so repeat until no row falls through.
+    let mut yielded = 0;
+    while !owned.is_empty() {
+        let mut yields: HashSet<&[u32]> = HashSet::new();
+        for span in &spans {
+            let mut past_owned = false;
+            for (key, _) in &pairs[span.clone()] {
+                if table.contains_key(key) {
+                    if past_owned {
+                        yields.insert(key);
+                    }
+                    break;
+                }
+                past_owned |= owned.contains(key);
+            }
+        }
+        if yields.is_empty() {
+            break;
+        }
+        yielded += yields.len();
+        table.retain(|key, _| !yields.contains(key.as_slice()));
+    }
+    let named = spans
+        .iter()
+        .zip(rows)
+        .filter(|(span, row)| {
+            pairs[(*span).clone()]
+                .iter()
+                .find_map(|(key, _)| table.get(key))
+                .is_some_and(|&token| token == row.target)
+        })
+        .count();
+    ChainTable { table, built, left, yielded, named }
 }
 
 /// The reply table's rows in one forward of `windows`, each `time` positions long: every row
@@ -5307,13 +6382,11 @@ fn reply_offsets(windows: &[CausalWindow], mask: &[u8]) -> ReplyOffsets {
 /// is the step's window and `opening` the window index of the prompt's last token.
 fn greedy_reply_key(window: &[u32], opening: usize, reply: &[u32]) -> Option<Vec<u32>> {
     use crate::flock_read_opening::{opening_slots, OpeningAnchor};
-    let last = *reply.last()?;
-    let slots = opening_slots(&window[..=opening], TURN_KEY, OpeningAnchor::Turn);
-    let turn = slots[opening].iter().map(|&s| window[s]);
-    Some(
-        turn.chain([u32::MAX, reply.len() as u32, u32::MAX, last])
-            .collect(),
-    )
+    reply.last()?;
+    // The whole turn at the prompt's last token: the anchor's slots, uncut.
+    let slots = opening_slots(&window[..=opening], opening + 1, OpeningAnchor::Turn);
+    let turn: Vec<u32> = slots[opening].iter().map(|&s| window[s]).collect();
+    Some(chained_key(&turn, reply, crate::flock_read_memory::reply_tail()))
 }
 
 fn reply_rows(windows: &[CausalWindow], mask: &[u8]) -> Vec<ReplyRow> {
@@ -5371,20 +6444,41 @@ enum ReplyKey {
     /// The turn's first 8 tokens, the reply position, and the reply's last `j`. At position 0
     /// this is claude-161's opening key.
     TurnPosition(usize),
+    /// The turn's last `n` prompt tokens, the reply position, and the reply's last token
+    /// (claude-345). The first 8 tokens end before the second operand of a sum and before the
+    /// word of "What is the opposite of tall?"; the tail holds them.
+    TailPosition(usize),
+    /// The turn's first 8 prompt tokens and, of the tokens after them, the last `n`; then the
+    /// reply position and the reply's last token (claude-345). A sum's first operand is in the
+    /// first 8 and its second in the tail; a prompt of at most `8 + n` tokens is keyed whole.
+    HeadTail(usize),
 }
 
 impl ReplyKey {
     fn of(self, row: &ReplyRow) -> Vec<u32> {
-        let last = |j: usize| &row.reply[row.reply.len() - j.min(row.reply.len())..];
-        let turn = &row.prompt[..TURN_KEY.min(row.prompt.len())];
+        self.of_parts(&row.prompt, &row.reply)
+    }
+
+    /// The key of a reply row from its turn's ids and its reply tokens so far.
+    fn of_parts(self, prompt: &[u32], reply: &[u32]) -> Vec<u32> {
+        let last = |j: usize| &reply[reply.len() - j.min(reply.len())..];
+        let turn = &prompt[..TURN_KEY.min(prompt.len())];
+        let tail = |n: usize| &prompt[prompt.len() - n.min(prompt.len())..];
+        let position = [u32::MAX, reply.len() as u32, u32::MAX];
         // The parts are joined by `u32::MAX`, which no token id takes.
         match self {
             ReplyKey::None => Vec::new(),
             ReplyKey::Reply(j) => last(j).to_vec(),
             ReplyKey::Turn(j) => [turn, &[u32::MAX], last(j)].concat(),
-            ReplyKey::TurnPosition(j) => {
-                [turn, &[u32::MAX, row.reply.len() as u32, u32::MAX], last(j)].concat()
+            ReplyKey::TurnPosition(j) => [turn, &position, last(j)].concat(),
+            ReplyKey::HeadTail(n) => {
+                let rest = &prompt[turn.len()..];
+                let end = &rest[rest.len() - n.min(rest.len())..];
+                [turn, end, &position, last(1)].concat()
             }
+            // A leading `u32::MAX` marks the form: a key on the turn's first ids never opens
+            // with one unless the turn is empty, and then it is four ids long, this one five.
+            ReplyKey::TailPosition(n) => [&[u32::MAX], tail(n), &position, last(1)].concat(),
         }
     }
 
@@ -5394,6 +6488,8 @@ impl ReplyKey {
             ReplyKey::Reply(j) => format!("reply-last-{j}"),
             ReplyKey::Turn(j) => format!("turn-{TURN_KEY}+reply-last-{j}"),
             ReplyKey::TurnPosition(j) => format!("turn-{TURN_KEY}+position+reply-last-{j}"),
+            ReplyKey::TailPosition(n) => format!("tail-{n}+position+reply-last-1"),
+            ReplyKey::HeadTail(n) => format!("turn-{TURN_KEY}+tail-{n}+position+reply-last-1"),
         }
     }
 }
@@ -5515,6 +6611,64 @@ fn reply_bound_rows(
         .collect()
 }
 
+/// [`ReplyBound`] for tables asked in order (claude-345): the first of `chain` whose table keeps
+/// the row's key names it. A specific key answers where TRAIN holds the question; the general key
+/// after it keeps the wording of a turn whose value TRAIN never held.
+fn reply_bound_backoff_rows(
+    chain: &[ReplyKey],
+    train: &[ReplyRow],
+    dev: &[ReplyRow],
+    shares: &[f64],
+) -> Vec<ReplyBound> {
+    let tables: Vec<ReplyTableCounts> = chain.iter().map(|key| reply_table(*key, train)).collect();
+    let names: Vec<String> = chain.iter().map(|key| key.name()).collect();
+    shares
+        .iter()
+        .map(|&min_share| {
+            let kept = |stored: &&(u32, usize, usize)| table_keeps(stored, min_share);
+            let mut out = ReplyBound {
+                key: names.join(", else "),
+                min_share,
+                train_rows: train.len(),
+                train_keys: tables.iter().map(|t| t.values().filter(kept).count()).sum(),
+                all: KindCount::default(),
+                openings: KindCount::default(),
+                copies: KindCount::default(),
+                rest: KindCount::default(),
+                opening_hits_with_fallback: 0,
+            };
+            for row in dev {
+                let named = chain
+                    .iter()
+                    .zip(&tables)
+                    .find_map(|(key, table)| table.get(&key.of(row)).filter(kept))
+                    .map(|s| s.0);
+                let kinds = [
+                    (true, &mut out.all),
+                    (row.opening, &mut out.openings),
+                    (row.copy, &mut out.copies),
+                    (!row.opening && !row.copy, &mut out.rest),
+                ];
+                for (_, kind) in kinds.into_iter().filter(|(of, _)| *of) {
+                    kind.rows += 1;
+                    kind.named += usize::from(named.is_some());
+                    kind.hits += usize::from(named == Some(row.target));
+                }
+            }
+            out
+        })
+        .collect()
+}
+
+/// The tail lengths `--reply-bound` tries for [`ReplyKey::TailPosition`]. The role line and the
+/// question mark before it take 7 tokens, so 8 holds the question's last token and 9 its last
+/// two. The float memory's
+/// longest key is 16 ids.
+const REPLY_BOUND_TAILS: [usize; 6] = [7, 8, 9, 10, 12, 16];
+/// The tail lengths `--reply-bound` tries after the first 8 tokens ([`ReplyKey::HeadTail`]): 8
+/// fills the float memory's 16-id key; 14 holds 8 tokens before the 6-token role line.
+const REPLY_BOUND_ENDS: [usize; 3] = [8, 12, 14];
+
 /// The stored-share thresholds `--reply-bound` reports.
 const REPLY_BOUND_SHARES: [f64; 4] = [0.0, 0.5, 0.8, 0.95];
 
@@ -5526,15 +6680,131 @@ pub fn reply_bound(data_root: &Path) -> Result<Vec<ReplyBound>> {
     let (train_windows, _) =
         hs::build_document_windows(&train_tokens, &train_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
     let (dev_windows, dev_mask) = load_dev(data_root)?;
-    let train = reply_rows(&train_windows, &train_mask);
-    let dev = reply_rows(&dev_windows, &dev_mask);
+    Ok(reply_bound_of(
+        &reply_rows(&train_windows, &train_mask),
+        &reply_rows(&dev_windows, &dev_mask),
+    ))
+}
+
+/// [`reply_bound`] over two named folders instead of the pinned TRAIN and DEV (claude-345): each
+/// holds `tokens.u16` and `response_mask.u8`, `train` the table's rows and `dev` the rows it is
+/// asked about. The first two values are the folders' token hashes, so a reader can say which
+/// files were counted.
+pub fn reply_bound_dirs(train: &Path, dev: &Path) -> Result<(String, String, Vec<ReplyBound>)> {
+    let rows = |dir: &Path| -> Result<(Vec<ReplyRow>, String)> {
+        let (tokens, mask, sha) = load_unpinned_uort(dir)?;
+        let (windows, _) =
+            hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
+        Ok((reply_rows(&windows, &mask), sha))
+    };
+    let ((train, train_sha), (dev, dev_sha)) = (rows(train)?, rows(dev)?);
+    Ok((train_sha, dev_sha, reply_bound_of(&train, &dev)))
+}
+
+/// What the trainer's reply table names on other rows (claude-345): the table of `tail` built
+/// from one folder's rows past their openings as [`chain_reply_table`] builds it, the keys the
+/// copy read owns left out, then asked about another folder's rows as the read asks. A `copied`
+/// row is one the copy read's latest exact match names; a table that names it writes over the
+/// copy. The `rest` are the rows only the table can name.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct ReplyChainCount {
+    pub tail: usize,
+    pub copy_keys: Vec<usize>,
+    pub train_rows: usize,
+    pub keys_at_share: usize,
+    pub keys_left_to_copy: usize,
+    pub keys_yielded: usize,
+    pub keys: usize,
+    pub train_named_right: usize,
+    pub dev_rows: usize,
+    pub dev_copied: usize,
+    pub dev_copied_named: usize,
+    pub dev_copied_named_right: usize,
+    pub dev_rest: usize,
+    pub dev_rest_named: usize,
+    pub dev_rest_right: usize,
+}
+
+/// [`ReplyChainCount`] for each of `tails` (0 is the table without a tail), the table from
+/// `train` and the rows asked from `dev`, the copy read's heads keyed by `copy_keys`. Needs no
+/// GPU: it counts what a run's table would hold before the run.
+pub fn reply_chain_dirs(
+    train: &Path,
+    dev: &Path,
+    tails: &[usize],
+    copy_keys: &[usize],
+) -> Result<Vec<ReplyChainCount>> {
+    let load = |dir: &Path| -> Result<(Vec<ReplyRow>, Vec<bool>)> {
+        let (tokens, mask, _) = load_unpinned_uort(dir)?;
+        let (windows, _) =
+            hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
+        let rows: Vec<ReplyRow> =
+            reply_rows(&windows, &mask).into_iter().filter(|row| !row.opening).collect();
+        let copied = rows
+            .iter()
+            .map(|row| {
+                let ids = &windows[row.window].input_ids;
+                copy_names_by(copy_keys, ids, row.offset, row.target)
+            })
+            .collect();
+        Ok((rows, copied))
+    };
+    let ((train, train_copied), (dev, dev_copied)) = (load(train)?, load(dev)?);
+    let count = |&tail: &usize| {
+        let built = chain_reply_table(&train, tail, REPLY_MEMORY_SHARE, Some(&train_copied));
+        let forms = reply_key_forms(tail);
+        let mut count = ReplyChainCount {
+            tail,
+            copy_keys: copy_keys.to_vec(),
+            train_rows: train.len(),
+            keys_at_share: built.built,
+            keys_left_to_copy: built.left,
+            keys_yielded: built.yielded,
+            keys: built.table.len(),
+            train_named_right: built.named,
+            dev_rows: dev.len(),
+            ..ReplyChainCount::default()
+        };
+        for (row, &copied) in dev.iter().zip(&dev_copied) {
+            let stored = forms.iter().find_map(|form| built.table.get(&form.of(row)));
+            let (named, right) = (usize::from(stored.is_some()), usize::from(stored == Some(&row.target)));
+            if copied {
+                count.dev_copied += 1;
+                count.dev_copied_named += named;
+                count.dev_copied_named_right += right;
+            } else {
+                count.dev_rest += 1;
+                count.dev_rest_named += named;
+                count.dev_rest_right += right;
+            }
+        }
+        count
+    };
+    Ok(tails.iter().map(count).collect())
+}
+
+/// Every key [`reply_bound`] reports, over `train`'s table and `dev`'s rows.
+fn reply_bound_of(train: &[ReplyRow], dev: &[ReplyRow]) -> Vec<ReplyBound> {
     let keys = std::iter::once(ReplyKey::None)
         .chain((1..=4).map(ReplyKey::Reply))
         .chain((0..=4).map(ReplyKey::Turn))
-        .chain((0..=1).map(ReplyKey::TurnPosition));
-    Ok(keys
-        .flat_map(|key| reply_bound_rows(key, &train, &dev, &REPLY_BOUND_SHARES))
-        .collect())
+        .chain((0..=1).map(ReplyKey::TurnPosition))
+        .chain(REPLY_BOUND_TAILS.map(ReplyKey::TailPosition));
+    let mut out: Vec<ReplyBound> = keys
+        .flat_map(|key| reply_bound_rows(key, train, dev, &REPLY_BOUND_SHARES))
+        .collect();
+    let specific = REPLY_BOUND_TAILS
+        .map(ReplyKey::TailPosition)
+        .into_iter()
+        .chain(REPLY_BOUND_ENDS.map(ReplyKey::HeadTail));
+    let general = ReplyKey::TurnPosition(1);
+    for first in specific {
+        out.extend(reply_bound_backoff_rows(&[first, general], train, dev, &REPLY_BOUND_SHARES));
+    }
+    // Both ends of the question, then its end, then its start: a sum needs both operands.
+    let chain = [ReplyKey::HeadTail(8), ReplyKey::TailPosition(9), general];
+    out.extend(reply_bound_backoff_rows(&chain, train, dev, &REPLY_BOUND_SHARES));
+    out
 }
 
 /// Pinned SHA-256 of the sealed Fresh V2 panel's `tokens.u16`, opened once for M1 bar (e)
@@ -7801,8 +9071,8 @@ pub fn root_separation() -> Result<(f64, f64)> {
 }
 
 /// The pinned DEV panel's windows and its response mask.
-fn load_dev(data_root: &Path) -> Result<(Vec<CausalWindow>, Vec<u8>)> {
-    let (dev_tokens, dev_mask) = hs::load_pinned_uort_split(
+fn load_dev_split(data_root: &Path) -> Result<(Vec<u32>, Vec<u8>)> {
+    hs::load_pinned_uort_split(
         &data_root.join("ft/dev/tokens.u16"),
         &data_root.join("ft/dev/response_mask.u8"),
         hs::PINNED_DEV_TOKENS_SHA256,
@@ -7811,7 +9081,11 @@ fn load_dev(data_root: &Path) -> Result<(Vec<CausalWindow>, Vec<u8>)> {
         hs::EXPECTED_DEV_ELIGIBLE_TARGETS,
         hs::SHEET_VOCAB,
         hs::SHEET_BOS_ID,
-    )?;
+    )
+}
+
+fn load_dev(data_root: &Path) -> Result<(Vec<CausalWindow>, Vec<u8>)> {
+    let (dev_tokens, dev_mask) = load_dev_split(data_root)?;
     let (dev_windows, _) =
         hs::build_document_windows(&dev_tokens, &dev_mask, SHEET_CONTEXT, hs::SHEET_BOS_ID)?;
     Ok((dev_windows, dev_mask))
@@ -8619,6 +9893,11 @@ pub fn score_rows(
             return Err(invalid(format!("--panel-queries {name} needs --panel {name}=DIR")));
         }
     }
+    let panel_marker = match panels.is_empty() {
+        true => None,
+        false => crate::flock_read_hamming::HammingReads::load(checkpoint, device)?
+            .and_then(|reads| reads.copy_longest()),
+    };
     for (name, dir) in panels {
         if !panel_name_ok(name) || splits.iter().any(|s| s.name == *name) {
             return Err(invalid(format!(
@@ -8626,6 +9905,14 @@ pub fn score_rows(
             )));
         }
         let (tokens, mask, sha) = load_unpinned_uort(dir)?;
+        // claude-357: a checkpoint under the longest rule finds reply openings by its marker.
+        if let Some(marker) = panel_marker {
+            let openings = check_reply_marker(name, &tokens, &mask, marker)?;
+            println!(
+                "[longest] the checkpoint reads by the marker {},{}: {name} has it before every reply opening and nowhere else: {openings}",
+                marker[0], marker[1]
+            );
+        }
         // claude-287: the rule's cut, and the context its windows and decodes run at.
         let (runs_at, windows) = match past_window {
             Some(rule) => past_window_cut(rule, &tokens, &mask, context)?,
@@ -9182,6 +10469,20 @@ pub fn score_rows(
                     search: None,
                     context: split.context,
                 });
+            }
+            // The pair rows (claude-370): the sampled prompts, as the decode is fed them, whose
+            // reply reads a bag. Once per panel, in the memory pass.
+            if let Some(rows) = crate::pair_rows::pair_rows().filter(|_| on) {
+                let fed: Vec<&[u32]> = prompts
+                    .iter()
+                    .map(|window| &window.input_ids[..=window.scored_offsets[0]])
+                    .collect();
+                let readers = crate::pair_rows::bag_readers(rows.dict(), rows.marks(), &fed)?;
+                println!(
+                    "[pair] {}: {readers} of {} sampled replies read a bag",
+                    split.name,
+                    fed.len()
+                );
             }
             // A chained panel's queries (claude-275), greedy at full scope with the memory on and
             // off: each from a prompt ending at its opening, graded by whether the reply states
@@ -10780,9 +12081,10 @@ pub fn grade(
             .and_then(|at| greedy_reply_key(&ids[..=row.offset], at, &row.reply));
         hit_keys[0] += 1;
         hit_keys[1] += usize::from(decoded.as_ref() == Some(&key));
+        // `reply` holds the first-8 form alone, whatever tail this thread's memory keys on.
         hit_keys[2] += usize::from(
             reply
-                .get(&key)
+                .get(&ReplyKey::TurnPosition(1).of(row))
                 .is_some_and(|s| table_keeps(s, REPLY_MEMORY_SHARE)),
         );
     }
@@ -12172,6 +13474,289 @@ pub fn recall_query_window(
     Ok((window, queries))
 }
 
+/// claude-397: the facts that a reader of one two-class window's stream cannot tell apart from a
+/// query's other fact ([`recall_other_candidates`]). Positions are value positions `p`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct OtherFactCandidates {
+    pub slot: usize,
+    pub bucket: usize,
+    pub scored_offset: usize,
+    pub asked: usize,
+    pub other: usize,
+    /// The consistent facts, ascending; `other` is one of them.
+    pub candidates: Vec<usize>,
+    /// The window's facts, ascending.
+    pub facts: Vec<usize>,
+}
+
+/// Where one read pick lands against a query's facts. A pick is stored `s + 1`, and pick `s`
+/// copies `ids[s + 1]`, so a pick equal to a fact's value position `p` picked that fact.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OtherPickClass {
+    Asked,
+    Other,
+    Candidate,
+    Fact,
+    Row,
+}
+
+impl OtherFactCandidates {
+    pub fn class(&self, pick: u32) -> OtherPickClass {
+        let p = pick as usize;
+        if pick == 0 {
+            OtherPickClass::Row
+        } else if p == self.asked {
+            OtherPickClass::Asked
+        } else if p == self.other {
+            OtherPickClass::Other
+        } else if self.candidates.contains(&p) {
+            OtherPickClass::Candidate
+        } else if self.facts.contains(&p) {
+            OtherPickClass::Fact
+        } else {
+            OtherPickClass::Row
+        }
+    }
+}
+
+/// claude-397: for each query of one window ([`recall_query_window`]), the facts consistent with
+/// being its other fact, from what the stream shows before the scored row:
+/// - not the asked fact;
+/// - not asked in an earlier slot (that query is in the stream);
+/// - at a distance `q − p` from the query inside the asked fact's bucket.
+///
+/// The episode pairing itself is a hidden shuffle, so on a query with more than one consistent
+/// fact no read of the stream can know which one is the other. (The generator also clips the
+/// bucket at `q − 2`; every fact sits at `p ≥ 2`, so the clip never removes one.) Refuses a
+/// window whose facts are not distinct, or whose other fact is not consistent.
+pub fn recall_other_candidates(queries: &[RecallQuery]) -> Result<Vec<OtherFactCandidates>> {
+    let mut facts: Vec<usize> = queries
+        .iter()
+        .flat_map(|q| [q.ask_value_pos, q.other_value_pos])
+        .collect();
+    facts.sort_unstable();
+    if facts.windows(2).any(|w| w[0] == w[1]) {
+        return Err(invalid("a two-class window's facts must be distinct"));
+    }
+    let mut out = Vec::with_capacity(queries.len());
+    for q in queries {
+        let &(low, high) = RECALL_QUERY_BUCKETS
+            .get(q.bucket)
+            .ok_or_else(|| invalid(format!("recall bucket {} is out of range", q.bucket)))?;
+        let earlier: Vec<usize> = queries
+            .iter()
+            .filter(|e| e.slot < q.slot)
+            .map(|e| e.ask_value_pos)
+            .collect();
+        let candidates: Vec<usize> = facts
+            .iter()
+            .copied()
+            .filter(|&p| {
+                p != q.ask_value_pos
+                    && p < q.query_pos
+                    && (low..=high).contains(&(q.query_pos - p))
+                    && !earlier.contains(&p)
+            })
+            .collect();
+        if !candidates.contains(&q.other_value_pos) {
+            return Err(invalid(format!(
+                "slot {}'s other fact at {} is not consistent with its stream",
+                q.slot, q.other_value_pos
+            )));
+        }
+        out.push(OtherFactCandidates {
+            slot: q.slot,
+            bucket: q.bucket,
+            scored_offset: q.scored_offset,
+            asked: q.ask_value_pos,
+            other: q.other_value_pos,
+            candidates,
+            facts: facts.clone(),
+        });
+    }
+    Ok(out)
+}
+
+/// `num / den` to three decimals, rounded half up, from integers only (`den > 0`).
+fn ratio3(num: u64, den: u64) -> String {
+    let v = (num * 1000 + den / 2) / den.max(1);
+    format!("{}.{:03}", v / 1000, v % 1000)
+}
+
+/// lcm(1..=8): every `1 / K` for a window's at most 7 consistent facts is a whole number of these.
+const OTHER_CEILING_UNIT: u64 = 840;
+
+/// claude-397's settings: which windows, the run's target files to check them against, and the
+/// saved eval picks to class.
+#[derive(Clone, Debug)]
+pub struct OtherCeilingSettings {
+    pub seed: u64,
+    pub header: usize,
+    pub windows: u64,
+    /// The held-out windows (`seed ^ RECALL_EVAL_SEED`, as the probe draws them), else TRAIN.
+    pub held: bool,
+    /// A dump path whose `.ask.u32`, `.other.u32` and `.bucket.u8` must equal these windows'.
+    pub targets: Option<PathBuf>,
+    /// Named u32 pick files, one word per row (`window * SHEET_CONTEXT + offset`).
+    pub picks: Vec<(String, PathBuf)>,
+}
+
+/// R1 for one far bucket: the consistent-set sizes and the uniform-guess ceiling `mean(1 / K)`.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct OtherCeilingBucket {
+    pub rows: u64,
+    /// `k_counts[k]` rows have `K = k`.
+    pub k_counts: [u64; 9],
+    pub k1_share: String,
+    /// `sum(840 / K)`; the ceiling is this over `840 * rows`.
+    pub ceiling_840ths: u64,
+    pub ceiling: String,
+}
+
+/// R2 and R3 for one pick file and far bucket.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct OtherPicksBucket {
+    pub rows: u64,
+    pub asked: u64,
+    pub other: u64,
+    pub candidate: u64,
+    pub fact: u64,
+    pub row: u64,
+    pub k1_rows: u64,
+    pub other_on_k1: u64,
+    pub k2_rows: u64,
+    pub other_on_k2: u64,
+    /// `P` in 840ths: `sum([pick in C] * 840 / K)`, the per-fact rate on the consistent set.
+    pub per_fact_840ths: u64,
+    /// Outcome 4's test: `A <= 2 P`.
+    pub asked_at_most_twice_per_fact: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct OtherCeilingReport {
+    pub seed: u64,
+    pub header: usize,
+    pub windows: u64,
+    pub held: bool,
+    /// Rows checked against the run's target files, when given.
+    pub targets_rows_checked: Option<u64>,
+    /// Indexed by far bucket (0, 1).
+    pub buckets: Vec<OtherCeilingBucket>,
+    pub picks: BTreeMap<String, Vec<OtherPicksBucket>>,
+}
+
+fn read_words_exact(path: &Path, words: usize, width: usize) -> Result<Vec<u8>> {
+    let bytes = fs::read(path).map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+    if bytes.len() != words * width {
+        return Err(invalid(format!(
+            "{} holds {} bytes, not {words} words of {width}",
+            path.display(),
+            bytes.len()
+        )));
+    }
+    Ok(bytes)
+}
+
+fn u32_words(bytes: &[u8]) -> Vec<u32> {
+    bytes
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect()
+}
+
+/// claude-397: R1 to R3 of the ORDER, from integer counts. Rebuilds the windows from the seed,
+/// checks them against the run's target files when given (outcome 0), and classes every saved
+/// pick at every scored row. No model and no device.
+pub fn recall_other_ceiling(s: &OtherCeilingSettings) -> Result<OtherCeilingReport> {
+    let seed = if s.held { s.seed ^ RECALL_EVAL_SEED } else { s.seed };
+    let rows = s.windows as usize * SHEET_CONTEXT;
+    let mut sets = Vec::new();
+    for w in 0..s.windows {
+        let (_, queries) = recall_query_window(seed, w, SHEET_CONTEXT, s.header)?;
+        for c in recall_other_candidates(&queries)? {
+            sets.push((w as usize * SHEET_CONTEXT + c.scored_offset, c));
+        }
+    }
+    let targets_rows_checked = match &s.targets {
+        None => None,
+        Some(dump) => {
+            let file = |ext: &str| PathBuf::from(format!("{}.{ext}", dump.display()));
+            let ask = u32_words(&read_words_exact(&file("ask.u32"), rows, 4)?);
+            let other = u32_words(&read_words_exact(&file("other.u32"), rows, 4)?);
+            let bucket = read_words_exact(&file("bucket.u8"), rows, 1)?;
+            let (mut want_ask, mut want_other, mut want_bucket) =
+                (vec![0u32; rows], vec![0u32; rows], vec![0u8; rows]);
+            for (row, c) in &sets {
+                want_ask[*row] = c.asked as u32;
+                want_other[*row] = c.other as u32;
+                want_bucket[*row] = c.bucket as u8 + 1;
+            }
+            if ask != want_ask || other != want_other || bucket != want_bucket {
+                return Err(invalid(format!(
+                    "{}'s target files differ from the rebuilt windows",
+                    dump.display()
+                )));
+            }
+            Some(rows as u64)
+        }
+    };
+    let mut buckets = vec![OtherCeilingBucket::default(); RECALL_QUERY_BUCKETS.len()];
+    for (_, c) in &sets {
+        let k = c.candidates.len();
+        let b = &mut buckets[c.bucket];
+        b.rows += 1;
+        b.k_counts[k] += 1;
+        b.ceiling_840ths += OTHER_CEILING_UNIT / k as u64;
+    }
+    for b in &mut buckets {
+        b.k1_share = ratio3(b.k_counts[1], b.rows);
+        b.ceiling = ratio3(b.ceiling_840ths, OTHER_CEILING_UNIT * b.rows);
+    }
+    let mut picks = BTreeMap::new();
+    for (name, path) in &s.picks {
+        let words = u32_words(&read_words_exact(path, rows, 4)?);
+        let mut out = vec![OtherPicksBucket::default(); RECALL_QUERY_BUCKETS.len()];
+        for (row, c) in &sets {
+            let o = &mut out[c.bucket];
+            let k = c.candidates.len() as u64;
+            let class = c.class(words[*row]);
+            o.rows += 1;
+            match class {
+                OtherPickClass::Asked => o.asked += 1,
+                OtherPickClass::Other => o.other += 1,
+                OtherPickClass::Candidate => o.candidate += 1,
+                OtherPickClass::Fact => o.fact += 1,
+                OtherPickClass::Row => o.row += 1,
+            }
+            let hit = class == OtherPickClass::Other;
+            if k == 1 {
+                o.k1_rows += 1;
+                o.other_on_k1 += u64::from(hit);
+            } else {
+                o.k2_rows += 1;
+                o.other_on_k2 += u64::from(hit);
+            }
+            if matches!(class, OtherPickClass::Other | OtherPickClass::Candidate) {
+                o.per_fact_840ths += OTHER_CEILING_UNIT / k;
+            }
+        }
+        for o in &mut out {
+            o.asked_at_most_twice_per_fact =
+                o.asked * OTHER_CEILING_UNIT <= 2 * o.per_fact_840ths;
+        }
+        picks.insert(name.clone(), out);
+    }
+    Ok(OtherCeilingReport {
+        seed: s.seed,
+        header: s.header,
+        windows: s.windows,
+        held: s.held,
+        targets_rows_checked,
+        buckets,
+        picks,
+    })
+}
+
 /// One recall checkpoint's reading, one line of `recall.jsonl` ([`run_recall`]).
 #[derive(Clone, Debug, Serialize)]
 pub struct RecallReading {
@@ -12213,10 +13798,16 @@ pub struct RecallReading {
     /// claude-334: the hold's gain `g` by token group, on a held read.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hamming_hold_gain: Option<HoldGainReading>,
+    /// claude-335: the question carry's gain `c` by token group, on a carried read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hamming_carry_gain: Option<HoldGainReading>,
     /// claude-334: `|w_y|`, each depth's type weight row's mean absolute value, with the ask
     /// heads on.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hamming_type_weight_mean_abs: Option<Vec<f64>>,
+    /// claude-385: the vector read's choices and its cut reading, when the run has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vector_read: Option<VectorReadReading>,
 }
 
 /// The mean, least and greatest of a group of gains.
@@ -12393,6 +13984,9 @@ pub enum Ablation {
     /// `R^{−H}` (claude-334): the held term dropped (`g := 0`), the direct write kept. Taken
     /// after `−aS`, and only on a held read.
     HoldOff,
+    /// `R^{−C}` (claude-335): the readout read's carried question dropped (`c := 0`), the ask
+    /// heads' own question kept. Taken last, and only on a carried read.
+    CarryOff,
 }
 
 /// The ablations in the order the readings record them.
@@ -12416,12 +14010,18 @@ impl Ablation {
             Self::AskAtQuery => "-aQ",
             Self::AskStream => "-aS",
             Self::HoldOff => "-H",
+            Self::CarryOff => "-C",
         }
     }
 
     /// Whether it turns the hold off ([`crate::flock_read_hamming::set_hold_off`]).
     pub fn hold_off(self) -> bool {
         matches!(self, Self::HoldOff)
+    }
+
+    /// Whether it turns the question carry off ([`crate::flock_read_hamming::set_carry_off`]).
+    pub fn carry_off(self) -> bool {
+        matches!(self, Self::CarryOff)
     }
 
     /// The heads its row cut limits, for the two that cut at the question rows.
@@ -12442,7 +14042,9 @@ impl Ablation {
             Self::Copy => [[true, false], [true, false]],
             Self::Type => [[false, true], [false, true]],
             Self::AskStream => [[false, true], [false, false]],
-            Self::CopyAtQuery | Self::AskAtQuery | Self::HoldOff => [[false; 2]; 2],
+            Self::CopyAtQuery | Self::AskAtQuery | Self::HoldOff | Self::CarryOff => {
+                [[false; 2]; 2]
+            }
         }
     }
 }
@@ -12716,6 +14318,7 @@ impl Drop for UndoAblation {
         crate::flock_read_hamming::set_class_ablation([[false; 2]; 2]);
         crate::flock_read_hamming::set_row_cut(None);
         crate::flock_read_hamming::set_hold_off(false);
+        crate::flock_read_hamming::set_carry_off(false);
         crate::flock_read_hamming::set_row_capture(None);
     }
 }
@@ -12837,10 +14440,15 @@ fn recall_readings(
     if reads.hold_rows() > 0 {
         extra.push(Ablation::HoldOff);
     }
+    // claude-335: `−C` last, on a carried read.
+    if reads.carry_rows() > 0 {
+        extra.push(Ablation::CarryOff);
+    }
     for ablation in RECALL_ABLATIONS.into_iter().chain(extra) {
         let _undo = UndoAblation;
         fh::set_class_ablation(ablation.classes());
         fh::set_hold_off(ablation.hold_off());
+        fh::set_carry_off(ablation.carry_off());
         let mut done = 0usize;
         let picks = picks_with(
             model,
@@ -12983,6 +14591,16 @@ pub fn run_recall(
     if form.eval_windows == 0 {
         return Err(invalid("a recall run scores at least one held-out window"));
     }
+    if config.address_memory.is_some() || config.address_band.is_some() {
+        return Err(invalid(
+            "the address memory trains with --out's long run, not under --recall",
+        ));
+    }
+    if config.pair_rows.is_some() {
+        return Err(invalid(
+            "the pair rows train with --out's long run, not under --recall",
+        ));
+    }
     if form.query && pairs_per_bucket != RECALL_QUERY_EPISODES {
         return Err(invalid(format!(
             "the two-class task holds {RECALL_QUERY_EPISODES} episodes a window, not {pairs_per_bucket}"
@@ -12998,7 +14616,7 @@ pub fn run_recall(
     // the same rows (the scored rows when the pull is off).
     check_pull_flags(config)?;
     let attract = attract_plan(config, form)?;
-    let attract_back = attract.unwrap_or(0);
+    let attract_backs = attract.clone().unwrap_or_else(|| vec![0]);
     if out.exists() {
         return Err(invalid(format!(
             "{} exists; a run never writes over one",
@@ -13068,25 +14686,72 @@ pub fn run_recall(
     let mut opening = start_opening(config, device)?;
     // The prompt register (claude-155), when on: its own optimizer, applied inside the trunk.
     let mut register = start_register(config, device)?;
+    // claude-385: a vector read (claude-381), when on, as `run_long` starts it: identity
+    // rotations and a zero weight, its own optimizer, its margin credit in the loss.
+    let mut vread = match config.vector_read {
+        Some(arm) => {
+            let layers = model.config.layers();
+            let depth = arm.depth.unwrap_or(layers);
+            if depth > layers {
+                return Err(invalid(format!(
+                    "--vector-read-depth {depth} is past the model's {layers} layers"
+                )));
+            }
+            let read = crate::vector_reads::VectorRead::new(
+                arm.kind,
+                depth,
+                config.width,
+                arm.margin,
+                arm.credit,
+                device,
+            )?
+            .with_stream_grad(arm.stream_grad);
+            crate::vector_reads::set_vector_read(Some(read.clone()));
+            println!(
+                "[vread] {} read after layer {depth} of {layers}, margin {}, credit x {}, stream \
+                 gradient {}",
+                arm.kind.name(),
+                arm.margin,
+                arm.credit,
+                if arm.stream_grad { "on" } else { "off" }
+            );
+            let opt = crate::flock_read::FlockAdamW::for_vars(&read.variables())?;
+            Some((read, opt))
+        }
+        None => None,
+    };
     let mut opt_main = StackAdamW::new(&model, hs::SHEET_WEIGHT_DECAY, hs::SHEET_CLIP)?;
     let mut opt_decay = StackAdamW::new(&model, 0.0, hs::SHEET_CLIP)?;
     let log = out.join("recall.jsonl");
     let (mut train_seconds, mut loss_sum, mut loss_steps) = (0.0f64, 0.0f64, 0usize);
     let (mut attract_sum, mut attract_steps) = (0.0f64, 0usize);
     let reading = |step: usize, loss: Option<f64>, seconds: f64, attract: Option<f64>| -> Result<()> {
-        let (rows, hits, query, picks) = if form.query {
-            let refs: Vec<&CausalWindow> = held_queries.iter().map(|(w, _)| w).collect();
-            let picks = recall_picks(&model, &refs, config.seed)?;
-            let counts = count_queries(&held_queries, &picks)?;
-            let (mut rows, mut hits) = ([0usize; 4], [0usize; 4]);
-            for b in 0..2 {
-                rows[2 + b] = counts.rows[b].iter().sum();
-                hits[2 + b] = counts.ask[b].iter().sum();
+        let score = || -> Result<RecallScore> {
+            Ok(if form.query {
+                let refs: Vec<&CausalWindow> = held_queries.iter().map(|(w, _)| w).collect();
+                let picks = recall_picks(&model, &refs, config.seed)?;
+                let counts = count_queries(&held_queries, &picks)?;
+                let (mut rows, mut hits) = ([0usize; 4], [0usize; 4]);
+                for b in 0..2 {
+                    rows[2 + b] = counts.rows[b].iter().sum();
+                    hits[2 + b] = counts.ask[b].iter().sum();
+                }
+                (rows, hits, Some(counts), picks)
+            } else {
+                let (rows, hits) = recall_hits(&model, &held_out, config.seed)?;
+                (rows, hits, None, Vec::new())
+            })
+        };
+        // claude-385: with a vector read, its choice at each scored row, and the same held-out
+        // pass again with the read cut (eval only, `R^{-v}`).
+        let ((rows, hits, query, picks), vector_read) = match crate::vector_reads::vector_read() {
+            Some(read) => {
+                let (scored, chosen) = crate::vector_reads::recording_picks(&score)?;
+                let cut = crate::vector_reads::without_vector_read(&score)?;
+                let line = vector_read_reading(&read, &held_out, &held_queries, &chosen, cut)?;
+                (scored, Some(line))
             }
-            (rows, hits, Some(counts), picks)
-        } else {
-            let (rows, hits) = recall_hits(&model, &held_out, config.seed)?;
-            (rows, hits, None, Vec::new())
+            None => (score()?, None),
         };
         let readings = if form.readings {
             Some(recall_readings(&model, &held_out, &held_queries, &picks, config.seed)?)
@@ -13109,7 +14774,7 @@ pub fn run_recall(
                     .ok_or_else(|| invalid("the model has no shared vector table"))?
                     .as_tensor()
                     .detach();
-                let pulls = attract_rows(&windows, attract_back)?;
+                let pulls = attract_rows_at(&windows, &attract_backs)?;
                 reads.ask_pull_depths(&ids, windows[0].input_ids.len(), &table, &pulls)?
             }
             _ => None,
@@ -13155,6 +14820,10 @@ pub fn run_recall(
                 Some(reads) => reads.hold_gain()?.map(|g| hold_gain_reading(&g)).transpose()?,
                 None => None,
             },
+            hamming_carry_gain: match crate::flock_read_hamming::hamming_reads() {
+                Some(reads) => reads.carry_gain()?.map(|c| hold_gain_reading(&c)).transpose()?,
+                None => None,
+            },
             hamming_type_weight_mean_abs: match crate::flock_read_hamming::hamming_reads() {
                 Some(reads) if reads.has_ask() => Some(
                     reads
@@ -13165,14 +14834,25 @@ pub fn run_recall(
                 ),
                 _ => None,
             },
+            vector_read,
         };
         println!(
             "[recall] step {step} hits {:?} of {:?} train {seconds:.0}s",
             line.hits, line.rows
         );
+        if let Some(v) = &line.vector_read {
+            println!(
+                "[vread] step {step}: read {:?} chose target {:?} other {:?}, cut hits {:?}, offset {:?}",
+                v.read, v.chose_target, v.chose_other, v.cut_hits, v.offset
+            );
+        }
         append_line(&log, &serde_json::to_string(&line)?)
     };
     reading(0, None, 0.0, None)?;
+    // claude-385: a Starling read's offset starts from the first training batch's address scale.
+    if vread.as_ref().is_some_and(|(read, _)| read.kind().is_starling()) {
+        crate::vector_reads::calibrate_next_offset();
+    }
     for step in 0..config.steps {
         let windows: Vec<CausalWindow> = (0..config.batch)
             .map(|b| {
@@ -13189,8 +14869,8 @@ pub fn run_recall(
         let refs: Vec<&CausalWindow> = windows.iter().collect();
         let (ids, scored, targets) = assemble(&refs);
         // claude-330: the found-copy pull's rows, when it is on.
-        let pulls = match attract {
-            Some(back) => attract_rows(&refs, back)?,
+        let pulls = match &attract {
+            Some(backs) => attract_rows_at(&refs, backs)?,
             None => Vec::new(),
         };
         let started = Instant::now();
@@ -13200,19 +14880,28 @@ pub fn run_recall(
             step + 1,
             false,
             || {
-                let loss = batch_loss(
-                    &model,
-                    config.objective,
-                    &ids,
-                    &scored,
-                    &targets,
-                    config.batch,
-                    false,
-                )?;
+                // claude-385: a vector read's credit, collected in this forward only.
+                crate::vector_reads::clear_credit();
+                let loss = crate::vector_reads::collecting(|| {
+                    batch_loss(
+                        &model,
+                        config.objective,
+                        &ids,
+                        &scored,
+                        &targets,
+                        config.batch,
+                        false,
+                    )
+                })?;
                 let value = f64::from(loss.to_scalar::<f32>()?);
                 if !value.is_finite() {
                     return Err(invalid(format!("non-finite recall loss at step {step}")));
                 }
+                // The logged loss is the task's alone; the credit joins the gradient.
+                let loss = match crate::vector_reads::take_credit() {
+                    Some(credit) => loss.add(&credit)?,
+                    None => loss,
+                };
                 // The task loss alone is the logged loss; the pull adds λ times its mean distance.
                 let pull = match (&hamming, pulls.is_empty()) {
                     (Some((reads, _)), false) => {
@@ -13258,6 +14947,9 @@ pub fn run_recall(
         if let Some((reg, opt)) = register.as_mut() {
             opt.step_vars(&reg.variables(), &grads, lr)?;
         }
+        if let Some((read, opt)) = vread.as_mut() {
+            opt.step_vars(&read.variables(), &grads, lr)?;
+        }
         opt_decay.update_filtered(&model, &grads, lr * config.decay_mult, |name| {
             name.ends_with("rec.decay")
         })?;
@@ -13294,7 +14986,704 @@ pub fn run_recall(
     if let Some(reg) = crate::flock_read_register::prompt_register() {
         reg.save(&directory)?;
     }
+    if let Some(read) = crate::vector_reads::vector_read() {
+        read.save(&directory)?;
+    }
     Ok(())
+}
+
+/// One held-out pass of the recall task: rows and hits per bucket, the two-class counts, and the
+/// picks the readings use.
+type RecallScore = ([usize; 4], [usize; 4], Option<QueryCounts>, Vec<u32>);
+
+/// claude-385: a vector read at one recall reading, on the held-out windows.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct VectorReadReading {
+    pub kind: String,
+    /// Scored rows per bucket (the `rows` layout: the two-class task at places 2 and 3) whose read
+    /// chose an earlier position at all; whose chosen position is followed by the scored target
+    /// (the asked value: the read picked the asked fact); and, two-class only, by the other
+    /// fact's value.
+    pub read: [usize; 4],
+    pub chose_target: [usize; 4],
+    pub chose_other: [usize; 4],
+    /// The held-out hits with the read cut (`R^{-v}`, the read unset for the pass), and the
+    /// two-class counts under the cut.
+    pub cut_hits: [usize; 4],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cut_query: Option<QueryCounts>,
+    pub weight_mean_abs: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<f64>,
+    /// The Starling offset the first training forward set from the address scale, at the
+    /// reading after it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub calibrated_offset: Option<f64>,
+    /// Over the training forwards since the last reading: rows with an earlier position, rows
+    /// that read, rows with a positive, rows that chose a positive, credit terms.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub train: Option<[f64; 5]>,
+}
+
+/// Count `chosen`, the read's choice (position + 1, 0 for none) at every row of the held-out
+/// windows in order, at each scored row: whether it read, and whether the chosen position is
+/// followed by the target (or, two-class, the other fact's value).
+pub fn count_read_choices(
+    held_out: &[(CausalWindow, Vec<usize>)],
+    held_queries: &[(CausalWindow, Vec<RecallQuery>)],
+    chosen: &[u32],
+) -> Result<([usize; 4], [usize; 4], [usize; 4])> {
+    // (window index, scored offset, target, other value, place): the pass scores one task's
+    // windows, the two-class task's when it has any.
+    let mut rows: Vec<(usize, usize, u32, Option<u32>, usize)> = Vec::new();
+    let windows: Vec<&CausalWindow> = if held_queries.is_empty() {
+        for (w, (window, buckets)) in held_out.iter().enumerate() {
+            let scored = window.scored_offsets.iter().zip(&window.scored_targets).zip(buckets);
+            for ((&t, &v), &b) in scored {
+                rows.push((w, t, v, None, b));
+            }
+        }
+        held_out.iter().map(|(w, _)| w).collect()
+    } else {
+        for (w, (_, queries)) in held_queries.iter().enumerate() {
+            for q in queries {
+                rows.push((w, q.scored_offset, q.ask_value, Some(q.other_value), 2 + q.bucket));
+            }
+        }
+        held_queries.iter().map(|(w, _)| w).collect()
+    };
+    if chosen.len() != windows.len() * SHEET_CONTEXT {
+        return Err(invalid(format!(
+            "{} recorded choices for {} held-out windows of {SHEET_CONTEXT}",
+            chosen.len(),
+            windows.len()
+        )));
+    }
+    let (mut read, mut target, mut other) = ([0usize; 4], [0usize; 4], [0usize; 4]);
+    for (w, t, v, o, place) in rows {
+        let window = windows[w];
+        let s1 = chosen[w * SHEET_CONTEXT + t] as usize;
+        if s1 == 0 {
+            continue;
+        }
+        if s1 > t {
+            return Err(invalid(format!("a read at row {t} chose a later position {}", s1 - 1)));
+        }
+        read[place] += 1;
+        let next = window.input_ids[s1];
+        if next == v {
+            target[place] += 1;
+        } else if Some(next) == o {
+            other[place] += 1;
+        }
+    }
+    Ok((read, target, other))
+}
+
+/// claude-385: [`VectorReadReading`] of `read` from its recorded choices and the cut pass.
+fn vector_read_reading(
+    read: &crate::vector_reads::VectorRead,
+    held_out: &[(CausalWindow, Vec<usize>)],
+    held_queries: &[(CausalWindow, Vec<RecallQuery>)],
+    chosen: &[u32],
+    cut: RecallScore,
+) -> Result<VectorReadReading> {
+    let (reads, chose_target, chose_other) = count_read_choices(held_out, held_queries, chosen)?;
+    let train = match crate::vector_reads::take_stats() {
+        Some(s) => {
+            let get = |t: &Tensor| -> Result<f64> { Ok(f64::from(t.to_scalar::<f32>()?)) };
+            Some([
+                get(&s.rows)?,
+                get(&s.read_rows)?,
+                get(&s.positive_rows)?,
+                get(&s.chose_positive)?,
+                get(&s.hinge_pairs)?,
+            ])
+        }
+        None => None,
+    };
+    Ok(VectorReadReading {
+        kind: read.kind().name(),
+        read: reads,
+        chose_target,
+        chose_other,
+        cut_hits: cut.1,
+        cut_query: cut.2,
+        weight_mean_abs: read.weight_mean_abs()?,
+        offset: read.offset_value()?.map(f64::from),
+        calibrated_offset: crate::vector_reads::take_calibrated_offset().map(f64::from),
+        train,
+    })
+}
+
+/// claude-387: the run settings a saved two-class recall checkpoint is read back with: the run's
+/// `config.json` (seed and trunk flags) and `recall.json` (the form's header and held-out count).
+#[derive(Clone, Debug, Serialize)]
+pub struct PayloadProbeSettings {
+    pub seed: u64,
+    pub retain_rates: bool,
+    pub fold_scores: bool,
+    pub reflect_floor: bool,
+    pub fix_input_table: bool,
+    pub header: usize,
+    pub eval_windows: u64,
+    /// The eval payload scales; the first is the saved forward's own, 1.
+    pub scales: Vec<f32>,
+    /// claude-388: every pass with the read copies Flock's first kept pick alone (the hard copy,
+    /// [`crate::vector_reads::with_first_pick_payload`]) instead of its picks' mean.
+    pub first_only: bool,
+    /// claude-389: one more hard-copy pass at payload scale 1 captures the read's inputs and
+    /// replays them through the native Q31 read ([`crate::native_replay::replay`]); needs
+    /// `first_only`.
+    pub native_replay: bool,
+    /// claude-389: where the replay writes its barred operator and converted words as one
+    /// [`uor_r4_native_vector::Q31ReadDump`], for control 2 (CPU against CUDA); needs
+    /// `native_replay`.
+    pub native_dump: Option<std::path::PathBuf>,
+    /// claude-395: when set, the native replay and its dump read the first `n` TRAIN windows,
+    /// `recall_query_window(seed, i, ..)` at the run's own seed, instead of the held-out ones;
+    /// needs `native_dump`. The payload-probe passes stay on the held-out windows.
+    pub native_train_windows: Option<u64>,
+    /// claude-395: when set, a file of little-endian `u32` picks, one per held-out row in row
+    /// order (window × context + offset, a window-local position + 1, 0 for none), that every
+    /// pass with the read uses as the hard copy's first pick
+    /// ([`crate::vector_reads::with_injected_first_picks`]); needs `first_only`.
+    pub native_picks: Option<std::path::PathBuf>,
+}
+
+/// claude-395: the native picks file, one `u32` per held-out row, checked for its length.
+fn read_native_picks(path: &Path, rows: usize) -> Result<Vec<u32>> {
+    let bytes = std::fs::read(path).map_err(|e| invalid(format!("{}: {e}", path.display())))?;
+    if bytes.len() != rows * 4 {
+        return Err(invalid(format!(
+            "{}: {} bytes for {rows} held-out rows of 4 bytes",
+            path.display(),
+            bytes.len()
+        )));
+    }
+    Ok(bytes
+        .chunks_exact(4)
+        .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+        .collect())
+}
+
+/// claude-395: the native read's per-row files beside a dump, one entry per dump row
+/// (`window * time + offset`), each 0 away from a query row.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecallRowTargets {
+    /// The asked fact's value position `p` (a pick `s` copies `ids[s + 1]`, so the target is
+    /// `p`, the rule's `s + 1` form).
+    pub ask: Vec<u32>,
+    /// The other fact's value position.
+    pub other: Vec<u32>,
+    /// C2's control: a seeded uniform earlier row in `1..=scored_offset`.
+    pub random: Vec<u32>,
+    /// The query's far bucket, 1 or 2 (`RecallQuery::bucket + 1`).
+    pub bucket: Vec<u8>,
+}
+
+/// SplitMix64, one draw per seed.
+fn splitmix64(seed: u64) -> u64 {
+    let mut z = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// The seed of C2's random targets (the sheet's "fixed 393 seed").
+pub const RECALL_RANDOM_TARGET_SEED: u64 = 393;
+
+/// claude-395: the per-row targets of windows whose queries are `queries[w]`, each window
+/// `time` rows. A target must be an earlier row of its window, `1..=scored_offset`; each
+/// query row is written once. The random draw depends on `(window, slot)` only.
+pub fn recall_row_targets(queries: &[Vec<RecallQuery>], time: usize) -> Result<RecallRowTargets> {
+    let rows = queries
+        .len()
+        .checked_mul(time)
+        .ok_or_else(|| invalid("the targets' row count overflows"))?;
+    let mut out = RecallRowTargets {
+        ask: vec![0; rows],
+        other: vec![0; rows],
+        random: vec![0; rows],
+        bucket: vec![0; rows],
+    };
+    for (w, window) in queries.iter().enumerate() {
+        for q in window {
+            let offset = q.scored_offset;
+            if offset == 0 || offset >= time {
+                return Err(invalid("a query's scored row is outside its window"));
+            }
+            let row = w * time + offset;
+            if out.bucket[row] != 0 {
+                return Err(invalid("two queries score the same row"));
+            }
+            for pos in [q.ask_value_pos, q.other_value_pos] {
+                if pos == 0 || pos > offset {
+                    return Err(invalid("a target is not an earlier row of its window"));
+                }
+            }
+            let bucket = u8::try_from(q.bucket + 1)
+                .map_err(|_| invalid("a query's bucket does not fit a byte"))?;
+            let draw = splitmix64(RECALL_RANDOM_TARGET_SEED ^ ((w as u64) << 8) ^ q.slot as u64);
+            out.ask[row] = q.ask_value_pos as u32;
+            out.other[row] = q.other_value_pos as u32;
+            out.random[row] = (draw % offset as u64) as u32 + 1;
+            out.bucket[row] = bucket;
+        }
+    }
+    Ok(out)
+}
+
+/// `path` with `suffix` appended to its file name.
+fn with_suffix(path: &std::path::Path, suffix: &str) -> std::path::PathBuf {
+    let mut name = path.as_os_str().to_owned();
+    name.push(suffix);
+    std::path::PathBuf::from(name)
+}
+
+/// claude-395: the four row files beside a dump: `.ask.u32`, `.other.u32`, `.random.u32`
+/// (little-endian `u32` per row) and `.bucket.u8`.
+pub fn write_recall_row_targets(dump: &std::path::Path, targets: &RecallRowTargets) -> Result<()> {
+    let le = |v: &[u32]| v.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>();
+    write_new(&with_suffix(dump, ".ask.u32"), &le(&targets.ask))?;
+    write_new(&with_suffix(dump, ".other.u32"), &le(&targets.other))?;
+    write_new(&with_suffix(dump, ".random.u32"), &le(&targets.random))?;
+    write_new(&with_suffix(dump, ".bucket.u8"), &targets.bucket)
+}
+
+/// claude-389: the hard-copy forward of every held-out window at payload scale 1, each forward's
+/// read captured ([`crate::vector_reads::capturing_replay`]) and split into windows of the sheet's
+/// context, with the held-out query rows marked. Every forward must be one Flock read of all its
+/// rows, under one read state.
+fn native_replay_pass(
+    model: &StackModel,
+    held: &[(CausalWindow, Vec<RecallQuery>)],
+    seed: u64,
+) -> Result<(crate::native_replay::ReplayModel, Vec<crate::native_replay::ReplayWindow>)> {
+    use crate::native_replay::{ReplayModel, ReplayWindow};
+    let refs: Vec<&CausalWindow> = held.iter().map(|(w, _)| w).collect();
+    let mut state: Option<ReplayModel> = None;
+    let mut windows = Vec::new();
+    hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, 0, false, || {
+        for (c, chunk) in refs.chunks(16).enumerate() {
+            let (ids, _, _) = assemble(chunk);
+            if ids.len() != chunk.len() * SHEET_CONTEXT {
+                return Err(invalid("a held-out window is not the sheet's context"));
+            }
+            let forward = || crate::flock_read::points(model, &ids, chunk.len(), SHEET_CONTEXT);
+            let (_, captures) = crate::vector_reads::with_first_pick_payload(|| {
+                crate::vector_reads::with_payload_scale(1.0, || {
+                    crate::vector_reads::capturing_replay(forward)
+                })
+            })?;
+            let [capture] = captures.as_slice() else {
+                return Err(invalid(format!(
+                    "{} replay captures for one forward: the read ran other than once",
+                    captures.len()
+                )));
+            };
+            let (time, width) = (capture.time, capture.width);
+            if !capture.flock {
+                return Err(invalid("the native replay reads a Flock read only"));
+            }
+            if capture.ids != ids
+                || time != SHEET_CONTEXT
+                || capture.batch * time != ids.len()
+                || capture.first_pick.len() != ids.len()
+                || capture.stream.len() != ids.len() * width
+                || capture.out.len() != ids.len() * width
+            {
+                return Err(invalid("the replay capture's rows are not the forward's"));
+            }
+            let blocks = |v: &[f32]| -> Vec<[f32; 4]> {
+                v.chunks_exact(4).map(|g| [g[0], g[1], g[2], g[3]]).collect()
+            };
+            let read = ReplayModel {
+                width,
+                query_gates_raw: blocks(&capture.query_rotation),
+                key_gates_raw: blocks(&capture.key_rotation),
+                weights: capture.weight.clone(),
+                table: capture.table.clone(),
+            };
+            match &state {
+                Some(first) if *first != read => {
+                    return Err(invalid("the read's state moved between replay forwards"));
+                }
+                Some(_) => {}
+                None => state = Some(read),
+            }
+            for (j, window) in chunk.iter().enumerate() {
+                let w = c * 16 + j;
+                let offsets: Vec<usize> = held[w].1.iter().map(|q| q.scored_offset).collect();
+                if offsets != window.scored_offsets {
+                    return Err(invalid("a window's scored rows are not its queries' rows"));
+                }
+                let mut query = vec![false; time];
+                for q in &held[w].1 {
+                    if q.scored_offset >= time {
+                        return Err(invalid("a held-out query row is outside its window"));
+                    }
+                    query[q.scored_offset] = true;
+                }
+                let rows = j * time..(j + 1) * time;
+                let lanes = j * time * width..(j + 1) * time * width;
+                windows.push(ReplayWindow {
+                    time,
+                    stream: capture.stream[lanes.clone()].to_vec(),
+                    ids: capture.ids[rows.clone()].to_vec(),
+                    f32_first_pick: capture.first_pick[rows].to_vec(),
+                    f32_out: capture.out[lanes].to_vec(),
+                    query,
+                });
+            }
+        }
+        Ok(())
+    })?;
+    let state = state.ok_or_else(|| invalid("the native replay read no forward"))?;
+    Ok((state, windows))
+}
+
+/// claude-387: one held-out query row of the payload probe at one payload scale.
+#[derive(Clone, Debug, Serialize)]
+pub struct PayloadProbeRow {
+    pub window: usize,
+    pub bucket: usize,
+    pub slot: usize,
+    /// The asked token's score minus the best other token's, in the nearest-table decode that
+    /// [`recall_picks`] makes (negative mean L1 displacement).
+    pub margin: f32,
+    /// The decoded token.
+    pub pick: u32,
+    pub ask_value: u32,
+    pub other_value: u32,
+    /// `|x|`, `|p|` and `x · p` where the read adds, at this row.
+    pub stream_norm: f32,
+    pub payload_norm: f32,
+    pub dot: f32,
+    /// The next tokens of the read's real kept picks, best first.
+    pub next_ids: Vec<u32>,
+}
+
+/// claude-387: every held-out query row of the saved recall checkpoint `checkpoint`, decoded
+/// with the read's payload times `scale` (`None`: the read cut, `R^{-v}`, with no probe rows).
+fn payload_probe_pass(
+    model: &StackModel,
+    held: &[(CausalWindow, Vec<RecallQuery>)],
+    seed: u64,
+    scale: Option<f32>,
+    picks: Option<&[u32]>,
+) -> Result<Vec<PayloadProbeRow>> {
+    let table = table(model)?;
+    let refs: Vec<&CausalWindow> = held.iter().map(|(w, _)| w).collect();
+    if picks.is_some_and(|p| p.len() != refs.len() * SHEET_CONTEXT) {
+        return Err(invalid("the native picks are not one per held-out row"));
+    }
+    let mut out = Vec::new();
+    hs::with_gate_mode(HamiltonArm::HamiltonActive, seed, 0, false, || {
+        for (c, chunk) in refs.chunks(16).enumerate() {
+            let (ids, _, _) = assemble(chunk);
+            if ids.len() != chunk.len() * SHEET_CONTEXT {
+                return Err(invalid("a held-out window is not the sheet's context"));
+            }
+            let forward = || crate::flock_read::points(model, &ids, chunk.len(), SHEET_CONTEXT);
+            // claude-395: this forward's rows of the native picks, when the probe has them.
+            let start = c * 16 * SHEET_CONTEXT;
+            let rows_picks = picks.map(|p| p[start..start + ids.len()].to_vec());
+            let probed = || match rows_picks.clone() {
+                Some(p) => crate::vector_reads::with_injected_first_picks(p, || {
+                    crate::vector_reads::probing_payload(forward)
+                }),
+                None => crate::vector_reads::probing_payload(forward),
+            };
+            let (hidden, probe) = match scale {
+                Some(s) => crate::vector_reads::with_payload_scale(s, probed)?,
+                None => (crate::vector_reads::without_vector_read(forward)?, Vec::new()),
+            };
+            if scale.is_some() && probe.len() != ids.len() {
+                return Err(invalid(format!(
+                    "{} probe rows for {} positions: the read ran other than once",
+                    probe.len(),
+                    ids.len()
+                )));
+            }
+            let mut at = Vec::new();
+            for (j, window) in chunk.iter().enumerate() {
+                let w = c * 16 + j;
+                let queries = &held[w].1;
+                let offsets: Vec<usize> = queries.iter().map(|q| q.scored_offset).collect();
+                if offsets != window.scored_offsets {
+                    return Err(invalid("a window's scored rows are not its queries' rows"));
+                }
+                for q in queries {
+                    at.push((w, j * SHEET_CONTEXT + q.scored_offset, q));
+                }
+            }
+            let index: Vec<u32> = at.iter().map(|&(_, r, _)| r as u32).collect();
+            let index = Tensor::from_vec(index, at.len(), model.device())?;
+            let scores = nearest_scores(&hidden.index_select(&index, 0)?, &table)?.to_vec2::<f32>()?;
+            for ((w, r, q), row) in at.into_iter().zip(scores) {
+                let ask = q.ask_value as usize;
+                let (mut pick, mut best_other) = (0usize, f32::NEG_INFINITY);
+                for (t, &v) in row.iter().enumerate() {
+                    if v > row[pick] {
+                        pick = t;
+                    }
+                    if t != ask && v > best_other {
+                        best_other = v;
+                    }
+                }
+                let p = probe.get(r);
+                out.push(PayloadProbeRow {
+                    window: w,
+                    bucket: q.bucket,
+                    slot: q.slot,
+                    margin: row[ask] - best_other,
+                    pick: pick as u32,
+                    ask_value: q.ask_value,
+                    other_value: q.other_value,
+                    stream_norm: p.map_or(0.0, |p| p.stream_norm),
+                    payload_norm: p.map_or(0.0, |p| p.payload_norm),
+                    dot: p.map_or(0.0, |p| p.dot),
+                    next_ids: p.map_or_else(Vec::new, |p| p.next_ids.clone()),
+                });
+            }
+        }
+        Ok(())
+    })?;
+    Ok(out)
+}
+
+/// claude-387: the count, mean, lower median and 10th and 90th percentiles of `v`; the count
+/// alone when empty.
+fn probe_spread(mut v: Vec<f64>) -> serde_json::Value {
+    if v.is_empty() {
+        return serde_json::json!({ "n": 0 });
+    }
+    v.sort_by(f64::total_cmp);
+    let at = |f: f64| v[((v.len() - 1) as f64 * f).floor() as usize];
+    let mean = v.iter().sum::<f64>() / v.len() as f64;
+    serde_json::json!({
+        "n": v.len(), "mean": mean, "p10": at(0.1), "median": at(0.5), "p90": at(0.9)
+    })
+}
+
+/// claude-387: the summary of one pass's `rows` over the rows `keep` selects.
+fn payload_probe_summary(
+    rows: &[PayloadProbeRow],
+    keep: impl Fn(usize, &PayloadProbeRow) -> bool,
+) -> serde_json::Value {
+    let picked: Vec<(usize, &PayloadProbeRow)> =
+        rows.iter().enumerate().filter(|&(i, r)| keep(i, r)).collect();
+    let f = |g: &dyn Fn(&PayloadProbeRow) -> f64| -> serde_json::Value {
+        probe_spread(picked.iter().map(|(_, r)| g(r)).collect())
+    };
+    let (mut ask, mut oth, mut n) = ([0usize; 2], [0usize; 2], [0usize; 2]);
+    for (_, r) in &picked {
+        n[r.bucket] += 1;
+        ask[r.bucket] += usize::from(r.pick == r.ask_value);
+        oth[r.bucket] += usize::from(r.pick == r.other_value);
+    }
+    let rate = |a: [usize; 2]| -> Vec<f64> {
+        (0..2).map(|b| if n[b] == 0 { 0.0 } else { a[b] as f64 / n[b] as f64 }).collect()
+    };
+    serde_json::json!({
+        "rows": n,
+        "ask": ask,
+        "oth": oth,
+        "r_ask": rate(ask),
+        "r_oth": rate(oth),
+        "margin": f(&|r| f64::from(r.margin)),
+        "margin_positive": picked.iter().filter(|(_, r)| r.margin > 0.0).count(),
+        // Added after the first probe read, outside the fixed reading map: whether the decoded
+        // token is one of the read's kept picks' next tokens, and the first kept pick's.
+        "pick_kept": picked.iter().filter(|(_, r)| r.next_ids.contains(&r.pick)).count(),
+        "pick_first": picked.iter().filter(|(_, r)| r.next_ids.first() == Some(&r.pick)).count(),
+        "stream_norm": f(&|r| f64::from(r.stream_norm)),
+        "payload_norm": f(&|r| f64::from(r.payload_norm)),
+        "ratio": f(&|r| if r.stream_norm > 0.0 {
+            f64::from(r.payload_norm) / f64::from(r.stream_norm)
+        } else {
+            0.0
+        }),
+        "cosine": f(&|r| {
+            let d = f64::from(r.stream_norm) * f64::from(r.payload_norm);
+            if d > 0.0 { f64::from(r.dot) / d } else { 0.0 }
+        }),
+    })
+}
+
+/// claude-387: the payload probe of the saved two-class recall checkpoint `checkpoint` (a run's
+/// `models/step-*` directory) under `settings`, as `probe.json`'s value: at each held-out query
+/// row `|x|`, `|p|`, their cosine, the read's kept picks against the asked fact, and the asked
+/// token's decoded margin, at each payload scale and with the read cut. Eval only.
+pub fn recall_payload_probe(
+    checkpoint: &Path,
+    settings: &PayloadProbeSettings,
+    device: &Device,
+) -> Result<serde_json::Value> {
+    if settings.scales.first() != Some(&1.0) {
+        return Err(invalid("the probe's first payload scale is the saved forward's, 1"));
+    }
+    if settings.eval_windows == 0 {
+        return Err(invalid("the probe reads at least one held-out window"));
+    }
+    if settings.native_replay && !settings.first_only {
+        return Err(invalid("the native replay replays the hard copy: it needs first_only"));
+    }
+    if settings.native_dump.is_some() && !settings.native_replay {
+        return Err(invalid("the native dump is the replay's input: it needs native_replay"));
+    }
+    if settings.native_train_windows.is_some() && settings.native_dump.is_none() {
+        return Err(invalid("the TRAIN replay is only for its dump: it needs native_dump"));
+    }
+    if settings.native_train_windows == Some(0) {
+        return Err(invalid("the TRAIN replay reads at least one window"));
+    }
+    if settings.native_picks.is_some() && !settings.first_only {
+        return Err(invalid("the native picks are the hard copy's first pick: they need first_only"));
+    }
+    let native_picks = match &settings.native_picks {
+        Some(path) => Some(read_native_picks(path, settings.eval_windows as usize * SHEET_CONTEXT)?),
+        None => None,
+    };
+    arms::set_fbs_arm(Some(FbsArm::OneAtomActive));
+    crate::geometric_stack::set_retention_rates(settings.retain_rates);
+    crate::geometric_stack::set_folded_scores(settings.fold_scores);
+    crate::geometric_stack::set_reflected_floor(settings.reflect_floor);
+    crate::geometric_stack::set_input_table_fixed(settings.fix_input_table);
+    let _guard = ArmGuard;
+    let model = StackModel::load(checkpoint, device)?;
+    load_reads(checkpoint, device)?;
+    let read = crate::vector_reads::vector_read()
+        .ok_or_else(|| invalid("the checkpoint has no vector read to probe"))?;
+    let held_seed = settings.seed ^ RECALL_EVAL_SEED;
+    let held = (0..settings.eval_windows)
+        .map(|i| recall_query_window(held_seed, i, SHEET_CONTEXT, settings.header))
+        .collect::<Result<Vec<_>>>()?;
+    // claude-388: every pass with the read runs under the hard copy when the settings ask.
+    let pass = |scale: Option<f32>| -> Result<Vec<PayloadProbeRow>> {
+        if settings.first_only {
+            crate::vector_reads::with_first_pick_payload(|| {
+                payload_probe_pass(&model, &held, settings.seed, scale, native_picks.as_deref())
+            })
+        } else {
+            payload_probe_pass(&model, &held, settings.seed, scale, None)
+        }
+    };
+    let base = pass(Some(1.0))?;
+    let first_right: Vec<bool> =
+        base.iter().map(|r| r.next_ids.first() == Some(&r.ask_value)).collect();
+    // How many of the kept picks point at the asked fact (and at the other fact), over all query
+    // rows and over the rows whose first pick is right.
+    let kept_max = base.iter().map(|r| r.next_ids.len()).max().unwrap_or(0);
+    let mut kept_ask = vec![[0usize; 2]; kept_max + 1];
+    let mut kept_oth = vec![[0usize; 2]; kept_max + 1];
+    for (r, &right) in base.iter().zip(&first_right) {
+        let a = r.next_ids.iter().filter(|&&t| t == r.ask_value).count();
+        let o = r.next_ids.iter().filter(|&&t| t == r.other_value).count();
+        kept_ask[a][0] += 1;
+        kept_oth[o][0] += 1;
+        if right {
+            kept_ask[a][1] += 1;
+            kept_oth[o][1] += 1;
+        }
+    }
+    let (mut passes, mut scaled_picks) = (Vec::new(), Vec::new());
+    for &scale in &settings.scales {
+        let rows = if scale == 1.0 {
+            base.clone()
+        } else {
+            pass(Some(scale))?
+        };
+        if rows.len() != base.len() {
+            return Err(invalid("a scaled pass read other rows than the base pass"));
+        }
+        passes.push(serde_json::json!({
+            "scale": scale,
+            "all": payload_probe_summary(&rows, |_, _| true),
+            "first_right": payload_probe_summary(&rows, |i, _| first_right[i]),
+            "first_not_right": payload_probe_summary(&rows, |i, _| !first_right[i]),
+        }));
+        scaled_picks.push(rows.iter().map(|r| r.pick).collect::<Vec<u32>>());
+    }
+    // Added after the first probe read: the payload weight's sign census.
+    let w = read.weight_values()?;
+    let weight = serde_json::json!({
+        "width": w.len(),
+        "negative": w.iter().filter(|&&v| v < 0.0).count(),
+        "zero": w.iter().filter(|&&v| v == 0.0).count(),
+        "min": w.iter().copied().fold(f32::INFINITY, f32::min),
+        "max": w.iter().copied().fold(f32::NEG_INFINITY, f32::max),
+        "abs": probe_spread(w.iter().map(|&v| f64::from(v.abs())).collect()),
+    });
+    // claude-389: the native Q31 replay of the hard-copy read, once over every forward's capture.
+    let native_replay = if settings.native_replay {
+        // claude-395: the TRAIN windows at the run's own seed, when the settings ask.
+        let train = match settings.native_train_windows {
+            Some(n) => Some(
+                (0..n)
+                    .map(|i| recall_query_window(settings.seed, i, SHEET_CONTEXT, settings.header))
+                    .collect::<Result<Vec<_>>>()?,
+            ),
+            None => None,
+        };
+        let replayed = train.as_deref().unwrap_or(&held[..]);
+        let (state, windows) = native_replay_pass(&model, replayed, settings.seed)?;
+        let (summary, dump) = crate::native_replay::replay_with_dump(&state, &windows)?;
+        if let Some(path) = &settings.native_dump {
+            let dump = dump.ok_or_else(|| invalid("a refused state has no read to dump"))?;
+            if dump.batch != replayed.len() || dump.time != SHEET_CONTEXT {
+                return Err(invalid("the dump's shape is not the replayed windows'"));
+            }
+            let bytes = dump.to_bytes().map_err(|e| invalid(e.to_string()))?;
+            // `create_new`: the dump never writes over a file, even one made during the run.
+            write_new(path, &bytes)?;
+            let queries: Vec<Vec<RecallQuery>> = replayed.iter().map(|(_, q)| q.clone()).collect();
+            write_recall_row_targets(path, &recall_row_targets(&queries, SHEET_CONTEXT)?)?;
+        }
+        serde_json::to_value(summary)?
+    } else {
+        serde_json::Value::Null
+    };
+    let cut = payload_probe_pass(&model, &held, settings.seed, None, None)?;
+    if cut.len() != base.len() {
+        return Err(invalid("the cut pass read other rows than the base pass"));
+    }
+    let rows: Vec<serde_json::Value> = base
+        .iter()
+        .zip(&cut)
+        .enumerate()
+        .map(|(i, (r, c))| {
+            let picks: Vec<u32> = scaled_picks.iter().map(|p| p[i]).collect();
+            serde_json::json!({
+                "window": r.window, "bucket": r.bucket, "slot": r.slot,
+                "ask_value": r.ask_value, "other_value": r.other_value,
+                "pick": r.pick, "margin": r.margin, "picks_by_scale": picks,
+                "cut_pick": c.pick, "cut_margin": c.margin,
+                "stream_norm": r.stream_norm, "payload_norm": r.payload_norm, "dot": r.dot,
+                "next_ids": r.next_ids,
+            })
+        })
+        .collect();
+    Ok(serde_json::json!({
+        "checkpoint": checkpoint.display().to_string(),
+        "settings": settings,
+        "kind": read.kind().name(),
+        "depth": read.depth(),
+        "weight_mean_abs": read.weight_mean_abs()?,
+        "weight": weight,
+        "query_rows": base.len(),
+        "first_right": first_right.iter().filter(|&&r| r).count(),
+        "kept_picks_on_ask": kept_ask,
+        "kept_picks_on_other": kept_oth,
+        "passes": passes,
+        "cut": {
+            "all": payload_probe_summary(&cut, |_, _| true),
+            "first_right": payload_probe_summary(&cut, |i, _| first_right[i]),
+        },
+        "rows": rows,
+        "native_replay": native_replay,
+    }))
 }
 
 /// The pinned tokenizer.
@@ -13855,6 +16244,9 @@ pub fn summarize_profile(rows: &[ProfileRow]) -> ProfileSummary {
 }
 
 pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Device) -> Result<()> {
+    // claude-337: the pull's question placements are refused before anything is read or written.
+    refuse_pull_placement_outside_recall(config)?;
+    check_pull_flags(config)?;
     if config.steps == 0 || config.batch == 0 || config.eval_every == 0 {
         return Err(invalid("steps, batch and eval-every must be positive"));
     }
@@ -13906,9 +16298,41 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
              TRAIN's own targets",
         ));
     }
+    if config.address_band.is_some() && config.address_memory.is_none() {
+        return Err(invalid(
+            "--address-band sets the address memory's band; turn the memory on with --address-memory",
+        ));
+    }
+    // claude-381: a float reference read; the export refuses it, so it cannot train as served.
+    if config.vector_read.is_some() && config.train_as_served {
+        return Err(invalid(
+            "a vector read is a float reference read the export refuses; it does not train as served",
+        ));
+    }
+    if config.pair_rows == Some(0) {
+        return Err(invalid("--pair-rows wants a minimum of 1 or more"));
+    }
+    if config.pair_weight && config.pair_rows.is_none() {
+        return Err(invalid(
+            "--pair-weight replies weighs the pair rows; turn them on with --pair-rows",
+        ));
+    }
+    if config.pair_weight_boost && !config.pair_weight {
+        return Err(invalid(
+            "the pair rows' boost raises their reply weight; it wants pair_weight",
+        ));
+    }
+    // claude-370: the export has no section for the pair rows, so no artifact holds them.
+    if config.pair_rows.is_some() && config.train_as_served {
+        return Err(invalid(
+            "--train-as-served rounds what the export carries; the pair rows have no exported form",
+        ));
+    }
     // Training as served (claude-258) rounds what the export carries: the trunk, the Hamming
     // read and the turn memory. A read it does not carry would train at values no artifact holds,
     // and a run with folded or reflected rate scores has no export at all (`run_rate_reading`).
+    // The address memory (claude-346) is rounded to its served 16 bits with them; the export's
+    // section for it is a later unit's, and until then the export refuses its checkpoint.
     if config.train_as_served
         && (config.flock_read > 0
             || config.content_read > 0
@@ -13926,6 +16350,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
              refuses folded or reflected rate scores",
         ));
     }
+    check_carry_flags(config)?;
     if out.exists() {
         return Err(invalid(format!(
             "{} exists; a run never writes over one",
@@ -13945,7 +16370,39 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             config.context,
             config.train_targets,
         )?;
+    // claude-380: under the carry, TRAIN is cut back to back instead, every window kept, and
+    // each conversation's windows are walked in order by the schedule's lanes.
+    let (usable, carry_docs) = if config.carry_windows == 0 {
+        (usable, None)
+    } else {
+        let (tokens, mask) = match config.train_split.as_ref() {
+            None => load_train_split(data_root)?,
+            Some(split) => load_named_split(split)?,
+        };
+        let (windows, docs) =
+            carry_stream_windows(&tokens, &mask, config.context, hs::SHEET_BOS_ID)?;
+        let spanning = docs.iter().filter(|d| d.len() > 1).count();
+        let longest = docs.iter().map(|d| d.len()).max().unwrap_or(0);
+        println!(
+            "[carry] K {} windows a step, {} lanes: TRAIN cut back to back into {} windows over \
+             {} conversations, {} of them past one window (longest {} windows)",
+            config.carry_windows,
+            config.batch / config.carry_windows,
+            windows.len(),
+            docs.len(),
+            spanning,
+            longest
+        );
+        if spanning == 0 {
+            return Err(invalid(
+                "--carry-windows on a TRAIN where no conversation spans two windows trains what \
+                 the carry off trains",
+            ));
+        }
+        (windows, Some(docs))
+    };
     let (dev_windows, dev_mask) = load_dev(data_root)?;
+    check_run_markers(data_root, config)?;
     let prompts = sample_windows(&dev_windows, &dev_mask, config.samples);
     println!(
         "[in-space] usable TRAIN windows {} (batch {}, {} steps = {:.2} epochs), DEV windows {}",
@@ -14002,8 +16459,118 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         None
     };
     // The Hamming reads, when on: their own optimizer, applied inside the trunk.
-    refuse_pull_outside_recall(config)?;
     let mut hamming = start_hamming(config, device)?;
+    // The address memory (claude-346), when on: zero rows, its own optimizer, applied inside the
+    // trunk after every layer.
+    let mut address = match config.address_memory {
+        Some(arm) => {
+            let memory = crate::e8_address::AddressMemory::new(
+                arm,
+                model.config.layers(),
+                config.width,
+                config.address_band,
+                config.seed,
+                device,
+            )?;
+            crate::e8_address::set_address_memory(Some(memory.clone()));
+            println!(
+                "[address] {} arm: {} layers of {} cells a block, band {}, rows step at lr x {}",
+                arm.name(),
+                memory.layers(),
+                arm.cells(),
+                memory.band(),
+                memory.rate()
+            );
+            let opt = crate::flock_read::FlockAdamW::for_vars(&memory.variables())?;
+            Some((memory, opt))
+        }
+        None => None,
+    };
+    // A vector read (claude-381), when on: identity rotations and a zero weight, its own
+    // optimizer, applied inside the trunk after its layer; its margin credit joins the loss.
+    let mut vread = match config.vector_read {
+        Some(arm) => {
+            let layers = model.config.layers();
+            let depth = arm.depth.unwrap_or(layers);
+            if depth > layers {
+                return Err(invalid(format!(
+                    "--vector-read-depth {depth} is past the model's {layers} layers"
+                )));
+            }
+            let read = crate::vector_reads::VectorRead::new(
+                arm.kind,
+                depth,
+                config.width,
+                arm.margin,
+                arm.credit,
+                device,
+            )?
+            .with_stream_grad(arm.stream_grad);
+            crate::vector_reads::set_vector_read(Some(read.clone()));
+            println!(
+                "[vread] {} read after layer {} of {}, margin {}, credit x {}",
+                arm.kind.name(),
+                depth,
+                layers,
+                arm.margin,
+                arm.credit
+            );
+            let opt = crate::flock_read::FlockAdamW::for_vars(&read.variables())?;
+            Some((read, opt))
+        }
+        None => None,
+    };
+    // The pair rows (claude-370), when on: a zero row for each pair of turn tokens seen in at
+    // least `min` user turns of TRAIN, their own optimizer, added at every reply position.
+    let mut pair = match config.pair_rows {
+        Some(min) => {
+            let (tokens, _) = match config.train_split.as_ref() {
+                None => load_train_split(data_root)?,
+                Some(split) => load_named_split(split)?,
+            };
+            let rows = crate::pair_rows::PairRows::from_tokens(
+                model.config.vocab_size,
+                &tokens,
+                &pair_marks(),
+                min,
+                config.width,
+                device,
+            )?;
+            // claude-373: each row weighed by one over its count of different TRAIN replies.
+            let rows = if config.pair_weight {
+                let counts = crate::pair_rows::reply_counts(rows.dict(), &tokens, &pair_marks())?;
+                println!(
+                    "[pair] weight replies: {}",
+                    crate::pair_rows::reply_census(&counts)
+                );
+                // claude-374: the same counts, each row at 1 + 1/R.
+                let rows = if config.pair_weight_boost {
+                    rows.with_boost_weights(&counts)?
+                } else {
+                    rows.with_reply_weights(&counts)?
+                };
+                println!("[pair] weight kind: {}", rows.weight_kind());
+                rows
+            } else {
+                rows
+            };
+            crate::pair_rows::set_pair_rows(Some(rows.clone()));
+            println!(
+                "[pair] min {min}: {} pairs have rows; width {}; dictionary sha256 {}",
+                rows.dict().len(),
+                config.width,
+                sha256_bytes(&rows.dict().to_bytes())
+            );
+            let vars = rows.variables();
+            let opt = crate::flock_read::FlockAdamW::for_vars(&vars.iter().collect::<Vec<_>>())?;
+            Some((rows, opt))
+        }
+        None => None,
+    };
+    // The address memory's cells on the same TRAIN windows, checkpoint after checkpoint.
+    let address_census = std::cell::RefCell::new(crate::e8_address::Census::default());
+    // claude-337: the found-copy pull's record since the last checkpoint, when the pull is on.
+    let mut pull_tally = (config.hamming_attract > 0.0).then(|| PullTally::new(config.hamming_attract));
     write_initialization_record(out, config)?;
     if config.init_from.is_some() {
         let approval = std::env::var_os(INIT_APPROVAL_ENV).map(PathBuf::from);
@@ -14205,6 +16772,70 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         if let Some(memory) = crate::flock_read_memory::turn_memory() {
             memory.save(&directory)?;
         }
+        // The address memory (claude-346), at the values this checkpoint holds: the cells its
+        // rows are read by on the first TRAIN windows, then the rows.
+        if let Some(address) = crate::e8_address::address_memory() {
+            let windows = usable.len().min(crate::e8_address::CENSUS_WINDOWS);
+            let layers = address_census.borrow_mut().read(&address, || {
+                with_eval_forward(config.train_as_served, config.seed, step, || {
+                    for window in &usable[..windows] {
+                        model.hidden(&window.input_ids, 1, window.input_ids.len())?;
+                    }
+                    Ok(())
+                })
+            })?;
+            let mean = |of: &dyn Fn(&crate::e8_address::LayerCensus) -> f64| {
+                layers.iter().map(of).sum::<f64>() / layers.len().max(1) as f64
+            };
+            println!(
+                "[address] step {step}: cells in use a block {:.1}, largest cell share {:.3}, moved {}, in band {:.3}, mean |row| {:.6}",
+                mean(&|layer| layer.cells_used_mean),
+                mean(&|layer| layer.largest_cell_share),
+                layers
+                    .iter()
+                    .map(|layer| layer.moved_share)
+                    .sum::<Option<f64>>()
+                    .map_or("-".to_owned(), |sum| format!(
+                        "{:.3}",
+                        sum / layers.len().max(1) as f64
+                    )),
+                mean(&|layer| layer.in_band_share),
+                mean(&|layer| layer.row_mean_abs),
+            );
+            let line = serde_json::json!({
+                "step": step,
+                "arm": address.arm().name(),
+                "band": address.band(),
+                "windows": windows,
+                "layers": layers,
+            });
+            append_line(&out.join("address.jsonl"), &serde_json::to_string(&line)?)?;
+            address.save(&directory)?;
+        }
+        // The vector read (claude-381): its counts over the training forwards since the last
+        // checkpoint, then the read.
+        if let Some(read) = crate::vector_reads::vector_read() {
+            if let Some(stats) = crate::vector_reads::take_stats() {
+                let get = |t: &Tensor| -> Result<f64> { Ok(f64::from(t.to_scalar::<f32>()?)) };
+                let (rows, read_rows) = (get(&stats.rows)?, get(&stats.read_rows)?);
+                let (positive, chose) = (get(&stats.positive_rows)?, get(&stats.chose_positive)?);
+                println!(
+                    "[vread] step {step}: {} read {read_rows:.0} of {rows:.0} rows, positive rows {positive:.0}, chose a positive {chose:.0}, credit terms {:.0}",
+                    read.kind().name(),
+                    get(&stats.hinge_pairs)?
+                );
+            }
+            read.save(&directory)?;
+        }
+        // The pair rows (claude-370), at the values this checkpoint holds.
+        if let Some(rows) = crate::pair_rows::pair_rows() {
+            rows.save(&directory)?;
+            let (nonzero, rms) = rows.census()?;
+            println!(
+                "[pair] step {step}: rows nonzero {nonzero} of {}, rms {rms:.6}",
+                rows.dict().len()
+            );
+        }
         if let Some(served) = served {
             served.restore()?;
         }
@@ -14213,6 +16844,11 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     };
 
     checkpoint(&model, 0, None, 0.0)?;
+    // claude-385: a Starling read's offset starts from the first training batch's address scale,
+    // after the step-0 checkpoint's DEV panel.
+    if vread.as_ref().is_some_and(|(read, _)| read.kind().is_starling()) {
+        crate::vector_reads::calibrate_next_offset();
+    }
     let mut order = epoch_order(usable.len(), config.seed, 0);
     let mut cursor = 0usize;
     let mut epoch = 0u64;
@@ -14220,21 +16856,43 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
     // step after it, whose time it is compared with.
     let mut profiled_row: Option<ProfileRow> = None;
     let mut profile_rows: Vec<ProfileRow> = Vec::new();
+    // claude-380: the carry's schedule and the state its lanes carry between steps, detached.
+    let carry_lanes = config.batch / config.carry_windows.max(1);
+    let mut schedule = carry_docs
+        .map(|docs| CarrySchedule::new(docs, carry_lanes, config.seed))
+        .transpose()?;
+    let mut window_state = match schedule {
+        Some(_) => crate::geometric_stack::zero_window_state(
+            model.config.layers(),
+            carry_lanes,
+            model.config.width,
+            device,
+        )?,
+        None => Vec::new(),
+    };
     for step in 0..config.steps {
-        if cursor + config.batch > order.len() {
-            epoch += 1;
-            order = epoch_order(usable.len(), config.seed, epoch);
-            cursor = 0;
-        }
-        let picked = &order[cursor..cursor + config.batch];
+        let (picked, opens): (Vec<usize>, Vec<bool>) = match schedule.as_mut() {
+            Some(schedule) => schedule.step(config.carry_windows).into_iter().unzip(),
+            None => {
+                if cursor + config.batch > order.len() {
+                    epoch += 1;
+                    order = epoch_order(usable.len(), config.seed, epoch);
+                    cursor = 0;
+                }
+                cursor += config.batch;
+                (order[cursor - config.batch..cursor].to_vec(), Vec::new())
+            }
+        };
+        let picked = &picked[..];
         let windows: Vec<&CausalWindow> = picked.iter().map(|&i| &usable[i]).collect();
-        cursor += config.batch;
         // Each forward's rows, built before the step's clock starts: one forward of the whole
-        // batch, or one per micro-batch. A window the memory is dropped from (protocol I-B)
-        // names no memory row; its draw keeps its place in the whole batch.
-        let micro = match config.micro_batch {
-            0 => config.batch,
-            m => m,
+        // batch, or one per micro-batch, or under the carry one per chunk of its lanes. A window
+        // the memory is dropped from (protocol I-B) names no memory row; its draw keeps its
+        // place in the whole batch.
+        let micro = match (config.carry_windows, config.micro_batch) {
+            (0, 0) => config.batch,
+            (0, m) => m,
+            _ => carry_lanes,
         };
         let kept = |b: usize| {
             !memory_dropped(config.seed, step, b, config.batch, config.turn_memory_dropout)
@@ -14284,18 +16942,36 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         if served.is_some() {
             stage_clock::mark("served.round");
         }
-        let (value, mut grads) = step_gradient(
-            &model,
-            config.objective,
-            &windows,
-            config.micro_batch,
-            config.context,
-            config.train_as_served,
-            config.seed,
-            step,
-            Some((&train_mask, config.opening_weight)),
-            forward_rows,
-        )?;
+        let (value, mut grads) = if schedule.is_some() {
+            carry_step_gradient(
+                &model,
+                config.objective,
+                &windows,
+                &opens,
+                carry_lanes,
+                config.context,
+                config.train_as_served,
+                config.seed,
+                step,
+                Some((&train_mask, config.opening_weight)),
+                &mut window_state,
+                forward_rows,
+            )?
+        } else {
+            step_gradient(
+                &model,
+                config.objective,
+                &windows,
+                config.micro_batch,
+                config.context,
+                config.train_as_served,
+                config.seed,
+                step,
+                Some((&train_mask, config.opening_weight)),
+                forward_rows,
+                pull_tally.as_mut(),
+            )?
+        };
         // The gradient, taken at the exported values, moves the float values they came from.
         if let Some(served) = served {
             served.restore()?;
@@ -14331,6 +17007,19 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         }
         if let Some((mem, opt)) = memory.as_mut() {
             opt.step_vars(&mem.variables(), &grads, lr)?;
+        }
+        // The address memory's rows (claude-346): a position's rows, one per block, take the
+        // same gradient, so each steps at the rate over the block count.
+        if let Some((address, opt)) = address.as_mut() {
+            opt.step_vars(&address.variables(), &grads, lr * address.rate())?;
+        }
+        // The vector read (claude-381), at the trainer's rate.
+        if let Some((read, opt)) = vread.as_mut() {
+            opt.step_vars(&read.variables(), &grads, lr)?;
+        }
+        // The pair rows (claude-370), at the trainer's rate, only on a step that read a bag.
+        if let Some((rows, opt)) = pair.as_mut() {
+            rows.step(opt, &grads, lr)?;
         }
         crate::flock_read_memory::set_memory_rows(None);
         crate::flock_read_memory::set_reply_rows(None);
@@ -14392,9 +17081,31 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
                 train_seconds,
             )?;
             (loss_sum, loss_steps) = (0.0, 0);
+            if let Some(tally) = pull_tally.as_mut() {
+                append_line(&out.join("pull.jsonl"), &serde_json::to_string(&tally.line(step + 1))?)?;
+            }
+            // claude-351: the place read's reading for this checkpoint, on a run with it.
+            if let Some(line) = place_line(step + 1)? {
+                append_line(&out.join("place.jsonl"), &serde_json::to_string(&line)?)?;
+            }
         }
     }
     Ok(())
+}
+
+/// claude-351: a checkpoint's `place.jsonl` line on a language run with the place read
+/// (`run_long` under `--hamming-place`): the step, and the place read's gains and, since the
+/// line before, its votes and mean pull (`PlaceRead::reading`, which starts the next tally).
+/// None on a run without the place read, which writes no such file.
+fn place_line(step: usize) -> Result<Option<serde_json::Value>> {
+    let Some(reads) = crate::flock_read_hamming::hamming_reads() else {
+        return Ok(None);
+    };
+    let Some(place) = reads.place() else {
+        return Ok(None);
+    };
+    let line = place.line(step)?;
+    Ok(Some(line))
 }
 
 #[cfg(test)]
@@ -15095,6 +17806,127 @@ mod tests {
         assert_eq!(got, expected);
     }
 
+    /// claude-385: a read's choice counts at the scored rows. Two-class: a pick of the asked
+    /// fact's value position is the target, of the other fact's the other, of a filler a read
+    /// only, none nothing. Key-again: a pick of the value's first position is the target. A short
+    /// recording and a later position are refused.
+    #[test]
+    fn read_choices_count_the_asked_fact_at_the_scored_rows() {
+        let held_queries = vec![recall_query_window(7, 0, SHEET_CONTEXT, 4).unwrap()];
+        let qs = &held_queries[0].1;
+        let mut chosen = vec![0u32; SHEET_CONTEXT];
+        chosen[qs[0].scored_offset] = qs[0].ask_value_pos as u32;
+        chosen[qs[1].scored_offset] = qs[1].other_value_pos as u32;
+        chosen[qs[2].scored_offset] = 1;
+        let (read, target, other) = count_read_choices(&[], &held_queries, &chosen).unwrap();
+        let (mut want_read, mut want_target, mut want_other) = ([0usize; 4], [0usize; 4], [0usize; 4]);
+        want_read[2 + qs[0].bucket] += 1;
+        want_read[2 + qs[1].bucket] += 1;
+        want_read[2 + qs[2].bucket] += 1;
+        want_target[2 + qs[0].bucket] += 1;
+        want_other[2 + qs[1].bucket] += 1;
+        assert_eq!((read, target, other), (want_read, want_target, want_other));
+
+        let held_out = vec![recall_window(7, 0, SHEET_CONTEXT, 4).unwrap()];
+        let (window, buckets) = &held_out[0];
+        let (t, v) = (window.scored_offsets[0], window.scored_targets[0]);
+        let first = window.input_ids.iter().position(|&id| id == v).unwrap();
+        assert!(first < t);
+        let mut chosen = vec![0u32; SHEET_CONTEXT];
+        chosen[t] = first as u32;
+        let (read, target, other) = count_read_choices(&held_out, &[], &chosen).unwrap();
+        let mut want = [0usize; 4];
+        want[buckets[0]] = 1;
+        assert_eq!((read, target, other), (want, want, [0; 4]));
+
+        assert!(count_read_choices(&held_out, &[], &chosen[1..]).is_err());
+        chosen[t] = t as u32 + 1;
+        let later = count_read_choices(&held_out, &[], &chosen).unwrap_err().to_string();
+        assert!(later.contains("later position"), "{later}");
+    }
+
+    /// claude-395: the row files put each query's targets at `window * time + scored_offset`,
+    /// and nowhere else.
+    #[test]
+    fn recall_row_targets_sit_at_the_scored_rows() {
+        let windows: Vec<Vec<RecallQuery>> = (0..3)
+            .map(|i| recall_query_window(11, i, SHEET_CONTEXT, 4).unwrap().1)
+            .collect();
+        let t = recall_row_targets(&windows, SHEET_CONTEXT).unwrap();
+        assert_eq!(t.ask.len(), 3 * SHEET_CONTEXT);
+        assert_eq!(t.bucket.len(), 3 * SHEET_CONTEXT);
+        let mut marked = 0;
+        for (w, qs) in windows.iter().enumerate() {
+            for q in qs {
+                let row = w * SHEET_CONTEXT + q.scored_offset;
+                assert_eq!(t.ask[row] as usize, q.ask_value_pos);
+                assert_eq!(t.other[row] as usize, q.other_value_pos);
+                assert_eq!(t.bucket[row] as usize, q.bucket + 1);
+                assert!(t.random[row] >= 1 && t.random[row] as usize <= q.scored_offset);
+                marked += 1;
+            }
+        }
+        assert_eq!(marked, 3 * RECALL_QUERY_EPISODES);
+        let nonzero = |v: &[u32]| v.iter().filter(|&&x| x != 0).count();
+        assert_eq!(nonzero(&t.ask), marked);
+        assert_eq!(nonzero(&t.other), marked);
+        assert_eq!(nonzero(&t.random), marked);
+        assert_eq!(t.bucket.iter().filter(|&&b| b != 0).count(), marked);
+    }
+
+    /// claude-395: a target that is not an earlier row of its window, a row outside the window
+    /// and two queries on one row are each refused.
+    #[test]
+    fn recall_row_targets_refuse_a_bad_query() {
+        let (_, qs) = recall_query_window(11, 0, SHEET_CONTEXT, 4).unwrap();
+        let mut late = qs.clone();
+        late[0].ask_value_pos = late[0].scored_offset + 1;
+        assert!(recall_row_targets(&[late], SHEET_CONTEXT).is_err());
+        let mut zero = qs.clone();
+        zero[1].other_value_pos = 0;
+        assert!(recall_row_targets(&[zero], SHEET_CONTEXT).is_err());
+        let mut outside = qs.clone();
+        outside[2].scored_offset = SHEET_CONTEXT;
+        assert!(recall_row_targets(&[outside], SHEET_CONTEXT).is_err());
+        let mut twice = qs.clone();
+        twice[3].scored_offset = twice[2].scored_offset;
+        assert!(recall_row_targets(&[twice], SHEET_CONTEXT).is_err());
+        assert!(recall_row_targets(&[qs], SHEET_CONTEXT).is_ok());
+    }
+
+    /// claude-395: C2's random targets depend on `(window, slot)` only: the same windows give
+    /// the same draws, and a window's draws do not change when another window is added.
+    #[test]
+    fn recall_row_targets_draw_the_same_random_rows() {
+        let windows: Vec<Vec<RecallQuery>> = (0..4)
+            .map(|i| recall_query_window(13, i, SHEET_CONTEXT, 4).unwrap().1)
+            .collect();
+        let a = recall_row_targets(&windows, SHEET_CONTEXT).unwrap();
+        let b = recall_row_targets(&windows, SHEET_CONTEXT).unwrap();
+        assert_eq!(a, b);
+        let fewer = recall_row_targets(&windows[..2], SHEET_CONTEXT).unwrap();
+        assert_eq!(fewer.random[..], a.random[..2 * SHEET_CONTEXT]);
+        assert_ne!(a.random, a.ask);
+    }
+
+    /// claude-395: the native picks file reads back as little-endian `u32`s, one per row, and a
+    /// file of another length or one that is missing is refused.
+    #[test]
+    fn native_picks_read_one_per_row() {
+        let dir = std::env::temp_dir().join(format!("claude-395-picks-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("picks.u32");
+        let picks: Vec<u32> = vec![0, 1, 7, 191, 3, 0];
+        let bytes: Vec<u8> = picks.iter().flat_map(|p| p.to_le_bytes()).collect();
+        std::fs::write(&path, &bytes).unwrap();
+        assert_eq!(read_native_picks(&path, 6).unwrap(), picks);
+        assert!(read_native_picks(&path, 5).is_err());
+        assert!(read_native_picks(&path, 7).is_err());
+        assert!(read_native_picks(&dir.join("none.u32"), 6).is_err());
+        std::fs::remove_file(&path).unwrap();
+        std::fs::remove_dir(&dir).unwrap();
+    }
+
     /// claude-328's I-2 and I-3 on every structural rule, for both forms: the query token, the
     /// bijection, one write per relation, the target, 4 targets, the ranges, the distances and
     /// the tails.
@@ -15487,6 +18319,125 @@ mod tests {
         }
     }
 
+    /// A hand-built query: slot, bucket, query position, asked and other value positions.
+    fn other_query(slot: usize, bucket: usize, q: usize, pa: usize, po: usize) -> RecallQuery {
+        RecallQuery {
+            slot,
+            bucket,
+            j: 0,
+            query_pos: q,
+            scored_offset: q + 4,
+            ask_relation: 16,
+            other_relation: 17,
+            ask_value: 528,
+            other_value: 529,
+            ask_value_pos: pa,
+            other_value_pos: po,
+            ask_distance: q - pa,
+            other_distance: q - po,
+            ask_nearer: q - pa < q - po,
+            ask_first: pa < po,
+            values: Vec::new(),
+        }
+    }
+
+    /// claude-397: the consistent sets on a hand-built window (buckets 33–96 and 97–180). Slot 2
+    /// keeps 90 and 120 but not 100, slot 0's asked fact; slot 3 likewise drops 20.
+    #[test]
+    fn recall_other_candidates_follow_the_stream() {
+        let window = [
+            other_query(0, 0, 150, 100, 90),
+            other_query(1, 1, 156, 20, 30),
+            other_query(2, 0, 162, 110, 120),
+            other_query(3, 1, 168, 40, 50),
+        ];
+        let sets = recall_other_candidates(&window).unwrap();
+        let got: Vec<Vec<usize>> = sets.iter().map(|c| c.candidates.clone()).collect();
+        assert_eq!(got, vec![vec![90, 110], vec![30, 40, 50], vec![90, 120], vec![30, 50]]);
+        assert_eq!(sets[0].facts, vec![20, 30, 40, 50, 90, 100, 110, 120]);
+        let c = &sets[0];
+        assert_eq!(c.class(100), OtherPickClass::Asked);
+        assert_eq!(c.class(90), OtherPickClass::Other);
+        assert_eq!(c.class(110), OtherPickClass::Candidate);
+        assert_eq!(c.class(20), OtherPickClass::Fact);
+        assert_eq!(c.class(0), OtherPickClass::Row);
+        assert_eq!(c.class(5), OtherPickClass::Row);
+        // K = 1: slot 2's facts move to 125 and 130, out of slot 0's range.
+        let one = [
+            other_query(0, 0, 150, 100, 90),
+            other_query(1, 1, 156, 20, 30),
+            other_query(2, 0, 162, 130, 125),
+            other_query(3, 1, 168, 40, 50),
+        ];
+        assert_eq!(recall_other_candidates(&one).unwrap()[0].candidates, vec![90]);
+        // Refusals: a repeated fact, and an other fact outside the asked fact's bucket.
+        let mut twice = window.clone();
+        twice[3].other_value_pos = 20;
+        assert!(recall_other_candidates(&twice).is_err());
+        let mut far = window.clone();
+        far[0].other_value_pos = 140;
+        let refused = recall_other_candidates(&far).unwrap_err().to_string();
+        assert!(refused.contains("not consistent"), "{refused}");
+    }
+
+    /// claude-397: on real windows the other fact is always consistent, the target check passes
+    /// on the files the run would write and fails on one changed word, and picks that copy the
+    /// other fact class as `other` everywhere.
+    #[test]
+    fn recall_other_ceiling_reads_real_windows() {
+        let dir = std::env::temp_dir().join(format!("recall-other-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let (seed, header, windows) = (1u64, 4usize, 8u64);
+        let rows = windows as usize * SHEET_CONTEXT;
+        let (mut ask, mut other, mut bucket) = (vec![0u32; rows], vec![0u32; rows], vec![0u8; rows]);
+        for w in 0..windows {
+            let (_, qs) =
+                recall_query_window(seed ^ RECALL_EVAL_SEED, w, SHEET_CONTEXT, header).unwrap();
+            for q in qs {
+                let row = w as usize * SHEET_CONTEXT + q.scored_offset;
+                ask[row] = q.ask_value_pos as u32;
+                other[row] = q.other_value_pos as u32;
+                bucket[row] = q.bucket as u8 + 1;
+            }
+        }
+        let bytes = |v: &[u32]| v.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>();
+        let dump = dir.join("held.q31");
+        fs::write(dir.join("held.q31.ask.u32"), bytes(&ask)).unwrap();
+        fs::write(dir.join("held.q31.other.u32"), bytes(&other)).unwrap();
+        fs::write(dir.join("held.q31.bucket.u8"), &bucket).unwrap();
+        fs::write(dir.join("other.picks"), bytes(&other)).unwrap();
+        let settings = OtherCeilingSettings {
+            seed,
+            header,
+            windows,
+            held: true,
+            targets: Some(dump.clone()),
+            picks: vec![("other".into(), dir.join("other.picks"))],
+        };
+        let report = recall_other_ceiling(&settings).unwrap();
+        assert_eq!(report.targets_rows_checked, Some(rows as u64));
+        let total: u64 = report.buckets.iter().map(|b| b.rows).sum();
+        assert_eq!(total, windows * RECALL_QUERY_EPISODES as u64);
+        for b in &report.buckets {
+            assert_eq!(b.k_counts[0], 0, "the other fact is always consistent");
+            assert_eq!(b.k_counts.iter().sum::<u64>(), b.rows);
+        }
+        for o in &report.picks["other"] {
+            assert_eq!(o.other, o.rows);
+            assert_eq!(o.other_on_k1, o.k1_rows);
+            assert_eq!(o.other_on_k2, o.k2_rows);
+        }
+        let mut wrong = other.clone();
+        let first = wrong.iter().position(|&x| x != 0).unwrap();
+        wrong[first] += 1;
+        fs::write(dir.join("held.q31.other.u32"), bytes(&wrong)).unwrap();
+        assert!(recall_other_ceiling(&settings).is_err(), "a changed target word is refused");
+        assert_eq!(ratio3(1, 3), "0.333");
+        assert_eq!(ratio3(2, 3), "0.667");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
     /// claude-328's I-2 balance over 10,000 windows of each form. In each bucket × slot cell (about
     /// 5,000 queries) the asked fact is the nearer one, and relation 0 is asked, each 0.5 ± 0.02;
     /// each slot receives a 33–96 bucket in 0.5 ± 0.02 of windows. "Written first" is not a
@@ -15797,21 +18748,30 @@ mod tests {
             type_spin: false,
             hamming_copy_key: 1,
             hamming_copy_keys: None,
+            hamming_copy_latest: false,
+            hamming_copy_longest: None,
             hamming_ask: false,
             hamming_attract: 0.0,
             hamming_attract_at_question: false,
             hamming_hold: 0,
+            hamming_attract_at_both: false,
+            hamming_carry_question: 0,
+            hamming_place: None,
+            hamming_place_pull: 0.0,
             fix_input_table: false,
             train_split: None,
             opening_weight: 1,
             samples: 6,
             reply_tokens: 48,
             micro_batch: 0,
+            carry_windows: 0,
             fast_rivals: false,
             profile: 0,
             turn_memory: 0,
             turn_memory_empty: false,
             turn_memory_reply: false,
+            turn_memory_leave_copied: false,
+            turn_memory_tail: 0,
             turn_memory_dropout: 0,
             fbs_arm: FbsArm::OneAtomActive,
             reply_read_train: None,
@@ -15820,6 +18780,12 @@ mod tests {
             context: hs::SHEET_CONTEXT,
             train_targets: TrainTargets::Observed,
             init_from: None,
+            address_memory: None,
+            address_band: None,
+            pair_rows: None,
+            pair_weight: false,
+            pair_weight_boost: false,
+            vector_read: None,
         }
     }
 
@@ -17302,6 +20268,204 @@ mod tests {
     }
 
     #[test]
+    fn a_tail_key_names_what_the_first_eight_tokens_end_before() {
+        // Questions with the same first 8 tokens and different last words, each answered by its
+        // own token: the first-8 key cannot tell them apart, the tail key can.
+        let row = |end: u32, target: u32| ReplyRow {
+            window: 0,
+            offset: 0,
+            prompt: [&[1u32, 2, 3, 4, 5, 6, 7, 8][..], &[end, 9]].concat(),
+            reply: vec![30],
+            target,
+            opening: false,
+            copy: false,
+        };
+        let train = [row(40, 50), row(41, 51), row(41, 51)];
+        // DEV: both held questions, and one whose last word TRAIN never held.
+        let dev = [row(40, 50), row(41, 51), row(42, 51)];
+        // The first-8 key keeps its commonest target, 51 (2 of 3 rows), for every question.
+        let head = &reply_bound_rows(ReplyKey::TurnPosition(1), &train, &dev, &[0.5])[0];
+        assert_eq!((head.rest.named, head.rest.hits), (3, 2));
+        // The tail key names each held question right and the unseen one not at all.
+        let tail = &reply_bound_rows(ReplyKey::TailPosition(8), &train, &dev, &[0.5])[0];
+        assert_eq!((tail.rest.named, tail.rest.hits), (2, 2));
+        // Asked in order, the tail names the held two and the first-8 key the unseen one.
+        let chain = [ReplyKey::TailPosition(8), ReplyKey::TurnPosition(1)];
+        let both = &reply_bound_backoff_rows(&chain, &train, &dev, &[0.5])[0];
+        assert_eq!((both.rest.named, both.rest.hits), (3, 3));
+        assert_eq!(
+            both.key,
+            "tail-8+position+reply-last-1, else turn-8+position+reply-last-1"
+        );
+        // The first 8 and the last 8 of a 10-token prompt are the whole prompt, each token once.
+        let whole = ReplyKey::HeadTail(8).of(&dev[0]);
+        assert_eq!(whole[..10], dev[0].prompt[..]);
+        assert_eq!(whole[10..], [u32::MAX, 1, u32::MAX, 30]);
+    }
+
+    /// A reply row whose turn is the eight ids 1 to 8, then `middle` and `end`, one token into
+    /// its reply (claude-345).
+    fn chain_row(middle: u32, end: [u32; 2], target: u32) -> ReplyRow {
+        ReplyRow {
+            window: 0,
+            offset: 0,
+            prompt: [&[1u32, 2, 3, 4, 5, 6, 7, 8][..], &[middle], &end].concat(),
+            reply: vec![30],
+            target,
+            opening: false,
+            copy: false,
+        }
+    }
+
+    /// claude-345: with a tail, one table holds each row under its three keys, the read asks
+    /// both ends, then the tail, then the first 8, and the trainer's key is the three joined.
+    #[test]
+    fn a_chain_table_holds_three_forms_and_the_read_asks_them_in_order() {
+        use crate::flock_read_memory::{reply_tail, set_turn_memory, TurnMemory, CHAIN};
+        // One question answered 50; another with the same first 8 and last 2 tokens, twice, 51.
+        let train = [
+            chain_row(40, [60, 61], 50),
+            chain_row(41, [60, 61], 51),
+            chain_row(41, [60, 61], 51),
+        ];
+        let built = chain_reply_table(&train, 2, 0.5, None);
+        // Two both-ends keys, one tail key, one first-8 key; every row named by its own.
+        assert_eq!((built.built, built.left, built.yielded, built.named), (4, 0, 0, 3));
+        let mut openings = std::collections::HashMap::new();
+        openings.insert(vec![1u32, 2], 30u32);
+        let memory = TurnMemory::new(2, openings, 4, &Device::Cpu)
+            .unwrap()
+            .with_reply(built.table.clone())
+            .unwrap()
+            .with_reply_tail(2)
+            .unwrap();
+        set_turn_memory(Some(memory.clone()));
+        assert_eq!(reply_tail(), 2);
+        // The key the trainer asks with is the three forms joined, in the read's order.
+        let wide = reply_key(&train[0]);
+        let forms: Vec<&[u32]> = wide.split(|&id| id == CHAIN).collect();
+        assert_eq!(forms.len(), 3);
+        assert_eq!(forms[0], ReplyKey::HeadTail(TURN_KEY).of(&train[0]));
+        assert_eq!(forms[1], ReplyKey::TailPosition(2).of(&train[0]));
+        assert_eq!(forms[2], ReplyKey::TurnPosition(1).of(&train[0]));
+        assert_eq!(forms[1][0], u32::MAX, "the tail form opens with its mark");
+        // The held question: both ends name 50, where the tail and the first 8 alone say 51.
+        assert_eq!(memory.reply_lookup(&wide), (forms[0], Some(50)));
+        assert_eq!(memory.reply_stored(forms[1]), Some(51));
+        assert_eq!(memory.reply_stored(forms[2]), Some(51));
+        // A new middle with a held ending: the tail names it. A new ending: the first 8.
+        let by_tail = reply_key(&chain_row(42, [60, 61], 0));
+        assert_eq!(memory.reply_lookup(&by_tail), (forms[1], Some(51)));
+        let by_head = reply_key(&chain_row(42, [70, 71], 0));
+        assert_eq!(memory.reply_lookup(&by_head), (forms[2], Some(51)));
+        // A new start: nothing, and the lookup reports the first-8 key it asked last.
+        let mut other = chain_row(42, [70, 71], 0);
+        other.prompt[0] = 9;
+        let missed = reply_key(&other);
+        let last = ReplyKey::TurnPosition(1).of(&other);
+        assert_eq!(memory.reply_lookup(&missed), (&last[..], None));
+        // With no memory set there is no tail, and the key is the first-8 form alone, as before.
+        set_turn_memory(None);
+        assert_eq!(reply_tail(), 0);
+        assert_eq!(reply_key(&train[0]), ReplyKey::TurnPosition(1).of(&train[0]));
+    }
+
+    /// claude-345: a key the copy read owns stops the chain. The table leaves it out, and with
+    /// it every wider key its rows would fall through to, so no stored row writes over the copy.
+    #[test]
+    fn a_wider_key_yields_where_the_copy_read_owns_the_exact_key() {
+        // Two recall rows the copy read names, their values differing; three rows of another
+        // question with the same first 8 and last 2 tokens, answered 51.
+        let rows = [
+            chain_row(40, [60, 61], 70),
+            chain_row(40, [60, 61], 71),
+            chain_row(41, [60, 61], 51),
+            chain_row(41, [60, 61], 51),
+            chain_row(41, [60, 61], 51),
+        ];
+        let copied = [true, true, false, false, false];
+        let built = chain_reply_table(&rows, 2, 0.5, Some(&copied));
+        // Four keys at the share. The recall question's own key is the copy read's; the tail
+        // and the first-8 key, which its rows would fall through to, yield.
+        assert_eq!((built.built, built.left, built.yielded), (4, 1, 2));
+        assert_eq!(built.table.len(), 1);
+        assert_eq!(built.table.get(&ReplyKey::HeadTail(TURN_KEY).of(&rows[2])), Some(&51));
+        assert_eq!(built.named, 3);
+        // One form has nothing to fall through to: the table is the one built before the chain,
+        // the first-8 keys at their share less the keys the copy read owns. Here it stores 51
+        // under the key the two recall rows also read.
+        let one = chain_reply_table(&rows, 0, 0.5, Some(&copied));
+        let pairs: Vec<(Vec<u32>, u32)> = rows
+            .iter()
+            .map(|row| (ReplyKey::TurnPosition(1).of(row), row.target))
+            .collect();
+        let named: Vec<(Vec<u32>, bool)> = pairs
+            .iter()
+            .zip(&copied)
+            .map(|((key, _), &copied)| (key.clone(), copied))
+            .collect();
+        let owned = crate::flock_read_memory::copy_owned_keys(&named);
+        let mut before = crate::flock_read_memory::build_reply_table(&pairs, 0.5);
+        before.retain(|key, _| !owned.contains(key));
+        assert_eq!(one.table, before);
+        assert_eq!((one.left, one.yielded, one.table.len()), (0, 0, 1));
+    }
+
+    /// claude-345: with a tail, the key the decoder forms at each later step of a reply is
+    /// still the row's key, so the tail reads the turn's end as the table's rows were keyed.
+    #[test]
+    fn the_greedy_reply_key_is_the_rows_key_under_a_tail() {
+        use crate::flock_read_memory::{set_reply_tail, CHAIN};
+        // BOS, a prompt (10 11 12), a reply (11 12 30), a prompt (13), a reply (31).
+        let tokens = [0u32, 10, 11, 12, 11, 12, 30, 13, 31];
+        let mask = [0u8, 0, 0, 0, 1, 1, 1, 0, 1];
+        let (windows, _) = hs::build_document_windows(&tokens, &mask, 16, 0).unwrap();
+        set_reply_tail(2);
+        let rows = reply_rows(&windows, &mask);
+        let later: Vec<&ReplyRow> = rows.iter().filter(|r| !r.opening).collect();
+        assert_eq!(later.len(), 2);
+        for row in &later {
+            let ids = &windows[row.window].input_ids;
+            let opening = row.offset - row.reply.len();
+            let key = greedy_reply_key(&ids[..=row.offset], opening, &row.reply).unwrap();
+            assert_eq!(key, reply_key(row), "row at offset {}", row.offset);
+            assert_eq!(key.iter().filter(|&&id| id == CHAIN).count(), 2);
+        }
+        set_reply_tail(0);
+    }
+
+    /// claude-345: on a turn longer than both cuts the decoder's key is still the row's key, and
+    /// its ids are the three forms as the serving engine forms them: the turn's first 8 ids with
+    /// the last 8 of the rest, its last `tail` ids behind a pad, and its first 8 alone.
+    #[test]
+    fn the_greedy_reply_key_reads_the_end_of_a_long_turn() {
+        use crate::flock_read_memory::{set_reply_tail, CHAIN};
+        const PAD: u32 = u32::MAX;
+        // BOS, a prompt of 19 ids (10..=28), a reply (11 12 30).
+        let mut tokens = vec![0u32];
+        tokens.extend(10..=28);
+        tokens.extend([11, 12, 30]);
+        let mut mask = vec![0u8; 20];
+        mask.extend([1, 1, 1]);
+        let (windows, _) = hs::build_document_windows(&tokens, &mask, 32, 0).unwrap();
+        set_reply_tail(2);
+        let rows = reply_rows(&windows, &mask);
+        let row = rows.iter().find(|r| r.reply == [11]).unwrap();
+        let ids = &windows[row.window].input_ids;
+        let opening = row.offset - row.reply.len();
+        let key = greedy_reply_key(&ids[..=row.offset], opening, &row.reply).unwrap();
+        let of_row = reply_key(row);
+        set_reply_tail(0);
+        let stem = [PAD, 1, PAD, 11];
+        let head: Vec<u32> = (10..=17).chain(stem).collect();
+        let tail: Vec<u32> = [PAD, 27, 28].into_iter().chain(stem).collect();
+        let ends: Vec<u32> = (10..=17).chain(21..=28).chain(stem).collect();
+        let expected = [ends, tail, head].join(&CHAIN);
+        assert_eq!(key, expected);
+        assert_eq!(of_row, expected);
+    }
+
+    #[test]
     fn the_reply_table_names_what_the_probe_counts() {
         // BOS, a turn, a reply; another turn with the same start, a reply that differs at its
         // second token; a third.
@@ -17615,6 +20779,7 @@ mod tests {
                     3,
                     None,
                     |_, _| Ok(()),
+                    None,
                 )
             })
             .unwrap()
@@ -17802,6 +20967,194 @@ mod tests {
         assert!(!FAST_RIVALS.with(|on| on.get()));
     }
 
+    /// claude-337: `count` language windows of `context` tokens, each scoring a few rows whose
+    /// targets stand earlier in the window (copies), one whose target stands only at position 0,
+    /// one whose target stands only at the row itself, and one with no copy at all.
+    fn pull_windows(count: usize, context: usize) -> Vec<CausalWindow> {
+        (0..count)
+            .map(|b| {
+                // Distinct tokens 100.. except where a copy is planted.
+                let mut input_ids: Vec<u32> = (0..context).map(|i| (100 + i + b * 7) as u32).collect();
+                input_ids[0] = 9; // only at position 0, never a candidate
+                input_ids[5] = 11; // a copy for the row at 40 + b
+                input_ids[6] = 12; // a copy for the row at 60
+                input_ids[70] = 13; // only at the row itself, 70
+                let offsets: Vec<usize> = vec![40 + b, 60, 61, 70, 80];
+                let targets: Vec<u32> = vec![11, 12, 9, 13, 4000];
+                CausalWindow {
+                    doc_id: b,
+                    scored_corpus_positions: offsets.iter().map(|&o| b * context + o + 1).collect(),
+                    input_ids,
+                    scored_offsets: offsets,
+                    scored_targets: targets,
+                }
+            })
+            .collect()
+    }
+
+    /// claude-337: the language pull's rows are exactly the scored rows `pull_pairs` finds a copy
+    /// for, at `b · context + offset`; a target only at position 0, only at the row itself, or
+    /// nowhere earlier is not listed.
+    #[test]
+    fn language_pull_rows_are_the_scored_rows_with_an_earlier_copy() {
+        let context = 96;
+        let owned = pull_windows(3, context);
+        let windows: Vec<&CausalWindow> = owned.iter().collect();
+        let got = language_pull_rows(&windows, context);
+        let (ids, scored, targets) = assemble(&windows);
+        let brute: Vec<(usize, u32)> = scored
+            .iter()
+            .zip(&targets)
+            .map(|(&r, &t)| (r as usize, t))
+            .filter(|&pull| {
+                let (_, spans) = crate::flock_read_hamming::pull_pairs(&ids, context, &[pull]).unwrap();
+                !spans.is_empty()
+            })
+            .collect();
+        assert_eq!(got, brute);
+        let want: Vec<(usize, u32)> = (0..3)
+            .flat_map(|b| [(b * context + 40 + b, 11u32), (b * context + 60, 12)])
+            .collect();
+        assert_eq!(got, want, "two copy rows a window, at b · context + offset");
+    }
+
+    /// claude-337: the tally's line is the mean distance over the steps that pulled and the mean
+    /// copy rows over every step, and the tally starts again at the same λ.
+    #[test]
+    fn the_pull_tally_records_its_means_and_starts_again() {
+        let mut tally = PullTally::new(0.5);
+        tally.record(Some(0.25), 6);
+        tally.record(None, 0);
+        tally.record(Some(0.75), 2);
+        let line = tally.line(64);
+        assert_eq!(line["step"], 64);
+        assert_eq!(line["hamming_attract"], 0.5);
+        assert_eq!(line["pull_distance_mean"], 0.5);
+        assert_eq!(line["pull_rows_mean"], 8.0 / 3.0);
+        assert_eq!(line["steps"], 3);
+        assert_eq!(tally, PullTally::new(0.5));
+        let empty = tally.line(128);
+        assert!(empty["pull_distance_mean"].is_null() && empty["pull_rows_mean"].is_null());
+    }
+
+    /// claude-337: a language run takes the pull at its scored rows and refuses the question
+    /// placements by name.
+    #[test]
+    fn a_language_run_refuses_the_question_placements_by_name() {
+        let base = LongConfig { hamming_read: 4, hamming_ask: true, hamming_attract: 1.0, ..config(0, None) };
+        assert!(refuse_pull_placement_outside_recall(&base).is_ok());
+        for (place, c) in [
+            ("question", LongConfig { hamming_attract_at_question: true, ..base.clone() }),
+            ("both", LongConfig { hamming_attract_at_both: true, ..base.clone() }),
+        ] {
+            let err = refuse_pull_placement_outside_recall(&c).err().unwrap().to_string();
+            assert!(err.contains(&format!("--hamming-attract-at {place}")) && err.contains("--recall"), "{err}");
+        }
+        assert!(refuse_pull_outside_recall(&base).is_err(), "the other runners still refuse it");
+        // run_long itself refuses them, and a weight below 0, first, before it reads its data root
+        // or writes `config.json`.
+        let missing = std::env::temp_dir().join(format!("claude-337-none-{}", std::process::id()));
+        for (expect, c) in [
+            ("--hamming-attract-at question", LongConfig { hamming_attract_at_question: true, ..base.clone() }),
+            ("--hamming-attract-at both", LongConfig { hamming_attract_at_both: true, ..base.clone() }),
+            ("a weight of at least 0", LongConfig { hamming_attract: -1.0, ..base.clone() }),
+        ] {
+            let refusal = run_long(&missing, &missing.join("out"), &c, &Device::Cpu)
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_default();
+            assert!(refusal.contains(expect), "{refusal}");
+            assert!(!missing.exists());
+        }
+    }
+
+    /// claude-337: a language run's `config.json` records the pull's weight, and leaves it out at 0.
+    #[test]
+    fn a_language_runs_config_records_the_pull_only_when_on() {
+        let on = LongConfig { hamming_read: 4, hamming_ask: true, hamming_attract: 1.0, ..config(0, None) };
+        let json = serde_json::to_string(&on).unwrap();
+        assert!(json.contains("\"hamming_attract\":1.0"), "{json}");
+        assert!(!json.contains("hamming_attract_at"), "{json}");
+        let off = serde_json::to_string(&LongConfig { hamming_attract: 0.0, ..on }).unwrap();
+        assert!(!off.contains("hamming_attract"), "{off}");
+    }
+
+    /// claude-337: the pull in [`step_gradient`]. At λ = 0 the step is bit-identical to a step
+    /// without it; at λ = 1 the logged loss is still the task loss, the pull's gradient reaches the
+    /// ask table and the carry, and a micro-batched step gives the one-forward step's gradient and
+    /// pull reading.
+    /// The model's forward runs on CUDA only, so this test runs on the pod.
+    #[cfg(feature = "cuda")]
+    fn the_language_pull_joins_the_step_gradient_on(device: &Device) {
+        let config = LongConfig {
+            hamming_read: 4,
+            hamming_ask: true,
+            hamming_carry_question: 4,
+            hamming_attract: 1.0,
+            ..config(0, None)
+        };
+        let (reads, _) = start_hamming(&config, device).unwrap().unwrap();
+        let model = build_fbs_model_at(FbsArm::OneAtomActive, 1, config.width, device).unwrap();
+        let owned = pull_windows(4, SHEET_CONTEXT);
+        let windows: Vec<&CausalWindow> = owned.iter().collect();
+        let step = |micro: usize, tally: Option<&mut PullTally>| {
+            step_gradient(&model, PointObjective::Nearest, &windows, micro, SHEET_CONTEXT, false, 1, 3, None, |_, _| Ok(()), tally)
+                .unwrap()
+        };
+        let flat = |t: &Tensor| t.flatten_all().unwrap().to_dtype(DType::F32).unwrap().to_vec1::<f32>().unwrap();
+        let bits = |t: &Tensor| flat(t).iter().map(|v| v.to_bits()).collect::<Vec<_>>();
+        let mut vars: Vec<(String, candle_core::Var)> = model.variables().iter().map(|(n, v)| (n.clone(), v.clone())).collect();
+        vars.extend(reads.variables().into_iter().enumerate().map(|(i, v)| (format!("read{i}"), v.clone())));
+
+        let (plain, plain_grads) = step(0, None);
+        let mut zero = PullTally::new(0.0);
+        let (at_zero, zero_grads) = step(0, Some(&mut zero));
+        assert_eq!(plain.to_bits(), at_zero.to_bits(), "λ = 0 leaves the loss");
+        for (name, var) in &vars {
+            let (a, b) = (plain_grads.get(var.as_tensor()), zero_grads.get(var.as_tensor()));
+            assert_eq!(a.map(bits), b.map(bits), "λ = 0 leaves {name}'s gradient");
+        }
+        assert_eq!(zero.steps, 0, "λ = 0 records nothing");
+
+        let mut whole = PullTally::new(1.0);
+        let (pulled, pulled_grads) = step(0, Some(&mut whole));
+        assert_eq!(plain.to_bits(), pulled.to_bits(), "the logged loss is the task loss");
+        assert_eq!((whole.steps, whole.rows, whole.pulled_steps), (1, 8, 1), "two copy rows a window");
+        let read = &reads.reads[1];
+        let ask = read.ask.as_ref().unwrap();
+        let carry = &read.carry.as_ref().unwrap().gain;
+        let a = flat(pulled_grads.get(ask.as_tensor()).expect("the pull moves the ask table"));
+        assert!(a.iter().any(|&v| v != 0.0), "a nonzero ask-table gradient");
+        let before = plain_grads.get(ask.as_tensor()).map(flat);
+        assert_ne!(before.as_deref(), Some(a.as_slice()), "the pull changes the ask table's gradient");
+        let c = flat(pulled_grads.get(carry.as_tensor()).expect("the pull moves the carry"));
+        assert!(c.iter().any(|&v| v != 0.0), "a nonzero carry gradient");
+
+        let mut split = PullTally::new(1.0);
+        let (_, split_grads) = step(2, Some(&mut split));
+        assert_eq!(split.rows, whole.rows);
+        assert!((split.distance_sum - whole.distance_sum).abs() <= 1e-5, "{split:?} against {whole:?}");
+        let mut compared = 0;
+        for (name, var) in &vars {
+            let (Some(a), Some(b)) = (pulled_grads.get(var.as_tensor()), split_grads.get(var.as_tensor())) else {
+                continue;
+            };
+            let (a, b) = (flat(a), flat(b));
+            let scale = a.iter().fold(0f32, |m, x| m.max(x.abs()));
+            let diff = a.iter().zip(&b).fold(0f32, |m, (x, y)| m.max((x - y).abs()));
+            assert!(diff <= 1e-4 * scale.max(1e-6), "{name} differs by {diff} at scale {scale}");
+            compared += 1;
+        }
+        assert!(compared > 2, "the ask table, the carry and the trunk compared");
+        crate::flock_read_hamming::set_hamming_reads(None);
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    fn the_language_pull_joins_the_step_gradient_on_cuda() {
+        the_language_pull_joins_the_step_gradient_on(&Device::new_cuda(0).unwrap());
+    }
+
     #[test]
     fn fused_targets_are_one_per_row_and_inside_the_table() {
         assert!(check_fused_targets(&[0, 3, 7], 3, 8).is_ok());
@@ -17859,6 +21212,7 @@ mod tests {
                         forwards.push((lo, hi));
                         Ok(())
                     },
+                    None,
                 )
                 .unwrap();
                 (value, grads, forwards)
@@ -17943,6 +21297,7 @@ mod tests {
                 3,
                 Some((&mask, 3)),
                 |_, _| Ok(()),
+                None,
             )
             .unwrap()
         };
@@ -18136,6 +21491,99 @@ mod tests {
         assert!(refusal(usize::MAX, 72).contains("too large"));
         assert!(refusal(3, 13).contains("needs at least 14 steps"));
         assert!(refusal(3, 14).contains("needs a CUDA device"));
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn a_zero_pair_minimum_is_refused() {
+        let missing = std::env::temp_dir().join(format!("claude-370-zero-{}", std::process::id()));
+        let mut config = config(0, None);
+        config.pair_rows = Some(0);
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("--pair-rows wants a minimum of 1 or more")),
+            "{refused:?}"
+        );
+        // claude-373: the weight alone has no rows to weigh.
+        (config.pair_rows, config.pair_weight) = (None, true);
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("--pair-weight replies weighs the pair rows")),
+            "{refused:?}"
+        );
+        config.pair_weight = false;
+        // claude-374: the boost alone has no reply weight to raise.
+        (config.pair_rows, config.pair_weight_boost) = (Some(2), true);
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("the pair rows' boost raises their reply weight")),
+            "{refused:?}"
+        );
+        (config.pair_rows, config.pair_weight_boost) = (None, false);
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn pair_rows_refuse_training_as_served() {
+        let missing = std::env::temp_dir().join(format!("claude-370-served-{}", std::process::id()));
+        let mut config = config(0, None);
+        (config.pair_rows, config.train_as_served) = (Some(2), true);
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("the pair rows have no exported form")),
+            "{refused:?}"
+        );
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn pair_rows_refuse_a_checkpoint_start() {
+        let missing = std::env::temp_dir().join(format!("claude-370-init-{}", std::process::id()));
+        let mut config = config(0, None);
+        (config.pair_rows, config.init_from) = (Some(2), Some(missing.join("checkpoint")));
+        let refused = run_long(&missing, &missing.join("out"), &config, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("--init-from does not start the pair rows")),
+            "{refused:?}"
+        );
+        assert!(!missing.exists());
+    }
+
+    #[test]
+    fn pair_rows_refuse_the_recall_task() {
+        let missing = std::env::temp_dir().join(format!("claude-370-recall-{}", std::process::id()));
+        let mut config = config(0, None);
+        config.pair_rows = Some(2);
+        let form = RecallForm::default();
+        let refused = run_recall(&missing, &config, RECALL_QUERY_EPISODES, form, &Device::Cpu)
+            .err()
+            .map(|e| e.to_string());
+        assert!(
+            refused
+                .as_deref()
+                .is_some_and(|e| e.contains("the pair rows train with --out's long run")),
+            "{refused:?}"
+        );
         assert!(!missing.exists());
     }
 
@@ -19336,9 +22784,9 @@ mod tests {
         let windows = hs::build_document_windows(&tokens, &mask, SHEET_CONTEXT, bos).unwrap().0;
         let prompt = |doc: u32| std::iter::once(bos).chain((0..20).map(|i| 10 + i + doc)).collect::<Vec<u32>>();
         let row = |position: usize, doc: u32| PanelPrompt { position, prompt: prompt(doc), reference: vec![5, 6, 7], float_keyed: None };
-        assert_eq!(split_prompts(&windows, &mask, 2, 64), [row(21, 0), row(45, 1)]);
-        assert_eq!(split_prompts(&windows, &mask, 2, 2)[0].reference, [5, 6], "at most the reply tokens");
-        assert_eq!(split_prompts(&windows, &mask, 1, 64), [row(21, 0)], "the stride takes the first");
+        assert_eq!(split_prompts(&windows, &mask, 2, 64, false), [row(21, 0), row(45, 1)]);
+        assert_eq!(split_prompts(&windows, &mask, 2, 2, false)[0].reference, [5, 6], "at most the reply tokens");
+        assert_eq!(split_prompts(&windows, &mask, 1, 64, false), [row(21, 0)], "the stride takes the first");
     }
 
     fn integer_sample(keyed: Option<u32>, reply: Vec<u32>, reference: Vec<u32>) -> IntegerSample {
@@ -21186,6 +24634,32 @@ mod tests {
         );
     }
 
+    /// claude-352: `--panel-prompts` writes the prompts the scorer decodes. With
+    /// `--sample-opening last` each is its window's input through the last reply opening, with
+    /// that reply as its reference; without it, the first opening's, as before.
+    #[test]
+    fn the_panel_prompts_follow_the_sample_opening() {
+        // BOS, a 20-token prompt, a reply (3), a 5-token prompt, a reply (3).
+        let mut tokens = vec![0u32];
+        tokens.extend(100..120);
+        tokens.extend([200, 201, 202]);
+        tokens.extend(300..305);
+        tokens.extend([400, 401, 402]);
+        let mask: Vec<u8> =
+            tokens.iter().map(|&t| u8::from((200..203).contains(&t) || (400..403).contains(&t))).collect();
+        let (windows, _) = hs::build_document_windows(&tokens, &mask, 2048, 0).unwrap();
+        let first = split_prompts(&windows, &mask, 4, 64, false);
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].position, 21);
+        assert_eq!(first[0].prompt, tokens[..21]);
+        assert_eq!(first[0].reference, [200, 201, 202]);
+        let last = split_prompts(&windows, &mask, 4, 64, true);
+        assert_eq!(last.len(), 1);
+        assert_eq!(last[0].position, 29);
+        assert_eq!(last[0].prompt, tokens[..29]);
+        assert_eq!(last[0].reference, [400, 401, 402]);
+    }
+
     /// claude-274: a scored file at 192 writes no `context`, so a 192 manifest is as before; at
     /// another window it names it.
     #[test]
@@ -21344,6 +24818,64 @@ mod tests {
             held[1] != served_bits(&reads.variables())?,
             held[2] != served_bits(&memory.variables())?,
         ])
+    }
+
+    /// claude-339: an ask weight past the Q12 `i16` range stopped a 16,384-step run at about
+    /// step 14,700. As served it is now held at the end of the range, in both the served value
+    /// and the float master; a weight inside the range is rounded as before.
+    #[test]
+    fn an_ask_weight_past_the_served_range_is_held_at_its_end() -> Result<()> {
+        let device = Device::Cpu;
+        let (model, reads, _memory) = served_parts(&device)?;
+        let reads = reads.with_ask(2)?;
+        let top = 32_767f32 / 4_096f32;
+        let ask = reads.reads[1].ask.as_ref().expect("the read asks");
+        let mut values = vec![0f32; ask.elem_count()];
+        values[..5].copy_from_slice(&[-8.000_233, 8.25, 7.999_9, -7.5, 0.25]);
+        ask.set(&Tensor::from_vec(values, ask.shape(), &device)?)?;
+        let head = |var: &candle_core::Var| -> Result<Vec<f32>> {
+            Ok(var.as_tensor().flatten_all()?.to_vec1::<f32>()?[..5].to_vec())
+        };
+        let guard = round_if_served(true, &model, Some(&reads), None)?.expect("the guard is on");
+        assert_eq!(head(ask)?, [-8.0, top, top, -7.5, 0.25], "the served values");
+        guard.restore()?;
+        assert_eq!(head(ask)?, [-8.0, top, top, -7.5, 0.25], "the float masters");
+        Ok(())
+    }
+
+    /// claude-339: the hold covers every read's ask table, and holds only finite weights. An
+    /// infinite weight or a NaN is still refused by the rounding, never served as the range's end.
+    #[test]
+    fn every_ask_is_held_and_a_weight_not_finite_is_still_refused() -> Result<()> {
+        let device = Device::Cpu;
+        let (model, reads, _memory) = served_parts(&device)?;
+        let reads = reads.with_ask(2)?;
+        let asks: Vec<_> = reads.reads.iter().filter_map(|read| read.ask.as_ref()).collect();
+        assert!(asks.len() > 1, "more than one read asks");
+        for ask in asks {
+            let set = |first: f32, second: f32| -> Result<()> {
+                let mut values = vec![0f32; ask.elem_count()];
+                (values[0], values[1]) = (first, second);
+                Ok(ask.set(&Tensor::from_vec(values, ask.shape(), &device)?)?)
+            };
+            set(-8.25, 0.0)?;
+            let guard = round_if_served(true, &model, Some(&reads), None)?.expect("the guard is on");
+            assert_eq!(ask.as_tensor().flatten_all()?.to_vec1::<f32>()?[0], -8.0, "held");
+            guard.restore()?;
+            // Alone, and beside a finite weight past the range, which makes the hold run.
+            for (bad, other) in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN]
+                .into_iter()
+                .flat_map(|bad| [(bad, 0.0), (bad, -9.0)])
+            {
+                set(bad, other)?;
+                assert!(
+                    round_if_served(true, &model, Some(&reads), None).is_err(),
+                    "{bad} beside {other} refused"
+                );
+            }
+            set(0.0, 0.0)?;
+        }
+        Ok(())
     }
 
     /// claude-258: a checkpoint saved as served is one the export's rounding leaves unchanged in
@@ -22317,6 +25849,59 @@ mod tests {
         assert!(RECALL_ABLATIONS.iter().all(|a| *a == Ablation::CopyAtQuery || a.row_scope().is_none()));
     }
 
+    /// claude-357: the longest rule's marker stays out of `config.json` when not set, needs the
+    /// read, the latest-exact rule and one-token keys, and reaches the reads the run builds.
+    #[test]
+    fn the_longest_flag_is_off_by_default_and_checked() {
+        let plain = serde_json::to_string(&config(0, None)).unwrap();
+        assert!(!plain.contains("hamming_copy_longest"));
+        let on = LongConfig {
+            hamming_read: 4,
+            hamming_copy_latest: true,
+            hamming_copy_longest: Some([714, 28]),
+            ..config(0, None)
+        };
+        let json = serde_json::to_string(&on).unwrap();
+        assert!(json.contains("\"hamming_copy_longest\":[714,28]"));
+        let refused = |c: LongConfig| start_hamming(&c, &Device::Cpu).err().map(|e| e.to_string());
+        let no_read = LongConfig { hamming_read: 0, hamming_copy_latest: false, ..on.clone() };
+        assert!(refused(no_read).unwrap().contains("--hamming-copy-longest sets"));
+        let no_latest = LongConfig { hamming_copy_latest: false, ..on.clone() };
+        assert!(refused(no_latest).unwrap().contains("it needs --hamming-copy-latest 1"));
+        let two_token = LongConfig { hamming_copy_key: 2, ..on.clone() };
+        assert!(refused(two_token).unwrap().contains("one-token copy keys"));
+        let (reads, _) = start_hamming(&on, &Device::Cpu).unwrap().expect("a read");
+        assert_eq!(reads.copy_longest(), Some([714, 28]));
+        let off = LongConfig { hamming_copy_longest: None, ..on.clone() };
+        let (plain_reads, _) = start_hamming(&off, &Device::Cpu).unwrap().expect("a read");
+        assert_eq!(plain_reads.copy_longest(), None);
+        // A resumed run's marker must be its checkpoint's, both ways and by value.
+        let other = LongConfig { hamming_copy_longest: Some([714, 29]), ..on.clone() };
+        crate::flock_read_hamming::set_hamming_reads(None);
+        let dir = std::env::temp_dir().join(format!(
+            "longest-checkpoint-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        for (saved, run, fits) in [
+            (&reads, &on, true),
+            (&plain_reads, &off, true),
+            (&reads, &off, false),
+            (&plain_reads, &on, false),
+            (&reads, &other, false),
+        ] {
+            std::fs::create_dir(&dir).unwrap();
+            saved.save(&dir).unwrap();
+            let got = checkpoint_hamming(run, &dir, &Device::Cpu).map(|r| r.map(|(r, _)| r.copy_longest()));
+            std::fs::remove_dir_all(&dir).unwrap();
+            match got {
+                Ok(marker) => assert!(fits && marker == Some(run.hamming_copy_longest), "{marker:?}"),
+                Err(e) => assert!(!fits && e.to_string().contains("longest-rule marker"), "{e}"),
+            }
+        }
+        crate::flock_read_hamming::set_hamming_reads(None);
+    }
+
     /// claude-334: `−aS` drops the stream read's ask (type) class alone and keeps the hold on;
     /// `−H` drops no class and turns the hold off; neither cuts rows.
     #[test]
@@ -22502,13 +26087,327 @@ mod tests {
         let on = LongConfig { hamming_attract: 1.0, ..off.clone() };
         let question = LongConfig { hamming_attract_at_question: true, ..on.clone() };
         assert_eq!(attract_plan(&off, b2).unwrap(), None, "λ = 0 builds no pull rows");
-        assert_eq!(attract_plan(&on, b2).unwrap(), Some(0));
-        assert_eq!(attract_plan(&question, b2).unwrap(), Some(4));
+        assert_eq!(attract_plan(&on, b2).unwrap(), Some(vec![0]));
+        assert_eq!(attract_plan(&question, b2).unwrap(), Some(vec![4]));
         let refused = attract_plan(&question, b1).err().unwrap().to_string();
         assert!(refused.contains("with a header"), "{refused}");
+        // claude-335: `both` pulls at the question rows, then at the scored rows; it needs a
+        // header and a weight, and is one placement, never with `question`.
+        let both = LongConfig { hamming_attract_at_both: true, ..on.clone() };
+        assert_eq!(attract_plan(&both, b2).unwrap(), Some(vec![4, 0]));
+        let refused = attract_plan(&both, b1).err().unwrap().to_string();
+        assert!(refused.contains("both needs the two-class task with a header"), "{refused}");
+        assert!(check_pull_flags(&both).is_ok());
+        let weightless = LongConfig { hamming_attract: 0.0, ..both.clone() };
+        let refused = check_pull_flags(&weightless).err().unwrap().to_string();
+        assert!(refused.contains("at both places the pull"), "{refused}");
+        let twice = LongConfig { hamming_attract_at_question: true, ..both.clone() };
+        let refused = check_pull_flags(&twice).err().unwrap().to_string();
+        assert!(refused.contains("takes one placement"), "{refused}");
         assert!(refuse_pull_outside_recall(&off).is_ok());
-        for c in [on, question] {
+        let both_unweighted = LongConfig { hamming_attract: 0.0, ..both.clone() };
+        for c in [on, question, both, both_unweighted] {
             assert!(refuse_pull_outside_recall(&c).err().unwrap().to_string().contains("--recall"));
         }
+    }
+
+    /// claude-335: `both`'s rows are the question placement's rows and then the scored rows', on
+    /// B2's windows, each with its episode's asked value.
+    #[test]
+    fn the_both_placement_pulls_at_the_question_rows_and_then_the_scored_rows() -> Result<()> {
+        let built = (0..2)
+            .map(|i| recall_query_window(17, i, SHEET_CONTEXT, 4))
+            .collect::<Result<Vec<_>>>()?;
+        let windows: Vec<&CausalWindow> = built.iter().map(|(w, _)| w).collect();
+        let (question, scored) = (attract_rows(&windows, 4)?, attract_rows(&windows, 0)?);
+        assert!(!question.is_empty() && question.len() == scored.len());
+        assert!(question.iter().zip(&scored).all(|(q, s)| q.0 + 4 == s.0 && q.1 == s.1));
+        let both = attract_rows_at(&windows, &[4, 0])?;
+        assert_eq!(both, question.iter().chain(&scored).copied().collect::<Vec<_>>());
+        assert_eq!(attract_rows_at(&windows, &[0])?, scored);
+        Ok(())
+    }
+
+    /// claude-335: `−C` drops no class, cuts no row, and turns the carry off alone; no other cut
+    /// turns it off.
+    #[test]
+    fn the_carry_cut_is_what_the_sheet_names() {
+        assert_eq!(Ablation::CarryOff.name(), "-C");
+        assert_eq!(Ablation::CarryOff.classes(), [[false; 2]; 2]);
+        assert_eq!(Ablation::CarryOff.row_scope(), None);
+        assert!(Ablation::CarryOff.carry_off() && !Ablation::CarryOff.hold_off());
+        let others = [Ablation::AskAtQuery, Ablation::AskStream, Ablation::HoldOff];
+        assert!(RECALL_ABLATIONS.iter().chain(&others).all(|a| !a.carry_off()));
+    }
+
+    /// claude-335: `--hamming-carry-question` stays out of `config.json` when off, needs the ask
+    /// heads, starts the readout read's carry at the rows it names, and a checkpoint's carry must
+    /// match the run's, both ways. Host data only: no forward runs.
+    #[test]
+    fn the_carry_flag_is_off_by_default_needs_the_ask_heads_and_matches_its_checkpoint() {
+        let plain = serde_json::to_string(&config(0, None)).unwrap();
+        assert!(!plain.contains("hamming_carry_question") && !plain.contains("hamming_attract_at_both"));
+        let on = LongConfig { hamming_read: 4, hamming_ask: true, hamming_carry_question: 4, ..config(0, None) };
+        assert!(serde_json::to_string(&on).unwrap().contains("\"hamming_carry_question\":4"));
+        let both = LongConfig { hamming_attract: 1.0, hamming_attract_at_both: true, ..on.clone() };
+        assert!(serde_json::to_string(&both).unwrap().contains("\"hamming_attract_at_both\":true"));
+        let no_ask = LongConfig { hamming_ask: false, ..on.clone() };
+        let refused = start_hamming(&no_ask, &Device::Cpu).err().map(|e| e.to_string());
+        assert!(refused.as_deref().is_some_and(|e| e.contains("--hamming-carry-question carries")), "{refused:?}");
+        let (reads, _) = start_hamming(&on, &Device::Cpu).unwrap().expect("a read");
+        assert_eq!((reads.carry_rows(), reads.hold_rows()), (4, 0));
+        let uncarried = LongConfig { hamming_carry_question: 0, ..on.clone() };
+        let (plain_reads, _) = start_hamming(&uncarried, &Device::Cpu).unwrap().expect("a read");
+        assert_eq!(plain_reads.carry_rows(), 0);
+        crate::flock_read_hamming::set_hamming_reads(None);
+        let dir = std::env::temp_dir().join(format!(
+            "carry-checkpoint-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        for (saved, run, fits) in [(&reads, &on, true), (&reads, &uncarried, false), (&plain_reads, &on, false)] {
+            std::fs::create_dir(&dir).unwrap();
+            saved.save(&dir).unwrap();
+            let got = checkpoint_hamming(run, &dir, &Device::Cpu).map(|r| r.map(|(r, _)| r.carry_rows()));
+            std::fs::remove_dir_all(&dir).unwrap();
+            match got {
+                Ok(rows) => assert!(fits && rows == Some(4), "{rows:?}"),
+                Err(e) => assert!(!fits && e.to_string().contains("carries the Hamming question from"), "{e}"),
+            }
+        }
+        crate::flock_read_hamming::set_hamming_reads(None);
+    }
+
+    /// claude-380: the carry's TRAIN cut. Two conversations, the first two windows long: each
+    /// conversation's windows lie back to back from its BOS, their inputs together are its inputs
+    /// in order, the last is BOS-padded, a target is scored where the mask says, and the first
+    /// window is [`hs::build_document_windows`]'s.
+    #[test]
+    fn the_carry_cuts_each_conversation_back_to_back() {
+        let bos = hs::SHEET_BOS_ID;
+        let tokens = vec![bos, 11, 12, 13, 14, 15, 16, 17, bos, 21, 22];
+        let mask = vec![0, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1];
+        let (windows, docs) = carry_stream_windows(&tokens, &mask, 4, bos).unwrap();
+        assert_eq!(docs, vec![0..2, 2..3]);
+        assert_eq!(windows[0].input_ids, vec![bos, 11, 12, 13]);
+        assert_eq!(windows[1].input_ids, vec![14, 15, 16, bos]);
+        assert_eq!(windows[2].input_ids, vec![bos, 21, bos, bos]);
+        assert_eq!(
+            windows.iter().map(|w| w.doc_id).collect::<Vec<_>>(),
+            vec![0, 0, 1]
+        );
+        // Inputs 0..7 of the first conversation predict tokens 1..8; 1, 5 and 8 are unscored
+        // (mask 0, or the next conversation's BOS).
+        assert_eq!(windows[0].scored_offsets, vec![1, 2, 3]);
+        assert_eq!(windows[0].scored_targets, vec![12, 13, 14]);
+        assert_eq!(windows[1].scored_offsets, vec![1, 2]);
+        assert_eq!(windows[1].scored_targets, vec![16, 17]);
+        assert_eq!(windows[1].scored_corpus_positions, vec![6, 7]);
+        assert_eq!(windows[2].scored_targets, vec![21, 22]);
+        let (whole, _) = hs::build_document_windows(&tokens, &mask, 4, bos).unwrap();
+        let first = whole.iter().find(|w| w.doc_id == 0).unwrap();
+        assert_eq!(first.input_ids, windows[0].input_ids);
+        assert_eq!(first.scored_offsets, windows[0].scored_offsets);
+        // Refused: a mask of another length, and windows under the convolution's width.
+        assert!(carry_stream_windows(&tokens, &mask[1..], 4, bos).is_err());
+        assert!(carry_stream_windows(&tokens, &mask, 3, bos).is_err());
+    }
+
+    /// claude-380: each lane walks whole conversations in order, a conversation's first window
+    /// is the only one marked as opening it, a step is chunk after chunk of the lanes, and an
+    /// epoch draws every conversation once before the next reshuffles.
+    #[test]
+    fn the_carry_schedule_walks_whole_conversations_per_lane() {
+        let docs = vec![0..3, 3..4, 4..6, 6..7, 7..11];
+        let (lanes, chunks) = (2usize, 3usize);
+        let mut schedule = CarrySchedule::new(docs.clone(), lanes, 7).unwrap();
+        let mut walked: Vec<Vec<(usize, bool)>> = vec![Vec::new(); lanes];
+        for _ in 0..20 {
+            let step = schedule.step(chunks);
+            assert_eq!(step.len(), chunks * lanes);
+            for (i, &window) in step.iter().enumerate() {
+                walked[i % lanes].push(window);
+            }
+        }
+        let mut opened = vec![0usize; docs.len()];
+        for lane in &walked {
+            let mut at = 0;
+            while at < lane.len() {
+                let (start, opens) = lane[at];
+                assert!(opens, "a lane's run begins at a conversation's first window");
+                let doc = docs.iter().position(|d| d.start == start).unwrap();
+                opened[doc] += 1;
+                for k in 1..docs[doc].len() {
+                    if at + k == lane.len() {
+                        break;
+                    }
+                    assert_eq!(lane[at + k], (start + k, false));
+                }
+                at += docs[doc].len();
+            }
+        }
+        // 120 windows, 11 a pass: every conversation drawn, none more than one draw ahead.
+        let (least, most) = (opened.iter().min().unwrap(), opened.iter().max().unwrap());
+        assert!(*least > 0 && most - least <= 1, "{opened:?}");
+        assert!(schedule.epoch() > 0);
+        assert!(CarrySchedule::new(docs.clone(), 0, 7).is_err());
+        assert!(CarrySchedule::new(docs[..1].to_vec(), 2, 7).is_err());
+    }
+
+    /// claude-380: the carry's flag is left out of `config.json` when off, written when on, and
+    /// refused where it does not divide the batch, with micro-batches, or as served.
+    #[test]
+    fn the_carry_flag_is_absent_when_off_and_refused_where_it_does_not_fit() {
+        let mut off = config(0, None);
+        off.batch = 4;
+        let written = serde_json::to_string(&off).unwrap();
+        assert!(!written.contains("carry_windows"));
+        assert!(check_carry_flags(&off).is_ok());
+        let mut on = off.clone();
+        on.carry_windows = 2;
+        assert!(serde_json::to_string(&on).unwrap().contains("\"carry_windows\":2"));
+        assert!(check_carry_flags(&on).is_ok());
+        for (k, micro) in [(3, 0), (8, 0), (2, 2)] {
+            let mut bad = on.clone();
+            bad.carry_windows = k;
+            bad.micro_batch = micro;
+            assert!(check_carry_flags(&bad).is_err(), "K {k}, micro {micro}");
+        }
+        let mut served = on.clone();
+        served.train_as_served = true;
+        let refused = check_carry_flags(&served).unwrap_err().to_string();
+        assert!(refused.contains("--train-as-served"), "{refused}");
+        let mut read = on.clone();
+        read.vector_read = Some(crate::vector_reads::VectorReadArm {
+            kind: crate::vector_reads::VectorReadKind::PrimeRoute,
+            depth: None,
+            margin: 0.0,
+            credit: 0.0,
+            stream_grad: false,
+        });
+        let refused = check_carry_flags(&read).unwrap_err().to_string();
+        assert!(refused.contains("--prime-route-read"), "{refused}");
+    }
+}
+
+#[cfg(test)]
+mod copy_names_tests {
+    use super::{copy_names, copy_names_by};
+
+    /// claude-345: the latest earlier position after the row's own token decides, as the copy
+    /// read's latest exact match does; the row's own position and position 0 are no candidates.
+    #[test]
+    fn the_latest_earlier_copy_of_the_rows_token_names_its_follower() {
+        // ids: 5 7 5 9 5; the row at offset 4 holds token 5, last seen at 2, followed by 9.
+        let ids = [5u32, 7, 5, 9, 5];
+        assert!(copy_names(&ids, 4, 9));
+        assert!(!copy_names(&ids, 4, 7), "the earlier follower is not the latest");
+        // At offset 2 the only earlier copy of 5 is at 0, followed by 7.
+        assert!(copy_names(&ids, 2, 7));
+        // No earlier copy of the row's token: 7 at offset 1, 9 at offset 3.
+        assert!(!copy_names(&ids, 1, 5) && !copy_names(&ids, 3, 5));
+        // A token repeated in place is not its own earlier copy: 5 5 at offsets 1 and 2.
+        assert!(!copy_names(&[3, 5, 5], 2, 5));
+        assert!(!copy_names(&[5], 0, 5));
+    }
+
+    /// claude-345: under per-head keys every copy head must name the target. ids: 3 5 9 4 5 7 3 5;
+    /// the row at offset 7 holds 5 after 3. The one-token head's latest 5 is at 4, followed by 7;
+    /// the two-token head's latest `3 5` is at 0-1, followed by 9. So no target is named by both,
+    /// each is named by its own head, and one-token keys alone are `copy_names`.
+    #[test]
+    fn copy_names_by_asks_every_head_by_its_own_key() {
+        let ids = [3u32, 5, 9, 4, 5, 7, 3, 5];
+        assert!(copy_names_by(&[1], &ids, 7, 7) && copy_names(&ids, 7, 7));
+        assert!(copy_names_by(&[2], &ids, 7, 9) && !copy_names_by(&[2], &ids, 7, 7));
+        assert!(!copy_names_by(&[1, 2], &ids, 7, 7) && !copy_names_by(&[1, 2], &ids, 7, 9));
+        // Both heads agree where the pair's latest match is also the token's latest: 3 5 9 3 5.
+        let agree = [3u32, 5, 9, 3, 5];
+        assert!(copy_names_by(&[1, 2], &agree, 4, 9) && copy_names_by(&[2, 2], &agree, 4, 9));
+        // A pair the window never held names nothing, and neither does a row with no previous token.
+        assert!(!copy_names_by(&[2], &[4, 5, 9, 3, 5], 4, 9));
+        assert!(!copy_names_by(&[2], &[5, 9, 5], 0, 9) && !copy_names_by(&[1, 2], &[5], 0, 5));
+        for offset in 0..ids.len() {
+            for target in [3u32, 4, 5, 7, 9] {
+                assert_eq!(copy_names_by(&[1], &ids, offset, target), copy_names(&ids, offset, target));
+                assert_eq!(copy_names_by(&[1, 1], &ids, offset, target), copy_names(&ids, offset, target));
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod copy_longest_tests {
+    use super::{check_reply_marker, copy_names, copy_names_ruled};
+
+    /// claude-357: under the longest rule the leave rule asks the copy read as it is built. A row
+    /// reads the latest match whose token before it also agrees, and with none the latest match;
+    /// a row whose previous and own tokens are the marker reads the latest, as before.
+    #[test]
+    fn the_leave_rule_reads_the_longer_match_except_at_an_opening() {
+        let (c, x, q, b, p) = (11, 12, 13, 14, 15);
+        let ids = [c, x, q, b, x, p, c, x];
+        let absent = Some([98, 99]);
+        assert!(copy_names(&ids, 7, p) && !copy_names(&ids, 7, q), "the latest X is followed by P");
+        assert!(copy_names_ruled(&[1], None, &ids, 7, p), "without the rule: the latest");
+        assert!(copy_names_ruled(&[1], absent, &ids, 7, q), "the X after C is followed by Q");
+        assert!(!copy_names_ruled(&[1], absent, &ids, 7, p));
+        assert!(copy_names_ruled(&[1], Some([c, x]), &ids, 7, p), "an opening row: the latest");
+        assert!(!copy_names_ruled(&[1], Some([c, x]), &ids, 7, q));
+        assert!(copy_names_ruled(&[1], absent, &ids, 4, q), "no longer match: the latest");
+        assert!(!copy_names_ruled(&[1], absent, &ids, 0, x));
+        assert!(!copy_names_ruled(&[1], absent, &ids, 1, q));
+        // Every six-token window over three tokens, against the rule spelled out position by
+        // position as the integer reader walks it (`longest_of`).
+        let spelled = |ids: &[u32], t: usize, target: u32, marker: [u32; 2]| {
+            let opening = t >= 1 && ids[t - 1] == marker[0] && ids[t] == marker[1];
+            let (mut exact, mut long) = (None, None);
+            for s in 1..t {
+                if ids[s - 1] == ids[t] {
+                    exact = Some(s);
+                    if !opening && s >= 2 && ids[s - 2] == ids[t - 1] {
+                        long = Some(s);
+                    }
+                }
+            }
+            long.or(exact).is_some_and(|s| ids[s] == target)
+        };
+        let mut differ = 0;
+        for code in 0..729u32 {
+            let ids: Vec<u32> = (0..6).map(|i| code / 3u32.pow(i) % 3).collect();
+            for marker in [[0, 1], [2, 2], [98, 99]] {
+                for offset in 0..6 {
+                    for target in 0..3 {
+                        let ruled = copy_names_ruled(&[1], Some(marker), &ids, offset, target);
+                        assert_eq!(
+                            ruled,
+                            spelled(&ids, offset, target, marker),
+                            "{ids:?} {offset} {target} {marker:?}"
+                        );
+                        differ += usize::from(ruled != copy_names(&ids, offset, target));
+                    }
+                }
+            }
+        }
+        assert!(differ > 0, "the rule changes some row");
+    }
+
+    /// claude-357: the marker stands before every reply's first token and nowhere else, or the
+    /// split is refused with the position.
+    #[test]
+    fn the_marker_check_refuses_a_missing_and_a_stray_marker() {
+        let tokens = [1, 3, 7, 8, 5, 5, 4, 7, 8, 6];
+        let mask = [0, 0, 0, 0, 1, 1, 0, 0, 0, 1];
+        assert_eq!(check_reply_marker("toy", &tokens, &mask, [7, 8]).unwrap(), 2);
+        let stray = check_reply_marker("toy", &tokens, &mask, [3, 7]).unwrap_err().to_string();
+        assert!(stray.contains("the token at 3 follows the marker and opens no reply"), "{stray}");
+        let other = [1, 3, 7, 9, 5, 5, 4, 7, 8, 6];
+        let missing = check_reply_marker("toy", &other, &mask, [7, 8]).unwrap_err().to_string();
+        assert!(
+            missing.contains("the token at 4 opens a reply without the marker before it"),
+            "{missing}"
+        );
+        assert!(check_reply_marker("toy", &tokens, &mask[..9], [7, 8]).is_err(), "lengths differ");
+        assert_eq!(check_reply_marker("toy", &[1, 2], &[0, 0], [7, 8]).unwrap(), 0);
     }
 }

@@ -10,13 +10,13 @@
 //!   driving [`DesktopBackend`].
 #![forbid(unsafe_code)]
 
-use std::io::{self, BufRead, Read, Write};
-use std::net::TcpListener;
+use std::io::{self, BufRead, Write};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 use uor_r4_desktop_client::{
-    generate_launch_token, handle_rpc_line, handle_studio_http_request, run_self_test_receipt,
-    DesktopBackend, PinRegistry,
+    agent_host::AgentHost, agent_server::StudioServer, generate_launch_token,
+    handle_rpc_line_with_host, run_self_test_receipt, DesktopBackend, PinRegistry,
 };
 
 fn apply_cli_grants(args: &[String], backend: &mut DesktopBackend) -> Result<(), String> {
@@ -30,6 +30,39 @@ fn apply_cli_grants(args: &[String], backend: &mut DesktopBackend) -> Result<(),
                 .native_grant_folder(Path::new(dir))
                 .map_err(|e| format!("--grant {dir}: {e}"))?;
             i += 2;
+        } else if args[i] == "--enable-terminal" {
+            backend.native_set_terminal_enabled(true);
+            i += 1;
+        } else if args[i] == "--terminal-home" {
+            let home = args
+                .get(i + 1)
+                .ok_or_else(|| "missing directory after --terminal-home".to_string())?;
+            backend
+                .set_terminal_home(Path::new(home))
+                .map_err(|error| format!("--terminal-home {home}: {error}"))?;
+            i += 2;
+        } else if args[i] == "--approve-shell" {
+            let cwd = args
+                .get(i + 1)
+                .ok_or_else(|| "missing working directory after --approve-shell".to_string())?;
+            let shell = args
+                .get(i + 2)
+                .ok_or_else(|| "missing shell after --approve-shell".to_string())?;
+            backend
+                .host_approve_terminal_shell(Path::new(cwd), Path::new(shell))
+                .map_err(|error| format!("--approve-shell {cwd} {shell}: {error}"))?;
+            i += 3;
+        } else if args[i] == "--approve-command" {
+            let cwd = args
+                .get(i + 1)
+                .ok_or_else(|| "missing working directory after --approve-command".to_string())?;
+            let command = args
+                .get(i + 2)
+                .ok_or_else(|| "missing command after --approve-command".to_string())?;
+            backend
+                .host_approve_terminal_command(Path::new(cwd), command)
+                .map_err(|error| format!("--approve-command {cwd} {command}: {error}"))?;
+            i += 3;
         } else {
             i += 1;
         }
@@ -37,76 +70,36 @@ fn apply_cli_grants(args: &[String], backend: &mut DesktopBackend) -> Result<(),
     Ok(())
 }
 
-fn run_serve_studio(addr: &str, studio_root: &Path, args: &[String]) -> Result<(), String> {
-    let listener = TcpListener::bind(addr).map_err(|e| format!("bind {addr}: {e}"))?;
-    let local_addr = listener.local_addr().map_err(|e| e.to_string())?;
-    if !local_addr.ip().is_loopback() {
+fn studio_root(args: &[String]) -> Result<std::path::PathBuf, String> {
+    let root = match args.iter().position(|arg| arg == "--studio-root") {
+        Some(index) => args
+            .get(index + 1)
+            .filter(|path| !path.starts_with("--"))
+            .map(std::path::PathBuf::from)
+            .ok_or_else(|| "--studio-root requires a directory value".to_string())?,
+        None => Path::new(env!("CARGO_MANIFEST_DIR")).join("../web/studio"),
+    };
+    let canonical = std::fs::canonicalize(&root)
+        .map_err(|error| format!("invalid studio root {}: {error}", root.display()))?;
+    if !canonical.is_dir() {
         return Err(format!(
-            "refusing non-loopback bind address {local_addr}; use 127.0.0.1:<port>"
+            "studio root is not a directory: {}",
+            root.display()
         ));
     }
-    let bound_host = local_addr.to_string();
-    let launch_token = generate_launch_token();
-    println!("UOR-R4 Desktop Studio loopback host listening on http://{bound_host}/");
-    let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
-    apply_cli_grants(args, &mut backend)?;
+    Ok(canonical)
+}
 
-    for stream in listener.incoming() {
-        let Ok(mut stream) = stream else { continue };
-        let mut buf = [0u8; 65536];
-        let Ok(n) = stream.read(&mut buf) else {
-            continue;
-        };
-        if n == 0 {
-            continue;
-        }
-        let raw = &buf[..n];
-        let header_end = raw
-            .windows(4)
-            .position(|w| w == b"\r\n\r\n")
-            .map(|p| p + 4)
-            .unwrap_or(n);
-        let head_str = String::from_utf8_lossy(&raw[..header_end]);
-        let mut lines = head_str.lines();
-        let req_line = lines.next().unwrap_or("GET / HTTP/1.1");
-        let mut parts = req_line.split_whitespace();
-        let method = parts.next().unwrap_or("GET");
-        let path = parts.next().unwrap_or("/");
-        let mut headers = Vec::new();
-        for hdr_line in lines {
-            let trimmed = hdr_line.trim();
-            if trimmed.is_empty() {
-                break;
-            }
-            if let Some((k, v)) = trimmed.split_once(':') {
-                headers.push((k.trim().to_string(), v.trim().to_string()));
-            }
-        }
-        let body = &raw[header_end..];
-        let (status, content_type, resp_body) = handle_studio_http_request(
-            &mut backend,
-            studio_root,
-            &bound_host,
-            &launch_token,
-            method,
-            path,
-            &headers,
-            body,
-        );
-        let status_text = match status {
-            200 => "OK",
-            403 => "Forbidden",
-            404 => "Not Found",
-            _ => "Method Not Allowed",
-        };
-        let header = format!(
-            "HTTP/1.1 {status} {status_text}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-            resp_body.len()
-        );
-        let _ = stream.write_all(header.as_bytes());
-        let _ = stream.write_all(&resp_body);
-        let _ = stream.flush();
-    }
+fn run_serve_studio(addr: &str, studio_root: &Path, args: &[String]) -> Result<(), String> {
+    let mut host = AgentHost::new(DesktopBackend::new(PinRegistry::with_synthetic_standin()))?;
+    apply_cli_grants(args, host.backend_mut())?;
+    let launch_token = generate_launch_token();
+    let server = StudioServer::start(addr, studio_root, Arc::new(Mutex::new(host)), launch_token)?;
+    println!(
+        "UOR-R4 Desktop Studio loopback host listening on http://{}/",
+        server.bound_host()
+    );
+    server.serve();
     Ok(())
 }
 
@@ -129,7 +122,10 @@ fn main() {
             .filter(|s| !s.starts_with("--"))
             .map(String::as_str)
             .unwrap_or("127.0.0.1:1420");
-        let studio_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../web/studio");
+        let studio_root = studio_root(&args).unwrap_or_else(|error| {
+            eprintln!("studio-root error: {error}");
+            std::process::exit(2);
+        });
         if let Err(err) = run_serve_studio(addr, &studio_root, &args) {
             eprintln!("serve-studio error: {err}");
             std::process::exit(1);
@@ -154,13 +150,101 @@ fn main() {
 
     let stdin = io::stdin();
     let mut stdout = io::stdout();
+    let mut host = match AgentHost::new(backend) {
+        Ok(host) => host,
+        Err(error) => {
+            eprintln!("host startup error: {error}");
+            std::process::exit(1);
+        }
+    };
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };
         if line.trim().is_empty() {
             continue;
         }
-        let resp = handle_rpc_line(&mut backend, &line);
+        let resp = handle_rpc_line_with_host(&mut host, &line);
         let _ = writeln!(stdout, "{resp}");
         let _ = stdout.flush();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uor_r4_desktop_client::TerminalCommandRequest;
+
+    #[test]
+    fn studio_root_honors_the_explicit_dist_and_preserves_the_default() {
+        assert!(studio_root(&[])
+            .expect("default root")
+            .ends_with("web/studio"));
+        let parent = std::env::temp_dir().join(format!("uor-explicit-dist-{}", std::process::id()));
+        let root = parent.join("dist");
+        let _ = std::fs::remove_dir_all(&parent);
+        std::fs::create_dir_all(&root).expect("create explicit dist");
+        let args = vec!["--studio-root".to_string(), root.display().to_string()];
+        assert_eq!(
+            studio_root(&args).expect("explicit dist"),
+            root.canonicalize().expect("canonical dist")
+        );
+        let _ = std::fs::remove_dir_all(&parent);
+    }
+
+    #[test]
+    fn studio_root_rejects_missing_invalid_and_noncanonical_values() {
+        for args in [
+            vec!["--studio-root".to_string()],
+            vec!["--studio-root".to_string(), "--enable-terminal".to_string()],
+            vec![
+                "--studio-root".to_string(),
+                "missing-studio-root".to_string(),
+            ],
+        ] {
+            assert!(
+                studio_root(&args).is_err(),
+                "accepted invalid root: {args:?}"
+            );
+        }
+        let root = std::env::temp_dir().join(format!("uor-studio-root-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create non-dist root");
+        let file = root.join("not-a-directory");
+        std::fs::write(&file, "not a directory").expect("create regular-file root");
+        assert!(studio_root(&["--studio-root".to_string(), file.display().to_string()]).is_err());
+        let args = vec!["--studio-root".to_string(), root.display().to_string()];
+        assert_eq!(
+            studio_root(&args).expect("non-dist root"),
+            root.canonicalize().expect("canonical root")
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn cli_controls_preauthorize_exact_command_once() {
+        let root = std::env::temp_dir().join(format!("uor-cli-approval-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create CLI approval workspace");
+        let args = vec![
+            "--grant".to_string(),
+            root.display().to_string(),
+            "--enable-terminal".to_string(),
+            "--approve-command".to_string(),
+            root.display().to_string(),
+            "pwd".to_string(),
+        ];
+        let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+        apply_cli_grants(&args, &mut backend).expect("apply host CLI controls");
+        let request = TerminalCommandRequest {
+            cwd: root.clone(),
+            command: "pwd".to_string(),
+            user_confirmed: true,
+            confirmed_command: "pwd".to_string(),
+        };
+        let output = backend
+            .native_run_terminal_command(&request)
+            .expect("host-approved command runs once");
+        assert!(output.contains(root.to_string_lossy().as_ref()));
+        assert!(backend.native_run_terminal_command(&request).is_err());
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

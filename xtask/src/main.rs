@@ -13,6 +13,7 @@ use repo_model::{codegen, Model};
 mod archive_verify;
 mod audit;
 mod book_check;
+mod book_fresh;
 mod book_stage;
 mod docs_catalog;
 mod docs_inventory;
@@ -35,6 +36,8 @@ mod kappa;
 mod qubo_codec;
 mod roadmap;
 mod roadmap_sync;
+mod stack_audit;
+mod stack_contract;
 
 fn main() -> ExitCode {
     let task = std::env::args()
@@ -45,6 +48,16 @@ fn main() -> ExitCode {
 
     let result = match task.as_str() {
         "check-model" => check_model(&root, write),
+        "stack-contract" => stack_contract::run(&root, write),
+        "stack-contract-hash" => {
+            let Some(path) = std::env::args().nth(2) else {
+                return ExitCode::from(2);
+            };
+            stack_contract::hash(&root, &path)
+        }
+        "stack-audit" => {
+            stack_audit::run(&root, &std::env::args().skip(2).collect::<Vec<String>>())
+        }
         "audit-limits" => audit::audit_limits(&root),
         "audit-deferral" => audit::audit_deferral(&root),
         "gates" => gate::gate(&root, None),
@@ -95,6 +108,8 @@ fn main() -> ExitCode {
             .map_err(Into::into),
         "book-stage" => book_stage::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
             .map_err(Into::into),
+        "book-fresh" => book_fresh::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
+            .map_err(Into::into),
         "archive-verify" => {
             archive_verify::run(&root, &std::env::args().skip(2).collect::<Vec<_>>())
                 .map_err(Into::into)
@@ -123,6 +138,9 @@ fn main() -> ExitCode {
                 "cargo xtask <task>\n\
                  \n\
                  check-model       R1: conformance/*.toml is the single source; regenerate and diff\n\
+                 stack-contract    validate conformance/stack/*.toml and regenerate its model views\n\
+                 stack-contract-hash <TOML>  print a validated contract's semantic BLAKE3\n\
+                 stack-audit       compare one contract with its run config, checkpoint, artifact, tokenizer and chat path\n\
                  audit-limits      R5:  no bound that cannot be traced to a parameter\n\
                  audit-deferral    R4: no deferral marker, no stub, no capability behind a flag\n\
                  gates             #515: list every dormant claim's activation gate and status\n\
@@ -148,7 +166,8 @@ fn main() -> ExitCode {
                  roadmap sync      create or update one GitHub issue per roadmap item and the M1..M8 checklists through gh [--repo R] [--only ID] (dry run unless --apply)\n\
                  docs-stubs        pointer stubs at archive/ positions from --list FILE (dry run unless --apply)\n\
                  book-check        check that every relative link in the built book resolves [--dir DIR] (default book)\n\
-                 book-stage        stage the mdBook source from docs/SUMMARY.md: links out to GitHub, $…$ maths to MathJax [--out DIR] (default target/book-src)\n\
+                 book-stage        stage the mdBook source from docs/SUMMARY.md: links out to GitHub, $…$ maths to MathJax, a freshness banner per page [--out DIR] (default target/book-src)\n\
+                 book-fresh        advisory (D76): each book page's freshness record against git: stale, unchecked, unrecorded, broken [--json OUT]\n\
                  archive-verify    SHA256SUMS manifests vs the tree [--json OUT] [--baseline FILE]; archive/ immutability [--base REV]\n\
                  \n\
                  --write           check-model/gnaf-root/gnaf-manifest/gnaf-conformance/figures: rewrite the generated file instead of checking it"

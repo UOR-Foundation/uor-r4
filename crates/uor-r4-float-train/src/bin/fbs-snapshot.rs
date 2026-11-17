@@ -15,6 +15,11 @@
 //! fbs-snapshot [--dev DATA_ROOT] [--served-readout] --hamming-trace ARM MODEL_DIR D11_READOUT_JSON TRACE_JSON
 //! ```
 //!
+//! `--windows FILE` (claude-343) takes the same forms, on the windows `served-reply-panel
+//! --windows-out` wrote, in place of `--dev`'s sample: each is a panel prompt and the reply the
+//! integer engine decoded, up to the last token it read. `fbs-toks --hamming-trace` reads its
+//! sequences from the readout, so the integer steps the very same windows.
+//!
 //! `--dev DATA_ROOT` (claude-240) takes every readout, and the trace, on a sample of DEV in
 //! place of the fixed sequences: `DATA_ROOT/ft/dev`, loaded with its pins, cut into the
 //! trainer's windows of `SHEET_CONTEXT` and sampled every `PARITY_WINDOW_STRIDE`-th window, as
@@ -81,18 +86,35 @@
 //! (claude-198): the turn memory (`turn_memory*.safetensors`) and the Hamming
 //! reads (`hamming_read.safetensors`, claude-200) are carried, and any other
 //! read file (the Flock, content and opening reads, the prompt register) is
-//! refused by name until its export exists.
+//! refused by name until its export exists. An address memory
+//! (`address_memory.safetensors`, claude-366) is carried beside the snapshot:
+//! its rows, in the whole steps the served evaluation rounds them to, are
+//! written to `OUT_JSON.address-rows`, and the snapshot names that file's
+//! SHA-256 and the table's record under `address_rows`. `fbs-export` then
+//! needs the file (`--address-rows`). Float readouts are refused for such a
+//! checkpoint, since they would be the trunk without the table.
+//!
+//! Pair rows (`pair_rows.safetensors` + `pair_rows.dict`, claude-370) are carried
+//! the same way (claude-384): each value rounded once to i16 at 2^-12, written to
+//! `OUT_JSON.pair-rows` with the dictionary and the turn marks, and named under
+//! `pair_rows`. Weighed rows (claude-373, claude-374) are refused, as is a
+//! checkpoint holding both an address memory and pair rows. The rounding census
+//! (largest value, largest rounding error, zeros) is printed to stderr.
 
 use std::path::{Path, PathBuf};
 
 use candle_core::Device;
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
+use uor_r4_float_train::e8_address::AddressMemory;
 use uor_r4_float_train::fbs_export::{
-    check_checkpoint_reads, check_readout_reads, fbs_float_readout, fbs_float_readout_on,
-    fbs_float_readout_served, fbs_float_readout_served_on, fbs_hamming_snapshot,
-    fbs_memory_snapshot, fbs_trunk_snapshot, round_hamming_as_exported, round_tables_as_exported,
-    run_rate_reading, write_rounded_copy, READOUT_SEQUENCES,
+    check_checkpoint_reads, check_checkpoint_reads_carrying, check_readout_reads,
+    fbs_float_readout, fbs_float_readout_on, fbs_float_readout_served, fbs_float_readout_served_on,
+    fbs_hamming_snapshot_with_ask, fbs_memory_snapshot, fbs_trunk_snapshot,
+    round_hamming_as_exported, round_tables_as_exported, run_rate_reading, write_rounded_copy,
+    check_pair_rows_servable, CHECKPOINT_ADDRESS, CHECKPOINT_PAIR_ROWS, READOUT_SEQUENCES,
 };
+use uor_r4_float_train::pair_rows::PairRows;
 use uor_r4_float_train::flock_read_hamming::{
     set_hamming_reads, set_hamming_tie_rule, set_hamming_trace, take_hamming_trace, HammingReads,
     HAMMING_DEPTHS, HAMMING_KEPT,
@@ -109,9 +131,11 @@ use uor_r4_float_train::spiralcore_fbs::{ProjectionPlan, FBS_SOURCE_SHA256, SCHE
 use uor_r4_float_train::spiralcore_fbs_arms::FbsArm;
 use uor_r4_float_train::spiralcore_fbs_sheet::PARITY_WINDOW_STRIDE;
 use uor_r4_float_train::{FloatTrainError, Result};
+use uor_r4_integer::fbs_address::FBS_ADDRESS_KEY;
+use uor_r4_integer::fbs_pair_rows::FBS_PAIR_ROWS_KEY;
 use uor_r4_integer::fbs_snapshot::{
     run_readout_nearest, write_new_file, FbsFloatReadout, FbsReadoutMode, HammingTrace,
-    HAMMING_TRACE_SCHEMA,
+    FBS_HAMMING_ASK_KEY, FBS_HAMMING_PLACE_KEY, HAMMING_TRACE_SCHEMA,
 };
 
 fn write(path: &str, json: &[u8]) -> Result<()> {
@@ -159,6 +183,96 @@ fn output_place(path: &str) -> Result<PathBuf> {
 /// claude-240: every `PARITY_WINDOW_STRIDE`-th window, from the first (claude-126's rule).
 fn sample_windows<T>(windows: Vec<T>) -> Vec<T> {
     windows.into_iter().step_by(PARITY_WINDOW_STRIDE).collect()
+}
+
+/// claude-343: the schema of `served-reply-panel --windows-out`.
+const PANEL_WINDOWS_SCHEMA: &str = "uor-r4.panel-windows/1";
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PanelWindows {
+    schema: String,
+    artifact_sha256: String,
+    windows: Vec<PanelWindow>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PanelWindow {
+    id: String,
+    tokens: Vec<u32>,
+}
+
+/// claude-343: the windows of a `--windows` file, refused unless each has an earlier position to
+/// read (two tokens at least), fits the context and stays in the vocabulary.
+fn parse_panel_windows(
+    bytes: &[u8],
+    vocab: u32,
+    context: usize,
+) -> Result<(String, Vec<Vec<u32>>)> {
+    let file: PanelWindows = serde_json::from_slice(bytes)?;
+    if file.schema != PANEL_WINDOWS_SCHEMA {
+        return Err(FloatTrainError::Invalid(format!(
+            "the windows file's schema is {}, not {PANEL_WINDOWS_SCHEMA}",
+            file.schema
+        )));
+    }
+    if file.windows.is_empty() {
+        return Err(FloatTrainError::Invalid(
+            "the windows file holds no windows".to_owned(),
+        ));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    let mut windows = Vec::with_capacity(file.windows.len());
+    for window in file.windows {
+        let id = &window.id;
+        if !seen.insert(id.clone()) {
+            return Err(FloatTrainError::Invalid(format!(
+                "window {id} is there twice"
+            )));
+        }
+        let n = window.tokens.len();
+        if n < 2 || n > context {
+            return Err(FloatTrainError::Invalid(format!(
+                "window {id} has {n} tokens, not 2 to {context}"
+            )));
+        }
+        if let Some(token) = window.tokens.iter().find(|&&t| t >= vocab) {
+            return Err(FloatTrainError::Invalid(format!(
+                "window {id} holds token {token}, outside the {vocab}-token vocabulary"
+            )));
+        }
+        windows.push(window.tokens);
+    }
+    Ok((file.artifact_sha256, windows))
+}
+
+/// claude-343: `--windows FILE`'s sample, read before the GPU opens.
+fn panel_windows_sample(path: &str) -> Result<Vec<Vec<u32>>> {
+    let bytes = std::fs::read(path)?;
+    let (artifact, windows) = parse_panel_windows(&bytes, SHEET_VOCAB as u32, SHEET_CONTEXT)?;
+    let positions: usize = windows.iter().map(Vec::len).sum();
+    println!(
+        "windows: {} from {path}, {positions} positions, decoded by artifact {artifact}",
+        windows.len()
+    );
+    Ok(windows)
+}
+
+/// claude-343: remove `--windows FILE` from `args`. It is single-use.
+fn take_windows_flag(args: &mut Vec<String>) -> Result<Option<String>> {
+    let mut found = None;
+    while let Some(at) = args.iter().position(|arg| arg == "--windows") {
+        if found.is_some() {
+            return Err(FloatTrainError::Invalid("--windows given twice".to_owned()));
+        }
+        args.remove(at);
+        if at >= args.len() {
+            return Err(FloatTrainError::Invalid("--windows needs FILE".to_owned()));
+        }
+        found = Some(args.remove(at));
+    }
+    Ok(found)
 }
 
 /// claude-240: `--dev DATA_ROOT`'s sample. DEV is loaded with its pins and cut into the
@@ -590,8 +704,17 @@ fn main() -> Result<()> {
         );
         return Ok(());
     }
+    let windows_file = take_windows_flag(&mut args)?;
     let (dev_root, served_readout) = readout_options(&mut args)?;
-    let dev = dev_root.as_deref().map(dev_sample).transpose()?;
+    let dev = match (windows_file.as_deref(), dev_root.as_deref()) {
+        (Some(_), Some(_)) => {
+            return Err(FloatTrainError::Invalid(
+                "--windows and --dev are two samples; give one".to_owned(),
+            ));
+        }
+        (Some(path), None) => Some(panel_windows_sample(path)?),
+        (None, root) => root.map(dev_sample).transpose()?,
+    };
     let dev = dev.as_deref();
     if args.first().is_some_and(|flag| flag == "--hamming-trace") {
         let [_, arm, model_dir, readout, trace] = args.as_slice() else {
@@ -609,8 +732,14 @@ fn main() -> Result<()> {
     };
     let dir = Path::new(model_dir);
     // Every read the checkpoint holds is carried, or the export is refused (claude-198), before
-    // the GPU is opened.
-    check_checkpoint_reads(dir)?;
+    // the GPU is opened. The address memory (claude-366) is carried in a rows file beside the
+    // snapshot, written below, and so are the pair rows (claude-384).
+    check_checkpoint_reads_carrying(dir, &[CHECKPOINT_ADDRESS, CHECKPOINT_PAIR_ROWS])?;
+    if dir.join(CHECKPOINT_ADDRESS).exists() && dir.join(CHECKPOINT_PAIR_ROWS).exists() {
+        return Err(FloatTrainError::Invalid(
+            "a checkpoint with both an address memory and pair rows has no served form".to_owned(),
+        ));
+    }
     check_readout_reads(dir, readouts.len())?;
     // The run's rate reading (integer-retention-rates, claude-226), from its `config.json` two
     // levels above `models/step-N`. The snapshot carries it, and the float readouts below are
@@ -627,13 +756,87 @@ fn main() -> Result<()> {
     snapshot.memory = TurnMemory::load(dir, &device)?
         .map(|memory| fbs_memory_snapshot(&memory, SHEET_CONTEXT))
         .transpose()?;
-    let hamming = HammingReads::load(dir, &Device::Cpu)?
-        .map(|reads| fbs_hamming_snapshot(&reads, snapshot.layers.len(), snapshot.width))
+    let reads = HammingReads::load(dir, &Device::Cpu)?;
+    // claude-351: the place read's marks and classes, as the artifact carries them.
+    let place = reads
+        .as_ref()
+        .and_then(HammingReads::place)
+        .map(|place| place.image())
         .transpose()?;
+    let hamming = reads
+        .map(|reads| fbs_hamming_snapshot_with_ask(&reads, snapshot.layers.len(), snapshot.width))
+        .transpose()?;
+    let (hamming, asks) = match hamming {
+        Some((hamming, asks)) => (Some(hamming), asks),
+        None => (None, None),
+    };
     snapshot.hamming = hamming;
     snapshot.retain_rates = retain;
     snapshot.readout_nearest = nearest;
-    write(out, &serde_json::to_vec(&snapshot)?)?;
+    // claude-336: the ask heads and the question carry ride beside the trunk snapshot under
+    // `hamming_ask`, which `fbs-export` serves; without them the JSON is byte for byte as before.
+    // claude-351: the place read rides the same way under `hamming_place`; it sits on the ask
+    // heads, so a snapshot with it has both keys.
+    // claude-366: an address memory's rows, in the whole steps the served evaluation rounds them
+    // to. They travel in a rows file beside the snapshot (`OUT.address-rows`), and the snapshot
+    // names that file's SHA-256 and the table's record under `address_rows`, so `fbs-export`
+    // refuses the snapshot without its rows.
+    let address = AddressMemory::load(dir, &device)?
+        .map(|memory| memory.image())
+        .transpose()?;
+    // claude-384: the pair rows, rounded once to i16 at 2^-12 by the shared rule, travel in
+    // `OUT.pair-rows` and are named under `pair_rows`, as the address rows are.
+    let pair_rows = match PairRows::load(dir, &device)? {
+        Some(rows) => {
+            check_pair_rows_servable(&rows)?;
+            let (image, census) = rows.served_image()?;
+            eprintln!(
+                "pair rows: {} pairs x {} wide, largest |value| {:.6}, largest rounding {:.3e}, {} zeros",
+                image.dict().len(),
+                image.width(),
+                census.max_abs,
+                census.max_error,
+                census.zeros
+            );
+            Some(image)
+        }
+        None => None,
+    };
+    let json = match (asks, place, &address, &pair_rows) {
+        (None, None, None, None) => serde_json::to_vec(&snapshot)?,
+        (asks, place, address, pair_rows) => {
+            let mut value = serde_json::to_value(&snapshot)?;
+            let object = value.as_object_mut().expect("a snapshot is a JSON object");
+            if let Some(asks) = asks {
+                object.insert(FBS_HAMMING_ASK_KEY.to_owned(), serde_json::to_value(asks)?);
+            }
+            if let Some(place) = place {
+                object.insert(FBS_HAMMING_PLACE_KEY.to_owned(), serde_json::to_value(place)?);
+            }
+            if let Some(address) = address {
+                object.insert(FBS_ADDRESS_KEY.to_owned(), serde_json::to_value(address.note())?);
+            }
+            if let Some(pair_rows) = pair_rows {
+                object.insert(FBS_PAIR_ROWS_KEY.to_owned(), serde_json::to_value(pair_rows.note())?);
+            }
+            serde_json::to_vec(&value)?
+        }
+    };
+    // The rows file is written first, so a snapshot that names rows always has them beside it,
+    // and only where the snapshot itself can still be written: a snapshot refused because its
+    // file exists leaves no rows file behind.
+    if (address.is_some() || pair_rows.is_some()) && Path::new(out).exists() {
+        return Err(FloatTrainError::Invalid(format!(
+            "{out}: the snapshot exists; it is not written over"
+        )));
+    }
+    if let Some(address) = &address {
+        write(&format!("{out}.address-rows"), &address.to_bytes())?;
+    }
+    if let Some(pair_rows) = &pair_rows {
+        write(&format!("{out}.pair-rows"), &pair_rows.to_bytes())?;
+    }
+    write(out, &json)?;
     // The readouts are the float model with its Hamming reads (claude-200): `StackModel::hidden`
     // applies the reads set on this thread, here on the trunk's GPU.
     set_hamming_reads(HammingReads::load(dir, &device)?);
@@ -663,11 +866,73 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        forward_text, inspect_ties, output_place, pre_179_fingerprint, readout_options,
-        sample_windows, scored_prefix, CausalWindow, ProjectionPlan, FORWARD_TEXT_SHA256,
-        PARITY_WINDOW_STRIDE,
+        forward_text, inspect_ties, output_place, parse_panel_windows, pre_179_fingerprint,
+        readout_options, sample_windows, scored_prefix, take_windows_flag, CausalWindow,
+        ProjectionPlan, FORWARD_TEXT_SHA256, PANEL_WINDOWS_SCHEMA, PARITY_WINDOW_STRIDE,
     };
     use sha2::{Digest, Sha256};
+
+    fn panel_file(schema: &str, windows: &str) -> Vec<u8> {
+        format!(r#"{{"schema":"{schema}","artifact_sha256":"ab","windows":[{windows}]}}"#)
+            .into_bytes()
+    }
+
+    #[test]
+    fn panel_windows_keep_their_tokens_in_order() {
+        let file = panel_file(
+            PANEL_WINDOWS_SCHEMA,
+            r#"{"id":"a","tokens":[0,5,9]},{"id":"b","tokens":[7,2]}"#,
+        );
+        let (artifact, windows) = parse_panel_windows(&file, 10, 3).unwrap();
+        assert_eq!(artifact, "ab");
+        assert_eq!(windows, vec![vec![0, 5, 9], vec![7, 2]]);
+    }
+
+    #[test]
+    fn panel_windows_refuse_what_the_trace_cannot_read() {
+        let refused = |file: Vec<u8>| parse_panel_windows(&file, 10, 3).unwrap_err().to_string();
+        assert!(refused(panel_file("other", r#"{"id":"a","tokens":[0,5]}"#)).contains("schema"));
+        assert!(refused(panel_file(PANEL_WINDOWS_SCHEMA, "")).contains("no windows"));
+        for tokens in ["[5]", "[0,1,2,3]"] {
+            let window = format!(r#"{{"id":"a","tokens":{tokens}}}"#);
+            assert!(
+                refused(panel_file(PANEL_WINDOWS_SCHEMA, &window)).contains("not 2 to 3"),
+                "{tokens}"
+            );
+        }
+        let out_of_vocab = panel_file(PANEL_WINDOWS_SCHEMA, r#"{"id":"a","tokens":[0,10]}"#);
+        assert!(refused(out_of_vocab).contains("outside"));
+        let twice = panel_file(
+            PANEL_WINDOWS_SCHEMA,
+            r#"{"id":"a","tokens":[0,5]},{"id":"a","tokens":[1,5]}"#,
+        );
+        assert!(refused(twice).contains("twice"));
+    }
+
+    #[test]
+    fn panel_windows_at_the_limits_are_read() {
+        let window = r#"{"id":"a","tokens":[0,9,1]},{"id":"b","tokens":[0,9]}"#;
+        let file = panel_file(PANEL_WINDOWS_SCHEMA, window);
+        assert_eq!(parse_panel_windows(&file, 10, 3).unwrap().1.len(), 2);
+    }
+
+    #[test]
+    fn the_windows_flag_is_taken_from_anywhere_once() {
+        let strings = |s: &[&str]| s.iter().map(|a| a.to_string()).collect::<Vec<_>>();
+        let mut args = strings(&["--served-readout", "--windows", "w.json", "--hamming-trace"]);
+        assert_eq!(
+            take_windows_flag(&mut args).unwrap().as_deref(),
+            Some("w.json")
+        );
+        assert_eq!(args, strings(&["--served-readout", "--hamming-trace"]));
+        let mut none = strings(&["--served-readout"]);
+        assert_eq!(take_windows_flag(&mut none).unwrap(), None);
+        assert_eq!(none, strings(&["--served-readout"]));
+        let mut twice = strings(&["--windows", "a", "--windows", "b"]);
+        assert!(take_windows_flag(&mut twice).is_err());
+        let mut no_file = strings(&["--windows"]);
+        assert!(take_windows_flag(&mut no_file).is_err());
+    }
 
     #[test]
     fn served_readout_options_accept_either_order_and_refuse_duplicates() {

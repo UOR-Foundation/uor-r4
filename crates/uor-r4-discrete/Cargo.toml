@@ -8,12 +8,14 @@ description = "Exact SpiralCore/FBS learning proposals and shared geometric vect
 [features]
 default = []
 cuda = ["dep:cudarc"]
+qualification = []
 
 [dependencies]
 cudarc = { version = "=0.19.10", default-features = false, features = ["std", "driver", "cuda-12080", "dynamic-linking"], optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10.8"
+uor-r4-native-vector = { path = "../uor-r4-native-vector" }
 
 [build-dependencies]
 uor-r4-core = { path = "../uor-r4-core", default-features = false }
@@ -102,6 +104,21 @@ path = "src/bin/wider-carrier-run.rs"
 name = "within-cell-writer-run"
 path = "src/bin/within-cell-writer-run.rs"
 
+[[bin]]
+name = "ngram-count-probe"
+path = "src/bin/ngram-count-probe.rs"
 
 
 
+
+
+[dev-dependencies]
+# Test-only: the CUDA leg of the native-space parity contract (src/cpu_oracle_parity.rs)
+# compares the kernels with the CPU training oracle. Bytes and integer words cross; no types.
+uor-r4-cpu-train = { path = "../uor-r4-cpu-train" }
+# Test-only: the CPU Pick oracle in src/pick_read_cuda.rs takes the SpiralCore
+# composition table (claude-408).
+uor-r4-core = { path = "../uor-r4-core", default-features = false }
+# Test-only: src/pick_read_cuda.rs checks the CUDA Pick read against the served
+# D11 artifact (claude-408).
+uor-r4-integer = { path = "../uor-r4-integer" }

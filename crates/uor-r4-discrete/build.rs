@@ -37,6 +37,36 @@ const ENTRIES: [&str; 13] = [
     "discrete_count_score",
     "discrete_carrier_select",
 ];
+const NATIVE_VECTOR_ENTRIES: [&str; 7] = [
+    "native_q31_hamilton_rotate",
+    "native_q31_hamilton_train_step",
+    "native_q31_read_address",
+    "native_q31_first_pick_read",
+    "native_q31_read_pick_loss",
+    "native_q31_read_gate_credit_partial",
+    "native_q31_read_gate_apply",
+];
+// The exact n-gram counter (claude-412): its own source, PTX and cubin.
+const NGRAM_COUNT_ENTRIES: [&str; 16] = [
+    "ngram_token_hist",
+    "ngram_token_hist_reduce",
+    "ngram_select_flags",
+    "ngram_select_scatter",
+    "ngram_radix_hist",
+    "ngram_radix_scatter",
+    "ngram_scan32_reduce",
+    "ngram_scan32_sums",
+    "ngram_scan32_apply",
+    "ngram_scan64_reduce",
+    "ngram_scan64_sums",
+    "ngram_scan64_apply",
+    "ngram_boundaries",
+    "ngram_run_starts",
+    "ngram_emit_grams",
+    "ngram_emit_contexts",
+];
+// The modified Kneser-Ney scorer (claude-421): its own source, PTX and cubin.
+const KN_SCORE_ENTRIES: [&str; 1] = ["kn_score_targets"];
 
 /// Inspect the emitted module, rather than treating CUDA source spelling as
 /// evidence of its instructions. Integer index products are not prohibited.
@@ -65,6 +95,9 @@ fn admit_ptx_inventory(ptx: &str, inventory: &[&str]) -> Result<(), String> {
                         | "mma"
                         | "wmma"
                         | "wgmma"
+                        | "ldmatrix"
+                        | "stmatrix"
+                        | "movmatrix"
                         | "tcgen05"
                         | "tensor"
                         | "tensormap"
@@ -117,6 +150,9 @@ fn ptx_admission_self_test() -> Result<(), String> {
         "add.f32 %a,%b,%c;",
         ".reg .bf16 %a;",
         "mma.sync.aligned.m16n8k8.row.col.s32.s8.s8.s32 %a,%b,%c,%d;",
+        "ldmatrix.sync.aligned.m8n8.x1.shared.b16 {%a}, [%b];",
+        "stmatrix.sync.aligned.m8n8.x1.shared.b16 [%a], {%b};",
+        "movmatrix.sync.aligned.m8n8.trans.b16 %a, %b;",
         "ex2.approx %a,%b;",
         ".visible .entry unexpected() { ret; }",
         ".visible .entry discrete_init() { ret; }",
@@ -364,6 +400,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=src/bucket_source.rs");
     println!("cargo:rerun-if-changed=src/wider_carrier_source.rs");
     println!("cargo:rerun-if-changed=src/within_cell_writer_source.rs");
+    println!("cargo:rerun-if-changed=src/native_vector.cu");
+    println!("cargo:rerun-if-changed=src/ngram_count.cu");
+    println!("cargo:rerun-if-changed=src/kn_score.cu");
     println!("cargo:rerun-if-env-changed=NVCC");
     println!("cargo:rerun-if-env-changed=UOR_NVCC_ARCH");
     let out = PathBuf::from(env::var_os("OUT_DIR").ok_or("Cargo did not supply OUT_DIR")?);
@@ -391,6 +430,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err(format!("ahead-of-time nvcc discrete build failed: {status}").into());
     }
     admit_ptx(&fs::read_to_string(out.join("discrete.ptx"))?)?;
+    let status = Command::new(env::var("NVCC").unwrap_or_else(|_| "nvcc".into()))
+        .args(["-ptx", "-std=c++17"])
+        .arg(format!("-arch={arch}"))
+        .args(["-o"])
+        .arg(out.join("native-vector.ptx"))
+        .arg("src/native_vector.cu")
+        .status()?;
+    if !status.success() {
+        return Err(format!("native-vector PTX build failed: {status}").into());
+    }
+    admit_ptx_inventory(
+        &fs::read_to_string(out.join("native-vector.ptx"))?,
+        &NATIVE_VECTOR_ENTRIES,
+    )?;
+    // The exact n-gram counter (claude-412): an independent source and module.
+    let status = Command::new(env::var("NVCC").unwrap_or_else(|_| "nvcc".into()))
+        .args(["-ptx", "-std=c++17"])
+        .arg(format!("-arch={arch}"))
+        .args(["-o"])
+        .arg(out.join("ngram-count.ptx"))
+        .arg("src/ngram_count.cu")
+        .status()?;
+    if !status.success() {
+        return Err(format!("ngram-count PTX build failed: {status}").into());
+    }
+    admit_ptx_inventory(
+        &fs::read_to_string(out.join("ngram-count.ptx"))?,
+        &NGRAM_COUNT_ENTRIES,
+    )?;
+    // The modified Kneser-Ney scorer (claude-421): an independent source and module.
+    let status = Command::new(env::var("NVCC").unwrap_or_else(|_| "nvcc".into()))
+        .args(["-ptx", "-std=c++17"])
+        .arg(format!("-arch={arch}"))
+        .args(["-o"])
+        .arg(out.join("kn-score.ptx"))
+        .arg("src/kn_score.cu")
+        .status()?;
+    if !status.success() {
+        return Err(format!("kn-score PTX build failed: {status}").into());
+    }
+    admit_ptx_inventory(
+        &fs::read_to_string(out.join("kn-score.ptx"))?,
+        &KN_SCORE_ENTRIES,
+    )?;
     // An independent module: the ordinary source, nvcc invocation and PTX stay
     // untouched. Only this diagnostic entry carries internal clocks/counters.
     let diagnostic = decomposition_source::generate(&fs::read_to_string("src/discrete.cu")?)?;
@@ -557,6 +640,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("bucket", out.join("bucket.ptx")),
         ("wider-carrier", out.join("wider-carrier.ptx")),
         ("within-cell-writer", out.join("within-cell-writer.ptx")),
+        ("native-vector", out.join("native-vector.ptx")),
+        ("ngram-count", out.join("ngram-count.ptx")),
+        ("kn-score", out.join("kn-score.ptx")),
     ] {
         let mut resource_command = Command::new(&nvcc);
         // PTX input needs assembly, not C++ preprocessing or a new resource cap.

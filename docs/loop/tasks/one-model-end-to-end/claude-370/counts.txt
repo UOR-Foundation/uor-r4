@@ -1,0 +1,8 @@
+b-s2 p14 rows 1108 exact 211 unended 124 no_turn 0
+b-s2 p23 rows 1110 exact 220 unended 91 no_turn 0
+b-s3 p14 rows 1108 exact 202 unended 87 no_turn 0
+b-s3 p23 rows 1110 exact 211 unended 73 no_turn 0
+pair-s2 p14 rows 1108 exact 263 unended 96 no_turn 0
+pair-s2 p23 rows 1110 exact 264 unended 92 no_turn 0
+pair-s3 p14 rows 1108 exact 264 unended 97 no_turn 0
+pair-s3 p23 rows 1110 exact 257 unended 91 no_turn 0

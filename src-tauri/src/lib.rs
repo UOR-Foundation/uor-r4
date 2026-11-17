@@ -12,9 +12,14 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
+pub mod agent_data;
+pub mod agent_host;
+pub mod agent_server;
 pub mod mcp;
 pub(crate) mod process_control;
 pub mod sidecar;
+pub mod terminal;
+pub use terminal::{TerminalEvent, TerminalSnapshot};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -268,6 +273,15 @@ pub enum DesktopClientError {
         bytes: u64,
         max_bytes: u64,
     },
+    ArtifactNotFound(String),
+    ArtifactDigestMismatch {
+        expected: String,
+        actual: String,
+    },
+    ArtifactSizeMismatch {
+        expected: u64,
+        actual: u64,
+    },
     TerminalDisabledByDefault,
     TerminalConsentRequired,
     TerminalMetacharacterRefused(String),
@@ -368,6 +382,10 @@ pub struct DesktopBackend {
     granted_folders: BTreeSet<PathBuf>,
     terminal_enabled: bool,
     host_approved_commands: BTreeMap<(PathBuf, String), std::time::Instant>,
+    host_approved_shells: BTreeSet<(PathBuf, PathBuf)>,
+    terminal_sessions: BTreeMap<String, terminal::TerminalSession>,
+    terminal_home: Option<PathBuf>,
+    next_terminal_id: u64,
     loaded_model: Option<IntegerStackModel>,
     loaded_capabilities: Option<LoadedModelCapabilities>,
     initial_session_bytes: Option<Vec<u8>>,
@@ -375,6 +393,7 @@ pub struct DesktopBackend {
     object_store: Store,
     memory_store: DurableObjectMemoryStore,
     durable_store_dir: Option<PathBuf>,
+    agent_artifacts: BTreeMap<String, crate::agent_data::AgentArtifactRecord>,
 }
 
 impl DesktopBackend {
@@ -389,6 +408,10 @@ impl DesktopBackend {
             granted_folders: BTreeSet::new(),
             terminal_enabled: false,
             host_approved_commands: BTreeMap::new(),
+            host_approved_shells: BTreeSet::new(),
+            terminal_sessions: BTreeMap::new(),
+            terminal_home: None,
+            next_terminal_id: 1,
             loaded_model: None,
             loaded_capabilities: None,
             initial_session_bytes: None,
@@ -396,6 +419,7 @@ impl DesktopBackend {
             object_store: Store::new(Limits::default()),
             memory_store: DurableObjectMemoryStore::new(),
             durable_store_dir: None,
+            agent_artifacts: BTreeMap::new(),
         }
     }
 
@@ -1150,12 +1174,26 @@ impl DesktopBackend {
         self.terminal_enabled = enabled;
         if !enabled {
             self.host_approved_commands.clear();
+            self.host_approved_shells.clear();
         }
     }
 
     /// Return whether terminal command execution is currently enabled.
     pub fn terminal_enabled(&self) -> bool {
         self.terminal_enabled
+    }
+
+    /// Return whether an exact host-approved command remains within its one-shot validity window.
+    pub fn host_terminal_command_is_approved(&self, cwd: &Path, command: &str) -> bool {
+        if !self.terminal_enabled || command.trim().is_empty() {
+            return false;
+        }
+        let Ok(canonical_cwd) = self.verify_granted_existing_path(cwd) else {
+            return false;
+        };
+        self.host_approved_commands
+            .get(&(canonical_cwd, command.trim().to_string()))
+            .is_some_and(|approved_at| approved_at.elapsed() <= std::time::Duration::from_secs(60))
     }
 
     /// Record a one-shot host-side user confirmation for exact `(cwd, command)`.
@@ -1390,10 +1428,17 @@ fn run_bounded_process(
             std::thread::sleep(Duration::from_millis(1));
         }
     }
-    let exited = child
+    let mut exited = child
         .try_wait()
         .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?
         .is_some();
+    while !exited && readers_disconnected && !killed && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(1));
+        exited = child
+            .try_wait()
+            .map_err(|error| DesktopClientError::CommandFailed(error.to_string()))?
+            .is_some();
+    }
     if !exited {
         timed_out = true;
         process_control::terminate(&mut child);
@@ -1747,12 +1792,14 @@ mod bounded_process_tests {
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("create TERM-ignoring fixture");
         let pid_path = root.join("sleep.pid");
+        let ready_path = root.join("ready");
         let mut command = Command::new("/bin/sh");
         command.arg("-c").arg(format!(
-            "nohup sh -c 'trap \"\" TERM; sleep 30' >/dev/null 2>&1 & echo $! > '{}'; exec 1>&- 2>&-; trap \"\" TERM; sleep 30",
-            pid_path.display()
+            "mkfifo '{1}'; nohup sh -c 'trap \"\" TERM; echo ready > \"{1}\"; sleep 30' >/dev/null 2>&1 & echo $! > '{0}'; read _ < '{1}'; exec 1>&- 2>&-; trap \"\" TERM; sleep 30",
+            pid_path.display(),
+            ready_path.display()
         ));
-        let output = run_bounded_process(&mut command, std::time::Duration::from_millis(25), 1024)
+        let output = run_bounded_process(&mut command, std::time::Duration::from_secs(1), 1024)
             .expect("bounded shell with TERM-ignoring descendant");
         assert!(output.timed_out);
         let pid = fs::read_to_string(&pid_path)
@@ -1778,12 +1825,14 @@ mod bounded_process_tests {
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).expect("create grandchild fixture");
         let pid_path = root.join("sleep.pid");
+        let ready_path = root.join("ready");
         let mut command = Command::new("/bin/sh");
         command.arg("-c").arg(format!(
-            "nohup sleep 30 >/dev/null 2>&1 & echo $! > '{}'; wait",
-            pid_path.display()
+            "mkfifo '{1}'; nohup sh -c 'echo ready > \"{1}\"; exec sleep 30' >/dev/null 2>&1 & echo $! > '{0}'; read _ < '{1}'; wait",
+            pid_path.display(),
+            ready_path.display()
         ));
-        let output = run_bounded_process(&mut command, std::time::Duration::from_millis(25), 1024)
+        let output = run_bounded_process(&mut command, std::time::Duration::from_secs(1), 1024)
             .expect("bounded shell with descendant");
         assert!(output.timed_out);
         let pid = fs::read_to_string(&pid_path)
@@ -1810,6 +1859,22 @@ mod bounded_process_tests {
     }
 
     #[test]
+    fn closed_pipes_before_normal_exit_are_not_a_timeout() {
+        let mut command = Command::new("/bin/sh");
+        command
+            .arg("-c")
+            .arg("printf ok; exec 1>&- 2>&-; sleep 0.05");
+        let output = run_bounded_process(&mut command, std::time::Duration::from_secs(1), 1024)
+            .expect("closed pipes must allow a normal exit");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "ok");
+        assert!(output.status.success());
+        assert!(
+            !output.timed_out,
+            "normal exit after pipe closure was mislabeled as a timeout"
+        );
+    }
+
+    #[test]
     fn output_cap_does_not_impersonate_a_wall_clock_timeout() {
         let mut command = Command::new("/bin/sh");
         command.arg("-c").arg("yes x");
@@ -1820,7 +1885,7 @@ mod bounded_process_tests {
     }
 
     #[test]
-    fn closed_pipes_before_normal_exit_are_not_a_timeout() {
+    fn closed_pipes_before_normal_exit_without_output_are_not_a_timeout() {
         let mut command = Command::new("/bin/sh");
         command.arg("-c").arg("exec 1>&- 2>&-; sleep 0.1; exit 0");
         let output = run_bounded_process(&mut command, std::time::Duration::from_secs(1), 1024)
@@ -1840,6 +1905,47 @@ mod bounded_process_tests {
             .expect("closed pipes must not hide a live-child timeout");
         assert!(output.timed_out);
         assert!(!output.status.success());
+    }
+}
+
+#[cfg(test)]
+mod terminal_approval_tests {
+    use super::*;
+
+    #[test]
+    fn expired_host_approval_is_refused_and_consumed() {
+        let root =
+            std::env::temp_dir().join(format!("uor-expired-approval-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create expired-approval fixture");
+        let root = root
+            .canonicalize()
+            .expect("canonical expired-approval fixture");
+        let mut backend = DesktopBackend::new(PinRegistry::with_synthetic_standin());
+        backend
+            .native_grant_folder(&root)
+            .expect("grant fixture folder");
+        backend.native_set_terminal_enabled(true);
+        backend.host_approved_commands.insert(
+            (root.clone(), "pwd".to_string()),
+            std::time::Instant::now() - std::time::Duration::from_secs(61),
+        );
+        assert!(!backend.host_terminal_command_is_approved(&root, "pwd"));
+        let request = TerminalCommandRequest {
+            cwd: root.clone(),
+            command: "pwd".to_string(),
+            user_confirmed: true,
+            confirmed_command: "pwd".to_string(),
+        };
+        let result = backend.prepare_terminal_command(&request);
+        assert!(matches!(
+            result,
+            Err(DesktopClientError::TerminalConsentRequired)
+        ));
+        assert!(!backend
+            .host_approved_commands
+            .contains_key(&(root.clone(), "pwd".to_string())));
+        let _ = fs::remove_dir_all(&root);
     }
 }
 
@@ -1989,6 +2095,16 @@ pub fn build_synthetic_stack_artifact(seed: u64) -> Vec<u8> {
 /// Note that `native_grant_folder`, `native_set_terminal_enabled`, and
 /// `host_approve_terminal_command` are host-owned methods and are intentionally not exposed to
 /// unprivileged page RPC calls.
+fn terminal_dimension(args: &Value, key: &str, default: u16) -> Result<u16, String> {
+    let Some(value) = args.get(key) else {
+        return Ok(default);
+    };
+    let value = value
+        .as_u64()
+        .ok_or_else(|| format!("{key} must be a positive integer"))?;
+    u16::try_from(value).map_err(|_| format!("{key} is too large"))
+}
+
 pub fn dispatch_rpc_command(
     backend: &mut DesktopBackend,
     cmd: &str,
@@ -2256,6 +2372,16 @@ pub fn dispatch_rpc_command(
                 .collect();
             Ok(json!({ "folders": folders }))
         }
+        "native_choose_project_folder" => {
+            let mut folders = backend.granted_folders().iter();
+            let Some(folder) = folders.next() else {
+                return Ok(Value::Null);
+            };
+            if folders.next().is_some() {
+                return Err("multiple granted folders require the native folder picker".to_string());
+            }
+            Ok(json!({ "path": folder.to_string_lossy() }))
+        }
         "native_grant_folder" => Err(
             "PathNotGranted: folder grants are host-owned (--grant <dir>) and cannot be granted by page RPC"
                 .to_string(),
@@ -2309,6 +2435,28 @@ pub fn dispatch_rpc_command(
                 .map_err(|e| e.to_string())?;
             serde_json::to_value(report).map_err(|e| e.to_string())
         }
+        "native_enable_terminal" => Ok(json!({ "enabled": backend.terminal_enabled() })),
+        "native_confirm_terminal_command" => {
+            let cwd = args
+                .get("cwd")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "missing cwd".to_string())?;
+            let command = args
+                .get("command")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "missing command".to_string())?;
+            Ok(json!({ "approved": backend.host_terminal_command_is_approved(Path::new(cwd), command) }))
+        }
+        "native_git_diff" => {
+            let repo_path = args
+                .get("repoPath")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "missing repoPath".to_string())?;
+            let report = backend
+                .native_git_diff(Path::new(repo_path))
+                .map_err(|e| e.to_string())?;
+            serde_json::to_value(report).map_err(|e| e.to_string())
+        }
         "native_run_terminal_command" => {
             let cwd = args
                 .get("cwd")
@@ -2337,6 +2485,38 @@ pub fn dispatch_rpc_command(
                 .map_err(|e| e.to_string())?;
             Ok(Value::String(output))
         }
+        "native_open_terminal" => {
+            let cwd = args.get("cwd").and_then(Value::as_str).ok_or_else(|| "missing cwd".to_string())?;
+            let shell = args.get("shell").and_then(Value::as_str).map(PathBuf::from);
+            let rows = terminal_dimension(args, "rows", 24)?;
+            let cols = terminal_dimension(args, "cols", 80)?;
+            let snapshot = backend.open_terminal(Path::new(cwd), shell.as_deref(), rows, cols).map_err(|e| e.to_string())?;
+            serde_json::to_value(snapshot).map_err(|e| e.to_string())
+        }
+        "native_read_terminal" => {
+            let session_id = args.get("sessionId").and_then(Value::as_str).ok_or_else(|| "missing sessionId".to_string())?;
+            let after = args.get("after").and_then(Value::as_u64).unwrap_or(0);
+            let snapshot = backend.read_terminal(session_id, after).map_err(|e| e.to_string())?;
+            serde_json::to_value(snapshot).map_err(|e| e.to_string())
+        }
+        "native_terminal_input" => {
+            let session_id = args.get("sessionId").and_then(Value::as_str).ok_or_else(|| "missing sessionId".to_string())?;
+            let data = args.get("data").and_then(Value::as_str).ok_or_else(|| "missing data".to_string())?;
+            backend.write_terminal(session_id, data.as_bytes()).map_err(|e| e.to_string())?;
+            Ok(json!({ "ok": true }))
+        }
+        "native_resize_terminal" => {
+            let session_id = args.get("sessionId").and_then(Value::as_str).ok_or_else(|| "missing sessionId".to_string())?;
+            let rows = terminal_dimension(args, "rows", 24)?;
+            let cols = terminal_dimension(args, "cols", 80)?;
+            backend.resize_terminal(session_id, rows, cols).map_err(|e| e.to_string())?;
+            Ok(json!({ "ok": true }))
+        }
+        "native_close_terminal" => {
+            let session_id = args.get("sessionId").and_then(Value::as_str).ok_or_else(|| "missing sessionId".to_string())?;
+            let snapshot = backend.close_terminal(session_id).map_err(|e| e.to_string())?;
+            serde_json::to_value(snapshot).map_err(|e| e.to_string())
+        }
         "native_set_terminal_enabled" => Err(
             "TerminalDisabledByDefault: terminal enablement is host-owned and cannot be toggled by page RPC"
                 .to_string(),
@@ -2353,6 +2533,68 @@ pub fn handle_rpc_line(backend: &mut DesktopBackend, line: &str) -> Value {
             let cmd = req.get("command").and_then(Value::as_str).unwrap_or("");
             let payload = req.get("args").cloned().unwrap_or_else(|| json!({}));
             match dispatch_rpc_command(backend, cmd, &payload) {
+                Ok(result) => json!({ "id": id, "ok": true, "result": result }),
+                Err(error) => json!({ "id": id, "ok": false, "error": error }),
+            }
+        }
+        Err(e) => json!({ "id": Value::Null, "ok": false, "error": e.to_string() }),
+    }
+}
+
+/// Dispatch one `agent_host_*` command against the host authority.
+///
+/// The offline shim has no Tauri Channel, so `agent_subscribe` is refused and
+/// the page uses `agent_host_poll`; approval decisions are page decisions only
+/// and can never self-approve without a native host confirmation.
+pub fn dispatch_agent_host_rpc(
+    host: &mut agent_host::AgentHost,
+    cmd: &str,
+    args: &Value,
+) -> Result<Value, String> {
+    match cmd {
+        // The JSON-RPC/loopback entrypoint has no native confirmation dialog:
+        // approval-required tools can be denied there, never approved.
+        "agent_host_capabilities" => Ok(host.capabilities_for_surface(false)),
+        "agent_host_invoke" => {
+            let intent = args
+                .get("intent")
+                .cloned()
+                .ok_or_else(|| "invalid_arguments: missing intent".to_string())?;
+            let result = host.invoke(&agent_host::UnavailableMcpDispatch, intent)?;
+            serde_json::to_value(result).map_err(|error| error.to_string())
+        }
+        "agent_host_poll" => {
+            let cursor = args.get("cursor").and_then(Value::as_str);
+            host.poll(cursor)
+        }
+        "agent_host_resolve_approval" => {
+            let input = args
+                .get("input")
+                .cloned()
+                .ok_or_else(|| "invalid_arguments: missing approval input".to_string())?;
+            host.resolve_approval(&input, false)
+        }
+        "agent_subscribe" => Err(
+            "host_unavailable: agent_subscribe requires the Tauri GUI channel; use agent_host_poll"
+                .to_string(),
+        ),
+        other => Err(format!("unknown agent host command: {other}")),
+    }
+}
+
+/// Parse and execute one JSON-RPC line with the host authority available.
+pub fn handle_rpc_line_with_host(host: &mut agent_host::AgentHost, line: &str) -> Value {
+    match serde_json::from_str::<Value>(line) {
+        Ok(req) => {
+            let id = req.get("id").cloned().unwrap_or(Value::Null);
+            let cmd = req.get("command").and_then(Value::as_str).unwrap_or("");
+            let payload = req.get("args").cloned().unwrap_or_else(|| json!({}));
+            let result = if cmd.starts_with("agent_host_") || cmd == "agent_subscribe" {
+                dispatch_agent_host_rpc(host, cmd, &payload)
+            } else {
+                dispatch_rpc_command(host.backend_mut(), cmd, &payload)
+            };
+            match result {
                 Ok(result) => json!({ "id": id, "ok": true, "result": result }),
                 Err(error) => json!({ "id": id, "ok": false, "error": error }),
             }
@@ -2430,8 +2672,7 @@ fn find_header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a st
 ///    start with `application/json` (blocks `no-cors` simple requests), and `X-UOR-Desktop-Token`
 ///    must match the per-launch `expected_token` (embedded in the served `index.html`).
 #[allow(clippy::too_many_arguments)]
-pub fn handle_studio_http_request(
-    backend: &mut DesktopBackend,
+fn handle_studio_http_request_inner(
     studio_root: &Path,
     bound_host: &str,
     expected_token: &str,
@@ -2439,6 +2680,7 @@ pub fn handle_studio_http_request(
     path: &str,
     headers: &[(String, String)],
     body: &[u8],
+    dispatch: &mut dyn FnMut(&str) -> Value,
 ) -> (u16, &'static str, Vec<u8>) {
     let Some(req_host) = find_header(headers, "host") else {
         return (
@@ -2479,7 +2721,7 @@ pub fn handle_studio_http_request(
         }
 
         let line = String::from_utf8_lossy(body);
-        let resp = handle_rpc_line(backend, &line);
+        let resp = dispatch(&line);
         let bytes = serde_json::to_vec(&resp).unwrap_or_default();
         return (200, "application/json; charset=utf-8", bytes);
     }
@@ -2510,6 +2752,10 @@ pub fn handle_studio_http_request(
         Ok(root) => root,
         Err(_) => return (404, "text/plain; charset=utf-8", b"Not Found".to_vec()),
     };
+    let extension = rel.to_ascii_lowercase();
+    if extension.ends_with(".ts") || extension.ends_with(".tsx") || extension.ends_with(".map") {
+        return (404, "text/plain; charset=utf-8", b"Not Found".to_vec());
+    }
     let canonical_candidate = match fs::canonicalize(&candidate) {
         Ok(path) if path.starts_with(&canonical_root) => path,
         Ok(_) => return (403, "text/plain; charset=utf-8", b"Forbidden".to_vec()),
@@ -2525,8 +2771,8 @@ pub fn handle_studio_http_request(
             expected_token
         );
         let injected = html.replacen(
-            "<script type=\"module\">",
-            &format!("{bootstrap}\n    <script type=\"module\">"),
+            "<script type=\"module\"",
+            &format!("{bootstrap}\n    <script type=\"module\""),
             1,
         );
         bytes = injected.into_bytes();
@@ -2545,6 +2791,54 @@ pub fn handle_studio_http_request(
         "application/octet-stream"
     };
     (200, content_type, bytes)
+}
+
+/// Serve one loopback Studio request against a bare desktop backend.
+#[allow(clippy::too_many_arguments)]
+pub fn handle_studio_http_request(
+    backend: &mut DesktopBackend,
+    studio_root: &Path,
+    bound_host: &str,
+    expected_token: &str,
+    method: &str,
+    path: &str,
+    headers: &[(String, String)],
+    body: &[u8],
+) -> (u16, &'static str, Vec<u8>) {
+    handle_studio_http_request_inner(
+        studio_root,
+        bound_host,
+        expected_token,
+        method,
+        path,
+        headers,
+        body,
+        &mut |line| handle_rpc_line(backend, line),
+    )
+}
+
+/// Serve one loopback Studio request with the approved host authority available.
+#[allow(clippy::too_many_arguments)]
+pub fn handle_studio_http_request_with_host(
+    host: &mut agent_host::AgentHost,
+    studio_root: &Path,
+    bound_host: &str,
+    expected_token: &str,
+    method: &str,
+    path: &str,
+    headers: &[(String, String)],
+    body: &[u8],
+) -> (u16, &'static str, Vec<u8>) {
+    handle_studio_http_request_inner(
+        studio_root,
+        bound_host,
+        expected_token,
+        method,
+        path,
+        headers,
+        body,
+        &mut |line| handle_rpc_line_with_host(host, line),
+    )
 }
 
 /// Native Tauri v2 WebView shell (`--features gui`) wiring `#[tauri::command]` handlers and
@@ -2569,18 +2863,18 @@ pub mod tauri_gui {
 
     #[derive(Clone)]
     pub struct TauriDesktopState {
-        inner: Arc<Mutex<DesktopBackend>>,
+        inner: Arc<Mutex<super::agent_host::AgentHost>>,
         sidecar: Option<SidecarProcess>,
         mcp: McpManager,
     }
 
     impl TauriDesktopState {
-        pub fn new(backend: DesktopBackend) -> Self {
-            Self {
-                inner: Arc::new(Mutex::new(backend)),
+        pub fn new(backend: DesktopBackend) -> Result<Self, String> {
+            Ok(Self {
+                inner: Arc::new(Mutex::new(super::agent_host::AgentHost::new(backend)?)),
                 sidecar: None,
                 mcp: McpManager::default(),
-            }
+            })
         }
 
         pub fn with_sidecar(binary: &Path, stack: &Path, tokenizer: &Path) -> Result<Self, String> {
@@ -2599,7 +2893,7 @@ pub mod tauri_gui {
             tokenizer: &Path,
         ) -> Result<Self, String> {
             Ok(Self {
-                inner: Arc::new(Mutex::new(backend)),
+                inner: Arc::new(Mutex::new(super::agent_host::AgentHost::new(backend)?)),
                 sidecar: Some(SidecarProcess::start(binary, stack, tokenizer)?),
                 mcp: McpManager::default(),
             })
@@ -2619,6 +2913,17 @@ pub mod tauri_gui {
                 .inner
                 .lock()
                 .map_err(|_| "DesktopBackend mutex poisoned".to_string())?;
+            f(guard.backend_mut())
+        }
+
+        pub fn with_host<T>(
+            &self,
+            f: impl FnOnce(&mut super::agent_host::AgentHost) -> Result<T, String>,
+        ) -> Result<T, String> {
+            let mut guard = self
+                .inner
+                .lock()
+                .map_err(|_| "AgentHost mutex poisoned".to_string())?;
             f(&mut guard)
         }
 
@@ -2663,6 +2968,69 @@ pub mod tauri_gui {
             })
         }
 
+        pub fn approve_terminal_shell(&self, cwd: &Path, shell: &Path) -> Result<(), String> {
+            self.with_backend(|backend| {
+                backend
+                    .host_approve_terminal_shell(cwd, shell)
+                    .map_err(|error| error.to_string())
+            })
+        }
+
+        pub fn open_terminal(
+            &self,
+            cwd: &Path,
+            shell: Option<&Path>,
+            rows: u16,
+            cols: u16,
+        ) -> Result<super::TerminalSnapshot, String> {
+            self.with_backend(|backend| {
+                backend
+                    .open_terminal(cwd, shell, rows, cols)
+                    .map_err(|error| error.to_string())
+            })
+        }
+
+        pub fn read_terminal(
+            &self,
+            session_id: &str,
+            after: u64,
+        ) -> Result<super::TerminalSnapshot, String> {
+            self.with_backend(|backend| {
+                backend
+                    .read_terminal(session_id, after)
+                    .map_err(|error| error.to_string())
+            })
+        }
+
+        pub fn write_terminal(&self, session_id: &str, input: &[u8]) -> Result<(), String> {
+            self.with_backend(|backend| {
+                backend
+                    .write_terminal(session_id, input)
+                    .map_err(|error| error.to_string())
+            })
+        }
+
+        pub fn resize_terminal(
+            &self,
+            session_id: &str,
+            rows: u16,
+            cols: u16,
+        ) -> Result<(), String> {
+            self.with_backend(|backend| {
+                backend
+                    .resize_terminal(session_id, rows, cols)
+                    .map_err(|error| error.to_string())
+            })
+        }
+
+        pub fn close_terminal(&self, session_id: &str) -> Result<super::TerminalSnapshot, String> {
+            self.with_backend(|backend| {
+                backend
+                    .close_terminal(session_id)
+                    .map_err(|error| error.to_string())
+            })
+        }
+
         pub fn approve_terminal_command(&self, cwd: &Path, command: &str) -> Result<(), String> {
             self.with_backend(|backend| {
                 backend
@@ -2687,8 +3055,14 @@ pub mod tauri_gui {
         }
 
         pub fn connect_mcp_remote(&self, url: &str, credential: &str) -> Result<String, String> {
-            self.mcp
-                .connect_remote(url, credential, super::mcp::McpLimits::default())
+            let session_id =
+                self.mcp
+                    .connect_remote(url, credential, super::mcp::McpLimits::default())?;
+            self.with_host(|host| {
+                host.register_confirmed_mcp_session(&session_id);
+                Ok(())
+            })?;
+            Ok(session_id)
         }
 
         pub fn connect_mcp_stdio(
@@ -2702,12 +3076,17 @@ pub mod tauri_gui {
                     .verify_granted_existing_path(cwd)
                     .map_err(|error| error.to_string())
             })?;
-            self.mcp.connect_stdio(
+            let session_id = self.mcp.connect_stdio(
                 executable,
                 args,
                 &canonical_cwd,
                 super::mcp::McpLimits::default(),
-            )
+            )?;
+            self.with_host(|host| {
+                host.register_confirmed_mcp_session(&session_id);
+                Ok(())
+            })?;
+            Ok(session_id)
         }
 
         pub fn list_mcp_tools(&self, session_id: &str) -> Result<Vec<Value>, String> {
@@ -2724,7 +3103,11 @@ pub mod tauri_gui {
         }
 
         pub fn disconnect_mcp(&self, session_id: &str) -> Result<(), String> {
-            self.mcp.disconnect(session_id)
+            self.mcp.disconnect(session_id)?;
+            self.with_host(|host| {
+                host.unregister_confirmed_mcp_session(session_id);
+                Ok(())
+            })
         }
     }
 
@@ -2824,6 +3207,42 @@ pub mod tauri_gui {
         args: Value,
     ) -> Result<Value, String> {
         state.with_backend(|b| dispatch_rpc_command(b, cmd, &args))
+    }
+
+    /// Host-authority helper shared by the Tauri command and host tests.
+    pub fn agent_host_capabilities_on(state: &TauriDesktopState) -> Result<Value, String> {
+        state.with_host(|host| Ok(host.capabilities()))
+    }
+
+    pub fn agent_host_invoke_on(state: &TauriDesktopState, intent: Value) -> Result<Value, String> {
+        let result = state.with_host(|host| host.invoke(&state.mcp, intent))?;
+        serde_json::to_value(result).map_err(|error| error.to_string())
+    }
+
+    pub fn agent_host_poll_on(
+        state: &TauriDesktopState,
+        cursor: Option<String>,
+    ) -> Result<Value, String> {
+        state.with_host(|host| host.poll(cursor.as_deref()))
+    }
+
+    pub fn agent_host_subscribe_on(
+        state: &TauriDesktopState,
+        channel: tauri::ipc::Channel<super::agent_host::HostToolResult>,
+    ) -> Result<Value, String> {
+        state.with_host(|host| {
+            host.subscribe(Box::new(move |result| {
+                let _ = channel.send(result.clone());
+            }))
+        })
+    }
+
+    pub fn agent_host_resolve_approval_on(
+        state: &TauriDesktopState,
+        input: &Value,
+        native_confirmed: bool,
+    ) -> Result<Value, String> {
+        state.with_host(|host| host.resolve_approval(input, native_confirmed))
     }
 
     #[tauri::command(async)]
@@ -3161,6 +3580,135 @@ pub mod tauri_gui {
     }
 
     #[tauri::command(async)]
+    pub fn agent_list_directory(
+        state: tauri::State<'_, TauriDesktopState>,
+        grant_id: String,
+        path: Option<String>,
+    ) -> Result<Value, String> {
+        state.with_backend(|backend| {
+            let page = backend
+                .agent_list_directory(&grant_id, path.as_deref().unwrap_or(""))
+                .map_err(|error| error.to_string())?;
+            serde_json::to_value(page).map_err(|error| error.to_string())
+        })
+    }
+
+    #[tauri::command(async)]
+    pub fn agent_grants(state: tauri::State<'_, TauriDesktopState>) -> Result<Value, String> {
+        state.with_backend(|backend| {
+            crate::agent_data::agent_grants_value(backend).map_err(|error| error.to_string())
+        })
+    }
+
+    #[tauri::command(async)]
+    pub fn agent_git_diff(
+        state: tauri::State<'_, TauriDesktopState>,
+        grant_id: String,
+        branch_scope: String,
+    ) -> Result<Value, String> {
+        state.with_backend(|backend| {
+            crate::agent_data::agent_git_diff_output(backend, &grant_id, &branch_scope)
+                .map_err(|error| error.to_string())
+        })
+    }
+
+    #[tauri::command(async)]
+    pub fn agent_read_artifact(
+        state: tauri::State<'_, TauriDesktopState>,
+        artifact_id: String,
+        start: Option<u64>,
+        end: Option<u64>,
+        expected_digest: Option<String>,
+        expected_size_bytes: Option<u64>,
+    ) -> Result<Value, String> {
+        let range = match (start, end) {
+            (None, None) => None,
+            (Some(start), Some(end)) => Some(crate::agent_data::AgentArtifactRange { start, end }),
+            _ => {
+                return Err("artifact range requires both start and end".to_string());
+            }
+        };
+        state.with_backend(|backend| {
+            let bytes = backend
+                .agent_read_artifact(
+                    &artifact_id,
+                    range,
+                    expected_digest.as_deref(),
+                    expected_size_bytes,
+                )
+                .map_err(|error| error.to_string())?;
+            serde_json::to_value(bytes).map_err(|error| error.to_string())
+        })
+    }
+
+    #[tauri::command(async)]
+    pub fn agent_host_capabilities(
+        state: tauri::State<'_, TauriDesktopState>,
+    ) -> Result<Value, String> {
+        agent_host_capabilities_on(state.inner())
+    }
+
+    #[tauri::command(async)]
+    pub fn agent_host_invoke(
+        state: tauri::State<'_, TauriDesktopState>,
+        intent: Value,
+    ) -> Result<Value, String> {
+        agent_host_invoke_on(state.inner(), intent)
+    }
+
+    #[tauri::command(async)]
+    pub fn agent_host_poll(
+        state: tauri::State<'_, TauriDesktopState>,
+        cursor: Option<String>,
+    ) -> Result<Value, String> {
+        agent_host_poll_on(state.inner(), cursor)
+    }
+
+    #[tauri::command(async)]
+    pub fn agent_subscribe(
+        state: tauri::State<'_, TauriDesktopState>,
+        channel: tauri::ipc::Channel<super::agent_host::HostToolResult>,
+    ) -> Result<Value, String> {
+        agent_host_subscribe_on(state.inner(), channel)
+    }
+
+    #[tauri::command(async)]
+    pub async fn agent_host_resolve_approval(
+        app: tauri::AppHandle,
+        state: tauri::State<'_, TauriDesktopState>,
+        input: Value,
+    ) -> Result<Value, String> {
+        let object = input
+            .as_object()
+            .filter(|object| {
+                object.len() == 2
+                    && object.contains_key("approval_id")
+                    && object.contains_key("decision")
+            })
+            .ok_or_else(|| {
+                "approval_forbidden: approval input accepts only approval_id and decision"
+                    .to_string()
+            })?;
+        let approval_id = object["approval_id"]
+            .as_str()
+            .ok_or_else(|| "invalid_arguments: approval_id must be a host identity".to_string())?;
+        let decision = object["decision"]
+            .as_str()
+            .ok_or_else(|| "invalid_arguments: decision must be approved | denied".to_string())?;
+        let native_confirmed = if decision == "approved" {
+            let summary = state.with_host(|host| host.pending_approval_summary(approval_id))?;
+            confirmation_dialog(&app, super::agent_host::approval_dialog_message(&summary))?
+                .title("Approve tool intent")
+                .kind(MessageDialogKind::Warning)
+                .buttons(MessageDialogButtons::OkCancel)
+                .blocking_show()
+        } else {
+            false
+        };
+        agent_host_resolve_approval_on(state.inner(), &input, native_confirmed)
+    }
+
+    #[tauri::command(async)]
     pub async fn native_choose_project_folder(
         app: tauri::AppHandle,
         state: tauri::State<'_, TauriDesktopState>,
@@ -3191,7 +3739,7 @@ pub mod tauri_gui {
         app: tauri::AppHandle,
         state: tauri::State<'_, TauriDesktopState>,
     ) -> Result<Value, String> {
-        let confirmed = confirmation_dialog(&app, "Enable the guarded terminal for this app session? Every command will still require separate approval.")?
+        let confirmed = confirmation_dialog(&app, "Enable terminal for this app session? Each new interactive shell or one-shot command requires host approval.")?
             .title("Enable terminal")
             .kind(MessageDialogKind::Warning)
             .buttons(MessageDialogButtons::OkCancel)
@@ -3242,6 +3790,85 @@ pub mod tauri_gui {
             confirmed_command: confirmed_command.unwrap_or_default(),
         };
         Ok(Value::String(state.run_terminal_command(&request)?))
+    }
+
+    #[tauri::command(async)]
+    pub async fn native_open_terminal(
+        app: tauri::AppHandle,
+        state: tauri::State<'_, TauriDesktopState>,
+        cwd: String,
+        shell: Option<String>,
+        rows: Option<u16>,
+        cols: Option<u16>,
+    ) -> Result<Value, String> {
+        super::validate_consent_text(&cwd).map_err(|error| error.to_string())?;
+        if let Some(shell) = &shell {
+            super::validate_consent_text(shell).map_err(|error| error.to_string())?;
+        }
+        let shell_path = shell.as_deref().map(Path::new);
+        let rows = rows.unwrap_or(24);
+        let cols = cols.unwrap_or(80);
+        match state.open_terminal(Path::new(&cwd), shell_path, rows, cols) {
+            Ok(snapshot) => serde_json::to_value(snapshot).map_err(|error| error.to_string()),
+            Err(error) if error.contains("TerminalConsentRequired") => {
+                let shell_name = shell.as_deref().unwrap_or("/bin/zsh");
+                let confirmed = confirmation_dialog(
+                    &app,
+                    format!("Open an interactive shell?\n\nWorking directory:\n{cwd}\n\nShell:\n{shell_name}\n\nThe shell remains active until you close it."),
+                )?
+                .title("Approve interactive shell")
+                .kind(MessageDialogKind::Warning)
+                .buttons(MessageDialogButtons::OkCancel)
+                .blocking_show();
+                if !confirmed {
+                    return Err("Shell opening was cancelled; no PTY was started.".to_string());
+                }
+                state.approve_terminal_shell(Path::new(&cwd), Path::new(shell_name))?;
+                let snapshot = state.open_terminal(Path::new(&cwd), shell_path, rows, cols)?;
+                serde_json::to_value(snapshot).map_err(|error| error.to_string())
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    #[tauri::command]
+    pub fn native_read_terminal(
+        state: tauri::State<'_, TauriDesktopState>,
+        session_id: String,
+        after: Option<u64>,
+    ) -> Result<Value, String> {
+        let snapshot = state.read_terminal(&session_id, after.unwrap_or(0))?;
+        serde_json::to_value(snapshot).map_err(|error| error.to_string())
+    }
+
+    #[tauri::command]
+    pub fn native_terminal_input(
+        state: tauri::State<'_, TauriDesktopState>,
+        session_id: String,
+        data: String,
+    ) -> Result<Value, String> {
+        state.write_terminal(&session_id, data.as_bytes())?;
+        Ok(json!({ "ok": true }))
+    }
+
+    #[tauri::command]
+    pub fn native_resize_terminal(
+        state: tauri::State<'_, TauriDesktopState>,
+        session_id: String,
+        rows: u16,
+        cols: u16,
+    ) -> Result<Value, String> {
+        state.resize_terminal(&session_id, rows, cols)?;
+        Ok(json!({ "ok": true }))
+    }
+
+    #[tauri::command]
+    pub fn native_close_terminal(
+        state: tauri::State<'_, TauriDesktopState>,
+        session_id: String,
+    ) -> Result<Value, String> {
+        let snapshot = state.close_terminal(&session_id)?;
+        serde_json::to_value(snapshot).map_err(|error| error.to_string())
     }
 
     #[tauri::command(async)]
@@ -3333,7 +3960,7 @@ pub mod tauri_gui {
     }
 
     /// Construct the configured [`tauri::Builder`] with managed [`TauriDesktopState`] and all
-    /// 30 native/host `#[tauri::command]` handlers registered.
+    /// 39 native/host `#[tauri::command]` handlers registered.
     pub fn build_tauri_app_builder(state: TauriDesktopState) -> tauri::Builder<tauri::Wry> {
         tauri::Builder::default()
             .plugin(tauri_plugin_dialog::init())
@@ -3384,11 +4011,25 @@ pub mod tauri_gui {
                 native_list_directory,
                 native_git_status,
                 native_git_diff,
+                agent_grants,
+                agent_list_directory,
+                agent_git_diff,
+                agent_read_artifact,
+                agent_host_capabilities,
+                agent_host_invoke,
+                agent_host_poll,
+                agent_subscribe,
+                agent_host_resolve_approval,
                 native_choose_project_folder,
                 native_choose_model_folder,
                 native_enable_terminal,
                 native_confirm_terminal_command,
                 native_run_terminal_command,
+                native_open_terminal,
+                native_read_terminal,
+                native_terminal_input,
+                native_resize_terminal,
+                native_close_terminal,
                 native_mcp_connect_remote,
                 native_mcp_list_tools,
                 native_mcp_call_tool,

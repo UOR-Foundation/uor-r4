@@ -14,6 +14,199 @@ flowchart LR
 
 An entry gives the date, what changed, which charter clauses it touches, and who decided. The owner's own words are recorded verbatim when they are the reason. Old text is never edited or deleted: it moves unchanged to the `archive/` folder, and the live decision index keeps one line saying where each decision went (see the [decision map](decision-map.md)).
 
+## 16 November 2026: the rest of D87's corpus is streamed from the DeepSeek API (D89)
+
+**Decided by:** the owner (Casey), 16 November 2026, in claude's chat (claude-402). The lab had leased a 4×B200
+and an 8×B200 for the fan-out. It then reported that DeepSeek's own API lists V4.1 Flash at $0.60 per 1M output
+tokens off-peak, so about $800–900 for 1B kept, against about $1,480 for the rented run (pod 3 plus the
+8×B200 plus the 4×B200 at $172.73/h, setup included). Casey's words,
+verbatim:
+
+- Asked about one 8×B200 at about $85/h in place of two 4×B200 pods:
+  "ok i mean yeah go for it just get it done please as quickly and cheaply as possible"
+- "i can just stream deepseek from api..."
+- To the lab's recommendation (down the two new pods, keep pod 3 generating while an API path is built and
+  checked, then finish over the API off-peak): "go with your recommendation"
+- "btw 1 million tokens from openai costs .25c so ive done like 10b before for like 200bucks"
+
+**What changed:**
+
+- **D87's means of generation (the owner's terms):**
+  - Stream the rest of the donor corpus from DeepSeek's API, as the lab recommended, instead of a rented
+    fan-out. In the owner's words: "i can just stream deepseek from api".
+  - The recommendation the owner accepted: down the two new pods, keep pod 3 (vast-60886842) generating while
+    the API path is built and checked, then down it and finish over the API off-peak.
+  - D87's donor (DeepSeek V4.1 Flash), reasoning rule, hard-text-target rule and 1B size stand.
+  - The earlier yes to one 8×B200 is superseded by this answer: no 8×B200 may be leased under it.
+- **Amends D87's lab conditions:**
+  - In place of a pinned checkpoint and the engine and GPUs, the API receipt names the endpoint, the
+    model-version string, the request dates and the off-peak window.
+  - Shards from pod 3 and from the API are tagged apart.
+  - The charter's §3.10 is unchanged.
+- **The lab's reading, not owner terms:**
+  - The two new pods (vast-60895844, vast-60895824) were deleted about 10 minutes after their lease, before
+    any file reached them (about $21.55).
+  - D88's caps still cover pod 3 until it is downed.
+  - The OpenAI note was not taken as a donor switch, since a switch needs the owner's word (D87). The lab also
+    notes that OpenAI's Services Agreement §3.3(e) bars using Output to develop competing models, while
+    DeepSeek's Open Platform Terms §4.2 allow "training other models (such as model distillation)". The $0.25
+    per 1M figure is the owner's, unverified by the lab and for a different model.
+- **The lab's conditions and means, not owner terms:**
+  - `deepseek-flash` at the published off-peak rates.
+  - The seed is recorded as absent (not replayable).
+  - The instrument takes the key from a file or environment variable; the lab never reads, prints or logs it
+    (§3.13).
+  - The production sheet's amendment and its non-author FIT come before the first API request.
+
+## 16 November 2026: D87's corpus run may use 4 pods at $43.41/h (D88)
+
+**Decided by:** the owner (Casey), 16 November 2026, in claude's chat (claude-401). Under D87's $35/h no
+qualifying Vast host was listed, so the one-hour measured run was approved piece by piece. The full corpus
+was approved after the lab reported that tuning segment A read about 9.5k kept tokens/s on vast-60886842
+(4×B200, $43.41/h): about 29 h and $1,270 for 1B on one pod, or about 7.3 h on 4 pods at about the same
+cost. Casey's words, verbatim:
+
+- "approve the $56.85/h host for the one-hour measurement"
+- Asked "Is the disk charge covered by your approval?": "Yes, that's fine"
+- Asked "Allow any verified datacenter 8×H200 at up to $58/h for the hour?": "Yes, any such host"
+- Asked "Allow a Vast datacenter 4×B200 at up to $44/h for the hour?": "Yes, use 4×B200"
+- "yes approved go please", then "go i said go"
+- "approve 4 pods at $43.41/h for the full 1B - make sure you do everything possible to make these run as
+  quickly as possible for as cheap as possible because 1270$ sped is ridiculous"
+
+**What changed:**
+
+- **§5.4's compute caps (the owner's term):** "4 pods at $43.41/h" for the full 1B corpus, in place of
+  D87's $35/h, with the direction to run it "as quickly as possible for as cheap as possible".
+- **The lab's reading, not owner terms:** $43.41/h is per pod (the measured 4×B200 pod's price), so
+  $173.64/h in all across all labs. The raise is for this corpus run only, as D87's was, and the caps then
+  return to 4 pods and $8/h. While four pods are leased, no other lab can lease one.
+- **The lab's conditions and means, not owner terms:** Vast verified datacenter hosts that pass the sheet's
+  offer and NVLink checks; the guard with the amendment's caps; disjoint prompt ranges per pod; the cost per
+  kept token worked down before the fan-out; any host above $43.41/h needs the owner's word.
+
+## 16 November 2026: D41's production donor is DeepSeek V4.1 Flash, reasoning kept, 1B first (D87)
+
+**Decided by:** the owner (Casey), 16 November 2026, in Claude's chat, recorded at
+`2026-11-16T02:37:46Z` (claude-399). The decision followed the gpt-oss-20b pilot (claude-390),
+which kept 220.7 answer tokens/s on wick, so 1B kept tokens would take about 52 days. The picked answers
+quote the choice they picked; the others are Casey's own words.
+
+To the speed and size question:
+
+> "please do everything above that will reduce our time to accomplish this, including multiple
+> pods to get it done fast... I'd much rather do the large corpus we talked about 100M is far too
+> small to be useful."
+
+To the corpus size: "1B first as suggested above - but I think we should then lowkey do the rest
+of the distilling on the 4090 on wick for as long as it takes. I think a 1B model is at least
+sort of useful". To the caps: "Raise to $35/h, 4 pods (Recommended)". To the wick donor: "if the
+small models cant offer real intelligence close to claude opus4.6 reasoning, then we need to focus
+on a model that can". To "Start the first 1B tokens with DeepSeek V4.1 Flash, reasoning traces
+kept?": "Yes, start it".
+
+**What changed** (the charter's text does not change; §3.10 still says hard targets only):
+
+1. **D86's donor.** The production donor is DeepSeek V4.1 Flash on rented pods, in place of
+   gpt-oss-20b on wick. *The lab's recommendation, not an owner term:* gpt-oss-120b (Apache 2.0)
+   if the measured rate is too slow. The owner did not choose it, so a switch needs the owner's
+   word. The licence (MIT, per the lab) is checked on the model card at pinning.
+2. **D86's scope: the reasoning text is kept.** The donor's reasoning text is kept with its
+   final answer. Both are hard text targets: no logits, probabilities, scores or ranks. (b) stays
+   deferred, and (c) and (d) stay banned.
+3. **The first corpus** is 1B kept tokens.
+4. **§5.4's compute caps, for this corpus run only:** 4 pods and $35/h across all labs, in place of
+   4 pods and $8/h. The run sets `UOR_POD_MAX_RATE=35`, and the caps return to $8/h when the run's
+   pods are down.
+
+**Not decided:** wick's role after the first corpus, and whether a public pretraining corpus is
+used.
+
+## 15 November 2026: D41's donor pass released, on wick, with gpt-oss-20b (D86)
+
+**Decided by:** the owner (Casey), 15 November 2026, in Claude's chat, recorded at
+`2026-11-15T10:53Z` (claude-388). He decided this after a five-architect review of the path to
+one end-to-end served vector model. All five reviews recommended releasing D41's hard-target
+donor pass and keeping weight and logit distillation banned. Each answer below replies to a
+question that quoted its choice.
+
+To "Release D41's one-time donor pass (distill-d1)?":
+
+> "I would say yes release it, but why is it going to cost money? if we are running it locally
+> on wick, wouldn't it be free?"
+
+To "may the donor give up to 4 alternative answers per prompt (still no probabilities or
+scores)?": "Allow up to 4 (Recommended)". To the weight-distillation variants: "Defer (b), ban
+(c)(d) (Recommended)". To "Which donor?": "gpt-oss-20b on wick (Recommended)". To D41 item 3's
+order: "Drop driver math, keep pilot (Recommended)".
+
+**What changed** (the charter's text does not change; §3.10 still says hard targets only):
+
+1. **§3.10 / D41 item 5: the release.** `distill-d1` is released by the owner. The generation
+   unit still needs its own one-page sheet with a non-author FIT (§4.5). It also needs its
+   generation receipt bound at generation (D41 item 2b).
+2. **D41 item 1 and condition (a): the donor and the machine.** The donor is
+   `openai/gpt-oss-20b`, not `openai/gpt-oss-120b`. The 120B model needs about 65 GB and does
+   not fit the owner's 24 GB RTX 4090. It runs on **wick**, the owner's own RTX 4090, instead
+   of a declared `uor-pod` lease. *The lab's conditions, not owner terms:* a pinned revision
+   with the released MXFP4 weights; one offline run in the lab's own container, outside every
+   compiled module of the repository (§3.4); the receipt names the external inference engine
+   and binds wick's GPU identity in place of a pod's.
+3. **D41 item 4: the consumption contract.** The donor may give up to **four** alternative
+   answer texts per prompt. Each is a hard target: donor-chosen tokens stored as integer
+   targets, with no logits, probabilities, scores or ranks stored or consumed.
+4. **D41 item 3: the sequence.** The driver math optimization (occupancy and the BVG-K driver,
+   from the M1 era) no longer gates the donor pass. The measured ~1M-token pilot stays: it runs
+   first, on the same donor, before any production corpus is sized.
+5. **Variants the review named.** (b) a one-time donor embedding-table import, used as a native
+   starting point, is **deferred** (Casey's words: "Defer (b)"). The review recommended deciding
+   it on evidence after the first native end-to-end model; it would need a §3.10 change. (c) fitting the geometric operators to a donor's layers
+   or hidden states, and (d) a donor's logits or distributions as targets, stay **banned**
+   (§3.2, §3.3, §3.10).
+
+D41's other conditions are unchanged: (b) the receipt; (c) the donor never runs in student
+preparation, training, evaluation, serving, grading or any panel; (d) no student-side
+exception; (e) data is an instrument input, not evidence; (f) the exception expires when
+`distill-d1` is sealed.
+
+## 13 November 2026: one persistent native train/serve state (D85)
+
+<!-- native-space-contract: Native default: one persistent native geometric state uses one declared integer or fixed-point representation for token addresses, vector coordinates, carry, routes, memory keys and reads, learned state, gradients and optimizer updates; training and serving use the same typed operators; route choices, carry state, read choices, memory addresses and token ids are bit-identical on the same prompt and starting state; the artifact losslessly serializes that state instead of an F32 master model or an export gap; floating point remains reference or diagnostic code only. -->
+
+**Decided by:** the owner (Casey), 13 November 2026, recorded at `2026-11-14T02:57:18Z`.
+He wrote:
+
+> "see here I thought we were training directly to vector space, carrying the same space,
+> and serving the same space with identical attention mechanisms in training and serving"
+
+Then:
+
+> "yes please update your corvuswing loopkit and harness too so that you can continue down
+> the correct path"
+
+**What changed:**
+
+1. **§1 and §2.1.** The model's native state is trained, carried and serialized to D11; the
+   artifact is no longer described as the result of a different model's export.
+2. **§3.6.** Serving remains integer and now states explicitly that its artifact packages the
+   same state training updated.
+3. **§3.7.** The default route is one persistent integer/fixed-point geometric state with
+   the same typed operators in training and serving. Route choices, carry, reads, memory
+   addresses and emitted ids must replay bit for bit. Float is reference/diagnostic code
+   outside the default path. An export gap cannot qualify the default path.
+4. **Historical route preserved.** The prior §3.7 text was:
+
+   > Float forward, gradients and optimizers are legal offline, in a separately scanned
+   > module, never in the discrete crate. Every float candidate reports its export gap on
+   > the same evaluator; a gap above the two-seed noise band disqualifies it. The D32
+   > discrete path stays active; its qualification uses exact arithmetic.
+
+   D37, D73, the float trainer, exporter and all measured evidence remain. They become
+   historical/reference or diagnostic work, not the default architecture.
+5. **Control plane.** AGENTS.md, the project Codex skills and `uor-harness` now carry the same
+   invariant. `harness.native_space_contract` fails when the owner decision, charter markers,
+   milestone rule, plan section, skills or required native-parity contract disagree.
+
 ## 1 November 2026: owner-authorized CPU training program (D84)
 
 **Decided by:** the owner (Casey), in the DeepSeek/Codex session on the project workstation, recorded by the lab at `2026-11-01T21:51:23Z`. He wrote:

@@ -20,11 +20,11 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 24 |
+| ready | 27 |
 | held | 11 |
 | decision | 1 |
-| done | 104 |
-| total | 140 |
+| done | 107 |
+| total | 146 |
 
 ## Start here
 
@@ -123,14 +123,17 @@ These items are ready and open to anyone.
 
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
+| [Repair Studio model identity and share exact geometric arithmetic](items/m7-lexlean-studio-tools.md) | ready | a lab | no | [m7-studio-live-model-sources](items/m7-studio-live-model-sources.md), [infra-desktop-client-tauri](items/infra-desktop-client-tauri.md) | [#3704](https://github.com/UOR-Foundation/uor-r4/issues/3704) |
 | [Build the library, CLI and browser bit-identity parity harness](items/m7-parity-library-cli-browser.md) | ready | anyone | no | [m7-studio-connect-wasm-engine](items/m7-studio-connect-wasm-engine.md), [m4-export-uorlut01-cli](items/m4-export-uorlut01-cli.md) | [#2867](https://github.com/UOR-Foundation/uor-r4/issues/2867) |
 | [Deliver the native-style Studio IDE harness and real connection workflows](items/studio-ide-harness.md) | ready | a lab | no | [studio-typed-shell-upgrade](items/studio-typed-shell-upgrade.md) | [#3569](https://github.com/UOR-Foundation/uor-r4/issues/3569) |
+| [Import the LexLean MVM workbench and approved GitHub workflow](items/studio-lexlean-mvm-workbench.md) | ready | a lab | no | [studio-cursor-hosted](items/studio-cursor-hosted.md) | [#3939](https://github.com/UOR-Foundation/uor-r4/issues/3939) |
 | [Migrate the Studio to a typed lifecycle shell without changing its engine](items/studio-typed-shell-upgrade.md) | ready | a lab | no | [m7-studio-live-model-sources](items/m7-studio-live-model-sources.md) | [#3500](https://github.com/UOR-Foundation/uor-r4/issues/3500) |
 | [Decompose images into bounded integer R4 patches for native Studio input](items/geometric-image-input.md) | done | a lab | no | [studio-conversational-composer](items/studio-conversational-composer.md) | [#3619](https://github.com/UOR-Foundation/uor-r4/issues/3619) |
 | [Connect the Studio to the browser WASM engine](items/m7-studio-connect-wasm-engine.md) | done | anyone | no | none | [#2868](https://github.com/UOR-Foundation/uor-r4/issues/2868) |
 | [Publish the fixed Studio with working WASM and selectable model sources](items/m7-studio-live-model-sources.md) | done | a lab | no | [m7-studio-connect-wasm-engine](items/m7-studio-connect-wasm-engine.md), [m7-studio-self-host-page-assets](items/m7-studio-self-host-page-assets.md) | [#3440](https://github.com/UOR-Foundation/uor-r4/issues/3440) |
 | [Verify the Studio's offline claim, retire the demo CDNs, bundle tokenizer](items/m7-studio-self-host-page-assets.md) | done | anyone | no | none | [#3075](https://github.com/UOR-Foundation/uor-r4/issues/3075) |
 | [Give Studio a conversational composer, text attachments, and native metrics](items/studio-conversational-composer.md) | done | a lab | no | [uor-chat-openai-loopback](items/uor-chat-openai-loopback.md) | [#3608](https://github.com/UOR-Foundation/uor-r4/issues/3608) |
+| [Deliver the Cursor-style browser-owned Studio task workspace](items/studio-cursor-hosted.md) | done | a lab | no | none | [#3917](https://github.com/UOR-Foundation/uor-r4/issues/3917) |
 | [Serve the native uor-chat engine through a secure OpenAI-compatible loopback API](items/uor-chat-openai-loopback.md) | done | a lab | no | none | [#3595](https://github.com/UOR-Foundation/uor-r4/issues/3595) |
 
 ## M8
@@ -145,9 +148,10 @@ These items are ready and open to anyone.
 | Item | Status | Who can take it | GPU | Depends on | Issue |
 |---|---|---|---|---|---|
 | [Run and grade the bounded CPU training pilot](items/cpu-training-pilot.md) | ready | a lab | no | [cpu-discrete-training-path](items/cpu-discrete-training-path.md), [cpu-shared-vector-train](items/cpu-shared-vector-train.md), [cpu-quantization-exact-memory](items/cpu-quantization-exact-memory.md), [cpu-whole-path-exact-updates](items/cpu-whole-path-exact-updates.md) | [#3506](https://github.com/UOR-Foundation/uor-r4/issues/3506) |
+| [Book page freshness records, a staged banner, and mdBook 0.5](items/docs-site-freshness.md) | ready | a lab | no | none | [#3972](https://github.com/UOR-Foundation/uor-r4/issues/3972) |
 | [Bring every status page, picture and tracker up to 31 Oct 2026](items/docs-status-refresh.md) | ready | a lab | no | none | [#3380](https://github.com/UOR-Foundation/uor-r4/issues/3380) |
 | [One kernel list for the float crate, and fused kernels for the served quantizers](items/float-kernel-fusion.md) | ready | a lab | yes | none | [#3678](https://github.com/UOR-Foundation/uor-r4/issues/3678) |
-| [Serve prompts and conversations past the 192-token window](items/integer-long-context.md) | ready | a lab | yes | [integer-hamming-read](items/integer-hamming-read.md) | [#3471](https://github.com/UOR-Foundation/uor-r4/issues/3471) |
+| [Define one persistent native training/serving state and its operator parity](items/native-space-state-contract.md) | ready | a lab | no | none | [#3973](https://github.com/UOR-Foundation/uor-r4/issues/3973) |
 | [Score one model end to end on prompts it has not seen, with tokens per second](items/one-model-end-to-end.md) | ready | a lab | yes | [turn-memory-reply](items/turn-memory-reply.md) | [#3407](https://github.com/UOR-Foundation/uor-r4/issues/3407) |
 | [Serve the point key's opening in the integer artifact on the laptop](items/point-key-integer.md) | ready | a lab | no | [one-model-end-to-end](items/one-model-end-to-end.md), [turn-memory-integer](items/turn-memory-integer.md), [integer-retention-rates](items/integer-retention-rates.md), [integer-nearest-readout](items/integer-nearest-readout.md) | [#3450](https://github.com/UOR-Foundation/uor-r4/issues/3450) |
 | [Measure how ability grows with width and data](items/scale-probe.md) | ready | a lab | yes | [one-model-end-to-end](items/one-model-end-to-end.md) | [#3472](https://github.com/UOR-Foundation/uor-r4/issues/3472) |
@@ -177,6 +181,7 @@ These items are ready and open to anyone.
 | [Run a Hamilton gate offline-float sheet with language fit and export gap](items/hamilton-gate-offline-float-sheet.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [r-secant-surrogate-descent](items/r-secant-surrogate-descent.md) | [#2824](https://github.com/UOR-Foundation/uor-r4/issues/2824) |
 | [Train the FBS trunk in its own space until its replies read their prompts](items/in-space-trunk-to-text.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | [#3384](https://github.com/UOR-Foundation/uor-r4/issues/3384) |
 | [Serve the Hamming read from the integer artifact on the laptop](items/integer-hamming-read.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [spiralcore-fbs-offline-float-sheet](items/spiralcore-fbs-offline-float-sheet.md) | [#3385](https://github.com/UOR-Foundation/uor-r4/issues/3385) |
+| [Serve prompts and conversations past the 192-token window](items/integer-long-context.md) | done | a lab | yes | [integer-hamming-read](items/integer-hamming-read.md) | [#3471](https://github.com/UOR-Foundation/uor-r4/issues/3471) |
 | [Serve with the hardware integer multiply and divide (D80, D81), exactly](items/integer-mul-div-serving.md) | done | a lab | no | [fbs-serving-kernels](items/fbs-serving-kernels.md) | [#3386](https://github.com/UOR-Foundation/uor-r4/issues/3386) |
 | [Serve the recurrence's retention reading in the integer artifact](items/integer-retention-rates.md) | done | a lab | yes | [d11-exporter-float-trunk](items/d11-exporter-float-trunk.md) | [#3456](https://github.com/UOR-Foundation/uor-r4/issues/3456) |
 | [Solve the saved legal-construction case in exact arithmetic](items/legal-construction-exact-solve.md) | done | anyone | no | none | [#2828](https://github.com/UOR-Foundation/uor-r4/issues/2828) |
@@ -193,6 +198,7 @@ These items are ready and open to anyone.
 | [Compare read-off and read-on for Route and Flock on checkpoints](items/r-read-off-vs-read-on.md) | done | a lab | yes | none | [#2885](https://github.com/UOR-Foundation/uor-r4/issues/2885) |
 | [Check whether a secant surrogate gives descent for recurrence gates](items/r-secant-surrogate-descent.md) | done | a lab | yes | [float-training-module](items/float-training-module.md) | [#2886](https://github.com/UOR-Foundation/uor-r4/issues/2886) |
 | [Compare 4,096 and 16,384 tokenizer pieces](items/r-vocab-4096-vs-16384.md) | done | a lab | yes | [m1-faster-writer](items/m1-faster-writer.md) | [#2887](https://github.com/UOR-Foundation/uor-r4/issues/2887) |
+| [A human-written real-text corpus and held-out panel, for P5 on real text](items/real-text-corpus.md) | done | a lab | no | none | [#3974](https://github.com/UOR-Foundation/uor-r4/issues/3974) |
 | [Run the six-recurrence fit for the recurrence gates](items/recurrence-gates-six-recurrence-fit.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [r-secant-surrogate-descent](items/r-secant-surrogate-descent.md) | [#2890](https://github.com/UOR-Foundation/uor-r4/issues/2890) |
 | [Route the user's turn to an exact memory built from TRAIN, read at the readout](items/route-plus-memory.md) | done | a lab | yes | none | [#3390](https://github.com/UOR-Foundation/uor-r4/issues/3390) |
 | [Measure SpiralCore/FBS descent and tokens per second in a float sheet](items/spiralcore-fbs-offline-float-sheet.md) | done | a lab | yes | [float-training-module](items/float-training-module.md), [r-secant-surrogate-descent](items/r-secant-surrogate-descent.md) | [#2891](https://github.com/UOR-Foundation/uor-r4/issues/2891) |
@@ -320,6 +326,7 @@ flowchart LR
   n_m6_exact_arithmetic_mechanism["m6-exact-arithmetic-mechanism"]
   n_m6_qualify_reasoning_coding["m6-qualify-reasoning-coding"]
   n_m6_reasoning_panel_freeze["m6-reasoning-panel-freeze"]
+  n_m7_lexlean_studio_tools["m7-lexlean-studio-tools"]
   n_m7_parity_library_cli_browser["m7-parity-library-cli-browser"]
   n_m7_studio_connect_wasm_engine["m7-studio-connect-wasm-engine"]
   n_m7_studio_live_model_sources["m7-studio-live-model-sources"]
@@ -344,7 +351,9 @@ flowchart LR
   n_scale_probe["scale-probe"]
   n_spiralcore_fbs_offline_float_sheet["spiralcore-fbs-offline-float-sheet"]
   n_studio_conversational_composer["studio-conversational-composer"]
+  n_studio_cursor_hosted["studio-cursor-hosted"]
   n_studio_ide_harness["studio-ide-harness"]
+  n_studio_lexlean_mvm_workbench["studio-lexlean-mvm-workbench"]
   n_studio_typed_shell_upgrade["studio-typed-shell-upgrade"]
   n_training_step_cost["training-step-cost"]
   n_turn_memory_integer["turn-memory-integer"]
@@ -383,6 +392,7 @@ flowchart LR
   n_float_training_module --> n_r_secant_surrogate_descent
   n_float_training_module --> n_recurrence_gates_six_recurrence_fit
   n_float_training_module --> n_spiralcore_fbs_offline_float_sheet
+  n_infra_desktop_client_tauri --> n_m7_lexlean_studio_tools
   n_infra_loop_harness --> n_infra_loop_render_review
   n_infra_loop_pr02_item_keys --> n_infra_loop_pr03_render
   n_infra_loop_pr02_item_keys --> n_infra_loop_pr05_policy_check
@@ -476,6 +486,7 @@ flowchart LR
   n_m7_studio_connect_wasm_engine --> n_infra_desktop_client_tauri
   n_m7_studio_connect_wasm_engine --> n_m7_parity_library_cli_browser
   n_m7_studio_connect_wasm_engine --> n_m7_studio_live_model_sources
+  n_m7_studio_live_model_sources --> n_m7_lexlean_studio_tools
   n_m7_studio_live_model_sources --> n_studio_typed_shell_upgrade
   n_m7_studio_self_host_page_assets --> n_m7_studio_live_model_sources
   n_m8_release_packaging --> n_m8_independent_verification
@@ -495,6 +506,7 @@ flowchart LR
   n_spiralcore_fbs_offline_float_sheet --> n_in_space_trunk_to_text
   n_spiralcore_fbs_offline_float_sheet --> n_integer_hamming_read
   n_studio_conversational_composer --> n_geometric_image_input
+  n_studio_cursor_hosted --> n_studio_lexlean_mvm_workbench
   n_studio_typed_shell_upgrade --> n_studio_ide_harness
   n_turn_memory_integer --> n_point_key_integer
   n_turn_memory_reply --> n_one_model_end_to_end

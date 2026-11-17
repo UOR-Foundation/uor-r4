@@ -75,6 +75,7 @@ impl PositionConfig {
         if read_spec == ReadSpec::Route {
             return Err(invalid("position transport needs a Flock or Relation read"));
         }
+        read_spec.admits_position_word(self.mode.device_word())?;
         self.steps.validate()?;
         if self.steps.blocks() != spec.blocks {
             return Err(invalid(
@@ -563,7 +564,7 @@ mod tests {
     fn cuda_snapshot_validation_launch_has_one_position_argument() {
         let source = include_str!("device.rs");
         let body = source
-            .split("pub fn from_snapshot")
+            .split("fn from_snapshot_with_provenance")
             .nth(1)
             .unwrap()
             .split("fn gpu_spec")

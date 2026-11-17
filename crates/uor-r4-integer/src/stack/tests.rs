@@ -3,9 +3,12 @@
 //! depends on both engines.
 
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 use super::format::MAX_READ_CACHE_BYTES;
 use super::{IntegerStackModel, StackError, StackShape, MAGIC};
+
+mod pair_rows;
 use super::synthetic::{
     fbs_synthetic_non_square, fbs_synthetic_tiny_gain, synthetic_fbs_trunk, synthetic_fbs_trunk_with,
     synthetic_hamming, synthetic_turn_memory, FbsSynth, FBS_SYNTH_SMALL, Lcg,
@@ -1590,6 +1593,80 @@ fn open_chat<'m>(
 
 type ChatTest = Result<(), Box<dyn std::error::Error>>;
 
+/// claude-352: a chat records the place register after each step that chose a reply id, one
+/// pair per id, and a new reply replaces the last one's pairs. This artifact has no place read,
+/// so every pair is empty, as the session reports it.
+#[test]
+fn stack_chat_records_the_place_register_per_reply_id() -> ChatTest {
+    let model = IntegerStackModel::parse(&artifact_with_context(29, &[], 128))?;
+    let json = chat_tokenizer_json();
+    let mut chat = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    chat.seed(&[0])?;
+    assert!(chat.last_reply_places().is_empty());
+    for max in [3, 1] {
+        let reply = chat.reply("Hi", max)?;
+        assert!(!reply.ids.is_empty());
+        assert_eq!(chat.last_reply_places().len(), reply.ids.len());
+        assert!(chat.last_reply_places().iter().all(|place| *place == (None, None)));
+    }
+    Ok(())
+}
+
+/// A byte-level tokenizer of `vocab` entries, for an artifact wider than the specials and the
+/// bytes: each entry past those 259 is one merge of `A` with another byte.
+fn merged_tokenizer_json(vocab: usize) -> Vec<u8> {
+    let table = alphabet();
+    let specials = ["<|bos|>", "<|eos|>", "<|unk|>"];
+    let mut entries = serde_json::Map::new();
+    for (id, surface) in specials.iter().enumerate() {
+        entries.insert((*surface).to_owned(), json!(id));
+    }
+    for (byte, surface) in table.iter().enumerate() {
+        entries.insert(surface.to_string(), json!(byte + 3));
+    }
+    let mut merges = Vec::new();
+    for (extra, surface) in table.iter().take(vocab - 259).enumerate() {
+        merges.push(format!("{} {surface}", table[65]));
+        entries.insert(format!("{}{surface}", table[65]), json!(extra + 259));
+    }
+    let added: Vec<Value> =
+        specials.iter().enumerate().map(|(id, surface)| json!({"id": id, "content": surface})).collect();
+    serde_json::to_vec(&json!({
+        "pre_tokenizer": {"type": "ByteLevel", "add_prefix_space": false},
+        "added_tokens": added,
+        "model": {"type": "BPE", "vocab": entries, "merges": merges},
+    }))
+    .expect("tokenizer json")
+}
+
+/// claude-352: on an artifact with a place read, the pair recorded for a reply id is the register
+/// a second session shows after the step that chose it: the history's last step for the first
+/// id, the step onto the id before it for every other. The history ends on `PLACE_OPENS`, an
+/// open row, and the next step moves the register whatever the reply says, so a pair recorded
+/// one step late is not this one.
+#[test]
+fn stack_chat_reply_places_are_the_register_at_each_choice() -> ChatTest {
+    let (_, placed, _) = place_trunk();
+    let model = IntegerStackModel::parse(&placed)?;
+    let json = merged_tokenizer_json(model.shape().vocab);
+    let mut chat = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    let history = &PLACE_TALK[..19];
+    let reply = chat.reply_history(history, 3)?;
+    let mut session = model.session();
+    for &token in history {
+        session.step_native(token)?;
+    }
+    let mut want = vec![session.last_place()];
+    for &id in &reply.ids[..reply.ids.len() - 1] {
+        session.step_native(id)?;
+        want.push(session.last_place());
+    }
+    assert_eq!(chat.last_reply_places(), want);
+    assert_eq!(want[0], (Some(4), Some(4)), "the open row");
+    assert!(want.len() > 1 && want[1] != want[0], "the next step moves the register: {want:?}");
+    Ok(())
+}
+
 /// The greedy continuation of `history` on a fresh session, as the float
 /// stack's `greedy_reply` computes it: the highest served score (ties to the
 /// lower id) until EOS, a terminal cycle of length 1..=4 repeated three times,
@@ -1661,6 +1738,173 @@ fn stack_chat_extends_the_session_instead_of_replaying_it() -> ChatTest {
         chat.position() - steps_after_first <= 2,
         "the session replayed the history"
     );
+    Ok(())
+}
+
+/// [`chat`] with a declared context of 128, room for a cut reply and the turn after it.
+fn long_chat(seed: u64) -> Result<(IntegerStackModel, Vec<u8>), StackError> {
+    Ok((
+        IntegerStackModel::parse(&artifact_with_context(seed, &[], 128))?,
+        chat_tokenizer_json(),
+    ))
+}
+
+/// claude-369: a seed of [`long_chat`] and a one-token turn after BOS whose reply, served with a
+/// cap of `cap` and the chat's default rule, stops as `want` says. Searched, so each test reads a
+/// stop the engine really gives.
+fn unended_turn(
+    want: fn(super::StackStop) -> bool,
+    cap: usize,
+) -> Result<(u64, Vec<u32>), Box<dyn std::error::Error>> {
+    for seed in 1..64 {
+        let (model, json) = long_chat(seed)?;
+        let mut probe = open_chat(&model, &json)?;
+        let bos = probe.protocol().bos_id;
+        for token in 3..40 {
+            probe.seed(&[bos])?;
+            if want(probe.reply_history(&[bos, token], cap)?.stop) {
+                return Ok((seed, vec![bos, token]));
+            }
+        }
+    }
+    Err("no seed and turn give the stop".into())
+}
+
+fn cut_by_cycle(stop: super::StackStop) -> bool {
+    matches!(stop, super::StackStop::ShortCycle { .. })
+}
+
+/// The turn after a cut one, served with the rule back on keep, and the same turn served by a
+/// fresh chat seeded with `seeded`: ids, history and session position agree.
+fn next_turn_is_a_fresh_chats(
+    chat: &mut super::StackChat<'_>,
+    model: &IntegerStackModel,
+    json: &[u8],
+    seeded: &[u32],
+) -> ChatTest {
+    chat.set_unended(super::Unended::Keep);
+    let next = [seeded, &[5]].concat();
+    let after = chat.reply_history(&next, 12)?;
+    let mut fresh = open_chat(model, json)?;
+    fresh.seed(seeded)?;
+    let want = fresh.reply_history(&next, 12)?;
+    assert_eq!((after.ids, after.stop), (want.ids, want.stop));
+    assert_eq!(chat.tokens(), fresh.tokens());
+    assert_eq!(chat.position(), fresh.position());
+    Ok(())
+}
+
+#[test]
+fn stack_chat_drops_a_cut_reply_and_its_turn() -> ChatTest {
+    let (seed, prompt) = unended_turn(cut_by_cycle, 12)?;
+    let (model, json) = long_chat(seed)?;
+    let bos = prompt[0];
+    let mut keep = open_chat(&model, &json)?;
+    keep.seed(&[bos])?;
+    let kept = keep.reply_history(&prompt, 12)?;
+    let mut chat = open_chat(&model, &json)?;
+    chat.set_unended(super::Unended::Drop);
+    chat.seed(&[bos])?;
+    let reply = chat.reply_history(&prompt, 12)?;
+    assert_eq!((&reply.ids, reply.stop, &reply.text), (&kept.ids, kept.stop, &kept.text));
+    assert_eq!(chat.tokens(), &[bos], "the turn and the reply both leave");
+    assert_eq!(chat.last_reply_unended(), Some(super::Unended::Drop));
+    next_turn_is_a_fresh_chats(&mut chat, &model, &json, &[bos])
+}
+
+#[test]
+fn stack_chat_drops_a_cut_reply_on_the_serve_again_path() -> ChatTest {
+    let (seed, prompt) = unended_turn(cut_by_cycle, 12)?;
+    let (model, json) = long_chat(seed)?;
+    let bos = prompt[0];
+    let mut keep = open_chat(&model, &json)?;
+    keep.seed(&[bos])?;
+    let kept = keep.reply_history(&prompt, 12)?;
+    let mut chat = open_chat(&model, &json)?;
+    chat.set_unended(super::Unended::Drop);
+    chat.set_serve_again(true);
+    chat.seed(&[bos])?;
+    let before = chat.tokens().to_vec();
+    let reply = chat.reply_history(&prompt, 12)?;
+    assert!(cut_by_cycle(reply.stop), "the reply still has its not-ended stop");
+    assert_eq!(reply.stop, kept.stop);
+    assert_eq!(chat.last_reply_unended(), Some(super::Unended::Drop));
+    assert_eq!(chat.tokens(), &before[..], "the turn and the reply both leave");
+    Ok(())
+}
+
+#[test]
+fn stack_chat_closes_a_cut_reply_with_one_pass_and_the_end_mark() -> ChatTest {
+    let (seed, prompt) = unended_turn(cut_by_cycle, 12)?;
+    let (model, json) = long_chat(seed)?;
+    let mut keep = open_chat(&model, &json)?;
+    keep.seed(&prompt[..1])?;
+    let kept = keep.reply_history(&prompt, 12)?;
+    let mut chat = open_chat(&model, &json)?;
+    let eos = chat.protocol().eos_id;
+    chat.set_unended(super::Unended::Close);
+    chat.seed(&prompt[..1])?;
+    let reply = chat.reply_history(&prompt, 12)?;
+    assert_eq!((&reply.ids, reply.stop), (&kept.ids, kept.stop));
+    let super::StackStop::ShortCycle { period } = reply.stop else {
+        return Err("the turn was searched for a cut reply".into());
+    };
+    let closed = [&prompt[..], &reply.ids[..reply.ids.len() - 2 * period], &[eos]].concat();
+    assert_eq!(chat.tokens(), &closed[..]);
+    assert_eq!(chat.last_reply_unended(), Some(super::Unended::Close));
+    next_turn_is_a_fresh_chats(&mut chat, &model, &json, &closed)
+}
+
+#[test]
+fn stack_chat_reply_that_ended_is_kept_under_every_rule() -> ChatTest {
+    let (seed, prompt) = unended_turn(|stop| stop == super::StackStop::Eos, 12)?;
+    let (model, json) = long_chat(seed)?;
+    let mut keep = open_chat(&model, &json)?;
+    keep.seed(&prompt[..1])?;
+    let kept = keep.reply_history(&prompt, 12)?;
+    for rule in [super::Unended::Keep, super::Unended::Drop, super::Unended::Close] {
+        let mut chat = open_chat(&model, &json)?;
+        chat.set_unended(rule);
+        chat.seed(&prompt[..1])?;
+        let reply = chat.reply_history(&prompt, 12)?;
+        assert_eq!((&reply.ids, reply.stop), (&kept.ids, kept.stop), "{rule:?}");
+        assert_eq!(chat.tokens(), keep.tokens(), "{rule:?}");
+        assert_eq!(chat.last_reply_unended(), None, "{rule:?}");
+    }
+    Ok(())
+}
+
+#[test]
+fn stack_chat_keeps_a_cut_reply_by_default() -> ChatTest {
+    let (seed, prompt) = unended_turn(cut_by_cycle, 12)?;
+    let (model, json) = long_chat(seed)?;
+    let mut chat = open_chat(&model, &json)?;
+    chat.seed(&prompt[..1])?;
+    let reply = chat.reply_history(&prompt, 12)?;
+    assert!(cut_by_cycle(reply.stop));
+    assert_eq!(chat.tokens(), &[&prompt[..], &reply.ids[..]].concat()[..]);
+    assert_eq!(chat.last_reply_unended(), None);
+    assert_eq!(super::Unended::default(), super::Unended::Keep);
+    Ok(())
+}
+
+#[test]
+fn stack_chat_drops_or_closes_a_reply_stopped_by_the_token_cap() -> ChatTest {
+    let (seed, prompt) = unended_turn(|stop| stop == super::StackStop::MaximumNewTokens, 2)?;
+    let (model, json) = long_chat(seed)?;
+    let mut chat = open_chat(&model, &json)?;
+    let eos = chat.protocol().eos_id;
+    chat.set_unended(super::Unended::Drop);
+    chat.seed(&prompt[..1])?;
+    let dropped = chat.reply_history(&prompt, 2)?;
+    assert_eq!(dropped.stop, super::StackStop::MaximumNewTokens);
+    assert_eq!(chat.tokens(), &prompt[..1]);
+    assert_eq!(chat.last_reply_unended(), Some(super::Unended::Drop));
+    chat.set_unended(super::Unended::Close);
+    let closed = chat.reply_history(&prompt, 2)?;
+    assert_eq!(closed.ids, dropped.ids);
+    assert_eq!(chat.tokens(), &[&prompt[..], &closed.ids[..], &[eos]].concat()[..]);
+    assert_eq!(chat.last_reply_unended(), Some(super::Unended::Close));
     Ok(())
 }
 
@@ -1927,6 +2171,11 @@ const FBS_CHAT_CONTEXT: usize = 32;
 /// with a tokenizer of its vocabulary. Also returns the opening keys a turn can open with: the
 /// stored keys holding no `<|bos|>` or `<|eos|>`, which would move the turn's anchor.
 fn fbs_chat(seed: u64) -> Result<(IntegerStackModel, Vec<u8>, Vec<Vec<u32>>), StackError> {
+    fbs_chat_with(seed, false)
+}
+
+/// [`fbs_chat`]'s model with either head: `nearest` reads the whole table's nearest token.
+fn fbs_chat_with(seed: u64, nearest: bool) -> Result<(IntegerStackModel, Vec<u8>, Vec<Vec<u32>>), StackError> {
     let mut snap = synthetic_fbs_trunk_with(
         seed,
         FbsSynth {
@@ -1934,6 +2183,7 @@ fn fbs_chat(seed: u64) -> Result<(IntegerStackModel, Vec<u8>, Vec<Vec<u32>>), St
             ..FBS_SYNTH_SMALL
         },
     );
+    snap.readout_nearest = nearest;
     let memory = synthetic_turn_memory(snap.vocab, snap.width, 8, 192, true, 40, seed ^ 0x5eed);
     let keys = memory
         .opening
@@ -2045,6 +2295,110 @@ fn stack_chat_marks_each_turn_of_an_fbs_conversation() -> ChatTest {
         chat.position() - steps_before <= second_history.len() - first_history.len() + second.ids.len(),
         "the session replayed the history"
     );
+    Ok(())
+}
+
+/// claude-348: the chat reads every prompt token but the last without choosing a token
+/// ([`super::IntegerStackSession::read_step`]). Under the nearest head, where that skips the
+/// whole-table scan, two turns still serve what sessions stepped in full serve.
+#[test]
+fn stack_chat_reads_the_prompt_without_choosing_under_the_nearest_head() -> ChatTest {
+    let (model, json, keys) = fbs_chat_with(43, true)?;
+    assert!(model.shape().head_nearest() && model.turn_memory().is_some());
+    let mut chat = open_chat(&model, &json)?;
+    let (bos, eos) = (chat.protocol().bos_id, chat.protocol().eos_id);
+    let mut replies = std::collections::BTreeSet::new();
+    for pair in keys.windows(2) {
+        chat.seed(&[bos])?;
+        let first_history = [&[bos][..], &pair[0]].concat();
+        let first = chat.reply_history(&first_history, 6)?;
+        assert_eq!(first.ids, served_reference(&model, &first_history, 6, eos, true)?, "first turn");
+        let mut second_history = [first_history.as_slice(), &first.ids].concat();
+        if first.stop != super::StackStop::Eos {
+            second_history.push(eos);
+        }
+        second_history.extend_from_slice(&pair[1]);
+        let second = chat.reply_history(&second_history, 6)?;
+        assert_eq!(second.ids, served_reference(&model, &second_history, 6, eos, true)?, "second turn");
+        replies.insert(first.ids);
+        replies.insert(second.ids);
+    }
+    assert!(replies.len() > 1, "every reply is the same: the test cannot see a changed state");
+    Ok(())
+}
+
+/// claude-348: a read step leaves the session where a choosing step leaves it. Under the nearest
+/// head it names no token; the query and every later choice are the same. Under the writer head
+/// it is a full step.
+#[test]
+fn a_read_step_leaves_the_session_as_a_choosing_step_does() {
+    let synth = FbsSynth {
+        context: 32,
+        ..FBS_SYNTH_SMALL
+    };
+    let mut snap = synthetic_fbs_trunk_with(20261110, synth);
+    snap.readout_nearest = true;
+    let model = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&snap).expect("export")).expect("parse");
+    assert!(model.shape().head_nearest());
+    let vocab = model.shape().vocab as u32;
+    let (mut full, mut read) = (model.session(), model.session());
+    let mut picks = std::collections::BTreeSet::new();
+    let mut token = 3u32;
+    for t in 0..24u32 {
+        let (pick, _) = full.serve_step(token).expect("a full step");
+        if t % 3 == 2 {
+            assert_eq!(read.serve_step(token).expect("a choosing step"), (pick, 0), "step {t}");
+            assert_eq!(read.last_native_token(), Some(pick), "step {t}");
+        } else {
+            read.read_step(token).expect("a read step");
+            assert_eq!(read.last_native_token(), None, "step {t}: a read step names no token");
+        }
+        assert_eq!(read.last_query_q12(), full.last_query_q12(), "step {t}: the same query");
+        picks.insert(pick);
+        token = (pick + t) % vocab;
+    }
+    assert!(picks.len() > 1, "one pick throughout: the test cannot see a changed state");
+    snap.readout_nearest = false;
+    let writer = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&snap).expect("export")).expect("parse");
+    let (mut full, mut read) = (writer.session(), writer.session());
+    let (pick, _) = full.serve_step(3).expect("a full step");
+    read.read_step(3).expect("a read step");
+    assert_eq!(read.last_native_token(), Some(pick), "the writer head still chooses");
+}
+
+/// claude-348: a read step that is refused clears its mark, so the next step chooses again.
+#[test]
+fn a_refused_read_step_leaves_the_next_step_choosing() {
+    let mut snap = synthetic_fbs_trunk(20261110);
+    snap.readout_nearest = true;
+    let model = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&snap).expect("export")).expect("parse");
+    let vocab = model.shape().vocab as u32;
+    let (mut fresh, mut refused) = (model.session(), model.session());
+    assert!(refused.read_step(vocab).is_err(), "an id outside the vocabulary is refused");
+    assert_eq!(refused.serve_step(3).expect("a choosing step"), fresh.serve_step(3).expect("a choosing step"));
+    assert!(refused.last_native_token().is_some(), "the step after a refused read step chooses");
+}
+
+/// claude-348: a feed that stops on an id outside the vocabulary has read its last stepped token
+/// without a choice. Asking for a reply to the history up to that token steps it again, and the
+/// reply is what a session stepped in full serves. The model has no turn memory, whose own reset
+/// would hide this.
+#[test]
+fn stack_chat_serves_the_last_token_after_a_feed_that_stopped_on_an_error() -> ChatTest {
+    let (model, json) = chat(7)?;
+    assert!(model.turn_memory().is_none());
+    let mut chat = open_chat(&model, &json)?;
+    let (bos, eos) = (chat.protocol().bos_id, chat.protocol().eos_id);
+    let vocab = model.shape().vocab as u32;
+    // The fixture's context is six tokens: two read, the refused id, and two of reply fit.
+    let good = [bos, 5 % vocab];
+    let bad = [&good[..], &[vocab]].concat();
+    assert!(
+        matches!(chat.reply_history(&bad, 2), Err(super::StackChatError::Stack(_))),
+        "the engine refuses an id outside the vocabulary after reading the two before it"
+    );
+    let reply = chat.reply_history(&good, 2)?;
+    assert_eq!(reply.ids, served_reference(&model, &good, 2, eos, false)?);
     Ok(())
 }
 
@@ -4127,6 +4481,178 @@ fn hamming_reads_round_trip_in_lut_stack_6() {
     }
 }
 
+#[test]
+fn artifact_metadata_reports_validated_identity_and_sections() {
+    let mut snap = synthetic_fbs_trunk(3894);
+    snap.hamming = Some(synthetic_hamming(
+        snap.width,
+        snap.layers.len(),
+        4,
+        3894,
+    ));
+    let bytes = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+    let metadata = super::inspect_uorlut01(&bytes).expect("metadata");
+    assert_eq!(metadata.family, "uor-r4.lut-stack");
+    assert_eq!(metadata.schema, super::STACK_FBS_HAMMING_SCHEMA);
+    assert_eq!(metadata.sha256, hex::encode(Sha256::digest(&bytes)));
+    assert_eq!(metadata.bytes, bytes.len());
+    assert_eq!(
+        metadata.shape,
+        IntegerStackModel::parse(&bytes)
+            .expect("served model")
+            .shape()
+            .clone()
+    );
+    assert!(metadata.sections.iter().any(|name| name == "writer.table"));
+    assert!(metadata.hamming.is_some());
+    assert!(metadata.memory.is_none());
+    let mut sorted = metadata.sections.clone();
+    sorted.sort();
+    assert_eq!(metadata.sections, sorted);
+}
+
+#[test]
+fn contract_provenance_binds_identity_and_preserves_feature_bytes() {
+    let snap = synthetic_fbs_trunk(345);
+    let base = super::export_fbs_trunk_uorlut01_with(&snap, super::FbsExportSnaps::SNAPPED)
+        .expect("base export");
+    let without = super::export_fbs_trunk_uorlut01_with_provenance(
+        &snap,
+        super::FbsExportSnaps::SNAPPED,
+        None,
+        0,
+        None,
+    )
+    .expect("no-provenance export");
+    assert_eq!(without, base);
+
+    let provenance = super::FbsExportProvenance {
+        stack_contract: super::StackContractProvenance {
+            source: "conformance/stack/fbs-arm-r.toml".to_owned(),
+            sha256: "a".repeat(64),
+            semantic_blake3: "c".repeat(64),
+        },
+        tokenizer_sha256: "b".repeat(64),
+    };
+    let with = super::export_fbs_trunk_uorlut01_with_provenance(
+        &snap,
+        super::FbsExportSnaps::SNAPPED,
+        None,
+        0,
+        Some(&provenance),
+    )
+    .expect("provenance export");
+    assert_ne!(with, base);
+    let metadata = super::inspect_uorlut01(&with).expect("provenance metadata");
+    assert_eq!(metadata.schema, super::STACK_FBS_BOUND_SCHEMA);
+    assert_eq!(
+        metadata.source["stack_contract"]["source"],
+        "conformance/stack/fbs-arm-r.toml"
+    );
+    assert_eq!(
+        metadata.source["stack_contract"]["sha256"],
+        "a".repeat(64)
+    );
+    assert_eq!(
+        metadata.source["stack_contract"]["semantic_blake3"],
+        "c".repeat(64)
+    );
+    assert_eq!(metadata.source["tokenizer_sha256"], "b".repeat(64));
+    assert_eq!(
+        metadata.shape,
+        super::inspect_uorlut01(&base).expect("base metadata").shape
+    );
+    assert_eq!(
+        metadata.sections,
+        super::inspect_uorlut01(&base).expect("base metadata").sections
+    );
+    assert!(super::IntegerStackModel::parse(&with)
+        .expect("bound model")
+        .require_tokenizer_sha256(&"b".repeat(64))
+        .is_ok());
+    assert!(matches!(
+        super::IntegerStackModel::parse(&with)
+            .expect("bound model")
+            .require_tokenizer_sha256(&"d".repeat(64)),
+        Err(StackError::TokenizerBinding { .. })
+    ));
+
+    for (field, value) in [
+        ("source", serde_json::json!("")),
+        ("sha256", serde_json::json!("a")),
+        ("semantic_blake3", serde_json::json!(7)),
+    ] {
+        let broken = with.clone();
+        let header_len =
+            u64::from_le_bytes(broken[8..16].try_into().expect("header length")) as usize;
+        let mut header: Value =
+            serde_json::from_slice(&broken[16..16 + header_len]).expect("header");
+        header["source"]["stack_contract"][field] = value;
+        let replacement = serde_json::to_vec(&header).expect("header");
+        let mut candidate = Vec::new();
+        candidate.extend_from_slice(&broken[..8]);
+        candidate.extend_from_slice(&(replacement.len() as u64).to_le_bytes());
+        candidate.extend_from_slice(&replacement);
+        candidate.resize(candidate.len().div_ceil(64) * 64, 0);
+        candidate.extend_from_slice(&broken[((16 + header_len).div_ceil(64)) * 64..]);
+        assert!(super::inspect_uorlut01(&candidate).is_err());
+    }
+    assert!(
+        super::inspect_uorlut01(&with_header(&with, |header| {
+            header["source"].as_object_mut().unwrap().remove("stack_contract");
+        }))
+        .is_err(),
+        "a partial binding is refused"
+    );
+    assert!(
+        super::inspect_uorlut01(&with_header(&with, |header| {
+            header["source"]["tokenizer_sha256"] = json!("b");
+        }))
+        .is_err(),
+        "a malformed tokenizer binding is refused"
+    );
+}
+
+#[test]
+fn a_bound_point_key_stays_on_uor_r4_lut_stack_10() {
+    let bytes = point_key_test_stack(false);
+    let legacy_with_note = with_header(&bytes, |header| {
+        header["source"]["tokenizer_sha256"] = json!("b".repeat(64));
+    });
+    assert_eq!(
+        IntegerStackModel::parse(&legacy_with_note)
+            .expect("legacy provenance remains readable")
+            .tokenizer_sha256(),
+        None
+    );
+    let bound = with_header(&bytes, |header| {
+        header["schema"] = json!(super::STACK_FBS_BOUND_SCHEMA);
+        header["source"]["stack_contract"] = json!({
+            "source": "conformance/stack/fbs-arm-r.toml",
+            "sha256": "a".repeat(64),
+            "semantic_blake3": "c".repeat(64),
+        });
+        header["source"]["tokenizer_sha256"] = json!("b".repeat(64));
+    });
+    let image = synthetic_point_key(&bound, 5);
+    let with_point = super::add_point_key_uorlut01(&bound, &image).expect("bound point key");
+    let (header, _) = header_and_data(&with_point);
+    assert_eq!(header["schema"], super::STACK_FBS_BOUND_SCHEMA);
+    assert_eq!(
+        header["source"]["stack_contract"]["semantic_blake3"],
+        "c".repeat(64)
+    );
+    assert_eq!(header["source"]["tokenizer_sha256"], "b".repeat(64));
+    let model = IntegerStackModel::parse(&with_point).expect("bound point-key model");
+    model
+        .require_tokenizer_sha256(&"b".repeat(64))
+        .expect("matching tokenizer");
+    assert!(matches!(
+        model.require_tokenizer_sha256(&"d".repeat(64)),
+        Err(StackError::TokenizerBinding { .. })
+    ));
+}
+
 /// claude-188: the exporter refuses a Hamming read the trunk cannot carry.
 #[test]
 fn malformed_hamming_reads_are_refused() {
@@ -4177,6 +4703,239 @@ fn snapshots_without_hamming_reads_are_unchanged() {
 /// claude-261: the copy key in the snapshot and the artifact. At 1 the record serializes exactly
 /// as before the field, and neither the snapshot nor the artifact's header holds it; at 2 both
 /// hold it, and the parsed record and the session carry it; any other key is refused at export.
+/// claude-345: the copy rule is in the header only when it is the latest exact match, so an
+/// artifact under the mean is byte for byte as before, and the session serves the recorded rule.
+#[test]
+fn the_copy_rule_is_recorded_only_when_latest() {
+    use super::synthetic::synthetic_hamming;
+    use super::CopyRule;
+    let mut snap = synthetic_fbs_trunk(20261110);
+    snap.hamming = Some(synthetic_hamming(snap.width, snap.layers.len(), 4, 345));
+    let mean = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+    // The exporter sets the rule from the run's config (`fbs-export --run-config`); the snapshot
+    // does not carry it.
+    let latest = super::set_hamming_copy_latest_uorlut01(&mean).expect("the rule is set");
+    for (bytes, copy_latest, rule) in [(&mean, false, CopyRule::Mean), (&latest, true, CopyRule::LatestExact)] {
+        let image = super::read_hamming_uorlut01(bytes).expect("parse").expect("the reads");
+        assert_eq!(image.record.copy_latest, copy_latest);
+        let _ = with_header(bytes, |h| {
+            let field = h["hamming"].get("copy_latest").cloned();
+            assert_eq!(field, copy_latest.then(|| serde_json::json!(true)));
+        });
+        let mut model = IntegerStackModel::parse(bytes).expect("the session serves it");
+        assert_eq!(model.copy_rule(), Some(rule));
+        // The serving switch still overrides the artifact's own rule.
+        assert!(model.set_copy_rule(CopyRule::LatestNearest));
+        assert_eq!(model.copy_rule(), Some(CopyRule::LatestNearest));
+        // The mean is a rule to switch to like the others: on the latest artifact it is not its
+        // own rule, and the switch must take it (`uor-chat --copy-rule mean`).
+        assert!(model.set_copy_rule(CopyRule::Mean));
+        assert_eq!(model.copy_rule(), Some(CopyRule::Mean));
+    }
+    // Only the header changed: the artifact equals the mean one with that one header field set.
+    let by_hand = with_header(&mean, |h| h["hamming"]["copy_latest"] = serde_json::json!(true));
+    assert_eq!(latest, by_hand);
+    // A stack without Hamming reads has no copy rule to set.
+    snap.hamming = None;
+    let plain = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+    assert!(super::set_hamming_copy_latest_uorlut01(&plain).is_err());
+}
+
+/// claude-357: the longest rule's reply marker is in the header only when set, so an artifact
+/// without it is byte for byte as before; it needs the latest exact rule and vocabulary ids; and
+/// the session serves `longest-after-opening` as such an artifact's own rule.
+#[test]
+fn the_longest_rule_is_recorded_only_when_set() {
+    use super::synthetic::synthetic_hamming;
+    use super::CopyRule;
+    let mut snap = synthetic_fbs_trunk(20261112);
+    snap.hamming = Some(synthetic_hamming(snap.width, snap.layers.len(), 4, 357));
+    let mean = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+    let latest = super::set_hamming_copy_latest_uorlut01(&mean).expect("the rule is set");
+    let _ = with_header(&latest, |h| assert!(h["hamming"].get("copy_longest").is_none()));
+    // The marker orders the latest exact matches: an artifact under the mean has none to order.
+    assert!(super::set_hamming_copy_longest_uorlut01(&mean, [2, 3]).is_err());
+    assert!(super::set_hamming_copy_longest_uorlut01(&latest, [2, u32::MAX]).is_err(), "not a vocabulary id");
+    let longest = super::set_hamming_copy_longest_uorlut01(&latest, [2, 3]).expect("the marker is set");
+    let image = super::read_hamming_uorlut01(&longest).expect("parse").expect("the reads");
+    assert_eq!(image.record.copy_longest, Some([2, 3]));
+    assert!(image.record.copy_latest);
+    // Only the header changed: the artifact equals the latest one with that one field set.
+    let by_hand = with_header(&latest, |h| h["hamming"]["copy_longest"] = serde_json::json!([2, 3]));
+    assert_eq!(longest, by_hand);
+    // The artifact's own rule, and the serving switch still overrides it.
+    let mut model = IntegerStackModel::parse(&longest).expect("the session serves it");
+    assert_eq!(model.copy_rule(), Some(CopyRule::LongestAfterOpening));
+    assert!(model.set_copy_rule(CopyRule::LatestExact));
+    assert_eq!(model.copy_rule(), Some(CopyRule::LatestExact));
+    let other = IntegerStackModel::parse(&latest).expect("the session serves it");
+    assert_eq!(other.copy_rule(), Some(CopyRule::LatestExact));
+    // A marker by hand on an artifact under the mean is refused when read.
+    let bad = with_header(&mean, |h| h["hamming"]["copy_longest"] = serde_json::json!([2, 3]));
+    assert!(IntegerStackModel::parse(&bad).is_err());
+    // A stack without Hamming reads has no copy rule to set.
+    snap.hamming = None;
+    let plain = super::export_fbs_trunk_uorlut01(&snap).expect("export");
+    assert!(super::set_hamming_copy_longest_uorlut01(&plain, [2, 3]).is_err());
+}
+
+/// claude-357: an artifact whose record names a reply marker finds the opening row from the
+/// tokens. With no reply mark, the row whose previous and own tokens are the marker keeps the
+/// latest match, as a marked session of the artifact without a marker does under
+/// `longest-after-opening`; a marker that stands nowhere leaves every row to the longest rule,
+/// whatever the session marks. The tokens are claude-356's: the two rules differ at the last row.
+#[test]
+fn the_reply_marker_finds_the_opening_row_without_a_mark() {
+    use super::CopyRule;
+    let tokens: [u32; 8] = [4, 9, 6, 5, 9, 7, 4, 9];
+    let last = tokens.len() - 1;
+    let layers = served_read_trunk(&[1], 1.0, 1.0).0.layers.len();
+    for depth in [1, layers] {
+        let (_, _, bytes) = served_read_trunk(&[depth], 1.0, 1.0);
+        let latest = super::set_hamming_copy_latest_uorlut01(&bytes).expect("the latest rule");
+        // The last row's kept positions of the two copy heads, and the query served there.
+        let last_row = |bytes: &[u8], rule: Option<CopyRule>, mark: bool| {
+            let mut model = IntegerStackModel::parse(bytes).expect("the read is served");
+            if let Some(rule) = rule {
+                assert!(model.set_copy_rule(rule));
+            }
+            let mut session = model.session();
+            for &token in &tokens[..last] {
+                session.step_native(token).expect("step");
+            }
+            if mark {
+                session.mark_reply_start();
+            }
+            session.set_hamming_trace(true);
+            let step = session.step_native(tokens[last]).expect("the last step");
+            let trace = session.take_hamming_trace().expect("the trace is on");
+            let kept: Vec<Vec<u32>> =
+                trace.iter().flat_map(|r| r.heads.iter().take(2)).map(|h| h.kept.clone()).collect();
+            (kept, step.query_q12)
+        };
+        let marked = last_row(&latest, Some(CopyRule::LongestAfterOpening), true);
+        let longest = last_row(&latest, Some(CopyRule::LongestExact), false);
+        assert_ne!(marked, longest, "depth {depth}: the two rules differ at the last row");
+        let here = super::set_hamming_copy_longest_uorlut01(&latest, [tokens[last - 1], tokens[last]])
+            .expect("the marker is set");
+        assert_eq!(last_row(&here, None, false), marked, "depth {depth}: the marker names the opening row");
+        assert_eq!(
+            last_row(&here, Some(CopyRule::LongestExact), false),
+            longest,
+            "depth {depth}: a caller's rule stands over the artifact's own"
+        );
+        let nowhere = super::set_hamming_copy_longest_uorlut01(&latest, [0, 0]).expect("the marker is set");
+        assert_eq!(
+            last_row(&nowhere, None, true),
+            longest,
+            "depth {depth}: no marker at the row: the longest rule, whatever the session marks"
+        );
+    }
+}
+
+/// claude-356: the session passes its reply mark to the copy heads, in the stream read and in
+/// the readout read, by the plain step and by the timed one. The last row's token 9 comes after
+/// a 4; 9 was followed by 6 after a 4 and later by 7 after a 5, so the latest exact match and the
+/// longest differ at that row and at no earlier one. Under `longest-after-opening` a session
+/// marked at that row keeps the latest rule's positions and serves another query than an unmarked
+/// one, which is the longest rule's session at every row.
+#[test]
+fn the_reply_mark_reaches_the_copy_heads_under_the_opening_rule() {
+    use super::CopyRule;
+    let tokens: [u32; 8] = [4, 9, 6, 5, 9, 7, 4, 9];
+    let last = tokens.len() - 1;
+    let layers = served_read_trunk(&[1], 1.0, 1.0).0.layers.len();
+    for depth in [1, layers] {
+        let (_, _, bytes) = served_read_trunk(&[depth], 1.0, 1.0);
+        // The last row's kept positions of the two copy heads, and the query served there.
+        let last_row = |rule: CopyRule, mark: bool, timed: bool| {
+            let mut model = IntegerStackModel::parse(&bytes).expect("the read is served");
+            assert!(model.set_copy_rule(rule));
+            let mut session = model.session();
+            for &token in &tokens[..last] {
+                session.step_native(token).expect("step");
+            }
+            if mark {
+                session.mark_reply_start();
+            }
+            session.set_hamming_trace(true);
+            let step = if timed {
+                session.measure_fbs_step_stages(tokens[last], &mut Vec::new()).expect("the timed step").0
+            } else {
+                session.step_native(tokens[last]).expect("the last step")
+            };
+            let trace = session.take_hamming_trace().expect("the trace is on");
+            let kept: Vec<Vec<u32>> = trace.iter().flat_map(|r| r.heads.iter().take(2)).map(|h| h.kept.clone()).collect();
+            (kept, step.query_q12)
+        };
+        let latest = last_row(CopyRule::LatestExact, true, false);
+        let longest = last_row(CopyRule::LongestExact, false, false);
+        assert_ne!(latest.0, longest.0, "depth {depth}: the two rules keep different positions");
+        let marked = last_row(CopyRule::LongestAfterOpening, true, false);
+        assert_eq!(marked.0, latest.0, "depth {depth}: the opening row keeps the latest match");
+        let unmarked = last_row(CopyRule::LongestAfterOpening, false, false);
+        assert_eq!(unmarked, longest, "depth {depth}: with no mark the rule is the longest rule");
+        assert_ne!(marked.1, unmarked.1, "depth {depth}: the mark moves the served query");
+        let timed = last_row(CopyRule::LongestAfterOpening, true, true);
+        assert_eq!(timed, marked, "depth {depth}: the timed step reads the mark as the plain step");
+        // A mark at another row is no opening at this one.
+        let early = {
+            let mut model = IntegerStackModel::parse(&bytes).expect("the read is served");
+            assert!(model.set_copy_rule(CopyRule::LongestAfterOpening));
+            let mut session = model.session();
+            session.step_native(tokens[0]).expect("step");
+            session.mark_reply_start();
+            for &token in &tokens[1..] {
+                session.step_native(token).expect("step");
+            }
+            session.last_query_q12().expect("the last step's query").to_vec()
+        };
+        assert_eq!(early, unmarked.1, "depth {depth}: a mark at row 1 leaves the last row to the longest rule");
+    }
+    // A forced replay that forces nothing reads the mark as the served step does, in the stream
+    // read and in the readout read. The replay needs an unsnapped artifact (claude-249).
+    let none = crate::fbs_snapshot::DecisionForceWindow::default();
+    let (mut depths, mut layers) = (Vec::new(), 0);
+    let _ = decision_stack(DECISION_RAW, |snap| {
+        depths.clone_from(&snap.hamming.as_ref().expect("the reads").depths);
+        layers = snap.layers.len();
+    });
+    assert!(depths[0] < layers && depths.contains(&layers), "a stream read and a readout read: {depths:?}");
+    for depth in [depths[0], layers] {
+        let bytes = decision_stack(DECISION_RAW, |snap| {
+            snap.memory = None;
+            let read = snap.hamming.as_mut().expect("the reads");
+            let all = std::mem::take(&mut read.depths);
+            read.reads = all
+                .iter()
+                .zip(std::mem::take(&mut read.reads))
+                .filter(|(d, _)| **d == depth)
+                .map(|(_, r)| r)
+                .collect();
+            read.depths = vec![depth];
+        });
+        let mut model = IntegerStackModel::parse(&bytes).expect("the read is served");
+        assert!(model.set_copy_rule(CopyRule::LongestAfterOpening));
+        let last_query = |mark: bool, replay: bool| {
+            let mut session = model.session();
+            if replay {
+                session.set_decision_trace(&none).expect("a trace");
+            }
+            for &token in &tokens[..last] {
+                session.step_native(token).expect("step");
+            }
+            if mark {
+                session.mark_reply_start();
+            }
+            session.step_native(tokens[last]).expect("the last step").query_q12
+        };
+        let served = last_query(true, false);
+        assert_ne!(served, last_query(false, false), "depth {depth}: the mark moves the served query");
+        assert_eq!(last_query(true, true), served, "depth {depth}: a replay that forces nothing is the served read");
+        assert_eq!(last_query(false, true), last_query(false, false), "depth {depth}: and so with no mark");
+    }
+}
+
 #[test]
 fn the_copy_key_is_recorded_only_when_two() {
     use super::synthetic::synthetic_hamming;
@@ -4411,6 +5170,7 @@ fn copy_control(vocab: usize, width: usize, heads: usize, seed: u64) -> (super::
         value_rotation: fixed(&read.value_rotation, super::HAMMING_ROTATION_EXP),
         margin: fixed(&read.margin, super::HAMMING_MARGIN_EXP),
         weight: fixed(&read.weight, super::HAMMING_WEIGHT_EXP),
+        ask: None,
     };
     (super::StackHamming::new(heads, vec![1, 2]), image, table)
 }
@@ -5071,7 +5831,7 @@ fn type_heads_match_the_f64_reference() {
                     }
                 }
             }
-            let got = types.mean(&queries, &tokens[..=t], &cache[..(t + 1) * width]);
+            let got = types.mean(&queries, &tokens[..=t], &cache[..(t + 1) * width], None);
             match (got, found) {
                 (None, 0) => {}
                 (Some(got), found) if found > 0 => {
@@ -5110,7 +5870,7 @@ fn stream_with_type_heads(copy: f32, types: f32) -> (usize, usize) {
         let (_, free_trace) = traced_step(&mut without, tokens[t]);
         let x: Vec<i64> = free_trace[0].iter().map(|&v| i64::from(v)).collect();
         type_heads.payload(&x, &mut cache[t * width..][..width]);
-        let y = type_heads.mean(&type_heads.queries(&x), &tokens[..=t], &cache[..(t + 1) * width]);
+        let y = type_heads.mean(&type_heads.queries(&x), &tokens[..=t], &cache[..(t + 1) * width], None);
         let c = copy_heads.mean(&tokens[..=t], &table);
         typed += usize::from(y.is_some());
         let want: Vec<i32> = if c.is_none() && y.is_none() {
@@ -5161,7 +5921,7 @@ fn readout_with_type_heads(copy: f32, types: f32) -> (usize, usize) {
         let free_query = without.step_native(tokens[t]).expect("step").query_q12;
         let n = without.fbs_norm_output().to_vec();
         type_heads.payload(&n, &mut cache[t * width..][..width]);
-        let y = type_heads.mean(&type_heads.queries(&n), &tokens[..=t], &cache[..(t + 1) * width]);
+        let y = type_heads.mean(&type_heads.queries(&n), &tokens[..=t], &cache[..(t + 1) * width], None);
         let c = copy_heads.mean(&tokens[..=t], &table);
         typed += usize::from(y.is_some());
         let want: Vec<i64> = if c.is_none() && y.is_none() {
@@ -5202,20 +5962,32 @@ fn the_readout_read_adds_both_kinds_of_head() {
 /// saved session does not carry the payloads; a read with copy heads alone, whose state is the
 /// tokens, restores and continues bit for bit.
 #[test]
-fn a_session_with_type_heads_is_not_restored() {
+fn a_session_with_type_heads_restores_with_its_payloads() {
     let tokens = repeating_tokens();
     let (typed, ..) = served_read_parts(&[1, 3], 1.0, 1.0);
-    let mut session = typed.session();
+    let mut first = typed.session();
     for &token in &tokens[..8] {
-        session.step_native(token).expect("step");
+        first.step_native(token).expect("step");
     }
-    match typed.session().restore_state(&session.save_state()) {
-        Err(StackError::Shape(m)) => assert_eq!(
-            m,
-            "a session of a Hamming read with type heads cannot be restored yet: its per-position payloads are not saved"
-        ),
-        other => panic!("expected the restore refusal, got {:?}", other.err()),
+    let saved = first.save_state();
+    let mut restored = typed.session();
+    restored
+        .restore_state(&saved)
+        .expect("a type-head session restores with its payloads");
+    for (t, &token) in tokens.iter().enumerate().skip(8) {
+        assert_eq!(
+            first.step_native(token).expect("step"),
+            restored.step_native(token).expect("step"),
+            "position {t}"
+        );
     }
+    // An older snapshot without the payloads is refused, not restored differently.
+    let mut stripped = saved.clone();
+    stripped.hamming_payloads.clear();
+    assert!(
+        typed.session().restore_state(&stripped).is_err(),
+        "a type-head session without its payloads must be refused"
+    );
     let (copied, ..) = served_read_parts(&[1, 3], 1.0, 0.0);
     let mut first = copied.session();
     for &token in &tokens[..8] {
@@ -5978,6 +6750,10 @@ fn turn_memory_moves_the_readout_point() {
         let mv = mv.expect("a keyed row").clone();
         let (stored, weight) = if opening_hit { (42u32, 0.5f32) } else { (43, 0.25) };
         assert_eq!(mv.stored, Some(stored), "row {row}");
+        let observed = session.last_memory_move_state().expect("public move state");
+        assert_eq!(observed.key, mv.key);
+        assert_eq!(observed.stored, mv.stored);
+        assert_eq!(observed.opening, mv.opening);
         assert_eq!(session.fbs_norm_output_before_memory().len(), width);
         let target = session.fbs_writer_row(stored).expect("writer row");
         let expected = moved(session.fbs_norm_output_before_memory(), target, weight);
@@ -6691,6 +7467,40 @@ fn a_nearest_stack_serves_the_whole_tables_nearest_token() {
     assert!(differ > 0, "the writer's pick and the nearest token differ somewhere");
 }
 
+/// claude-348: the nearest scan stops reading a row once its partial distance passes the best so
+/// far. With every table row present twice, each query's nearest distance is tied between an id
+/// and its copy, and the served token is still the smaller id of the tied nearest rows, as a scan
+/// that reads every value finds it.
+#[test]
+fn the_early_stopping_nearest_scan_keeps_the_smaller_id_on_a_tie() {
+    let mut snap = synthetic_fbs_trunk(20261110);
+    snap.readout_nearest = true;
+    let (vocab, d) = (snap.vocab, snap.width);
+    let half = vocab / 2;
+    let (low, high) = snap.embed.split_at_mut(half * d);
+    high[..half * d].copy_from_slice(low);
+    let model = IntegerStackModel::parse(&super::export_fbs_trunk_uorlut01(&snap).expect("export")).expect("parse");
+    let table = model.fbs_image().expect("an FBS model").writer_table.to_vec();
+    assert!(table[..half * d] == table[half * d..2 * half * d], "every row is in the table twice");
+    let mut ties = 0usize;
+    for run in 0..4usize {
+        let mut session = model.session();
+        for step in 0..model.shape().context {
+            let token = ((step * 5 + run * 13 + 1) % vocab) as u32;
+            let near = session.step_native(token).expect("nearest step");
+            let distances: Vec<i64> = table
+                .chunks_exact(d)
+                .map(|row| near.query_q12.iter().zip(row).map(|(&x, &v)| (i64::from(x) - i64::from(v)).abs()).sum())
+                .collect();
+            let least = *distances.iter().min().expect("a table");
+            let first = distances.iter().position(|&l1| l1 == least).expect("the least") as u32;
+            ties += usize::from(distances.iter().filter(|&&l1| l1 == least).count() > 1);
+            assert_eq!(near.token, first, "run {run} step {step}: the smaller id of the tied nearest rows");
+        }
+    }
+    assert_eq!(ties, 4 * model.shape().context, "every query's nearest distance is tied");
+}
+
 /// claude-231: the point key's override of a missed opening holds under the nearest head, and the
 /// unkeyed greedy opening is the whole table's nearest.
 #[test]
@@ -7264,4 +8074,1528 @@ fn the_decision_trace_refuses_what_is_off_rs_path() {
     let model = IntegerStackModel::parse(&no_reads).expect("no reads");
     assert!(model.session().set_decision_trace(&none).is_ok(), "no read, no code: a trace");
     refused(&no_reads, &with(vec![], vec![code(0, 1, 0, CodeRole::Query)]), "a code on a model without reads");
+}
+
+/// claude-336: a synthetic read's ask heads, with a random question table and, if `reach > 0`,
+/// random carry gains over `vocab` tokens.
+fn ask_control(vocab: usize, width: usize, seed: u64, reach: usize) -> (super::TypeHeads, Vec<i16>, super::AskImage) {
+    let (record, read, table) = copy_control(vocab, width, 4, seed);
+    let mut rng = Lcg(seed ^ 0xa5c);
+    let a: Vec<i16> = (0..vocab * width).map(|_| ((rng.next() % 8192) as i32 - 4096) as i16).collect();
+    let carry = (reach > 0).then(|| (reach, (0..vocab).map(|_| (rng.next() % 131_072) as i32 - 65_536).collect()));
+    let ask = super::AskImage::checked(Some(a), carry, vocab, width).unwrap().unwrap();
+    let heads = super::TypeHeads::new(&record, &read, &table, vocab, width).with_ask(ask.clone());
+    (heads, table, ask)
+}
+
+#[test]
+fn ask_head_queries_match_the_f64_question() {
+    let (vocab, width) = (64, 64);
+    for (seed, reach) in [(336u64, 0usize), (337, 0), (338, 3), (339, 5)] {
+        let (record, read, _) = copy_control(vocab, width, 4, seed);
+        let (heads, table, ask) = ask_control(vocab, width, seed, reach);
+        let mut rng = Lcg(seed ^ 0x9);
+        let tokens: Vec<u32> = (0..24).map(|_| (rng.next() % vocab as u64) as u32).collect();
+        let asked = |v: u32, i: usize| f64::from(table[v as usize * width + i]) + f64::from(ask.table[v as usize * width + i]);
+        let (start, head_width) = (4, width / record.heads);
+        for t in start..tokens.len() {
+            let mut point: Vec<f64> = (0..width).map(|i| asked(tokens[t], i) / 4096.0).collect();
+            if let Some((h, gains)) = &ask.carry {
+                for s in 1..=(*h).min(t - start) {
+                    let (v, g) = (tokens[t - s], f64::from(gains[tokens[t - s] as usize]) / 65_536.0);
+                    for (i, p) in point.iter_mut().enumerate() {
+                        *p += g * asked(v, i) / 4096.0;
+                    }
+                }
+            }
+            let expected: Vec<u64> = (2..4).map(|h| f64_code(&read.key_rotation, &point, h, head_width)).collect();
+            assert_eq!(heads.ask_queries(&table, &tokens, t, start).unwrap(), expected, "seed {seed}, reach {reach}, row {t}");
+        }
+    }
+}
+
+#[test]
+fn a_carried_term_reaches_the_next_rows_of_its_window_only() {
+    let (vocab, width, reach, start) = (64, 64, 3, 3);
+    let (_, table, ask) = ask_control(vocab, width, 340, reach);
+    let (record, read, _) = copy_control(vocab, width, 4, 340);
+    // Only token 7 carries, at gain 1; it sits at row 1 (before the window) and row 5 (inside).
+    let mut gains = vec![0i32; vocab];
+    gains[7] = 1 << 16;
+    let carried = super::AskImage { table: ask.table.clone(), carry: Some((reach, gains)) };
+    let plain = super::AskImage { table: ask.table.clone(), carry: None };
+    let heads = super::TypeHeads::new(&record, &read, &table, vocab, width).with_ask(carried);
+    let bare = super::TypeHeads::new(&record, &read, &table, vocab, width).with_ask(plain);
+    let tokens: Vec<u32> = vec![1, 7, 2, 3, 4, 7, 5, 6, 8, 9, 10, 11];
+    let seven: Vec<i64> = (0..width).map(|i| (i64::from(table[7 * width + i]) + i64::from(ask.table[7 * width + i])) << 16).collect();
+    for t in start..tokens.len() {
+        let with = heads.asked_point(&table, &tokens, t, start).unwrap();
+        let without = bare.asked_point(&table, &tokens, t, start).unwrap();
+        let diff: Vec<i64> = with.iter().zip(&without).map(|(a, b)| a - b).collect();
+        let reached = (6..=5 + reach).contains(&t);
+        let expected = if reached { seven.clone() } else { vec![0; width] };
+        assert_eq!(diff, expected, "row {t}: carried {reached}");
+    }
+}
+
+#[test]
+fn malformed_ask_heads_are_refused() {
+    let (vocab, width) = (8, 8);
+    let a = || Some(vec![0i16; vocab * width]);
+    let refused = |table: Option<Vec<i16>>, carry: Option<(usize, Vec<i32>)>| super::AskImage::checked(table, carry, vocab, width).is_err();
+    assert!(super::AskImage::checked(None, None, vocab, width).unwrap().is_none());
+    assert!(super::AskImage::checked(a(), Some((2, vec![1; vocab])), vocab, width).unwrap().is_some());
+    assert!(refused(Some(vec![0; vocab * width - 1]), None), "short question table");
+    assert!(refused(a(), Some((2, vec![1; vocab + 1]))), "long gains");
+    assert!(refused(a(), Some((0, vec![1; vocab]))), "no reach");
+    assert!(refused(a(), Some((super::ASK_CARRY_MAX + 1, vec![1; vocab]))), "reach past the bound");
+    assert!(refused(None, Some((2, vec![1; vocab]))), "gains without a question table");
+}
+
+/// claude-336: the ask heads of reads at layer 1 and on the readout (layer 3) of the served-read
+/// trunk, with the readout's carry of reach `reach` if `Some`, as [`super::add_hamming_ask_uorlut01`]
+/// takes them; the trunk's bytes without them, and with them.
+fn ask_trunk(reach: Option<usize>) -> (Vec<u8>, Vec<Option<super::AskImage>>, Vec<u8>) {
+    let (snap, _, bytes) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    let (vocab, width) = (snap.vocab, snap.width);
+    let mut rng = Lcg(336);
+    let mut ask = |carry: Option<usize>| {
+        let table: Vec<i16> = (0..vocab * width).map(|_| ((rng.next() % 8192) as i32 - 4096) as i16).collect();
+        let gains = carry.map(|h| (h, (0..vocab).map(|_| (rng.next() % 131_072) as i32 - 65_536).collect()));
+        Some(super::AskImage { table, carry: gains })
+    };
+    let asks = vec![ask(None), ask(reach)];
+    let added = super::add_hamming_ask_uorlut01(&bytes, &asks).expect("the ask heads are added");
+    (bytes, asks, added)
+}
+
+/// claude-336: ask heads round-trip. Without them the record serializes exactly as
+/// `StackHamming::new`'s, the header holds neither field, and every read has no ask; added, the
+/// loaded reads' ask heads (and the readout's carry) are the ones written, under the same schema.
+#[test]
+fn hamming_ask_heads_round_trip() {
+    for reach in [None, Some(3)] {
+        let (bytes, asks, added) = ask_trunk(reach);
+        let plain = super::read_hamming_uorlut01(&bytes).expect("parse").expect("reads");
+        assert_eq!(serde_json::to_vec(&plain.record).unwrap(), serde_json::to_vec(&super::StackHamming::new(4, vec![1, 3])).unwrap());
+        let _ = with_header(&bytes, |h| {
+            assert!(h["hamming"].get("asks").is_none() && h["hamming"].get("carry_rows").is_none());
+        });
+        assert!(plain.reads.iter().all(|r| r.ask.is_none()));
+        let image = super::read_hamming_uorlut01(&added).expect("parse").expect("reads");
+        assert_eq!(image.record.asks, Some(vec![true, true]));
+        assert_eq!(image.record.carry_rows, reach);
+        let got: Vec<_> = image.reads.iter().map(|r| r.ask.clone()).collect();
+        assert_eq!(got, asks, "reach {reach:?}");
+        let _ = with_header(&added, |h| assert_eq!(h["schema"], super::STACK_FBS_HAMMING_SCHEMA));
+        assert!(super::add_hamming_ask_uorlut01(&added, &asks).is_err(), "ask heads are added once");
+    }
+}
+
+/// deepseek-262: carrying a question is an optional readout move, so the exact `−C` control must
+/// keep every ask table and remove only the carry record/section and its gains.
+#[test]
+fn hamming_carry_ablation_keeps_asks_and_removes_only_the_readout_carry() {
+    let (_, asks, carried) = ask_trunk(Some(3));
+    let ablated = super::drop_hamming_carry_uorlut01(&carried).expect("carry ablation");
+
+    let before = super::read_hamming_uorlut01(&carried)
+        .expect("parse carried")
+        .expect("carried reads");
+    let after = super::read_hamming_uorlut01(&ablated)
+        .expect("parse ablated")
+        .expect("ablated reads");
+    assert_eq!(before.record.asks, after.record.asks);
+    assert!(after.record.carry_rows.is_none());
+    assert_eq!(before.record.depths, after.record.depths);
+    for ((before, after), asked) in before.reads.iter().zip(&after.reads).zip(asks.iter()) {
+        let asked = asked.as_ref().expect("both reads ask");
+        let after = after.ask.as_ref().expect("the ask survives");
+        assert_eq!(after.table, asked.table);
+        assert!(after.carry.is_none());
+        assert_eq!(before.ask.as_ref().expect("carried ask").table, after.table);
+    }
+
+    let carried_header = header_json(&carried);
+    let ablated_header = header_json(&ablated);
+    assert_eq!(carried_header["schema"], ablated_header["schema"]);
+    let names = |header: &Value| -> Vec<String> {
+        header["tables"]
+            .as_array()
+            .expect("tables")
+            .iter()
+            .map(|table| table["name"].as_str().expect("name").to_owned())
+            .collect()
+    };
+    let carry = format!("hamming.d{}.carry", before.record.depths.last().unwrap());
+    let mut expected = names(&carried_header);
+    expected.retain(|name| name != &carry);
+    assert_eq!(names(&ablated_header), expected, "only the carry table is removed");
+    let matrices = |header: &Value| -> Vec<Value> {
+        header["matrices"]
+            .as_array()
+            .expect("matrices")
+            .iter()
+            .map(|matrix| {
+                json!({
+                    "name": matrix["name"],
+                    "rows": matrix["rows"],
+                    "cols": matrix["cols"],
+                    "exp_base": matrix["exp_base"],
+                })
+            })
+            .collect()
+    };
+    assert_eq!(
+        matrices(&carried_header),
+        matrices(&ablated_header),
+        "every matrix survives the compacted rebuild"
+    );
+    let sections = |bytes: &[u8], header: &Value| {
+        let declared = u64::from_le_bytes(bytes[8..16].try_into().expect("length")) as usize;
+        let data_start = (16 + declared).div_ceil(64) * 64;
+        let data = &bytes[data_start..];
+        let mut sections = std::collections::BTreeMap::new();
+        let read = |entry: &Value, field: &str| -> Vec<u8> {
+            let span = &entry[field];
+            let start = span["offset"].as_u64().unwrap() as usize;
+            let len = span["bytes"].as_u64().unwrap() as usize;
+            data[start..start + len].to_vec()
+        };
+        for matrix in header["matrices"].as_array().expect("matrices") {
+            let name = matrix["name"].as_str().expect("matrix name");
+            sections.insert(format!("matrix:{name}:nibbles"), read(matrix, "nibbles"));
+            sections.insert(format!("matrix:{name}:scales"), read(matrix, "scales"));
+        }
+        for table in header["tables"].as_array().expect("tables") {
+            let name = table["name"].as_str().expect("table name");
+            sections.insert(format!("table:{name}"), read(table, "span"));
+        }
+        sections
+    };
+    let mut carried_sections = sections(&carried, &carried_header);
+    carried_sections.remove(&format!("table:{carry}"));
+    assert_eq!(
+        carried_sections,
+        sections(&ablated, &ablated_header),
+        "every non-carry section keeps its exact bytes"
+    );
+    assert_eq!(carried_header["hamming"]["asks"], ablated_header["hamming"]["asks"]);
+    assert!(ablated_header["hamming"].get("carry_rows").is_none());
+    assert!(ablated.len() < carried.len());
+
+    let tokens = repeating_tokens();
+    let trace = |bytes: &[u8]| {
+        let model = IntegerStackModel::parse(bytes).expect("served");
+        let mut session = model.session();
+        session.set_hamming_trace(true);
+        for &token in &tokens {
+            session.step_native(token).expect("step");
+        }
+        session.take_hamming_trace().expect("trace")
+    };
+    let (carried_trace, ablated_trace) = (trace(&carried), trace(&ablated));
+    assert_eq!(carried_trace.len(), ablated_trace.len());
+    let mut readout_changes = 0;
+    for (step, (carried, ablated)) in carried_trace.iter().zip(&ablated_trace).enumerate() {
+        let queries = |read: &super::HammingStepRead| {
+            read.heads.iter().map(|head| head.query).collect::<Vec<_>>()
+        };
+        if step % 2 == 0 {
+            assert_eq!(
+                queries(carried),
+                queries(ablated),
+                "stream ask at row {}",
+                step / 2
+            );
+        } else if step / 2 > 0 {
+            readout_changes += usize::from(queries(carried) != queries(ablated));
+        }
+    }
+    assert!(readout_changes > 0, "the carried and ablated readout queries must differ after row 0");
+}
+
+#[test]
+fn hamming_carry_ablation_refuses_artifacts_without_a_carry_or_read() {
+    let (_, _, uncarried) = ask_trunk(None);
+    let error = super::drop_hamming_carry_uorlut01(&uncarried).expect_err("no carry");
+    assert!(error.to_string().contains("readout carry"), "{error}");
+
+    let (mut snapshot, _, _) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    snapshot.hamming = None;
+    let no_read = super::export_fbs_trunk_uorlut01(&snapshot).expect("read-free artifact");
+    let error = super::drop_hamming_carry_uorlut01(&no_read).expect_err("no Hamming read");
+    assert!(error.to_string().contains("Hamming reads"), "{error}");
+}
+
+/// claude-336: a session on an ask artifact records, at every step and read, type-head queries
+/// equal to `TypeHeads::ask_queries` over the window's tokens from row 0, with and without the
+/// readout's carry; at layer 1, whose input is the same as the read-free trunk's, they differ
+/// from the ask-free model's `queries(point)` on at least one head.
+#[test]
+fn a_session_serves_the_ask_heads_queries() {
+    let tokens = repeating_tokens();
+    let trace = |bytes: &[u8]| {
+        let model = IntegerStackModel::parse(bytes).expect("served");
+        let mut session = model.session();
+        session.set_hamming_trace(true);
+        for &token in &tokens {
+            session.step_native(token).expect("step");
+        }
+        session.take_hamming_trace().expect("the trace is on")
+    };
+    for reach in [None, Some(3)] {
+        let (bytes, _, added) = ask_trunk(reach);
+        let served = super::served_copy_codes_uorlut01(&added).expect("parse").expect("reads");
+        let (image, table, vocab, width) = (&served.image, &served.table, served.vocab, served.width);
+        let copy = image.record.heads / 2;
+        let heads: Vec<super::TypeHeads> = image
+            .reads
+            .iter()
+            .map(|r| super::TypeHeads::new(&image.record, r, table, vocab, width).with_ask(r.ask.clone().expect("asks")))
+            .collect();
+        let (asked, plain) = (trace(&added), trace(&bytes));
+        assert_eq!(asked.len(), 2 * tokens.len());
+        let mut differs = 0;
+        for (k, (step, free)) in asked.iter().zip(&plain).enumerate() {
+            let (t, r) = (k / 2, k % 2);
+            let want = heads[r].ask_queries(table, &tokens[..=t], t, 0).expect("asks");
+            let got: Vec<u64> = step.heads[copy..].iter().map(|h| h.query).collect();
+            assert_eq!(got, want, "reach {reach:?}, row {t}, read {r}");
+            if r == 0 {
+                differs += got.iter().zip(&free.heads[copy..]).filter(|(a, b)| **a != b.query).count();
+            }
+        }
+        assert!(differs > 0, "the ask heads ask other than p_t");
+    }
+}
+
+/// claude-353: an asking read's heads bring back the table's point of each kept position's own
+/// token, as the float read's ask heads do (claude-330), and no payload. In the stream the read
+/// is `x + w_c ⊙ c + w_y ⊙ y`, and on the readout `n + w_c ⊙ (c − n) + w_y ⊙ (y − n)`, each
+/// term where a head of its kind found a candidate, `y` the ask heads' mean of those points.
+/// Both are checked against that form in f64, built from the heads' own choices, on random
+/// question tables and on zero ones, where an ask head asks as a copy head and finds every repeat.
+#[test]
+fn an_asking_read_brings_back_the_kept_tokens_points() {
+    use super::hamming::ServedHamming;
+    let (bytes, _, random) = ask_trunk(None);
+    let (snap, _, _) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    let zero = Some(super::AskImage { table: vec![0; snap.vocab * snap.width], carry: None });
+    let zeros = super::add_hamming_ask_uorlut01(&bytes, &[zero.clone(), zero]).expect("the ask heads are added");
+    let tokens = repeating_tokens();
+    let mut rng = Lcg(353);
+    // The served weights floor at Q31, which moves a mean of Q12 points by less than a tenth
+    // of the readout's step; a payload of the wrong kind is off by thousands of steps.
+    let near = 0.6;
+    for (name, added) in [("random", random), ("zero", zeros)] {
+        let served = super::served_copy_codes_uorlut01(&added).expect("parse").expect("reads");
+        let (image, table, vocab, width) = (&served.image, &served.table, served.vocab, served.width);
+        let hamming = ServedHamming::new(image, table, vocab, width, 3, 40).expect("the reads");
+        assert!(hamming.has_type_heads());
+        let copy = image.record.heads / 2;
+        let mut payloads = hamming.payload_caches(40);
+        let mut found = [0usize; 2];
+        for t in 1..tokens.len() {
+            let window = &tokens[..=t];
+            for (r, read) in image.reads.iter().enumerate() {
+                let heads = super::TypeHeads::new(&image.record, read, table, vocab, width).with_ask(read.ask.clone().expect("asks"));
+                // The ask heads' mean in f64: each head's mean of its kept tokens' points, each
+                // weighed `max(0, m − d) / max(m, 1)`, then the mean over the heads that found one.
+                let mut sum = vec![0f64; width];
+                let mut finders = 0f64;
+                for (j, &query) in heads.ask_queries(table, window, t, 0).expect("asks").iter().enumerate() {
+                    let margin = f64::from(read.margin[copy + j]) / 65536.0;
+                    let mut head = vec![0f64; width];
+                    let mut count = 0f64;
+                    for (s, d) in heads.choose(j, query, window) {
+                        let weight = (margin - f64::from(d)).max(0.0) / margin.max(1.0);
+                        if weight == 0.0 {
+                            continue;
+                        }
+                        count += 1.0;
+                        let point = &table[window[s] as usize * width..][..width];
+                        for (acc, &p) in head.iter_mut().zip(point) {
+                            *acc += weight * f64::from(p) / 4096.0;
+                        }
+                    }
+                    if count > 0.0 {
+                        finders += 1.0;
+                        for (acc, value) in sum.iter_mut().zip(head) {
+                            *acc += value / count;
+                        }
+                    }
+                }
+                let y: Option<Vec<f64>> = (finders > 0.0).then(|| sum.iter().map(|v| v / finders).collect());
+                found[r] += usize::from(y.is_some());
+                // The copy mean: Q12 points at Q31 weights.
+                let c: Option<Vec<f64>> = super::CopyHeads::new(&image.record, read, table, vocab, width)
+                    .mean(window, table)
+                    .map(|c| c.iter().map(|&v| v as f64 * 2f64.powi(-43)).collect());
+                let (w_c, w_y) = read.weight.split_at(width);
+                let real = |w: i32| f64::from(w) * 2f64.powi(super::HAMMING_WEIGHT_EXP);
+                if r == 0 {
+                    let x: Vec<i32> = (0..width).map(|_| (rng.next() % (1 << 20)) as i32 - (1 << 19)).collect();
+                    let mut got = x.clone();
+                    hamming.stream(1, window, table, &mut payloads, &mut got, None, None, false, &mut []);
+                    for k in 0..width {
+                        let added = real(w_c[k]) * c.as_ref().map_or(0.0, |c| c[k]) + real(w_y[k]) * y.as_ref().map_or(0.0, |y| y[k]);
+                        let want = f64::from(x[k]) + 65536.0 * added;
+                        assert!((f64::from(got[k]) - want).abs() <= near, "{name}, stream row {t}, coordinate {k}: {} against {want}", got[k]);
+                    }
+                } else {
+                    let unit = 2f64.powi(super::kernels::NORM_FINE_EXP);
+                    let n: Vec<i64> = (0..width).map(|_| (rng.next() % (1 << 40)) as i64 - (1 << 39)).collect();
+                    let mut got = n.clone();
+                    hamming.readout(window, table, &mut payloads, &mut got, None, None, None, false, &mut []);
+                    for k in 0..width {
+                        let nf = n[k] as f64 * unit;
+                        let moved = |w: i32, mean: &Option<Vec<f64>>| mean.as_ref().map_or(0.0, |m| real(w) * (m[k] - nf));
+                        let want = (nf + moved(w_c[k], &c) + moved(w_y[k], &y)) / unit;
+                        assert!((got[k] as f64 - want).abs() <= near, "{name}, readout row {t}, coordinate {k}: {} against {want}", got[k]);
+                    }
+                }
+            }
+        }
+        if name == "zero" {
+            assert!(found[0] > 0 && found[1] > 0, "an ask head that asks as a copy head finds the repeats: {found:?}");
+        }
+        assert!(payloads.iter().all(Vec::is_empty), "{name}: an asking read keeps no payloads");
+    }
+}
+
+/// claude-336: malformed ask heads are refused, each by name: an ask section where the record
+/// says the read does not ask, a missing one, a carry off the readout read, a carry where the
+/// readout does not ask, all flags off or the wrong count, a carry of no reach, and a question
+/// table or carry gains at the wrong length.
+#[test]
+fn malformed_hamming_ask_heads_are_refused() {
+    let err = |bytes: &[u8]| super::read_hamming_uorlut01(bytes).err().map(|e| e.to_string()).unwrap_or_default();
+    let (bytes, asks, added) = ask_trunk(None);
+    let (_, carried_asks, carried) = ask_trunk(Some(3));
+    let cases: Vec<(&str, Vec<u8>, &str)> = vec![
+        ("an ask section, no ask", with_header(&added, |h| h["hamming"]["asks"] = serde_json::json!([false, true])), "present, but the record says"),
+        ("no asks key", with_header(&added, |h| { h["hamming"].as_object_mut().unwrap().remove("asks"); }), "present, but the record says"),
+        ("a carry section, no carry", with_header(&carried, |h| { h["hamming"].as_object_mut().unwrap().remove("carry_rows"); }), "present, but the record names no carry"),
+        ("all off", with_header(&added, |h| h["hamming"]["asks"] = serde_json::json!([false, false])), "not all off"),
+        ("one flag", with_header(&added, |h| h["hamming"]["asks"] = serde_json::json!([true])), "one flag per read"),
+        ("a carry, no ask", with_header(&carried, |h| h["hamming"]["asks"] = serde_json::json!([true, false])), "needs its read to ask"),
+        ("a carry of no reach", with_header(&carried, |h| h["hamming"]["carry_rows"] = serde_json::json!(0)), "from 1 to ASK_CARRY_MAX"),
+        ("a carry past the max", with_header(&carried, |h| h["hamming"]["carry_rows"] = serde_json::json!(super::ASK_CARRY_MAX + 1)), "from 1 to ASK_CARRY_MAX"),
+    ];
+    for (what, bytes, named) in cases {
+        let e = err(&bytes);
+        assert!(e.contains(named), "{what}: {e:?}");
+    }
+    // A missing ask section: the first read asks by the record, but only the readout's was added.
+    let one = super::add_hamming_ask_uorlut01(&bytes, &[None, asks[1].clone()]).expect("one read asks");
+    let missing = with_header(&one, |h| h["hamming"]["asks"] = serde_json::json!([true, true]));
+    assert!(err(&missing).contains("hamming.d1.ask"), "{}", err(&missing));
+    // A missing carry section: the readout's carry is named but its gains were not written.
+    let uncarried = with_header(&added, |h| h["hamming"]["carry_rows"] = serde_json::json!(3));
+    assert!(err(&uncarried).contains("hamming.d3.carry"), "{}", err(&uncarried));
+    // A carry on a read that is not the readout's: refused by the record and by the adder.
+    // A trunk whose one read is at layer 1, before the readout (layer 3).
+    let (_, _, inner) = served_read_trunk(&[1], 1.0, 1.0);
+    let ask = |carry| Some(super::AskImage { table: asks[0].clone().unwrap().table, carry });
+    let gains = carried_asks[1].clone().unwrap().carry;
+    let inner_added = super::add_hamming_ask_uorlut01(&inner, &[ask(None)]).expect("asks");
+    let inner_carry = with_header(&inner_added, |h| h["hamming"]["carry_rows"] = serde_json::json!(3));
+    assert!(err(&inner_carry).contains("on the readout read only"), "{}", err(&inner_carry));
+    let adder = |asks: &[Option<super::AskImage>]| super::add_hamming_ask_uorlut01(&bytes, asks).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(adder(&[ask(gains.clone()), ask(None)]).contains("on the readout read only"));
+    assert!(super::add_hamming_ask_uorlut01(&inner, &[ask(gains.clone())]).unwrap_err().to_string().contains("on the readout read only"));
+    // Wrong lengths.
+    let mut short = asks[0].clone().unwrap();
+    short.table.pop();
+    assert!(adder(&[Some(short), None]).contains("hamming.ask.table"));
+    let (h, mut g) = gains.clone().unwrap();
+    g.pop();
+    assert!(adder(&[None, ask(Some((h, g)))]).contains("hamming.ask.carry"));
+    assert!(adder(&[None]).contains("hamming.asks"));
+    assert!(adder(&[None, None]).contains("not all off"));
+}
+
+/// claude-336: `quantize_hamming_ask` stores a question table at Q12 in i16 and a carry's gains
+/// at Q16 in i32, half away from zero as `fixed_value` rounds, and refuses by name a value that
+/// does not fit or is not finite; its integers are what `AskImage::checked` takes.
+#[test]
+fn hamming_ask_tables_quantize_as_stored() {
+    use crate::fbs_snapshot::{fixed_value, quantize_hamming_ask, FbsHammingAskRead, FbsHammingCarry};
+    let (vocab, width) = (2, 4);
+    let half = 2f32.powi(-13);
+    let table = vec![half, -half, 1.0, -8.0, 0.3, 7.999, 0.0, -0.25];
+    let gain = vec![1.5 * 2f32.powi(-16), -2.75];
+    let ask = FbsHammingAskRead { table: table.clone(), carry: Some(FbsHammingCarry { rows: 3, gain: gain.clone() }) };
+    let (q, carry) = quantize_hamming_ask(6, &ask).expect("fits");
+    assert_eq!(&q[..4], &[1, -1, 4096, -32768], "half a step rounds away from zero");
+    for (&k, &v) in q.iter().zip(&table) {
+        assert_eq!(f64::from(k) / 4096.0, fixed_value(v, -12), "{v}");
+    }
+    let (rows, gains) = carry.clone().expect("carries");
+    assert_eq!((rows, gains.clone()), (3, vec![2, -180_224]));
+    let image = super::AskImage::checked(Some(q), carry, vocab, width).expect("checked").expect("asks");
+    assert_eq!(image.carry, Some((3, gains)));
+    for (what, table, gain, named) in [
+        ("past i16", vec![8.0], None, "hamming_read.d6.ask[0] = 8"),
+        ("not finite", vec![0.0, f32::NAN], None, "hamming_read.d6.ask[1]"),
+        ("past i32", vec![0.0], Some(vec![0.0, 0.0, 40_000.0]), "hamming_read.d6.carry_gain[2]"),
+    ] {
+        let ask = FbsHammingAskRead { table, carry: gain.map(|gain| FbsHammingCarry { rows: 1, gain }) };
+        let e = quantize_hamming_ask(6, &ask).expect_err(what);
+        assert!(e.contains(named), "{what}: {e}");
+    }
+}
+
+/// claude-345: a turn-memory artifact whose reply table holds exactly `entries`, the plain export
+/// without the memory chain's record.
+fn chain_memory_artifact(entries: &[(Vec<u32>, u32)], reply_turn: usize) -> Vec<u8> {
+    super::export_fbs_trunk_uorlut01(&chain_memory_snap(entries, reply_turn)).expect("export")
+}
+
+/// claude-345: the same memory exported with the memory chain's record at `tail`.
+fn chain_export(entries: &[(Vec<u32>, u32)], reply_turn: usize, tail: usize) -> Result<Vec<u8>, StackError> {
+    super::export_fbs_trunk_uorlut01_chain(&chain_memory_snap(entries, reply_turn), super::FbsExportSnaps::SNAPPED, None, tail)
+}
+
+/// claude-345: a turn-memory snapshot whose reply table holds exactly `entries` (sorted here).
+fn chain_memory_snap(entries: &[(Vec<u32>, u32)], reply_turn: usize) -> super::FbsTrunkSnapshot {
+    let mut snap = synthetic_fbs_trunk(20261110);
+    let mut memory = synthetic_memory(snap.vocab, snap.width, 8, true, 345);
+    let reply = memory.reply.as_mut().expect("a reply table");
+    reply.turn = reply_turn;
+    reply.entries = entries
+        .iter()
+        .map(|(key, value)| super::FbsMemoryEntry { key: key.clone(), value: *value })
+        .collect();
+    reply.entries.sort();
+    snap.memory = Some(memory);
+    snap
+}
+
+/// claude-345: serve `tokens` through the artifact's memory, stepping the opening row (the
+/// prompt's last token, `reply_start - 1`) and then the reply row `row`: the anchors and the
+/// reply row's move.
+fn chain_serve(
+    bytes: &[u8],
+    tokens: &[u32],
+    reply_start: usize,
+    row: usize,
+) -> (super::memory::MemoryAnchors, super::memory::MemoryMove) {
+    let artifact = super::format::Container::parse(bytes).expect("parse");
+    let image = super::memory::memory_image(&artifact).expect("read").expect("a memory");
+    let served = super::memory::ServedTurnMemory::new(image, artifact.memory_chain.as_ref());
+    let mut anchors = super::memory::MemoryAnchors::default();
+    let mut n = vec![0i64; artifact.shape.width];
+    served.apply(tokens, reply_start - 1, reply_start, &mut anchors, &[], &mut n).expect("the opening row");
+    let moved = served.apply(tokens, row, reply_start, &mut anchors, &[], &mut n).expect("a reply row");
+    (anchors, moved)
+}
+
+/// claude-345's long turn: `<|bos|>`, 18 prompt ids 10..=27, then the reply 100, 101, 102. The
+/// reply row 20 shows length 2 and id 101, and its head, tail (9) and ends keys.
+fn chain_long_turn() -> (Vec<u32>, Vec<u32>, Vec<u32>, Vec<u32>) {
+    use super::MEMORY_PAD;
+    let mut tokens = vec![0u32];
+    tokens.extend(10..=27u32);
+    tokens.extend([100, 101, 102]);
+    let end = [MEMORY_PAD, 2, MEMORY_PAD, 101];
+    let head: Vec<u32> = (10..=17).chain(end).collect();
+    let tail: Vec<u32> = std::iter::once(MEMORY_PAD).chain(19..=27).chain(end).collect();
+    let ends: Vec<u32> = (10..=17).chain(20..=27).chain(end).collect();
+    (tokens, head, tail, ends)
+}
+
+/// claude-345: with the memory chain's record a reply row asks the ends key, then the tail key,
+/// then the head key, and the first one the reply table stores names the id.
+#[test]
+fn a_memory_chain_asks_ends_then_tail_then_head() {
+    let (tokens, head, tail, ends) = chain_long_turn();
+    assert_eq!((head.len(), tail.len(), ends.len()), (12, 14, 20));
+    let cases = [
+        ("all three stored", vec![(ends.clone(), 11), (tail.clone(), 12), (head.clone(), 13)], &ends, Some(11)),
+        ("tail and head stored", vec![(tail.clone(), 12), (head.clone(), 13)], &tail, Some(12)),
+        ("head stored", vec![(head.clone(), 13)], &head, Some(13)),
+        ("none stored", vec![(vec![super::MEMORY_PAD, 2, super::MEMORY_PAD, 7], 14)], &head, None),
+    ];
+    for (what, entries, key, stored) in cases {
+        let bytes = chain_export(&entries, 8, 9).expect(what);
+        let (anchors, moved) = chain_serve(&bytes, &tokens, 19, 20);
+        assert_eq!(anchors.reply, (10..=17).collect::<Vec<u32>>(), "{what}");
+        assert_eq!(anchors.tail, (19..=27).collect::<Vec<u32>>(), "{what}");
+        assert_eq!(moved.key, *key, "{what}");
+        assert_eq!(moved.stored, stored, "{what}");
+        assert!(!moved.opening, "{what}");
+        // The served model reads the same artifact.
+        IntegerStackModel::parse(&bytes).expect(what);
+    }
+}
+
+/// claude-345: the plain exporter refuses a tail or ends key as not a key this engine reads, the
+/// chain exporter at the right tail writes and serves the same memory, and an artifact of head
+/// keys alone reads and serves the same with the record and without it.
+#[test]
+fn without_a_memory_chain_record_chain_keys_are_refused_and_head_keys_serve_unchanged() {
+    let (tokens, head, tail, ends) = chain_long_turn();
+    for (what, key, stored) in [("a tail key", &tail, 12), ("an ends key", &ends, 11)] {
+        let entries = [(key.clone(), stored), (head.clone(), 13)];
+        match super::export_fbs_trunk_uorlut01(&chain_memory_snap(&entries, 8)) {
+            Err(StackError::Numerics(e)) => assert!(e.contains("is not a key this engine reads"), "{what}: {e}"),
+            other => panic!("{what}: {other:?}"),
+        }
+        let chained = chain_export(&entries, 8, 9).expect(what);
+        assert!(super::read_memory_uorlut01(&chained).is_ok(), "{what}");
+        IntegerStackModel::parse(&chained).expect(what);
+        let (_, moved) = chain_serve(&chained, &tokens, 19, 20);
+        assert_eq!((&moved.key, moved.stored), (key, Some(stored)), "{what}");
+    }
+    let plain = chain_memory_artifact(&[(head.clone(), 13)], 8);
+    assert_eq!(header_and_data(&plain).0["schema"], super::STACK_FBS_MEMORY_SCHEMA);
+    let chained = chain_export(&[(head.clone(), 13)], 8, 9).expect("chain");
+    assert_eq!(
+        super::read_memory_uorlut01(&plain).expect("read"),
+        super::read_memory_uorlut01(&chained).expect("read")
+    );
+    for row in [19, 20, 21] {
+        let (_, without) = chain_serve(&plain, &tokens, 19, row);
+        let (_, with) = chain_serve(&chained, &tokens, 19, row);
+        assert_eq!(without, with, "row {row}");
+    }
+    assert_eq!(chain_serve(&plain, &tokens, 19, 20).1.stored, Some(13));
+}
+
+/// claude-345: the record round-trips as a `/9` header over the same data, and the chain exporter
+/// and the parser refuse a chain without a reply table, a bad tail, a turn whose ends key does not
+/// fit, and a schema that disagrees with the record.
+#[test]
+fn a_memory_chain_record_round_trips_in_lut_stack_9_and_bad_records_are_refused() {
+    let (_, head, _, _) = chain_long_turn();
+    let plain = chain_memory_artifact(&[(head.clone(), 13)], 8);
+    let chained = chain_export(&[(head.clone(), 13)], 8, 9).expect("chain");
+    assert_eq!(chain_export(&[(head.clone(), 13)], 8, 9).expect("chain"), chained);
+    let (header, data) = header_and_data(&chained);
+    assert_eq!(header["schema"], super::STACK_FBS_CHAIN_SCHEMA);
+    assert_eq!(header["memory_chain"], json!({ "tail": 9 }));
+    assert_eq!(data, header_and_data(&plain).1);
+    let parsed = super::format::Container::parse(&chained).expect("parse");
+    assert_eq!(parsed.memory_chain, Some(super::StackMemoryChain { tail: 9 }));
+    assert!(super::format::Container::parse(&plain).expect("parse").memory_chain.is_none());
+    chain_export(&[(head.clone(), 13)], 8, 15).expect("a tail of 15 fits the row");
+    let refused = |what: &str, snap: &super::FbsTrunkSnapshot, tail: usize| {
+        let out = super::export_fbs_trunk_uorlut01_chain(snap, super::FbsExportSnaps::SNAPPED, None, tail);
+        assert!(matches!(out, Err(StackError::Shape(_))), "{what}");
+    };
+    let snap = chain_memory_snap(&[(head.clone(), 13)], 8);
+    refused("a tail of 0", &snap, 0);
+    refused("a tail past the row", &snap, 16);
+    refused("an ends key past the row", &chain_memory_snap(&[(head.clone(), 13)], 9), 9);
+    let mut snap = synthetic_fbs_trunk(20261110);
+    snap.memory = Some(synthetic_memory(snap.vocab, snap.width, 8, false, 345));
+    refused("no reply table", &snap, 9);
+    snap.memory = None;
+    refused("no turn memory", &snap, 9);
+    let schema_refused = |what: &str, bytes: &[u8]| {
+        assert!(matches!(super::format::Container::parse(bytes), Err(StackError::Schema(_))), "{what}");
+    };
+    schema_refused("a chain under /7", &with_header(&chained, |h| h["schema"] = json!(super::STACK_FBS_MEMORY_SCHEMA)));
+    schema_refused("a chain under /8", &with_header(&chained, |h| h["schema"] = json!(super::STACK_FBS_POINT_SCHEMA)));
+    schema_refused("/9 without a chain", &with_header(&plain, |h| h["schema"] = json!(super::STACK_FBS_CHAIN_SCHEMA)));
+    // The largest tail a header can name is refused, not added to until it wraps.
+    let bad_records = [
+        ("a tail of 0", json!({ "tail": 0 })),
+        ("an unknown field", json!({ "tail": 9, "x": 1 })),
+        ("the largest tail", json!({ "tail": u64::MAX })),
+    ];
+    for (what, record) in bad_records {
+        let bad = with_header(&chained, |h| h["memory_chain"] = record);
+        assert!(super::format::Container::parse(&bad).is_err(), "{what}");
+    }
+}
+
+/// claude-345: a turn of no more than `reply_turn` ids has an ends key equal to its head key, and
+/// a reply row whose block the prompt has left keys every form with no turn ids.
+#[test]
+fn a_memory_chain_short_turn_ends_as_head_and_a_left_block_empties_every_chain_form() {
+    use super::MEMORY_PAD;
+    let mut short = vec![0u32];
+    short.extend(10..=14u32);
+    short.extend([100, 101]);
+    let head: Vec<u32> = (10..=14).chain([MEMORY_PAD, 2, MEMORY_PAD, 101]).collect();
+    let bytes = chain_export(&[(head.clone(), 13)], 8, 9).expect("chain");
+    let (anchors, moved) = chain_serve(&bytes, &short, 6, 7);
+    assert_eq!(anchors.ends, anchors.reply);
+    assert_eq!(anchors.tail, anchors.reply);
+    assert_eq!(anchors.reply, (10..=14).collect::<Vec<u32>>());
+    assert_eq!((moved.key, moved.stored), (head, Some(13)));
+    // The reply runs past the first 192-token block: row 193 shows length 2 and no turn ids.
+    let mut long = vec![0u32];
+    long.extend(10..=27u32);
+    long.extend((19..196u32).map(|i| 100 + i % 50));
+    let x = long[193];
+    let empty_head = vec![MEMORY_PAD, 2, MEMORY_PAD, x];
+    let empty_tail = vec![MEMORY_PAD, MEMORY_PAD, 2, MEMORY_PAD, x];
+    let cases = [
+        ("tail stored", vec![(empty_tail.clone(), 12)], &empty_tail, 12),
+        ("tail and head stored", vec![(empty_tail.clone(), 12), (empty_head.clone(), 13)], &empty_head, 13),
+    ];
+    for (what, entries, key, stored) in cases {
+        let bytes = chain_export(&entries, 8, 9).expect(what);
+        let (anchors, moved) = chain_serve(&bytes, &long, 19, 193);
+        assert_eq!(anchors.tail.len(), 9, "{what}: the anchors keep the turn");
+        assert_eq!(moved.key, *key, "{what}");
+        assert_eq!(moved.stored, Some(stored), "{what}");
+    }
+}
+
+/// claude-351: the ids the place-read tests frame a conversation with, in the synthetic trunk's
+/// vocabulary of 512, and the tokens of one: a user turn that states a value of two tokens after
+/// `PLACE_BEFORE`, a reply, a question ending in `PLACE_ASK`, and a reply that says `PLACE_OPENS`
+/// and then the value.
+const PLACE_BOS: u32 = 500;
+const PLACE_EOS: u32 = 501;
+const PLACE_SEP: u32 = 502;
+const PLACE_USER: u32 = 504;
+const PLACE_MODEL: u32 = 505;
+const PLACE_BEFORE: u32 = 21;
+const PLACE_ASK: u32 = 50;
+const PLACE_OPENS: u32 = 60;
+const PLACE_DOT: u32 = 32;
+const PLACE_TALK: [u32; 22] = [
+    PLACE_BOS, PLACE_USER, 20, PLACE_BEFORE, 30, 31, PLACE_DOT, PLACE_EOS, PLACE_SEP, PLACE_MODEL, 40, PLACE_EOS, PLACE_SEP, PLACE_USER, 20, PLACE_ASK, PLACE_SEP, PLACE_MODEL, PLACE_OPENS, 30, 31, PLACE_DOT,
+];
+
+/// claude-351: the served-read trunk with reads at layer 1 and on the readout, its type weights
+/// at 0, whose readout read asks; and the same with the place read added. The readout's question
+/// table moves `PLACE_ASK`'s point onto `PLACE_BEFORE`'s, so the question `20 PLACE_ASK` asks for
+/// the place after `20 PLACE_BEFORE` exactly; `PLACE_DOT` stops, `PLACE_ASK` arms and
+/// `PLACE_OPENS` opens.
+fn place_trunk() -> (Vec<u8>, Vec<u8>, super::PlaceImage) {
+    let (snap, _, bytes) = served_read_trunk(&[1, 3], 1.0, 0.0);
+    let (vocab, width) = (snap.vocab, snap.width);
+    let table = super::served_copy_codes_uorlut01(&bytes).expect("parse").expect("reads").table;
+    let row = |v: u32| &table[v as usize * width..][..width];
+    let mut ask = vec![0i16; vocab * width];
+    for (k, a) in ask[PLACE_ASK as usize * width..][..width].iter_mut().enumerate() {
+        *a = row(PLACE_BEFORE)[k] - row(PLACE_ASK)[k];
+    }
+    let asks = [None, Some(super::AskImage { table: ask, carry: None })];
+    let asked = super::add_hamming_ask_uorlut01(&bytes, &asks).expect("the readout read asks");
+    let marks = super::PlaceMarks {
+        bos: PLACE_BOS,
+        eos: PLACE_EOS,
+        sep: vec![PLACE_SEP],
+        system: vec![503],
+        user: vec![PLACE_USER],
+        assistant: vec![PLACE_MODEL],
+    };
+    let mut class = vec![0i16; vocab];
+    class[PLACE_DOT as usize] = super::PLACE_STOP;
+    class[PLACE_ASK as usize] = super::PLACE_ARM;
+    class[PLACE_OPENS as usize] = super::PLACE_OPEN;
+    let place = super::PlaceImage::checked(marks, class, vocab).expect("the classes");
+    let placed = super::add_hamming_place_uorlut01(&asked, &place).expect("the place read is added");
+    (asked, placed, place)
+}
+
+/// claude-351: the place read round-trips. Without it the header has no `place` and the image
+/// none; added, the loaded image is the one written under the same schema, every earlier section
+/// keeps its bytes, and it is added once, to a readout read that asks.
+#[test]
+fn hamming_place_read_round_trips() {
+    let (asked, placed, place) = place_trunk();
+    let _ = with_header(&asked, |h| assert!(h["hamming"].get("place").is_none()));
+    assert!(super::read_hamming_uorlut01(&asked).expect("parse").expect("reads").place.is_none());
+    let image = super::read_hamming_uorlut01(&placed).expect("parse").expect("reads");
+    assert_eq!(image.place.as_ref(), Some(&place));
+    assert_eq!(image.record.place.as_ref(), Some(&place.marks));
+    let _ = with_header(&placed, |h| assert_eq!(h["schema"], super::STACK_FBS_HAMMING_SCHEMA));
+    let data = |bytes: &[u8]| {
+        let declared = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
+        bytes[(16 + declared).div_ceil(64) * 64..].to_vec()
+    };
+    let (before, after) = (data(&asked), data(&placed));
+    assert_eq!(after[..before.len()], before[..], "every earlier section keeps its bytes");
+    assert!(super::add_hamming_place_uorlut01(&placed, &place).is_err(), "a place read is added once");
+    let (_, _, plain) = served_read_trunk(&[1, 3], 1.0, 0.0);
+    let err = super::add_hamming_place_uorlut01(&plain, &place).unwrap_err().to_string();
+    assert!(err.contains("a readout read that asks"), "{err}");
+    let inner = super::add_hamming_ask_uorlut01(&plain, &[Some(super::AskImage { table: vec![0; place.class.len() * 64], carry: None }), None]).expect("the inner read asks");
+    assert!(super::add_hamming_place_uorlut01(&inner, &place).is_err(), "the readout read must ask");
+    // A class table without its record, and a record without its table, are refused by name.
+    let orphan = with_header(&placed, |h| {
+        h["hamming"].as_object_mut().unwrap().remove("place");
+    });
+    let err = super::read_hamming_uorlut01(&orphan).unwrap_err().to_string();
+    assert!(err.contains("names no place read"), "{err}");
+    let bare = with_header(&asked, |h| h["hamming"]["place"] = serde_json::to_value(&place.marks).unwrap());
+    assert!(super::read_hamming_uorlut01(&bare).is_err(), "a place record needs its class table");
+    let outside = with_header(&placed, |h| h["hamming"]["place"]["bos"] = 512.into());
+    assert!(super::read_hamming_uorlut01(&outside).is_err(), "a mark is a vocabulary id");
+    // Marks the turn reader cannot tell apart are refused when read and when added: no
+    // separator, one marker for two roles, one token for the start and the end mark.
+    let refused = |why: &str, change: &dyn Fn(&mut super::PlaceMarks)| {
+        let mut marks = place.marks.clone();
+        change(&mut marks);
+        let written = with_header(&placed, |h| h["hamming"]["place"] = serde_json::to_value(&marks).unwrap());
+        let err = super::read_hamming_uorlut01(&written).unwrap_err().to_string();
+        assert!(err.contains(why), "{why}: {err}");
+        let image = super::PlaceImage { marks, class: place.class.clone() };
+        assert!(super::add_hamming_place_uorlut01(&asked, &image).is_err(), "{why}: refused when added");
+    };
+    refused("a separator", &|m| m.sep.clear());
+    refused("ends with another", &|m| m.assistant = m.user.clone());
+    refused("one token", &|m| m.eos = m.bos);
+    // The export's road: the image as the snapshot JSON carries it under its key gives the same
+    // artifact, byte for byte; a field the exporter does not know, a class table at another
+    // length and a class bit outside the three are each refused.
+    let key = crate::fbs_snapshot::FBS_HAMMING_PLACE_KEY;
+    let snapshot = serde_json::to_vec(&serde_json::json!({ key: place })).unwrap();
+    let mut value: serde_json::Value = serde_json::from_slice(&snapshot).unwrap();
+    let carried: super::PlaceImage = serde_json::from_value(value[key].take()).expect("a place image");
+    assert_eq!(super::add_hamming_place_uorlut01(&asked, &carried).expect("the place read"), placed);
+    let mut unknown = serde_json::to_value(&place).unwrap();
+    unknown["gain"] = 1.into();
+    assert!(serde_json::from_value::<super::PlaceImage>(unknown).is_err(), "an unknown field is refused");
+    let short = super::PlaceImage { marks: place.marks.clone(), class: place.class[1..].to_vec() };
+    assert!(super::add_hamming_place_uorlut01(&asked, &short).is_err(), "one class a token");
+    let mut wide = place.clone();
+    wide.class[0] = 8;
+    assert!(super::add_hamming_place_uorlut01(&asked, &wide).is_err(), "a class is stop, arm and open");
+}
+
+/// claude-351: a session serves the place read. The register is armed at the reply's start by
+/// the question's find, the row of `PLACE_OPENS` is offered the value's first token and the row
+/// after it the second, and the step onto `PLACE_DOT` clears it. Against the same artifact
+/// without the place read, the query differs at the two open rows and at no other.
+#[test]
+fn a_session_serves_the_place_read() {
+    let (asked, placed, _) = place_trunk();
+    let run = |bytes: &[u8], tokens: &[u32]| {
+        let model = IntegerStackModel::parse(bytes).expect("served");
+        let mut session = model.session();
+        let mut rows = Vec::new();
+        for &token in tokens {
+            session.step_native(token).expect("step");
+            rows.push((session.last_place(), session.last_query_q12().map(<[i32]>::to_vec)));
+        }
+        rows
+    };
+    let (plain, read) = (run(&asked, &PLACE_TALK), run(&placed, &PLACE_TALK));
+    assert!(plain.iter().all(|(place, _)| *place == (None, None)));
+    for (t, ((place, query), (_, free))) in read.iter().zip(&plain).enumerate() {
+        let want = match t {
+            17 => (Some(4), None),
+            18 => (Some(4), Some(4)),
+            19 => (Some(5), Some(5)),
+            _ => (None, None),
+        };
+        assert_eq!(*place, want, "row {t}");
+        assert_eq!(query != free, want.1.is_some(), "row {t}: the readout moves at an open row only");
+    }
+    // A reply that says another token after `PLACE_OPENS` is offered nothing at that row, and
+    // the register stays where it is.
+    let mut miss = PLACE_TALK[..19].to_vec();
+    miss.extend([40, PLACE_OPENS, 30]);
+    let read = run(&placed, &miss);
+    let places: Vec<_> = read[18..].iter().map(|(place, _)| *place).collect();
+    assert_eq!(places, [(Some(4), Some(4)), (Some(4), None), (Some(4), Some(4)), (Some(5), Some(5))]);
+    // A reset forgets the conversation: the same tokens from the reply on arm nothing.
+    let model = IntegerStackModel::parse(&placed).expect("served");
+    let mut session = model.session();
+    for &token in &PLACE_TALK[..18] {
+        session.step_native(token).expect("step");
+    }
+    assert_eq!(session.last_place(), (Some(4), None));
+    session.reset();
+    for &token in &PLACE_TALK[13..19] {
+        session.step_native(token).expect("step");
+    }
+    assert_eq!(session.last_place(), (None, None));
+    // The register and the turns are not saved, so a restore is refused by name.
+    let saved = session.save_state();
+    let err = session.restore_state(&saved).unwrap_err().to_string();
+    assert!(err.contains("place read"), "{err}");
+}
+
+/// claude-359: asks over the place-read tests' vocabulary. A question that holds `PLACE_ASK`
+/// finds the position after the token `link` (a pair weight of 100 over a floor of 50) and asks
+/// for a stored fact; with no such position it is answered with the stored reply `41 42 </s>`.
+fn place_asks(place: &super::PlaceImage, link: u32) -> crate::place_asks::PlaceAsks {
+    crate::place_asks::PlaceAsks {
+        tokens_sha256: "test".to_owned(),
+        marks: place.marks.clone(),
+        vocab: place.class.len() as u32,
+        link: vec![link],
+        shared: Vec::new(),
+        unseen: vec![[0, 0]; crate::place_asks::ASKS_FRAME],
+        pairs: vec![[PLACE_ASK as i32, 1, link as i32, 100]],
+        floor: 50,
+        floor_other: 50,
+        margin: 0,
+        opens: Vec::new(),
+        asking: vec![[PLACE_ASK as i32, 10]],
+        asking_prior: 0,
+        asking_floor: 5,
+        not_told: vec![41, 42, PLACE_EOS],
+        forms: vec![vec![41, 42, PLACE_EOS]],
+        repeat: Vec::new(),
+        repeat3: Vec::new(),
+        ask_floors: Vec::new(),
+    }
+}
+
+/// claude-359: with the asks set, the asks set the register and the ask heads do not, and with
+/// `speak` an open row serves the token at its place. The asks here find the position after
+/// token 30 (place 5) where the artifact's own find is the position after `PLACE_BEFORE`
+/// (place 4), so the row of `PLACE_OPENS` serves 31.
+#[test]
+fn a_session_with_the_asks_serves_the_token_at_the_asked_place() {
+    let (_, placed, place) = place_trunk();
+    let mut talk = PLACE_TALK[..19].to_vec();
+    talk.push(31);
+    let run = |asks: Option<bool>| {
+        let mut model = IntegerStackModel::parse(&placed).expect("served");
+        if let Some(speak) = asks {
+            model.set_place_asks(&place_asks(&place, 30), speak).expect("the asks are set");
+        }
+        assert_eq!(model.place_asks(), asks);
+        let mut session = model.session();
+        let mut rows = Vec::new();
+        for &token in &talk {
+            let step = session.step_native(token).expect("step");
+            rows.push((step.token, session.last_place(), session.last_spoken()));
+        }
+        rows
+    };
+    let (own, offered, spoken) = (run(None), run(Some(false)), run(Some(true)));
+    // The artifact's own read: the ask heads' find arms place 4, and no row speaks.
+    assert_eq!(own[18].1, (Some(4), Some(4)));
+    assert!(own.iter().all(|row| row.2.is_none()));
+    // The asks without `speak`: the register holds the asked place and offers it; no row speaks.
+    assert_eq!(offered[17].1, (Some(5), None));
+    assert_eq!(offered[18].1, (Some(5), Some(5)));
+    assert!(offered.iter().all(|row| row.2.is_none()));
+    // The offer alone does not choose the place's token on that row, so the 31 served below is
+    // the speak's doing and not the vote's.
+    assert_ne!(offered[18].0, 31);
+    // With `speak` the open row serves the token at the place, and only that row speaks: the
+    // step onto it reaches `PLACE_DOT`, which stops the read.
+    assert_eq!(spoken[18], (31, (Some(5), Some(5)), Some((31, None))));
+    assert_eq!((spoken[19].1, spoken[19].2), ((None, None), None));
+    assert!(spoken[..18].iter().all(|row| row.2.is_none()));
+    // Every caller of a step is served the spoken token: the browser's step and the timed step
+    // choose what the plain step chose, row by row.
+    let mut model = IntegerStackModel::parse(&placed).expect("served");
+    model.set_place_asks(&place_asks(&place, 30), true).expect("the asks are set");
+    let (mut browser, mut timed, mut ns) = (model.session(), model.session(), Vec::new());
+    for (t, &token) in talk.iter().enumerate() {
+        assert_eq!(browser.serve_step(token).expect("serve").0, spoken[t].0, "step {t}: the browser's step");
+        assert_eq!(timed.measure_fbs_step_stages(token, &mut ns).expect("timed").0.token, spoken[t].0, "step {t}: the timed step");
+    }
+}
+
+/// claude-359: a question that asks for a fact no finished user turn states is answered with the
+/// asks' stored reply. Each row from the role marker's serves the reply's next token through
+/// its end mark, with or without `speak`; the artifact's own reply there is another.
+#[test]
+fn a_session_with_the_asks_answers_an_untold_fact_with_the_stored_reply() {
+    let (_, placed, place) = place_trunk();
+    // The first user turn has no `PLACE_BEFORE`: the asks have no position to find.
+    let history = [PLACE_BOS, PLACE_USER, 20, 22, 23, PLACE_DOT, PLACE_EOS, PLACE_SEP, PLACE_MODEL, 40, PLACE_EOS, PLACE_SEP, PLACE_USER, 20, PLACE_ASK, PLACE_SEP, PLACE_MODEL];
+    let reply = |asks: Option<bool>| {
+        let mut model = IntegerStackModel::parse(&placed).expect("served");
+        if let Some(speak) = asks {
+            model.set_place_asks(&place_asks(&place, PLACE_BEFORE), speak).expect("the asks are set");
+        }
+        let mut session = model.session();
+        let (last, read) = history.split_last().expect("a history");
+        for &token in read {
+            session.read_step(token).expect("read");
+        }
+        let mut pick = session.serve_step(*last).expect("serve").0;
+        let mut said = vec![(pick, session.last_spoken())];
+        for _ in 0..3 {
+            pick = session.serve_step(pick).expect("serve").0;
+            said.push((pick, session.last_spoken()));
+        }
+        said
+    };
+    let stored = [(41, Some((41, Some(0)))), (42, Some((42, Some(1)))), (PLACE_EOS, Some((PLACE_EOS, Some(2))))];
+    for speak in [false, true] {
+        let said = reply(Some(speak));
+        assert_eq!(said[..3], stored, "speak {speak}");
+        assert_eq!(said[3].1, None, "after the end mark no row speaks");
+    }
+    let own = reply(None);
+    assert!(own.iter().all(|row| row.1.is_none()));
+    assert_ne!([own[0].0, own[1].0, own[2].0], [41, 42, PLACE_EOS], "the artifact's own reply is not the stored one");
+}
+
+/// claude-363: a chat told to serve again starts a reply over from its found place when the asks
+/// set the register at the reply's first step and no step of the reply was offered it. The
+/// second reply stands: it is the only one emitted, the history holds it, and the session's
+/// switch is off again afterwards. A reply that was offered its place is left as it is.
+#[test]
+fn stack_chat_serves_a_reply_again_when_its_found_place_was_never_offered() -> ChatTest {
+    let (_, placed, place) = place_trunk();
+    let mut model = IntegerStackModel::parse(&placed)?;
+    model.set_place_asks(&place_asks(&place, 30), true).expect("the asks are set");
+    let json = merged_tokenizer_json(model.shape().vocab);
+    // The history ends on the role marker: the asks find place 5 there, and that row is not open.
+    let asked = &PLACE_TALK[..18];
+    let mut plain = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    let first = plain.reply_history(asked, 4)?;
+    assert!(!plain.last_reply_served_again());
+    assert_eq!(plain.last_reply_places()[0], (Some(5), None));
+    assert!(plain.last_reply_places().iter().all(|place| place.1.is_none()), "no row was offered the place");
+    assert_ne!(first.ids[0], 31, "the reply as the model words it does not start on the found token");
+
+    let mut chat = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    chat.set_serve_again(true);
+    let mut emitted = Vec::new();
+    let again = chat.reply_history_with(asked, 4, |id, _| {
+        emitted.push(id);
+        Ok(())
+    })?;
+    assert!(chat.last_reply_served_again());
+    assert_eq!(again.ids[0], 31, "the reply starts on the token at the found place");
+    assert_eq!(chat.last_reply_places()[0], (Some(5), Some(5)));
+    assert_eq!(emitted, again.ids, "only the reply that stands is emitted");
+    let mut want = asked.to_vec();
+    want.extend_from_slice(&again.ids);
+    assert_eq!(chat.tokens(), want, "the history holds the reply served last");
+
+    // The session's switch is off again: the same prompt served once is the first reply.
+    chat.set_serve_again(false);
+    assert_eq!(chat.reply_history(asked, 4)?.ids, first.ids);
+    assert!(!chat.last_reply_served_again());
+
+    // A reply offered its place is left as it is: this history's last row is an open row.
+    let offered = &PLACE_TALK[..19];
+    let once = plain.reply_history(offered, 3)?;
+    assert_eq!(plain.last_reply_places()[0], (Some(5), Some(5)));
+    chat.set_serve_again(true);
+    assert_eq!(chat.reply_history(offered, 3)?.ids, once.ids);
+    assert!(!chat.last_reply_served_again());
+    Ok(())
+}
+
+/// claude-367: pair experts counted on the place trunk's vocabulary of 512, each turn answered
+/// by the reply `44 45`, and the check's setting: experts seen up to 8 times vote, a reply keeps
+/// half the top vote to stand, no hold-out.
+fn pair_experts(turns: &[&[u32]]) -> (crate::pair_experts::PairExperts, crate::pair_experts::Setting) {
+    let occurrences: Vec<_> = turns.iter().map(|turn| crate::pair_experts::Occurrence { turn, reply: &[44, 45] }).collect();
+    let table = crate::pair_experts::PairExperts::count(512, [0; 32], &occurrences).expect("the experts are counted");
+    let setting = crate::pair_experts::Setting { cap: 8, keep: crate::pair_experts::Ratio { num: 1, den: 2 }, hold_out: false, floor: 0 };
+    (table, setting)
+}
+
+/// claude-367: a reply to `history` and the ids its chat emitted, with the pair experts set when
+/// given.
+fn pair_reply(chat: &mut super::StackChat<'_>, history: &[u32], max: usize) -> Result<(super::StackReply, Vec<u32>), super::StackChatError> {
+    let mut emitted = Vec::new();
+    let reply = chat.reply_history_with(history, max, |id, _| {
+        emitted.push(id);
+        Ok(())
+    })?;
+    Ok((reply, emitted))
+}
+
+/// claude-367: a user turn the counted table finds nothing for, after the first user turn of
+/// `PLACE_TALK`: `20 22`, then the role marker.
+fn pair_untold() -> Vec<u32> {
+    let mut history = PLACE_TALK[..14].to_vec();
+    history.extend([20, 22, PLACE_SEP, PLACE_MODEL]);
+    history
+}
+
+/// claude-367: with the pair experts off, turned off again, or holding no expert for the turn,
+/// the chat's reply, its history and its emitted ids are the plain chat's, id for id.
+#[test]
+fn stack_chat_pair_experts_off_or_without_an_expert_leave_the_reply_as_served() -> ChatTest {
+    let (_, placed, place) = place_trunk();
+    let mut model = IntegerStackModel::parse(&placed)?;
+    model.set_place_asks(&place_asks(&place, 30), true).expect("the asks are set");
+    let json = merged_tokenizer_json(model.shape().vocab);
+    let history = pair_untold();
+    let mut plain = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    let (want, want_emitted) = pair_reply(&mut plain, &history, 4)?;
+    assert_eq!(plain.pair_verdict(), None);
+    assert_eq!(want_emitted, want.ids);
+
+    let mut off = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    off.set_pair_experts(Some(pair_experts(&[&[20, 22]])))?;
+    off.set_pair_experts(None)?;
+    let (got, emitted) = pair_reply(&mut off, &history, 4)?;
+    assert_eq!(off.pair_verdict(), None, "turned off, the check gives no verdict");
+    assert_eq!((got.ids, got.text, got.stop, emitted), (want.ids.clone(), want.text.clone(), want.stop, want_emitted.clone()));
+    assert_eq!(off.tokens(), plain.tokens());
+
+    let mut none = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    none.set_pair_experts(Some(pair_experts(&[&[70, 71]])))?;
+    let (got, emitted) = pair_reply(&mut none, &history, 4)?;
+    assert_eq!(none.pair_verdict(), Some(crate::pair_experts::Verdict::Checked(crate::pair_experts::Check::NoExpert)));
+    assert_eq!((got.ids, got.text, got.stop, emitted), (want.ids, want.text, want.stop, want_emitted));
+    assert_eq!(none.tokens(), plain.tokens());
+    assert_eq!(none.last_reply_places(), plain.last_reply_places());
+    Ok(())
+}
+
+/// claude-367: a turn whose experts hold another reply is given that reply and the end id. It is
+/// the only thing emitted, the history holds it, no place is recorded for it, and the next turn
+/// on that history is served as a fresh chat serves the same history.
+#[test]
+fn stack_chat_pair_experts_replace_a_reply_their_turn_holds_another_for() -> ChatTest {
+    let (_, placed, place) = place_trunk();
+    let mut model = IntegerStackModel::parse(&placed)?;
+    model.set_place_asks(&place_asks(&place, 30), true).expect("the asks are set");
+    let json = merged_tokenizer_json(model.shape().vocab);
+    let history = pair_untold();
+    let mut plain = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    let served = plain.reply_history(&history, 4)?;
+    let eos = plain.protocol().eos_id;
+    assert_ne!(served.ids, [44, 45, eos], "the model's own reply is another");
+
+    let mut chat = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    // Experts counted on another vocabulary than the model's 512 tokens are refused.
+    let (_, setting) = pair_experts(&[&[20, 22]]);
+    let other = crate::pair_experts::PairExperts::count(513, [0; 32], &[]).expect("the experts are counted");
+    let err = chat.set_pair_experts(Some((other, setting))).unwrap_err();
+    assert!(err.contains("a vocabulary of 513 tokens; the model's is 512"), "{err}");
+    chat.set_pair_experts(Some(pair_experts(&[&[20, 22]])))?;
+    let (given, emitted) = pair_reply(&mut chat, &history, 4)?;
+    assert!(matches!(chat.pair_verdict(), Some(crate::pair_experts::Verdict::Checked(crate::pair_experts::Check::Replaced { reply: 0, .. }))), "{:?}", chat.pair_verdict());
+    assert_eq!(given.ids, [44, 45, eos]);
+    assert_eq!(given.stop, super::StackStop::Eos);
+    assert_eq!(given.text, chat.protocol().reply_text(&chat.tokenizer().decode(&[44, 45])));
+    assert_eq!(emitted, given.ids, "the reply given is emitted once");
+    let mut want = history.clone();
+    want.extend_from_slice(&given.ids);
+    assert_eq!(chat.tokens(), want, "the history holds the reply given");
+    assert!(chat.last_reply_places().is_empty());
+
+    // The next turn, a told-value ask the check leaves alone, is served on that history as a
+    // fresh chat serves it.
+    let mut next = want.clone();
+    next.extend([PLACE_SEP, PLACE_USER, 20, PLACE_ASK, PLACE_SEP, PLACE_MODEL]);
+    let after = chat.reply_history(&next, 3)?;
+    assert_eq!(chat.pair_verdict(), Some(crate::pair_experts::Verdict::LeftAlone));
+    let mut fresh = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    assert_eq!(after.ids, fresh.reply_history(&next, 3)?.ids);
+    assert_eq!(chat.tokens(), fresh.tokens());
+    Ok(())
+}
+
+/// claude-367: a turn the counted table finds a told value for, and a turn that asks to have its
+/// own rest repeated, are left alone: the reply is the plain chat's although the experts hold
+/// another reply for that turn.
+#[test]
+fn stack_chat_pair_experts_leave_a_told_or_repeat_ask_alone() -> ChatTest {
+    let (_, placed, place) = place_trunk();
+    let told = PLACE_TALK[..18].to_vec();
+    let mut repeat = PLACE_TALK[..14].to_vec();
+    repeat.extend([20, 22, 23, 24, PLACE_SEP, PLACE_MODEL]);
+    let mut repeat_asks = place_asks(&place, 30);
+    repeat_asks.repeat = vec![[20, 22]];
+    for (what, asks, history, turn) in [("told", place_asks(&place, 30), told, &[20, PLACE_ASK][..]), ("repeat", repeat_asks, repeat, &[20, 22, 23, 24][..])] {
+        let mut model = IntegerStackModel::parse(&placed)?;
+        model.set_place_asks(&asks, true).expect("the asks are set");
+        let json = merged_tokenizer_json(model.shape().vocab);
+        let mut plain = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+        let (want, want_emitted) = pair_reply(&mut plain, &history, 4)?;
+        let (table, setting) = pair_experts(&[turn]);
+        // Asked without the counted table, the experts would replace the reply.
+        let eos = plain.protocol().eos_id;
+        let words: Vec<u32> = want.ids.iter().copied().filter(|&id| id != eos).collect();
+        let (_, marks) = model.place_asks_index().expect("the counted table");
+        assert!(matches!(table.check_prompt(None, marks, &history, &words, setting), crate::pair_experts::Verdict::Checked(crate::pair_experts::Check::Replaced { .. })), "{what}");
+
+        let mut chat = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+        chat.set_pair_experts(Some((table, setting)))?;
+        let (got, emitted) = pair_reply(&mut chat, &history, 4)?;
+        assert_eq!(chat.pair_verdict(), Some(crate::pair_experts::Verdict::LeftAlone), "{what}");
+        assert_eq!((got.ids, emitted), (want.ids, want_emitted), "{what}");
+        assert_eq!(chat.tokens(), plain.tokens(), "{what}");
+    }
+    Ok(())
+}
+
+/// claude-367: the experts' reply is given only when it and the end mark fit in the tokens the
+/// caller asked for. At two tokens the reply `44 45` and its end mark do not: the model's own
+/// reply stands id for id, the history is the plain chat's, and the verdict says there was no
+/// room. At three tokens it fits and is given.
+#[test]
+fn stack_chat_pair_experts_reply_that_does_not_fit_is_not_given() -> ChatTest {
+    let (_, placed, place) = place_trunk();
+    let mut model = IntegerStackModel::parse(&placed)?;
+    model.set_place_asks(&place_asks(&place, 30), true).expect("the asks are set");
+    let json = merged_tokenizer_json(model.shape().vocab);
+    let history = pair_untold();
+    let mut plain = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    let (want, want_emitted) = pair_reply(&mut plain, &history, 2)?;
+    let mut chat = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    chat.set_pair_experts(Some(pair_experts(&[&[20, 22]])))?;
+    let (got, emitted) = pair_reply(&mut chat, &history, 2)?;
+    assert_eq!(chat.pair_verdict(), Some(crate::pair_experts::Verdict::NoRoom));
+    assert_eq!((got.ids, emitted), (want.ids, want_emitted));
+    assert_eq!(chat.tokens(), plain.tokens());
+
+    let mut roomy = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    roomy.set_pair_experts(Some(pair_experts(&[&[20, 22]])))?;
+    let eos = roomy.protocol().eos_id;
+    let (given, emitted) = pair_reply(&mut roomy, &history, 3)?;
+    assert_eq!(given.ids, [44, 45, eos]);
+    assert_eq!(emitted, [44, 45, eos]);
+    Ok(())
+}
+
+/// claude-367: a model with no counted table refuses the pair experts, and the refusal changes
+/// nothing: the chat serves and emits the plain chat's reply with no verdict.
+#[test]
+fn stack_chat_pair_experts_are_refused_without_a_counted_table() -> ChatTest {
+    let (_, placed, _) = place_trunk();
+    let model = IntegerStackModel::parse(&placed)?;
+    assert!(model.place_asks_index().is_none());
+    let json = merged_tokenizer_json(model.shape().vocab);
+    let history = pair_untold();
+    let mut plain = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    let (want, want_emitted) = pair_reply(&mut plain, &history, 4)?;
+    let mut chat = super::StackChat::from_tokenizer_json(&model, &json, 2)?;
+    let err = chat.set_pair_experts(Some(pair_experts(&[&[20, 22]]))).unwrap_err();
+    assert!(err.contains("no counted table"), "{err}");
+    let (got, emitted) = pair_reply(&mut chat, &history, 4)?;
+    assert_eq!(chat.pair_verdict(), None);
+    assert_eq!((got.ids, emitted), (want.ids, want_emitted));
+    assert_eq!(chat.tokens(), plain.tokens());
+    Ok(())
+}
+
+/// claude-359: the asks are refused by a model with no place read, and when they were fitted
+/// with other marks or another vocabulary than the place read's. A refusal sets nothing.
+#[test]
+fn the_asks_are_refused_without_a_place_read_or_with_other_marks_or_vocabulary() {
+    let (asked, placed, place) = place_trunk();
+    let asks = place_asks(&place, PLACE_BEFORE);
+    let mut bare = IntegerStackModel::parse(&asked).expect("served");
+    let err = bare.set_place_asks(&asks, true).unwrap_err();
+    assert!(err.contains("no place read"), "{err}");
+    let mut model = IntegerStackModel::parse(&placed).expect("served");
+    let mut other = asks.clone();
+    other.marks.sep = vec![503];
+    let err = model.set_place_asks(&other, true).unwrap_err();
+    assert!(err.contains("other marks"), "{err}");
+    let mut short = asks.clone();
+    short.vocab -= 1;
+    let err = model.set_place_asks(&short, true).unwrap_err();
+    assert!(err.contains("vocabulary"), "{err}");
+    assert_eq!(model.place_asks(), None);
+    model.set_place_asks(&asks, false).expect("the asks are set");
+    assert_eq!(model.place_asks(), Some(false));
+}
+
+/// claude-351 left the timed step unexercised with a place read. It runs the
+/// same token copy and readout, so every served decision and the register must
+/// stay bit-identical to the normal step at every row.
+#[test]
+fn the_timed_step_serves_the_place_read_like_the_normal_step() {
+    let (_, placed, _) = place_trunk();
+    let model = IntegerStackModel::parse(&placed).expect("served");
+    let mut normal = model.session();
+    let mut timed = model.session();
+    let mut stages = Vec::new();
+    let mut places = Vec::new();
+
+    for &token in &PLACE_TALK {
+        let full = normal.step_native(token).expect("normal step");
+        let clocked = timed
+            .measure_fbs_step_stages(token, &mut stages)
+            .expect("timed step");
+        assert_eq!(full, clocked.0, "the served step differs");
+        assert_eq!(normal.last_place(), timed.last_place());
+        places.push(timed.last_place());
+    }
+
+    assert_eq!(
+        places[17..20],
+        [(Some(4), None), (Some(4), Some(4)), (Some(5), Some(5))]
+    );
+    assert_eq!(places[20], (None, None));
+}
+
+/// claude-351: at an open row the readout is `n + w_c ⊙ (table[x_place] − n)`, exactly
+/// [`super::hamming::readout_sum`] with the token's Q12 point at a weight of one, and within
+/// half a step of the float form.
+#[test]
+fn the_place_read_offers_the_tokens_point_through_the_copy_mix() {
+    use super::hamming::{readout_sum, ServedHamming};
+    let (_, placed, _) = place_trunk();
+    let served = super::served_copy_codes_uorlut01(&placed).expect("parse").expect("reads");
+    let (image, table, vocab, width) = (&served.image, &served.table, served.vocab, served.width);
+    let hamming = ServedHamming::new(image, table, vocab, width, 3, 40).expect("the reads");
+    assert!(hamming.has_place() && !hamming.has_type_heads());
+    // A forced code is refused by name, since an open row's readout takes the place and would
+    // pass over it; no forced code is no refusal.
+    use crate::fbs_snapshot::{CodeRole, ForcedCode};
+    assert!(hamming.forcing(&[], 40).is_ok(), "no forced code");
+    let code = ForcedCode { step: 1, depth: 1, head: 0, role: CodeRole::Query, code: 1 };
+    let Err(err) = hamming.forcing(&[code], 40) else {
+        panic!("a forced code is refused with a place read");
+    };
+    assert!(err.to_string().contains("place read"), "{err}");
+    let weight = &image.reads[1].weight[..width];
+    let mut rng = Lcg(351);
+    let n: Vec<i64> = (0..width).map(|_| (rng.next() % (1 << 40)) as i64 - (1 << 39)).collect();
+    let tokens = &PLACE_TALK[..19];
+    let mut payloads = hamming.payload_caches(40);
+    let mut got = n.clone();
+    hamming.readout(tokens, table, &mut payloads, &mut got, None, None, Some(4), false, &mut []);
+    let point = &table[PLACE_TALK[4] as usize * width..][..width];
+    let mut moved = 0;
+    for k in 0..width {
+        assert_eq!(got[k], readout_sum(n[k], weight[k], Some(i128::from(point[k]) << 31), 0, 0), "coordinate {k}");
+        // The float form: `n` at `2^NORM_FINE_EXP`, the point at Q12, the weight at its exponent.
+        let unit = 2f64.powi(super::kernels::NORM_FINE_EXP);
+        let w = f64::from(weight[k]) * 2f64.powi(super::HAMMING_WEIGHT_EXP);
+        let (nf, c) = (n[k] as f64 * unit, f64::from(point[k]) / 4096.0);
+        let want = (nf + w * (c - nf)) / unit;
+        assert!((got[k] as f64 - want).abs() <= 0.5 + want.abs() * 1e-12, "coordinate {k}: {} against {want}", got[k]);
+        moved += usize::from(got[k] != n[k]);
+    }
+    assert!(moved > 0, "the mix moves the readout");
+    // Without an offer the row reads its copy heads as before.
+    let mut free = n.clone();
+    hamming.readout(tokens, table, &mut payloads, &mut free, None, None, None, false, &mut []);
+    assert_ne!(free, got);
+}
+
+/// claude-351: a place is inside a head's margin exactly where the served copy weight is above
+/// zero, the test `fbs_snapshot::place_pick` makes without the division.
+#[test]
+#[allow(clippy::single_range_in_vec_init)] // one user turn, as a slice of ranges
+fn a_place_pick_is_inside_its_margin_exactly_when_the_copy_weight_is_positive() {
+    for margin in [0, 1, 65_535, 65_536, 65_537, 3 << 16, (9 << 16) + 77, i32::MAX] {
+        for d in 0..=64u32 {
+            let inside = super::place_pick(&[0], &[margin], &[2..3], |_, _| if d == 64 { u64::MAX } else { (1u64 << d) - 1 }).is_some();
+            assert_eq!(inside, super::copy_weight_q31(margin, d) > 0, "margin {margin}, distance {d}");
+        }
+    }
+}
+
+/// claude-366: a drawn address table for a trunk of `width` and `layers`, every value within
+/// `reach` of zero (`reach` 0 draws the all-zero table).
+fn drawn_address(arm: super::AddressArm, width: usize, layers: usize, reach: i64) -> super::AddressImage {
+    let mut state = 0x366_u64;
+    let rows = (0..layers)
+        .map(|_| {
+            (0..(width / super::ADDRESS_BLOCK) * super::ADDRESS_CELLS * width)
+                .map(|_| {
+                    state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+                    (((state >> 33) as i64).rem_euclid(2 * reach + 1) - reach) as i16
+                })
+                .collect()
+        })
+        .collect();
+    super::AddressImage::checked(arm, 0x0123_4567_89AB_CDEF, width, rows).expect("a table of the stack's size")
+}
+
+/// A drawn address table whose rows are zero in every layer but `only`.
+fn one_layer_address(arm: super::AddressArm, width: usize, layers: usize, reach: i64, only: usize) -> super::AddressImage {
+    let drawn = drawn_address(arm, width, layers, reach);
+    let rows = (0..layers)
+        .map(|l| if l == only { drawn.layer(l).to_vec() } else { vec![0; drawn.layer(l).len()] })
+        .collect();
+    super::AddressImage::checked(arm, drawn.seed(), width, rows).expect("a table of the stack's size")
+}
+
+/// The tables and matrices of an artifact: every byte after its header.
+fn data_bytes(bytes: &[u8]) -> Vec<u8> {
+    let declared = u64::from_le_bytes(bytes[8..16].try_into().unwrap()) as usize;
+    bytes[(16 + declared).div_ceil(64) * 64..].to_vec()
+}
+
+/// claude-366: the address table round-trips. A stack without one has no record, inspects with no
+/// `address` key and reads no image. Added, the image read back is the one written, under
+/// `lut-stack/11`, with every earlier section's bytes kept; it is added once, and only at the
+/// stack's own width and depth.
+#[test]
+fn an_address_table_round_trips_and_is_added_once() {
+    let (_, plain, with_read) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    for (name, bytes) in [("no reads", &plain), ("reads", &with_read)] {
+        assert_eq!(super::read_address_uorlut01(bytes).expect("parse"), None, "{name}");
+        let before = super::inspect_uorlut01(bytes).expect("inspect");
+        assert_eq!(before.address, None, "{name}");
+        let written = serde_json::to_value(&before).expect("the metadata is written");
+        assert!(written.get("address").is_none(), "{name}: a stack without the table inspects as before");
+        for arm in [super::AddressArm::E8, super::AddressArm::Token] {
+            let image = drawn_address(arm, 64, 3, 900);
+            let out = super::add_address_uorlut01(bytes, &image).expect("the table is added");
+            assert_eq!(super::read_address_uorlut01(&out).expect("parse").as_ref(), Some(&image), "{name}");
+            let after = super::inspect_uorlut01(&out).expect("inspect");
+            assert_eq!(after.schema, super::STACK_FBS_ADDRESS_SCHEMA, "{name}");
+            assert_eq!(after.address, Some(image.record()), "{name}");
+            assert_eq!(after.shape, before.shape, "{name}");
+            let (old, new) = (data_bytes(bytes), data_bytes(&out));
+            assert_eq!(new[..old.len()], old[..], "{name}: every earlier section keeps its bytes");
+            assert_eq!(new.len() - old.len(), 3 * 8 * 240 * 64 * 2, "{name}: three layers of 16-bit rows");
+            assert!(super::add_address_uorlut01(&out, &image).is_err(), "{name}: a table is added once");
+        }
+        let narrow = drawn_address(super::AddressArm::E8, 56, 3, 9);
+        assert!(super::add_address_uorlut01(bytes, &narrow).is_err(), "{name}: rows of another width");
+        let short = drawn_address(super::AddressArm::E8, 64, 2, 9);
+        assert!(super::add_address_uorlut01(bytes, &short).is_err(), "{name}: a table of another depth");
+    }
+}
+
+/// claude-366: the record and `lut-stack/11` come together, and the record is read strictly. The
+/// record under the stack's earlier schema is refused; so are `lut-stack/11` without the record, a
+/// record of another block, cell count, exponent, depth or arm, a record with a key the reader
+/// does not know, and a stack whose record names a layer with no table.
+#[test]
+fn the_address_record_and_its_schema_come_together() {
+    let (_, plain, _) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    let earlier = super::inspect_uorlut01(&plain).expect("inspect").schema;
+    assert_ne!(earlier, super::STACK_FBS_ADDRESS_SCHEMA);
+    let image = drawn_address(super::AddressArm::E8, 64, 3, 9);
+    let out = super::add_address_uorlut01(&plain, &image).expect("the table is added");
+    assert!(IntegerStackModel::parse(&out).is_ok());
+    // A header rewritten with no edit is still served: a refusal below is the edit's own.
+    assert!(IntegerStackModel::parse(&with_header(&out, |_| {})).is_ok());
+    let refused = |what: &str, edit: &dyn Fn(&mut Value)| {
+        let bytes = with_header(&out, |h| edit(h));
+        assert!(IntegerStackModel::parse(&bytes).is_err(), "{what} is refused");
+        assert!(super::inspect_uorlut01(&bytes).is_err() || what == "a layer with no table", "{what} does not inspect");
+    };
+    refused("the record under the earlier schema", &|h| h["schema"] = json!(earlier));
+    refused("the schema without the record", &|h| {
+        h.as_object_mut().unwrap().remove("address");
+    });
+    refused("a block of 4", &|h| h["address"]["block"] = json!(4));
+    refused("239 cells", &|h| h["address"]["cells"] = json!(239));
+    refused("another exponent", &|h| h["address"]["row_exp"] = json!(-15));
+    refused("another depth", &|h| h["address"]["layers"] = json!(2));
+    refused("an arm with no served form", &|h| h["address"]["arm"] = json!("sign"));
+    refused("a key the reader does not know", &|h| h["address"]["band"] = json!(1));
+    refused("a layer with no table", &|h| {
+        h["tables"].as_array_mut().unwrap().retain(|t| t["name"] != "address.l2");
+    });
+    // The record cannot be put on a stack by its header alone: the tables are missing.
+    let bare = with_header(&plain, |h| {
+        h["address"] = json!(image.record());
+        h["schema"] = json!(super::STACK_FBS_ADDRESS_SCHEMA);
+    });
+    assert!(IntegerStackModel::parse(&bare).is_err(), "a record with no rows is refused");
+}
+
+/// claude-366: the served step adds the address rows. With an all-zero table every step is, value
+/// for value, the step of the stack without it, under both arms and with or without the Hamming
+/// reads; with drawn rows the steps differ. A stack with the table has no trunk image, since its
+/// rows are added inside every layer and the trunk evaluators do not read them.
+#[test]
+fn the_served_step_adds_the_address_rows() {
+    let (_, plain, with_read) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    let tokens = repeating_tokens();
+    let run = |bytes: &[u8]| {
+        let model = IntegerStackModel::parse(bytes).expect("served");
+        let mut session = model.session();
+        tokens.iter().map(|&token| session.step_native(token).expect("step")).collect::<Vec<_>>()
+    };
+    for (name, bytes) in [("no reads", &plain), ("reads", &with_read)] {
+        let want = run(bytes);
+        assert!(IntegerStackModel::parse(bytes).expect("served").fbs_trunk_image().is_some());
+        for arm in [super::AddressArm::E8, super::AddressArm::Token] {
+            let zero = super::add_address_uorlut01(bytes, &drawn_address(arm, 64, 3, 0)).expect("added");
+            assert_eq!(run(&zero), want, "{name}, {arm:?}: rows of zero change no step");
+            let drawn = super::add_address_uorlut01(bytes, &drawn_address(arm, 64, 3, 20_000)).expect("added");
+            let got = run(&drawn);
+            let changed = got.iter().zip(&want).filter(|(a, b)| a != b).count();
+            assert!(changed > 30, "{name}, {arm:?}: drawn rows changed {changed} of {} steps", want.len());
+            let model = IntegerStackModel::parse(&drawn).expect("served");
+            assert!(model.fbs_trunk_image().is_none(), "{name}, {arm:?}: no trunk image");
+            assert!(model.fbs_image().is_none(), "{name}, {arm:?}: no image");
+        }
+    }
+    // Every layer's rows are read: a table that is zero in all layers but one changes the steps,
+    // whichever layer that is, and no two layers' rows change them alike.
+    for arm in [super::AddressArm::E8, super::AddressArm::Token] {
+        let want = run(&with_read);
+        let mut seen = Vec::new();
+        for only in 0..3 {
+            let table = one_layer_address(arm, 64, 3, 20_000, only);
+            let got = run(&super::add_address_uorlut01(&with_read, &table).expect("added"));
+            assert_ne!(got, want, "{arm:?}: layer {only}'s rows alone change the steps");
+            assert!(!seen.contains(&got), "{arm:?}: layer {only}'s rows change the steps as no other layer's do");
+            seen.push(got);
+        }
+    }
+    // The two arms read different rows of the same table.
+    let e8 = super::add_address_uorlut01(&plain, &drawn_address(super::AddressArm::E8, 64, 3, 20_000)).expect("added");
+    let token = super::add_address_uorlut01(&plain, &drawn_address(super::AddressArm::Token, 64, 3, 20_000)).expect("added");
+    assert_ne!(run(&e8), run(&token));
+}
+
+/// claude-366: the token arm reads the rows its position's own input token names. The table is
+/// zero but for the rows token `b` names in every layer and block. Steps that read only token
+/// `a` are the all-zero table's steps; the step that reads `b` is not.
+#[test]
+fn the_token_arm_reads_the_rows_its_own_token_names() {
+    let (_, _, with_read) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    let (width, layers, seed) = (64usize, 3usize, 0x0123_4567_89AB_CDEF_u64);
+    let blocks = width / super::ADDRESS_BLOCK;
+    let cells = |token: u32| -> Vec<u32> {
+        (0..layers)
+            .flat_map(|l| (0..blocks).map(move |b| super::token_cell(seed, l, b, token)))
+            .collect()
+    };
+    // Two tokens of the trunk's vocabulary that share no row in any layer or block.
+    let a = 3u32;
+    let b = (4..11u32)
+        .find(|&b| cells(a).iter().zip(cells(b)).all(|(x, y)| *x != y))
+        .expect("a token that shares no row with the first");
+    let table = |reach: i16| {
+        let rows = (0..layers)
+            .map(|l| {
+                let mut table = vec![0i16; blocks * super::ADDRESS_CELLS * width];
+                for block in 0..blocks {
+                    let at = (block * super::ADDRESS_CELLS + super::token_cell(seed, l, block, b) as usize) * width;
+                    table[at..at + width].fill(reach);
+                }
+                table
+            })
+            .collect();
+        let image = super::AddressImage::checked(super::AddressArm::Token, seed, width, rows).expect("a table of the stack's size");
+        super::add_address_uorlut01(&with_read, &image).expect("added")
+    };
+    let run = |bytes: &[u8], tokens: &[u32]| {
+        let model = IntegerStackModel::parse(bytes).expect("served");
+        let mut session = model.session();
+        tokens.iter().map(|&token| session.step_native(token).expect("step")).collect::<Vec<_>>()
+    };
+    let (zero, named) = (table(0), table(20_000));
+    assert_eq!(run(&named, &[a, a, a]), run(&zero, &[a, a, a]), "no row of token a is set");
+    let (got, want) = (run(&named, &[a, a, b]), run(&zero, &[a, a, b]));
+    assert_eq!(got[..2], want[..2], "the steps before token b read no set row");
+    assert_ne!(got[2], want[2], "the step on token b reads b's rows");
+}
+
+/// claude-366: the stage- and part-timed steps serve the address rows as the plain step does,
+/// and leave the session in the same state.
+#[test]
+fn the_timed_fbs_steps_serve_the_address_rows() {
+    let (_, _, with_read) = served_read_trunk(&[1, 3], 1.0, 1.0);
+    let tokens = repeating_tokens();
+    for arm in [super::AddressArm::E8, super::AddressArm::Token] {
+        let bytes = super::add_address_uorlut01(&with_read, &drawn_address(arm, 64, 3, 20_000)).expect("added");
+        let model = IntegerStackModel::parse(&bytes).expect("served");
+        let (mut plain, mut stages, mut parts) = (model.session(), model.session(), model.session());
+        let mut ns = Vec::new();
+        for (t, &token) in tokens.iter().enumerate() {
+            let want = plain.step_native(token).expect("step");
+            let (got, _) = stages.measure_fbs_step_stages(token, &mut ns).expect("stage-timed step");
+            assert_eq!(got, want, "{arm:?}: stages, position {t}");
+            let (got, _) = parts.measure_fbs_step_parts(token, &mut ns).expect("part-timed step");
+            assert_eq!(got, want, "{arm:?}: parts, position {t}");
+        }
+        assert_eq!(plain.save_state(), stages.save_state());
+        assert_eq!(plain.save_state(), parts.save_state());
+    }
 }

@@ -2,6 +2,7 @@
 //! Static geometry compilation is a build dependency, excluded from the runtime graph.
 //! The routing atlas is one sixteen-root E8 orbit; this is not full-orbit learnability.
 pub mod address_cells;
+pub mod e_means;
 pub mod address_key_grade;
 pub mod attention_anchor;
 pub mod attention_anchor_device;
@@ -18,6 +19,12 @@ pub mod carrier_fresh;
 pub mod controller;
 pub mod corpus;
 pub mod coverage_census;
+#[cfg(all(test, feature = "cuda"))]
+mod cpu_oracle_parity;
+#[cfg(all(test, feature = "cuda"))]
+mod pick_read_cuda;
+#[cfg(all(test, feature = "cuda"))]
+mod student_throughput;
 pub mod d11_export;
 pub mod decomposition;
 #[cfg(test)]
@@ -30,6 +37,24 @@ pub mod driver_source_pin;
 #[cfg(feature = "cuda")]
 pub mod measurement;
 pub mod metadata;
+pub mod native_vector;
+#[cfg(feature = "cuda")]
+pub mod native_vector_device;
+pub mod kn_filter;
+pub mod kn_score;
+#[cfg(all(test, feature = "cuda"))]
+mod kn_score_cuda;
+#[cfg(feature = "cuda")]
+pub mod kn_score_device;
+#[cfg(test)]
+mod kn_score_oracle;
+pub mod ngram_count;
+#[cfg(all(test, feature = "cuda"))]
+mod ngram_count_cuda;
+#[cfg(feature = "cuda")]
+pub mod ngram_count_device;
+#[cfg(test)]
+mod ngram_count_oracle;
 pub mod normalization_mechanism;
 pub mod objective;
 pub mod order_slice;
@@ -73,6 +98,11 @@ impl std::fmt::Display for Error {
 }
 impl std::error::Error for Error {}
 pub type Result<T> = std::result::Result<T, Error>;
+impl From<uor_r4_native_vector::Error> for Error {
+    fn from(error: uor_r4_native_vector::Error) -> Self {
+        Self::Invalid(error.to_string())
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -152,12 +182,16 @@ impl ReadInitialization {
 /// coordinate Hamming, then recency/position, on caller-bounded valid prefixes.
 /// Relation extends Flock with bounded S-sweep exact-relation reranking over
 /// all causally eligible BinderPlan nodes using existing Gate-kind trits.
+/// Pick reads one successor: the latest prefix position whose transported
+/// (previous, current) block codes are nearest the query pair, added per block
+/// under the level-0 Gate trit. It admits only position transport 1 or 3.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ReadSpec {
     Route,
     Flock { kept: u32 },
     Relation { kept: u32, sweeps: u32 },
+    Pick,
 }
 impl<'de> serde::Deserialize<'de> for ReadSpec {
     fn deserialize<D: serde::Deserializer<'de>>(
@@ -171,12 +205,14 @@ impl<'de> serde::Deserialize<'de> for ReadSpec {
             Route {},
             Flock { kept: u32 },
             Relation { kept: u32, sweeps: u32 },
+            Pick {},
         }
         Ok(
             match <Wire as serde::Deserialize>::deserialize(deserializer)? {
                 Wire::Route {} => Self::Route,
                 Wire::Flock { kept } => Self::Flock { kept },
                 Wire::Relation { kept, sweeps } => Self::Relation { kept, sweeps },
+                Wire::Pick {} => Self::Pick,
             },
         )
     }
@@ -185,7 +221,7 @@ impl ReadSpec {
     pub fn validate(&self, spec: Spec) -> Result<()> {
         spec.validate()?;
         match self {
-            Self::Route => {}
+            Self::Route | Self::Pick => {}
             Self::Flock { kept } => {
                 if !(1..=8).contains(kept) {
                     return Err(Error::Invalid(
@@ -209,12 +245,27 @@ impl ReadSpec {
         }
         Ok(())
     }
-    /// Fixed kernel metadata: mode 0 is route, mode 1 is flock, mode 2 is relation.
+    /// Fixed kernel metadata: mode 0 is route, mode 1 is flock, mode 2 is relation,
+    /// mode 3 is pick.
     pub(crate) fn words(self) -> [u32; 3] {
         match self {
             Self::Route => [0, 0, 0],
             Self::Flock { kept } => [1, kept, 0],
             Self::Relation { kept, sweeps } => [2, kept, sweeps],
+            Self::Pick => [3, 0, 0],
+        }
+    }
+    /// Position transport word `s[14]` admitted with this read (0 is no
+    /// position config). Pick admits only 1 (prefix holonomy) or 3 (identity);
+    /// the other reads keep their existing checks.
+    pub fn admits_position_word(self, word: u32) -> Result<()> {
+        match (self, word) {
+            (Self::Pick, 1 | 3) => Ok(()),
+            (Self::Pick, _) => Err(Error::Invalid(
+                "Pick read admits only position transport 1 (prefix holonomy) or 3 (identity)"
+                    .into(),
+            )),
+            _ => Ok(()),
         }
     }
     /// Gate trit inventory for the given block count and binder stage count.
@@ -223,7 +274,7 @@ impl ReadSpec {
             .checked_mul(stages)
             .ok_or_else(|| Error::Invalid("gate inventory overflow".into()))?;
         match self {
-            Self::Route | Self::Flock { .. } => Ok(base),
+            Self::Route | Self::Flock { .. } | Self::Pick => Ok(base),
             Self::Relation { .. } => {
                 let relation = RELATION_EDGE_TYPES
                     .checked_mul(stages)
@@ -364,6 +415,53 @@ mod tests {
                 ),
                 1,
             ),
+            (
+                (
+                    "device.rs".into(),
+                    ["self", ".", "apply", "(proposal)"].concat(),
+                ),
+                1,
+            ),
+            (
+                (
+                    "cpu_oracle_parity.rs".into(),
+                    [".", "apply", "(kind, index, noop)"].concat(),
+                ),
+                1,
+            ),
+            (
+                (
+                    "cpu_oracle_parity.rs".into(),
+                    ["assert!", "(gpu", ".", "apply", "(&proposal).unwrap());"].concat(),
+                ),
+                1,
+            ),
+            (
+                (
+                    "cpu_oracle_parity.rs".into(),
+                    [
+                        "let committed = device",
+                        ".",
+                        "apply",
+                        "(&proposal).expect(\"cuda apply\");",
+                    ]
+                    .concat(),
+                ),
+                1,
+            ),
+            (
+                (
+                    "cpu_oracle_parity.rs".into(),
+                    [
+                        "let receipt = applier",
+                        ".",
+                        "apply",
+                        "(kind, index, chosen).expect(\"cpu apply\");",
+                    ]
+                    .concat(),
+                ),
+                1,
+            ),
         ]);
         assert_eq!(
             observed, expected,
@@ -453,6 +551,47 @@ mod tests {
         .validate()
         .is_err());
         assert!(matches!(training_admission(), Err(Error::TrainingHeld)));
+    }
+    #[test]
+    fn pick_read_spec_is_strict_and_refuses_position_transport_0_and_2() {
+        use crate::position_mechanism::{PositionConfig, PositionMode, PositionStepTable};
+        let spec = Spec {
+            vocabulary: 256,
+            blocks: 2,
+            context: 27,
+            kept_cells: 8,
+        };
+        assert!(ReadSpec::Pick.validate(spec).is_ok());
+        assert_eq!(ReadSpec::Pick.words(), [3, 0, 0]);
+        assert_eq!(ReadSpec::Pick.gate_count(4, 5).unwrap(), 20);
+        for word in [0, 2] {
+            let error = ReadSpec::Pick.admits_position_word(word).unwrap_err();
+            assert!(error.to_string().contains("Pick"), "{error}");
+        }
+        for word in [1, 3] {
+            ReadSpec::Pick.admits_position_word(word).unwrap();
+        }
+        for word in 0..4 {
+            ReadSpec::Flock { kept: 2 }
+                .admits_position_word(word)
+                .unwrap();
+        }
+        let steps = PositionStepTable::identity(2).unwrap();
+        for (mode, admitted) in [
+            (PositionMode::PrefixHolonomyV1, true),
+            (PositionMode::EndpointControlV1, false),
+            (PositionMode::IdentityControlV1, true),
+        ] {
+            let config = PositionConfig::new(mode, steps.clone());
+            assert_eq!(config.validate(spec, ReadSpec::Pick).is_ok(), admitted);
+        }
+        let text = serde_json::to_string(&ReadSpec::Pick).unwrap();
+        assert_eq!(text, r#"{"kind":"pick"}"#);
+        assert_eq!(
+            serde_json::from_str::<ReadSpec>(&text).unwrap(),
+            ReadSpec::Pick
+        );
+        assert!(serde_json::from_str::<ReadSpec>(r#"{"kind":"pick","kept":1}"#).is_err());
     }
     #[test]
     fn read_configuration_is_explicit_bounded_metadata() {

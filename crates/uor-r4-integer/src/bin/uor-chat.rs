@@ -4,6 +4,7 @@
 //! Executes with strictly zero transformers and zero hardware matrix multiplication in the served runtime.
 //! Persistent dialogue continuity via exact-token history and literal-role protocol.
 
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::io::{self, BufRead, Read as IoRead, Write};
 use std::path::{Path, PathBuf};
@@ -18,10 +19,11 @@ use uor_r4_integer::generation::Stop;
 use uor_r4_integer::loopback::{serve_loopback, LoopbackConfig};
 use uor_r4_integer::model::{IntegerModel, IntegerSession, IntegerStep};
 use uor_r4_integer::openai::OpenAiServing;
+use uor_r4_integer::pair_experts::{Check, PairExperts, Ratio, Setting, Verdict};
 use uor_r4_integer::sampling::SamplePolicy;
 use uor_r4_integer::stack::{
-    is_dialogue_query, recall_from_dialogue, ContentReadout, IntegerStackModel, PromptReplyReadout,
-    SieveRecall, StackChat, StackChatError, StackError, StackReply,
+    is_dialogue_query, recall_from_dialogue, ContentReadout, CopyRule, IntegerStackModel,
+    PromptReplyReadout, SieveLine, StackChat, StackChatError, StackError, StackReply, Unended,
 };
 
 /// How the stack path picks each token: `IntegerStackSession::serve_step`.
@@ -32,6 +34,8 @@ use uor_r4_tokenizer::dialogue::{DialogueProtocol, Message};
 use uor_r4_tokenizer::ByteBpeTokenizer;
 
 const VERSION: &str = "0.1.0";
+const CHAT_SCRIPT_SCHEMA: &str = "uor-r4.chat-script/1";
+const MAX_CHAT_SCRIPT_BYTES: usize = 1 << 20;
 
 const ANSI_CYAN_BOLD: &str = "\x1b[1;36m";
 const ANSI_GREEN_BOLD: &str = "\x1b[1;32m";
@@ -55,10 +59,40 @@ struct CliArgs {
     /// Literal-role dialogue version for the stack artifact (default 2).
     protocol: u8,
     threads: usize,
+    /// The rule the stack's copy heads read under in place of the artifact's own (`--copy-rule`);
+    /// `None` serves the artifact's own rule.
+    copy_rule: Option<CopyRule>,
+    /// A fitted asks table the place read is served from (`--place-asks FILE`, claude-359).
+    place_asks: Option<PathBuf>,
+    /// Whether an open row speaks the token at its place (`--place-speak 0|1`, default 1); only
+    /// with `--place-asks`.
+    place_speak: Option<bool>,
+    /// Whether a reply whose asks found a place that no row was offered is started over from
+    /// that place (`--place-serve-again 0|1`, default 0, claude-363); only with `--place-asks`
+    /// and text replies.
+    place_serve_again: Option<bool>,
+    /// What the conversation keeps of a reply that did not end (`--unended keep|drop|close`,
+    /// claude-369); only with `--stack` and text replies. `None` when left out: keep.
+    unended: Option<Unended>,
+    /// A pair experts table that checks every text reply (`--pair-experts FILE`, claude-367);
+    /// only with `--stack` and `--place-asks`.
+    pair_experts: Option<PathBuf>,
+    /// An expert seen more than this many times does not vote (`--pair-cap N`).
+    pair_cap: Option<u32>,
+    /// The share of the top vote a reply keeps to stand (`--pair-keep NUM/DEN`).
+    pair_keep: Option<Ratio>,
+    /// The experts' top vote needed to answer, in thousandths of one expert's vote (`--pair-floor N`).
+    pair_floor: Option<u32>,
+    /// Whether a turn's own counts are taken out first (`--pair-hold-out 0|1`, default 0).
+    pair_hold_out: Option<bool>,
+    /// Serve the stack without its turn memory (`--no-turn-memory`).
+    no_turn_memory: bool,
     /// One-shot turn: answer this message, print the record and exit.
     say: Option<String>,
     /// One-shot raw token-ID prompt (`--prompt-ids 0,7,19,31`) for `--stack` parity verification.
     prompt_ids: Option<Vec<u32>>,
+    /// JSON script of dialogue turns for one artifact, written as one JSON record.
+    script_path: Option<PathBuf>,
     /// Path to write a `UR4SESS1` binary session snapshot (`UR4SESS2` with a content readout) after a `--stack` step batch.
     save_session: Option<PathBuf>,
     /// Path to read a `UR4SESS1` binary session snapshot (`UR4SESS2` with a content readout) before a `--stack` step batch.
@@ -76,6 +110,8 @@ struct CliArgs {
     memory: Option<String>,
     /// Derive the next memory value from prior user turns.
     memory_sieve: bool,
+    /// Print the place read's register beside each `--stack` reply (`--print-place`).
+    print_place: bool,
     temperature: f64,
     top_k: usize,
     seed: u64,
@@ -114,7 +150,70 @@ impl PendingMemory {
 struct ConversationMemory {
     pending: PendingMemory,
     sieve: bool,
+    /// How the sieve words its line; it follows the artifact's copy rule.
+    line: SieveLine,
     user_turns: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ChatScript {
+    schema: String,
+    turns: Vec<ScriptTurn>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScriptTurn {
+    user: String,
+    #[serde(default)]
+    memory: Option<String>,
+    #[serde(default)]
+    memory_auto: Option<bool>,
+}
+
+fn parse_chat_script(bytes: &[u8], source: &Path) -> std::result::Result<ChatScript, String> {
+    if bytes.len() > MAX_CHAT_SCRIPT_BYTES {
+        return Err(format!(
+            "{}: script is {} bytes; the limit is {MAX_CHAT_SCRIPT_BYTES}",
+            source.display(),
+            bytes.len()
+        ));
+    }
+    let script: ChatScript =
+        serde_json::from_slice(bytes).map_err(|error| format!("{}: {error}", source.display()))?;
+    if script.schema != CHAT_SCRIPT_SCHEMA {
+        return Err(format!(
+            "{}: schema {:?} is not {CHAT_SCRIPT_SCHEMA:?}",
+            source.display(),
+            script.schema
+        ));
+    }
+    if script.turns.is_empty() || script.turns.len() > 256 {
+        return Err(format!(
+            "{}: a script needs 1 to 256 turns",
+            source.display()
+        ));
+    }
+    for (index, turn) in script.turns.iter().enumerate() {
+        if turn.user.trim().is_empty() {
+            return Err(format!(
+                "{}: turn {} has empty user text",
+                source.display(),
+                index + 1
+            ));
+        }
+        if let Some(memory) = turn.memory.as_deref() {
+            StackChat::memory_content(memory).map_err(|error| {
+                format!(
+                    "{}: turn {} has invalid memory: {error}",
+                    source.display(),
+                    index + 1
+                )
+            })?;
+        }
+    }
+    Ok(script)
 }
 
 impl ConversationMemory {
@@ -122,8 +221,19 @@ impl ConversationMemory {
         Self {
             pending: PendingMemory::new(pending),
             sieve,
+            line: SieveLine::Value,
             user_turns: Vec::new(),
         }
+    }
+
+    /// Word the sieve's line for the copy rule the session serves under: a
+    /// latest-exact copy read follows a reply sentence, the mean reads a value.
+    fn worded_for(mut self, rule: Option<CopyRule>) -> Self {
+        self.line = match rule {
+            Some(CopyRule::LatestExact) => SieveLine::Reply,
+            _ => SieveLine::Value,
+        };
+        self
     }
 
     fn value_for(&self, user: &str) -> (Option<String>, bool) {
@@ -134,12 +244,7 @@ impl ConversationMemory {
             return (None, false);
         }
         let history: Vec<&str> = self.user_turns.iter().map(String::as_str).collect();
-        let value = match recall_from_dialogue(&history, user) {
-            SieveRecall::Value(value) => Some(value),
-            SieveRecall::Absent => Some("none".to_owned()),
-            SieveRecall::NotRequested => None,
-        };
-        (value, false)
+        (recall_from_dialogue(&history, user).line(self.line), false)
     }
 
     fn finish_turn(&mut self, user: &str, explicit_memory: bool) {
@@ -197,8 +302,20 @@ impl Default for CliArgs {
             prompt_reply_path: None,
             protocol: 2,
             threads: 1,
+            copy_rule: None,
+            place_asks: None,
+            place_speak: None,
+            place_serve_again: None,
+            unended: None,
+            pair_experts: None,
+            pair_cap: None,
+            pair_keep: None,
+            pair_floor: None,
+            pair_hold_out: None,
+            no_turn_memory: false,
             say: None,
             prompt_ids: None,
+            script_path: None,
             save_session: None,
             restore_session: None,
             serve: None,
@@ -208,6 +325,7 @@ impl Default for CliArgs {
             system_prompt: None,
             memory: None,
             memory_sieve: false,
+            print_place: false,
             temperature: 0.0,
             top_k: 16,
             seed: 0,
@@ -233,7 +351,9 @@ fn print_usage() {
     eprintln!("                              directly by the D11 integer stack engine");
     eprintln!("      --discrete <ARTIFACT>   UORLUT01 discrete SpiralCore/FBS artifact; one-shot");
     eprintln!("                              raw-token serving through IntegerDiscreteModel");
-    eprintln!("      --tokenizer <PATH>      tokenizer.json for --stack (required with it)");
+    eprintln!(
+        "      --tokenizer <PATH>      tokenizer.json for --stack (required; /10 artifacts bind its SHA-256)"
+    );
     eprintln!("      --content-readout <P>   artifact-bound content-readout sidecar for --stack");
     eprintln!("      --prompt-reply <P>      complete prompt/reply readout for --serve");
     eprintln!(
@@ -243,6 +363,10 @@ fn print_usage() {
     eprintln!("      --say <TEXT>            answer one turn, print a JSON record and exit");
     eprintln!(
         "      --prompt-ids <CSV>      step comma-separated token IDs on --stack or --discrete,"
+    );
+    eprintln!("                              print a JSON record and exit");
+    eprintln!(
+        "      --script <PATH>         run a JSON dialogue script on --stack and print a record"
     );
     eprintln!("                              print JSON and exit");
     eprintln!(
@@ -262,6 +386,23 @@ fn print_usage() {
     );
     eprintln!(
         "      --memory-sieve          Derive System: Memory from prior user turns in the REPL"
+    );
+    eprintln!(
+        "      --print-place           print the place read's register after each --stack reply:\n                              in the REPL on stdout under the reply; with --say or --script on\n                              stderr, so stdout stays the replies' JSON"
+    );
+    eprintln!(
+        "      --unended <RULE>        what a --stack conversation keeps of a reply cut by the short\n                              cycle or the token cap: keep (default), drop or close"
+    );
+    eprintln!(
+        "      --pair-experts <FILE>   pair experts table that checks each --stack text reply;\n                              needs --place-asks, --pair-cap, --pair-keep and --pair-floor"
+    );
+    eprintln!("      --pair-cap <INT>        an expert seen more than this many times does not vote");
+    eprintln!("      --pair-keep <NUM/DEN>   share of the top vote the model's reply keeps to stand");
+    eprintln!(
+        "      --pair-floor <INT>      top vote the experts need to answer, in thousandths of one vote"
+    );
+    eprintln!(
+        "      --pair-hold-out <0|1>   take a turn's own counts out before the vote (default: 0)"
     );
     eprintln!(
         "  -t, --temperature <FLOAT>   Sampling temperature (0.0 = greedy, >0.0 = categorical)"
@@ -359,6 +500,9 @@ fn parse_cli_args() -> CliArgs {
             "--memory-sieve" => {
                 args.memory_sieve = true;
             }
+            "--print-place" => {
+                args.print_place = true;
+            }
             "--stack" => {
                 idx += 1;
                 if idx < raw.len() {
@@ -431,6 +575,70 @@ fn parse_cli_args() -> CliArgs {
                     }
                 }
             }
+            "--no-turn-memory" => {
+                args.no_turn_memory = true;
+            }
+            "--copy-rule" => {
+                idx += 1;
+                match raw.get(idx).map(String::as_str).and_then(CopyRule::parse) {
+                    Some(rule) => args.copy_rule = Some(rule),
+                    None => {
+                        eprintln!(
+                            "{ANSI_RED_BOLD}error:{ANSI_RESET} '--copy-rule' takes mean, latest-exact, latest-nearest, longest-exact or longest-after-opening"
+                        );
+                        process::exit(1);
+                    }
+                }
+            }
+            "--place-asks" => {
+                idx += 1;
+                match raw.get(idx) {
+                    Some(path) => args.place_asks = Some(PathBuf::from(path)),
+                    None => {
+                        eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} '--place-asks' takes the path of a fitted asks table");
+                        process::exit(1);
+                    }
+                }
+            }
+            "--place-speak" => {
+                idx += 1;
+                match raw.get(idx).map(String::as_str) {
+                    Some("0") => args.place_speak = Some(false),
+                    Some("1") => args.place_speak = Some(true),
+                    _ => {
+                        eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} '--place-speak' takes 0 or 1");
+                        process::exit(1);
+                    }
+                }
+            }
+            "--place-serve-again" => {
+                idx += 1;
+                match raw.get(idx).map(String::as_str) {
+                    Some("0") => args.place_serve_again = Some(false),
+                    Some("1") => args.place_serve_again = Some(true),
+                    _ => {
+                        eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} '--place-serve-again' takes 0 or 1");
+                        process::exit(1);
+                    }
+                }
+            }
+            "--unended" => {
+                idx += 1;
+                match parse_unended(raw.get(idx).map(String::as_str)) {
+                    Ok(rule) => args.unended = Some(rule),
+                    Err(message) => {
+                        eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} {message}");
+                        process::exit(1);
+                    }
+                }
+            }
+            flag @ ("--pair-experts" | "--pair-cap" | "--pair-keep" | "--pair-floor" | "--pair-hold-out") => {
+                idx += 1;
+                if let Err(message) = parse_pair_flag(&mut args, flag, raw.get(idx).map(String::as_str)) {
+                    eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} {message}");
+                    process::exit(1);
+                }
+            }
             "--threads" => {
                 idx += 1;
                 match raw.get(idx).map(String::as_str).map(str::parse::<usize>) {
@@ -482,6 +690,15 @@ fn parse_cli_args() -> CliArgs {
                     eprintln!(
                         "{ANSI_RED_BOLD}error:{ANSI_RESET} missing argument for '--prompt-ids'"
                     );
+                    process::exit(1);
+                }
+            }
+            "--script" => {
+                idx += 1;
+                if idx < raw.len() {
+                    args.script_path = Some(PathBuf::from(&raw[idx]));
+                } else {
+                    eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} missing argument for '--script'");
                     process::exit(1);
                 }
             }
@@ -642,6 +859,7 @@ fn parse_cli_args() -> CliArgs {
     }
     if args.serve.is_some()
         && (args.say.is_some()
+            || args.script_path.is_some()
             || args.prompt_ids.is_some()
             || args.save_session.is_some()
             || args.restore_session.is_some()
@@ -701,6 +919,26 @@ fn parse_cli_args() -> CliArgs {
         );
         process::exit(1);
     }
+    if args.print_place && (args.stack_path.is_none() || args.prompt_ids.is_some() || args.serve.is_some()) {
+        eprintln!(
+            "{ANSI_RED_BOLD}error:{ANSI_RESET} '--print-place' requires text replies on '--stack' (the REPL, '--say' or '--script')"
+        );
+        process::exit(1);
+    }
+    if args.place_serve_again.is_some() && (args.place_asks.is_none() || args.prompt_ids.is_some() || args.serve.is_some()) {
+        eprintln!(
+            "{ANSI_RED_BOLD}error:{ANSI_RESET} '--place-serve-again' requires '--place-asks' and text replies on '--stack' (the REPL, '--say' or '--script')"
+        );
+        process::exit(1);
+    }
+    if let Err(message) = check_unended_args(&args) {
+        eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} {message}");
+        process::exit(1);
+    }
+    if let Err(message) = check_pair_args(&args) {
+        eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} {message}");
+        process::exit(1);
+    }
     if args.memory_sieve && (args.say.is_some() || args.prompt_ids.is_some()) {
         eprintln!(
             "{ANSI_RED_BOLD}error:{ANSI_RESET} '--memory-sieve' requires the multi-turn REPL"
@@ -712,6 +950,12 @@ fn parse_cli_args() -> CliArgs {
             "{ANSI_RED_BOLD}error:{ANSI_RESET} '--say' and '--prompt-ids' are mutually exclusive; pass one"
         );
         process::exit(1);
+    }
+    if args.script_path.is_some() && (args.say.is_some() || args.prompt_ids.is_some()) {
+        eprintln!(
+            "{ANSI_RED_BOLD}error:{ANSI_RESET} '--script' is mutually exclusive with '--say' and '--prompt-ids'"
+        );
+        process::exit(2);
     }
     if args.discrete_path.is_some() && args.say.is_some() {
         eprintln!(
@@ -746,6 +990,111 @@ fn parse_cli_args() -> CliArgs {
     }
 
     args
+}
+
+/// Read `--unended`'s value (claude-369).
+fn parse_unended(value: Option<&str>) -> std::result::Result<Unended, String> {
+    match value {
+        Some("keep") => Ok(Unended::Keep),
+        Some("drop") => Ok(Unended::Drop),
+        Some("close") => Ok(Unended::Close),
+        _ => Err("'--unended' takes keep, drop or close".into()),
+    }
+}
+
+/// Refuse `--unended` where no stack chat keeps a conversation (claude-369).
+fn check_unended_args(args: &CliArgs) -> std::result::Result<(), String> {
+    if args.unended.is_some() && (args.stack_path.is_none() || args.prompt_ids.is_some() || args.serve.is_some()) {
+        return Err("'--unended' requires text replies on '--stack' (the REPL, '--say' or '--script')".into());
+    }
+    Ok(())
+}
+
+/// Read one pair experts flag's value into `args` (claude-367).
+fn parse_pair_flag(args: &mut CliArgs, flag: &str, value: Option<&str>) -> std::result::Result<(), String> {
+    let whole = |value: Option<&str>| value.and_then(|text| text.parse::<u32>().ok());
+    match flag {
+        "--pair-experts" => {
+            let path = value.ok_or("'--pair-experts' takes the path of a pair experts table")?;
+            args.pair_experts = Some(PathBuf::from(path));
+        }
+        "--pair-cap" => {
+            args.pair_cap = Some(whole(value).ok_or("'--pair-cap' takes a whole number")?);
+        }
+        "--pair-floor" => {
+            args.pair_floor = Some(whole(value).ok_or("'--pair-floor' takes a whole number of thousandths")?);
+        }
+        "--pair-keep" => {
+            let keep = value
+                .and_then(|text| text.split_once('/'))
+                .and_then(|(num, den)| Some(Ratio { num: num.parse().ok()?, den: den.parse().ok()? }))
+                .filter(|keep| keep.den >= 1 && keep.num <= keep.den)
+                .ok_or("'--pair-keep' takes NUM/DEN: two whole numbers, DEN at least 1 and NUM at most DEN")?;
+            args.pair_keep = Some(keep);
+        }
+        "--pair-hold-out" => {
+            args.pair_hold_out = Some(match value {
+                Some("0") => false,
+                Some("1") => true,
+                _ => return Err("'--pair-hold-out' takes 0 or 1".into()),
+            });
+        }
+        _ => return Err(format!("'{flag}' is not a pair experts flag")),
+    }
+    Ok(())
+}
+
+/// Refuse pair experts flags that cannot be served together (claude-367).
+fn check_pair_args(args: &CliArgs) -> std::result::Result<(), String> {
+    let Some(_) = args.pair_experts else {
+        for (set, flag) in [
+            (args.pair_cap.is_some(), "--pair-cap"),
+            (args.pair_keep.is_some(), "--pair-keep"),
+            (args.pair_floor.is_some(), "--pair-floor"),
+            (args.pair_hold_out.is_some(), "--pair-hold-out"),
+        ] {
+            if set {
+                return Err(format!("'{flag}' requires '--pair-experts'"));
+            }
+        }
+        return Ok(());
+    };
+    if args.stack_path.is_none() {
+        return Err("'--pair-experts' requires '--stack'".into());
+    }
+    if args.place_asks.is_none() {
+        return Err(
+            "'--pair-experts' requires '--place-asks': the experts read the turns from its counted table".into(),
+        );
+    }
+    if args.prompt_ids.is_some() || args.serve.is_some() {
+        return Err(
+            "'--pair-experts' requires text replies on '--stack' (the REPL, '--say' or '--script')".into(),
+        );
+    }
+    for (set, flag) in [
+        (args.pair_cap.is_some(), "--pair-cap <N>"),
+        (args.pair_keep.is_some(), "--pair-keep <NUM/DEN>"),
+        (args.pair_floor.is_some(), "--pair-floor <N>"),
+    ] {
+        if !set {
+            return Err(format!("'--pair-experts' requires '{flag}'"));
+        }
+    }
+    Ok(())
+}
+
+/// The word a pair experts verdict is recorded as in a script transcript (claude-367).
+fn pair_verdict_name(verdict: Verdict) -> &'static str {
+    match verdict {
+        Verdict::NoTurn => "noturn",
+        Verdict::LeftAlone => "alone",
+        Verdict::Checked(Check::NoExpert) => "noexpert",
+        Verdict::Checked(Check::Stands { .. }) => "stands",
+        Verdict::Checked(Check::Unsure { .. }) => "unsure",
+        Verdict::Checked(Check::Replaced { .. }) => "replaced",
+        Verdict::NoRoom => "noroom",
+    }
 }
 
 fn get_process_rss_mb() -> Option<f64> {
@@ -1173,6 +1522,219 @@ mod tests {
         assert_eq!(CliArgs::default().protocol, 2);
     }
 
+    /// The pair experts flags read as the parser reads them, then checked as it checks them.
+    fn pair_args(stack: bool, asks: bool, flags: &[(&str, &str)]) -> std::result::Result<CliArgs, String> {
+        let mut args = CliArgs::default();
+        if stack {
+            args.stack_path = Some(PathBuf::from("model.lut"));
+        }
+        if asks {
+            args.place_asks = Some(PathBuf::from("asks.json"));
+        }
+        for &(flag, value) in flags {
+            parse_pair_flag(&mut args, flag, Some(value))?;
+        }
+        check_pair_args(&args)?;
+        Ok(args)
+    }
+
+    const PAIR_FLAGS: [(&str, &str); 5] = [
+        ("--pair-experts", "pairs.pex"),
+        ("--pair-cap", "8"),
+        ("--pair-keep", "1/32"),
+        ("--pair-floor", "250"),
+        ("--pair-hold-out", "1"),
+    ];
+
+    /// claude-369: `--unended` reads keep, drop or close, refuses any other value, and needs text
+    /// replies on `--stack`; left out it is `None`, today's run.
+    #[test]
+    fn unended_flag_parses_and_is_refused_without_a_stack_chat() {
+        let read = |stack: bool, ids: bool, value: &str| -> std::result::Result<CliArgs, String> {
+            let mut args = CliArgs::default();
+            if stack {
+                args.stack_path = Some(PathBuf::from("model.lut"));
+            }
+            if ids {
+                args.prompt_ids = Some(vec![1, 2]);
+            }
+            args.unended = Some(parse_unended(Some(value))?);
+            check_unended_args(&args)?;
+            Ok(args)
+        };
+        assert_eq!(read(true, false, "drop").expect("drop is accepted").unended, Some(Unended::Drop));
+        assert_eq!(read(true, false, "close").expect("close is accepted").unended, Some(Unended::Close));
+        assert_eq!(read(true, false, "keep").expect("keep is accepted").unended, Some(Unended::Keep));
+        let wrong = read(true, false, "trim").err().expect("a wrong value is refused");
+        assert_eq!(wrong, "'--unended' takes keep, drop or close");
+        assert!(parse_unended(None).is_err(), "a missing value is refused");
+        let no_stack = read(false, false, "drop").err().expect("refused without --stack");
+        assert!(no_stack.contains("on '--stack'"), "{no_stack}");
+        let ids = read(true, true, "close").err().expect("refused with --prompt-ids");
+        assert!(ids.contains("text replies"), "{ids}");
+        let left_out = CliArgs::default();
+        assert_eq!(left_out.unended, None);
+        assert!(check_unended_args(&left_out).is_ok());
+    }
+
+    #[test]
+    fn pair_experts_flags_parse_into_the_arguments() {
+        let args = pair_args(true, true, &PAIR_FLAGS).expect("the five flags are accepted");
+        assert_eq!(args.pair_experts, Some(PathBuf::from("pairs.pex")));
+        assert_eq!(args.pair_cap, Some(8));
+        assert_eq!(args.pair_keep, Some(Ratio { num: 1, den: 32 }));
+        assert_eq!(args.pair_floor, Some(250));
+        assert_eq!(args.pair_hold_out, Some(true));
+
+        let default_hold_out = pair_args(true, true, &PAIR_FLAGS[..4]).expect("hold-out is optional");
+        assert_eq!(default_hold_out.pair_hold_out, None);
+        let off = pair_args(true, true, &[PAIR_FLAGS[0], PAIR_FLAGS[1], PAIR_FLAGS[2], PAIR_FLAGS[3], ("--pair-hold-out", "0")])
+            .expect("hold-out 0 is accepted");
+        assert_eq!(off.pair_hold_out, Some(false));
+
+        let none = pair_args(false, false, &[]).expect("no pair flags is today's run");
+        assert_eq!(none.pair_experts, None);
+    }
+
+    #[test]
+    fn pair_experts_flags_are_refused_without_what_they_need() {
+        let no_stack = pair_args(false, true, &PAIR_FLAGS).err().expect("refused without --stack");
+        assert_eq!(no_stack, "'--pair-experts' requires '--stack'");
+
+        let no_asks = pair_args(true, false, &PAIR_FLAGS).err().expect("refused without --place-asks");
+        assert!(no_asks.contains("requires '--place-asks'"), "{no_asks}");
+
+        for (missing, flag) in [(1, "--pair-cap"), (2, "--pair-keep"), (3, "--pair-floor")] {
+            let flags: Vec<(&str, &str)> = PAIR_FLAGS.iter().enumerate().filter(|&(at, _)| at != missing).map(|(_, &pair)| pair).collect();
+            let error = pair_args(true, true, &flags).err().expect("refused without one of cap, keep, floor");
+            assert!(error.starts_with("'--pair-experts' requires") && error.contains(flag), "{error}");
+        }
+
+        let cap_alone = pair_args(true, true, &[("--pair-cap", "8")]).err().expect("--pair-cap needs the table");
+        assert_eq!(cap_alone, "'--pair-cap' requires '--pair-experts'");
+        let hold_out_alone = pair_args(true, true, &[("--pair-hold-out", "0")]).err().expect("--pair-hold-out needs the table");
+        assert_eq!(hold_out_alone, "'--pair-hold-out' requires '--pair-experts'");
+
+        let zero_den = pair_args(true, true, &[("--pair-keep", "1/0")]).err().expect("DEN 0 is refused");
+        assert!(zero_den.starts_with("'--pair-keep' takes NUM/DEN"), "{zero_den}");
+        for bad in ["1", "1/x", "-1/2", "1/2/3", "3/2"] {
+            let error = pair_args(true, true, &[("--pair-keep", bad)]).err().expect("a malformed share is refused");
+            assert!(error.starts_with("'--pair-keep' takes NUM/DEN"), "{bad}: {error}");
+        }
+
+        let hold_out_two = pair_args(true, true, &[("--pair-hold-out", "2")]).err().expect("hold-out 2 is refused");
+        assert_eq!(hold_out_two, "'--pair-hold-out' takes 0 or 1");
+
+        let mut on_ids = pair_args(true, true, &PAIR_FLAGS).expect("accepted");
+        on_ids.prompt_ids = Some(vec![0, 1]);
+        let error = check_pair_args(&on_ids).err().expect("refused on raw ids");
+        assert!(error.contains("text replies"), "{error}");
+    }
+
+    #[test]
+    fn pair_verdict_names_are_one_word_each() {
+        let names = [
+            (Verdict::NoTurn, "noturn"),
+            (Verdict::LeftAlone, "alone"),
+            (Verdict::Checked(Check::NoExpert), "noexpert"),
+            (Verdict::Checked(Check::Stands { vote: 9, top: 9 }), "stands"),
+            (Verdict::Checked(Check::Unsure { vote: 1, top: 3 }), "unsure"),
+            (Verdict::Checked(Check::Replaced { reply: 2, vote: 0, top: 5 }), "replaced"),
+            (Verdict::NoRoom, "noroom"),
+        ];
+        for (verdict, name) in names {
+            assert_eq!(pair_verdict_name(verdict), name, "{verdict:?}");
+        }
+    }
+
+    #[test]
+    fn chat_script_parser_accepts_multi_turn_memory_controls_only_with_the_schema() {
+        let script = parse_chat_script(
+            br#"{
+                "schema": "uor-r4.chat-script/1",
+                "turns": [
+                    {"user": "My lucky number is 47.", "memory_auto": true},
+                    {"user": "What is my lucky number?", "memory": "47", "memory_auto": false},
+                    {"user": "Hello", "memory_auto": true}
+                ]
+            }"#,
+            Path::new("fixture.json"),
+        )
+        .expect("script parses");
+        assert_eq!(script.turns.len(), 3);
+        assert_eq!(script.turns[0].memory_auto, Some(true));
+        assert_eq!(script.turns[1].memory.as_deref(), Some("47"));
+        assert_eq!(script.turns[1].memory_auto, Some(false));
+
+        let error = parse_chat_script(
+            br#"{"schema":"uor-r4.chat-script/2","turns":[{"user":"Hello"}]}"#,
+            Path::new("fixture.json"),
+        )
+        .expect_err("wrong schema is refused");
+        assert!(error.contains("schema"), "{error}");
+    }
+
+    #[test]
+    fn chat_script_parser_refuses_empty_oversized_and_invalid_turns() {
+        let empty = parse_chat_script(
+            br#"{"schema":"uor-r4.chat-script/1","turns":[]}"#,
+            Path::new("fixture.json"),
+        )
+        .expect_err("empty script is refused");
+        assert!(empty.contains("1 to 256"), "{empty}");
+
+        let invalid = parse_chat_script(
+            br#"{"schema":"uor-r4.chat-script/1","turns":[{"user":"  ","memory":"two\nlines"}]}"#,
+            Path::new("fixture.json"),
+        )
+        .expect_err("invalid script is refused");
+        assert!(invalid.contains("empty user text"), "{invalid}");
+
+        let bytes = vec![b'x'; MAX_CHAT_SCRIPT_BYTES + 1];
+        let oversized =
+            parse_chat_script(&bytes, Path::new("fixture.json")).expect_err("oversize is refused");
+        assert!(oversized.contains("limit"), "{oversized}");
+    }
+
+    #[test]
+    fn chat_script_memory_controls_change_precedence_per_turn() {
+        let script = parse_chat_script(
+            br#"{
+                "schema": "uor-r4.chat-script/1",
+                "turns": [
+                    {"user": "My lucky number is 47.", "memory_auto": true},
+                    {"user": "What is my lucky number?"},
+                    {"user": "What did I just say?", "memory": "a typed value", "memory_auto": false},
+                    {"user": "What is my lucky number?", "memory_auto": true}
+                ]
+            }"#,
+            Path::new("fixture.json"),
+        )
+        .expect("script parses");
+        let mut memory = ConversationMemory::new(None, false);
+        let mut observed = Vec::new();
+        for turn in &script.turns {
+            if let Some(memory_auto) = turn.memory_auto {
+                memory.sieve = memory_auto;
+            }
+            if let Some(explicit) = turn.memory.as_deref() {
+                memory.pending.set(explicit).expect("valid script memory");
+            }
+            let (value, explicit) = memory.value_for(&turn.user);
+            observed.push((value, explicit, memory.sieve));
+            memory.finish_turn(&turn.user, explicit);
+        }
+        assert_eq!(observed[0].0, None);
+        assert!(observed[0].2);
+        assert_eq!(observed[1].0.as_deref(), Some("47"));
+        assert!(!observed[1].1);
+        assert_eq!(observed[2].0.as_deref(), Some("a typed value"));
+        assert!(observed[2].1);
+        assert!(!observed[2].2);
+        assert_eq!(observed[3].0.as_deref(), Some("47"));
+        assert!(observed[3].2);
+    }
+
     #[test]
     fn dialogue_memory_commands_and_turn_lifecycle_are_exact() {
         let mut memory = ConversationMemory::new(None, false);
@@ -1229,6 +1791,39 @@ mod tests {
         assert_eq!(value.as_deref(), Some("Pickle"));
         assert!(!explicit);
         memory.finish_turn("What did we name the new puppy?", explicit);
+
+        // Under a latest-exact copy rule the sieve writes a reply sentence; a
+        // typed value and every other rule keep the bare value.
+        let mut worded =
+            ConversationMemory::new(None, true).worded_for(Some(CopyRule::LatestExact));
+        worded.finish_turn("The new puppy at our house is named Pickle.", false);
+        assert_eq!(
+            worded
+                .value_for("What did we name the new puppy?")
+                .0
+                .as_deref(),
+            Some("It's Pickle")
+        );
+        assert_eq!(
+            worded.value_for("What is my lucky number?").0.as_deref(),
+            Some("You haven't told me that yet")
+        );
+        assert_eq!(worded.value_for("Hello!").0, None);
+        for rule in [None, Some(CopyRule::Mean), Some(CopyRule::LatestNearest)] {
+            let mut plain = ConversationMemory::new(None, true).worded_for(rule);
+            plain.finish_turn("The new puppy at our house is named Pickle.", false);
+            assert_eq!(
+                plain
+                    .value_for("What did we name the new puppy?")
+                    .0
+                    .as_deref(),
+                Some("Pickle")
+            );
+            assert_eq!(
+                plain.value_for("What is my lucky number?").0.as_deref(),
+                Some("none")
+            );
+        }
 
         handle_memory_command(&mut memory, "/memory Goldie").unwrap();
         let (override_value, explicit) = memory.value_for("What did we name the new puppy?");
@@ -1626,6 +2221,29 @@ fn print_stack_reply(reply: &StackReply, positions: usize, seconds: f64) {
     );
 }
 
+/// `--print-place`: the place read's register for the reply just served. Pair 0 is the
+/// register after the step that chose the reply's first id; a held place is a position in
+/// the chat's token history, whose token is decoded. Without a place read every pair is empty.
+fn place_line(chat: &StackChat<'_>, reply: &StackReply) -> String {
+    let places = chat.last_reply_places();
+    let (held, offered) = places.first().copied().unwrap_or((None, None));
+    let name = |place: Option<usize>| place.map_or_else(|| "none".to_owned(), |p| p.to_string());
+    let token = match held {
+        Some(at) => match chat.tokens().get(at) {
+            Some(&id) => chat.tokenizer().decode(&[id]),
+            None => "?".to_owned(),
+        },
+        None => "-".to_owned(),
+    };
+    let open = places.iter().filter(|(_, offered)| offered.is_some()).count();
+    format!(
+        "{ANSI_MAGENTA_BOLD}[place]{ANSI_RESET} first: held={} offered={} token={token:?}; open: {open} of {}",
+        name(held),
+        name(offered),
+        reply.ids.len()
+    )
+}
+
 fn stack_help() {
     println!("{ANSI_YELLOW_BOLD}[uor-chat]{ANSI_RESET} Available Slash Commands (stack path):");
     println!("  /reset, /clear        Reset dialogue history and start a fresh conversation");
@@ -1678,10 +2296,63 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
     }
     #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
     let mut model = IntegerStackModel::load(artifact)?;
+    let tokenizer_bytes = std::fs::read(tokenizer_path)?;
+    model.require_tokenizer_sha256(&hex::encode(Sha256::digest(&tokenizer_bytes)))?;
     #[cfg(not(target_arch = "wasm32"))]
     model.set_threads(cli.threads)?;
     #[cfg(target_arch = "wasm32")]
     let _ = cli.threads;
+    if cli.no_turn_memory {
+        if !model.drop_turn_memory() {
+            return Err(StackCliError::Usage(
+                "--no-turn-memory needs a stack artifact with a turn memory".into(),
+            ));
+        }
+        println!(
+            "{ANSI_YELLOW_BOLD}[notice]{ANSI_RESET} Serving without the artifact's turn memory, not as it was exported and scored."
+        );
+    }
+    // The artifact's own rule, read before any switch: the sieve words its line for the rule the
+    // model was trained under, whatever rule this run serves.
+    let own_copy_rule = model.copy_rule();
+    if let Some(rule) = cli.copy_rule {
+        if !model.set_copy_rule(rule) {
+            return Err(StackCliError::Usage(
+                "--copy-rule needs a stack artifact with Hamming reads".into(),
+            ));
+        }
+        if own_copy_rule != Some(rule) {
+            println!(
+                "{ANSI_YELLOW_BOLD}[notice]{ANSI_RESET} Copy heads read under '{}', not the '{}' this artifact was exported and scored under.",
+                rule.name(),
+                own_copy_rule.map_or("mean", CopyRule::name)
+            );
+        }
+    }
+    // The asks (claude-359): a fitted table the place read is served from, set only here.
+    // The vocabulary and the tokens the asks were counted on: the pair experts must name the same.
+    let mut asks_counted_on: Option<(u32, String)> = None;
+    match (cli.place_asks.as_deref(), cli.place_speak) {
+        (Some(path), speak) => {
+            let asks: uor_r4_integer::place_asks::PlaceAsks = std::fs::read_to_string(path)
+                .map_err(|e| e.to_string())
+                .and_then(|text| serde_json::from_str(&text).map_err(|e| e.to_string()))
+                .map_err(|e| StackCliError::Usage(format!("--place-asks {}: {e}", path.display())))?;
+            asks_counted_on = Some((asks.vocab, asks.tokens_sha256.clone()));
+            let speak = speak.unwrap_or(true);
+            model
+                .set_place_asks(&asks, speak)
+                .map_err(|e| StackCliError::Usage(format!("--place-asks: {e}")))?;
+            println!(
+                "{ANSI_YELLOW_BOLD}[notice]{ANSI_RESET} The place read is served from a fitted asks table (speak={}), not as this artifact was exported and scored.",
+                u8::from(speak)
+            );
+        }
+        (None, Some(_)) => {
+            return Err(StackCliError::Usage("--place-speak needs --place-asks".into()));
+        }
+        (None, None) => {}
+    }
     let content_readout_identity = if let Some(path) = cli.content_readout_path.as_deref() {
         let path_string = path
             .to_str()
@@ -1704,7 +2375,6 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
         let port = port
             .parse::<u16>()
             .map_err(|_| StackCliError::Usage("--serve port must be a u16".into()))?;
-        let tokenizer_bytes = std::fs::read(tokenizer_path)?;
         let prompt_reply = if let Some(path) = cli.prompt_reply_path.as_deref() {
             let path_string = path
                 .to_str()
@@ -1749,6 +2419,51 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
         return serve_loopback(config).map_err(|error| StackCliError::Usage(error.to_string()));
     }
     let mut chat = StackChat::from_tokenizer_path(&model, tokenizer_path, cli.protocol)?;
+    // Serve again (claude-363): a reply whose found place no row was offered starts over from it.
+    let serve_again = cli.place_serve_again == Some(true);
+    chat.set_serve_again(serve_again);
+    // A reply that did not end (claude-369): kept, dropped or closed in the history.
+    chat.set_unended(cli.unended.unwrap_or_default());
+    let unended_name = |chat: &StackChat<'_>| chat.last_reply_unended().map(Unended::name);
+    // The pair experts (claude-367): set on the chat, which checks every text reply with them.
+    let pair_identity = match cli.pair_experts.as_deref() {
+        Some(path) => {
+            let refused = |e: String| StackCliError::Usage(format!("--pair-experts {}: {e}", path.display()));
+            let table = std::fs::read(path)
+                .map_err(|e| e.to_string())
+                .and_then(|bytes| PairExperts::from_bytes(&bytes))
+                .map_err(refused)?;
+            if table.vocab() as usize != model.shape().vocab {
+                return Err(refused(format!(
+                    "the table's vocabulary is {} tokens; the stack's is {}",
+                    table.vocab(),
+                    model.shape().vocab
+                )));
+            }
+            // The experts and the asks are counted on one corpus: the same vocabulary and tokens.
+            let (asks_vocab, asks_tokens) = asks_counted_on
+                .as_ref()
+                .ok_or_else(|| refused("needs --place-asks".into()))?;
+            let tag = hex::decode(asks_tokens)
+                .ok()
+                .and_then(|bytes| <[u8; 32]>::try_from(bytes).ok())
+                .ok_or_else(|| refused(format!("the asks name their tokens as {asks_tokens}, not a SHA-256")))?;
+            table.expect(*asks_vocab, &tag).map_err(refused)?;
+            let (Some(cap), Some(keep), Some(floor)) = (cli.pair_cap, cli.pair_keep, cli.pair_floor) else {
+                return Err(refused("needs --pair-cap, --pair-keep and --pair-floor".into()));
+            };
+            let setting = Setting {
+                cap,
+                keep,
+                hold_out: cli.pair_hold_out == Some(true),
+                floor,
+            };
+            let sha256 = table.sha256();
+            chat.set_pair_experts(Some((table, setting))).map_err(refused)?;
+            Some((sha256, setting))
+        }
+        None => None,
+    };
     if cli.read_mode == ReadMode::NoRead {
         eprintln!(
             "{ANSI_YELLOW_BOLD}[notice]{ANSI_RESET} --read-mode is fixed by the artifact's own read \
@@ -1833,12 +2548,15 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
             cli.max_tokens,
         )?;
         let seconds = started.elapsed().as_secs_f64();
+        if cli.print_place {
+            eprintln!("{}", place_line(&chat, &reply));
+        }
         let memory = cli
             .memory
             .as_deref()
             .map(StackChat::memory_content)
             .transpose()?;
-        let record = serde_json::json!({
+        let mut record = serde_json::json!({
             "schema": "uor-r4.uor-chat-stack-reply/1",
             "artifact": artifact,
             "artifact_sha256": model.artifact_sha256(),
@@ -1857,6 +2575,102 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
             "history_tokens": chat.tokens().len(),
             "seconds": seconds,
         });
+        // Only with `--place-serve-again 1`: without it the record is as it always was.
+        if serve_again {
+            record["served_again"] = serde_json::json!(chat.last_reply_served_again());
+        }
+        // Only with `--unended`: without it the record is as it always was.
+        if cli.unended.is_some() {
+            record["unended"] = serde_json::json!(unended_name(&chat));
+        }
+        println!("{}", serde_json::to_string_pretty(&record)?);
+        return Ok(());
+    }
+
+    if let Some(path) = cli.script_path.as_deref() {
+        let bytes = std::fs::read(path)?;
+        let script = parse_chat_script(&bytes, path).map_err(StackCliError::Usage)?;
+        let mut memory =
+            ConversationMemory::new(cli.memory.clone(), cli.memory_sieve).worded_for(own_copy_rule);
+        let mut transcript = Vec::with_capacity(script.turns.len());
+        for turn in &script.turns {
+            if let Some(memory_auto) = turn.memory_auto {
+                memory.sieve = memory_auto;
+            }
+            if let Some(explicit) = turn.memory.as_deref() {
+                memory.pending.set(explicit)?;
+            }
+            let (turn_memory, explicit_memory) = memory.value_for(&turn.user);
+            let started = std::time::Instant::now();
+            let reply = stack_reply(
+                &mut chat,
+                &initial,
+                &turn.user,
+                turn_memory.as_deref(),
+                cli.max_tokens,
+            )?;
+            let seconds = started.elapsed().as_secs_f64();
+            if cli.print_place {
+                eprintln!("{}", place_line(&chat, &reply));
+            }
+            let memory_source = if turn_memory.is_none() {
+                "none"
+            } else if explicit_memory {
+                "explicit"
+            } else {
+                "sieve"
+            };
+            let mut turn_record = serde_json::json!({
+                "user": turn.user,
+                "memory": memory_source,
+                "memory_text": turn_memory
+                    .as_deref()
+                    .map(StackChat::memory_content)
+                    .transpose()?,
+                "reply_text": reply.text,
+                "reply_ids": reply.ids,
+                "stop": reply.stop.name(),
+                "history_tokens": chat.tokens().len(),
+                "seconds": seconds,
+            });
+            if serve_again {
+                turn_record["served_again"] = serde_json::json!(chat.last_reply_served_again());
+            }
+            // Only with `--unended`: without it the record is as it always was.
+            if cli.unended.is_some() {
+                turn_record["unended"] = serde_json::json!(unended_name(&chat));
+            }
+            // Only with `--pair-experts`: without it the record is as it always was.
+            if pair_identity.is_some() {
+                turn_record["pair"] = serde_json::json!(chat.pair_verdict().map(pair_verdict_name));
+            }
+            transcript.push(turn_record);
+            memory.finish_turn(&turn.user, explicit_memory);
+        }
+        let mut record = serde_json::json!({
+            "schema": "uor-r4.uor-chat-stack-script/1",
+            "script": path,
+            "artifact": artifact,
+            "artifact_sha256": model.artifact_sha256(),
+            "tokenizer": tokenizer_path,
+            "tokenizer_cid": chat.protocol().tokenizer_cid,
+            "protocol": chat.protocol(),
+            "context": chat.context(),
+            "decoding": STACK_DECODING,
+            "transcript": transcript,
+        });
+        if let Some(rule) = cli.unended {
+            record["unended"] = serde_json::json!(rule.name());
+        }
+        if let Some((sha256, setting)) = &pair_identity {
+            record["pair_experts"] = serde_json::json!({
+                "sha256": sha256,
+                "cap": setting.cap,
+                "keep": format!("{}/{}", setting.keep.num, setting.keep.den),
+                "floor": setting.floor,
+                "hold_out": setting.hold_out,
+            });
+        }
         println!("{}", serde_json::to_string_pretty(&record)?);
         return Ok(());
     }
@@ -1865,7 +2679,8 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
     let stdin = io::stdin();
     let mut reader = stdin.lock();
     let mut turns = 0usize;
-    let mut memory = ConversationMemory::new(cli.memory.clone(), cli.memory_sieve);
+    let mut memory =
+        ConversationMemory::new(cli.memory.clone(), cli.memory_sieve).worded_for(own_copy_rule);
     loop {
         print!("{ANSI_CYAN_BOLD}User>{ANSI_RESET} ");
         if io::stdout().flush().is_err() {
@@ -1944,6 +2759,17 @@ fn run_stack_chat(cli: &CliArgs) -> std::result::Result<(), StackCliError> {
                     Ok(reply) => {
                         let seconds = started.elapsed().as_secs_f64();
                         print_stack_reply(&reply, chat.tokens().len(), seconds);
+                        if chat.last_reply_served_again() {
+                            println!("{ANSI_MAGENTA_BOLD}[again]{ANSI_RESET} the asks found a place no row was offered; the reply was started over from it");
+                        }
+                        match chat.last_reply_unended() {
+                            Some(Unended::Drop) => println!("{ANSI_MAGENTA_BOLD}[unended]{ANSI_RESET} the reply did not end; the turn and the reply were dropped from the conversation"),
+                            Some(Unended::Close) => println!("{ANSI_MAGENTA_BOLD}[unended]{ANSI_RESET} the reply did not end; the conversation keeps it closed with the end mark"),
+                            _ => {}
+                        }
+                        if cli.print_place {
+                            println!("{}", place_line(&chat, &reply));
+                        }
                         memory.finish_turn(trimmed, explicit_memory);
                         turns += 1;
                     }
