@@ -614,7 +614,17 @@ pub fn adjust_partition(
     let runs = match (order < highest, extended) {
         (true, Some(extended)) => {
             let mut suffixes = Vec::with_capacity(extended.triples.len());
+            let mut last_extended = None;
             for triple in &extended.triples {
+                // Each order-(k+1) triple is one distinct left token, so a
+                // repeated or zero-count triple would inflate N1+ (review MEDIUM).
+                let at = (triple.key, triple.next);
+                if triple.count == 0 || last_extended.is_some_and(|before| before >= at) {
+                    return Err(invalid(
+                        "adjusted counts: order-(k+1) triples are not strictly ascending with counts >= 1",
+                    ));
+                }
+                last_extended = Some(at);
                 let suffix = checked(triple.key, order + 1)?.back_off().expect("order >= 2");
                 suffixes.push((suffix.word(), triple.next));
             }
@@ -683,6 +693,10 @@ pub fn adjust_partition(
 /// every order-1 partition once gives the whole census (at most 4,096 bins).
 pub struct UnigramContinuation {
     types: Vec<u32>,
+    /// The last order-1 (key, next) added: partitions arrive in plan order, so
+    /// the whole order-1 stream is strictly ascending, and a partition added
+    /// twice or two overlapping partitions are refused.
+    last: Option<(u128, u16)>,
 }
 
 impl Default for UnigramContinuation {
@@ -693,10 +707,12 @@ impl Default for UnigramContinuation {
 
 impl UnigramContinuation {
     pub fn new() -> Self {
-        Self { types: vec![0; NGRAM_VOCABULARY as usize] }
+        Self { types: vec![0; NGRAM_VOCABULARY as usize], last: None }
     }
 
-    /// Add one order-1 partition. Each partition must be added exactly once.
+    /// Add one order-1 partition, in plan order. Each partition is added
+    /// exactly once: a repeated or overlapping one breaks the strictly
+    /// ascending order-1 stream and is refused.
     pub fn add(&mut self, extended: &NgramPartition) -> Result<()> {
         for triple in &extended.triples {
             if PrimeRouteKey::from_word(triple.key)?.order() != 1 {
@@ -705,6 +721,13 @@ impl UnigramContinuation {
             if u32::from(triple.next) >= NGRAM_VOCABULARY {
                 return Err(invalid("unigram continuation: next token is outside the 12-bit vocabulary"));
             }
+            let at = (triple.key, triple.next);
+            if triple.count == 0 || self.last.is_some_and(|before| before >= at) {
+                return Err(invalid(
+                    "unigram continuation: order-1 triples are not strictly ascending across partitions with counts >= 1",
+                ));
+            }
+            self.last = Some(at);
             self.types[triple.next as usize] += 1;
         }
         Ok(())
@@ -717,6 +740,9 @@ impl UnigramContinuation {
     pub fn adjust(&self, highest: u32, counted: &[NgramTriple]) -> Result<NgramPartition> {
         if highest > NGRAM_MAX_ORDER {
             return Err(invalid(format!("highest order {highest} exceeds {NGRAM_MAX_ORDER}")));
+        }
+        if highest == 0 && self.last.is_some() {
+            return Err(invalid("adjusted unigrams of the highest order N = 0 take no order-1 partition"));
         }
         let mut last: Option<u16> = None;
         let mut covered = 0u64;
@@ -1292,6 +1318,19 @@ mod tests {
         continuation.add(&counted).unwrap();
         let missing: Vec<NgramTriple> = unigrams.iter().copied().filter(|t| t.next != 4).collect();
         assert!(continuation.adjust(2, &missing).unwrap_err().to_string().contains("absent"));
+        // Review MEDIUM: a repeated order-2 triple would count 6 as a second
+        // left token of 7 -> 5 (a = 2, not 1); it is refused instead.
+        let mut repeated = extended.clone();
+        let at = repeated.triples.iter().position(|t| *t == kn_triple(&[6, 7], 5, 1)).unwrap();
+        repeated.triples.insert(at, kn_triple(&[6, 7], 5, 1));
+        assert!(refuse(1, 0, 4096, &counted, Some(&repeated)).contains("not strictly ascending"));
+        // Order 0: the same order-1 partition added twice is refused, and so
+        // is an order-1 partition under N = 0.
+        let mut continuation = UnigramContinuation::new();
+        continuation.add(&counted).unwrap();
+        assert!(continuation.add(&counted).unwrap_err().to_string().contains("not strictly ascending"));
+        let message = continuation.adjust(0, &unigrams).unwrap_err().to_string();
+        assert!(message.contains("N = 0 take no order-1 partition"), "{message}");
         // The oracle refuses a stream whose first gram is unique and not BOS-led.
         assert!(oracle_adjusted(&[9, 5, 6], 1, 2).is_err());
     }

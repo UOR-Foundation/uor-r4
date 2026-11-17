@@ -177,9 +177,11 @@ fn ngram_count_cuda_adjusted_matches_the_oracle() {
         let counter = NgramCounter::new(0, &tokens).expect("counter");
         for order in 0..=3u32 {
             let (want, want_triples, want_contexts) = oracle_adjusted(&tokens, order, 3).expect("oracle");
-            let (raw, ..) = oracle_count(&tokens, order).expect("raw oracle");
-            // Not vacuous: below N the adjusted stream differs from the raw one.
-            assert_eq!(order < 3, want.triple_sha256 != raw.triple_sha256, "order {order}");
+            let (_, raw_triples, _) = oracle_count(&tokens, order).expect("raw oracle");
+            // Not vacuous: below N the adjusted counts differ from the raw
+            // ones; at N they are the raw counts. (Compare the triples: the
+            // adjusted SHA sits in its own domain, so it differs even at N.)
+            assert_eq!(order < 3, want_triples != raw_triples, "order {order}");
             for budget in [u64::MAX, 9_000] {
                 let (digest, triples, contexts, partitions) = gpu_adjusted(&counter, order, 3, budget);
                 if budget != u64::MAX {
