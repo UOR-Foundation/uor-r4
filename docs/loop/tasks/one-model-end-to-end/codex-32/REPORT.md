@@ -120,3 +120,34 @@ the exact sentence the accepted list holds), not another recipe sweep.
 
 `served-reply-panel` at the head with `value_present`; the three runs above; the panel's manifest
 hashes matched.
+
+## What the 25 value-present rows actually are
+
+Every one of them is the **right value inside a framing sentence**, and the panel's accepted form is
+the **bare value**:
+
+| Reply | Accepted |
+|---|---|
+| ` My currently live in porphyry belvedere.` | `porphyry belvedere.` |
+| ` My current job is porphyry belvedere.` | `porphyry belvedere.` |
+| ` I currently live in syenite annex.` | `syenite annex.` |
+
+25 of 25 contain an accepted form; **0 of 256 are exactly it**. So the exact-reply zero is a
+**template convention**, not a memory failure: the corpus trains the owner sentence ("The current
+job is X.") and the panel's labels accept the bare value (`membership_only: true`).
+
+The copy also works at the token level on these rows — `porphyry belvedere` is copied whole — so the
+rare-word garbling (`loggia` → `loggany`) is a separate, rarer defect, not the general case.
+
+## The two honest options, and their cost
+
+1. **Accept the owner sentence in the panel** — `answer_oracle::accepted` already has the plain/owner
+   variants; the labels chose bare. This is a protocol decision, free, and it makes the 25 rows
+   complete. It does not match the item's public anchors, which ask for the bare value ("Pickle").
+2. **Train a bare-answer arm** — the corpus's reply template is the sentence; a bare-answer variant
+   (the same facts, the reply being the value alone) is a corpus unit plus a 1.4 h arm, and it is the
+   only route that satisfies the public anchors' convention.
+
+**Recommendation:** do both, in that order — take the free protocol reading first (it tells us how
+much of the failure is convention), then the bare-answer arm for the product convention. The memory
+mechanism is no longer the question on this panel; the answer *format* is.
