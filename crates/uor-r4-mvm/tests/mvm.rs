@@ -129,11 +129,9 @@ int main(void) {
         .expect("guest cc and executable run");
     assert_eq!(outcome.exit_code, 0, "{}", outcome.stderr);
     assert_eq!(outcome.compiled_elf_machine, Some(243));
-    assert!(
-        outcome.stdout.contains("FIB12=144 COLLATZ27=111 SUM=255"),
-        "{}",
-        outcome.stdout
-    );
+    assert_eq!(outcome.stdout, "FIB12=144 COLLATZ27=111 SUM=255\n");
+    assert!(outcome.stderr.is_empty());
+    assert!(outcome.instructions_retired > 0);
 
     let second = r#"
 #include <stdio.h>
@@ -152,11 +150,10 @@ int main(void) {
         )
         .expect("second C program executes");
     assert_eq!(second_out.exit_code, 0, "{}", second_out.stderr);
-    assert!(
-        second_out.stdout.contains("ANSWER=42"),
-        "{}",
-        second_out.stdout
-    );
+    assert_eq!(second_out.stdout, "ANSWER=42\n");
+    assert!(second_out.stderr.is_empty());
+    assert_eq!(second_out.compiled_elf_machine, Some(243));
+    assert!(second_out.instructions_retired > 0);
 }
 
 #[test]

@@ -1,6 +1,17 @@
 # uor-r4-mvm
 
-RV64IMAC Linux-userland emulator for the UOR Studio workbench. This is a software emulator with an in-memory AF_VSOCK policy boundary, not a hardware hypervisor, model runtime, or host network transport.
+This native Rust crate runs RV64IMAC Linux-userland binaries on a software CPU with an in-memory filesystem and vsock transport. Kimi adapted the pinned LexLean compiler and emulator in [#3941](https://github.com/UOR-Foundation/uor-r4/pull/3941/commits/138f473eaa0628322ce598da8cd447dababbc814). Codex adopted the native component and added a bounded local command for [#3939](https://github.com/UOR-Foundation/uor-r4/issues/3939).
+
+## Run locally
+
+```sh
+cargo run --locked -q -p uor-r4-mvm --bin uor-mvm -- status
+cargo run --locked -q -p uor-r4-mvm --bin uor-mvm -- collatz 27
+```
+
+`status` boots the pinned initramfs and prints the guest architecture and CID. `collatz N` finds the smallest starting value in 1 through N with the longest stopping time under the Collatz iteration. For 27 the guest prints `limit=27 start=27 steps=111`. The command compiles the checked-in C program with the supplied integer, executes its RISC-V ELF, and forwards its output. It requires an ELF machine ID of 243 and at least one retired guest instruction.
+
+Each process gets 8 MiB of guest RAM and up to 25 million retired instructions. The CLI accepts two commands and bounds N to 1–512. The guest starts fresh on each invocation and receives no host filesystem, command, credential or network connection. The native library’s general-purpose C input is for trusted callers. Parsing recurses on the host and global array declarations determine compiler allocations before guest execution begins. The guest RAM and fuel limits apply to execution. The browser worker, persistence and GitHub companion are separate work under #3939.
 
 ## Upstream provenance
 
@@ -23,7 +34,7 @@ The module ends at line 45,938. `r4_compositional_gllm` begins at line 45,940 an
 - `mvm.rs` has exactly two adaptations: `crate::lexlean_generated::r4_spiralcore_vsock` becomes `crate::spiralcore_vsock::r4_spiralcore_vsock`, and `include_bytes!("mvm_initramfs.bin")` becomes `crate::mvm_initramfs::MVM_INITRAMFS`. The provenance test reverses only those strings and reproduces the upstream hash.
 - `mvm_initramfs.rs` is generated from the pinned binary into a Rust byte slice, so no compiled initramfs binary is committed. Its bytes and SHA-256 are tested.
 - Vendored modules are `#[rustfmt::skip]` so package formatting cannot change upstream hashes; new tests and adapter code remain rustfmt-checked.
-- `lib.rs` exposes the native engine/compiler and safe module re-exports. No page-callable host-secret, proxy-egress or raw-CoW import API is exposed by this native crate's Studio worker boundary.
+- `lib.rs` exposes native compiler and emulator APIs to the host program. The fixed CLI uses guest files and numeric input. Tests use synthetic placeholders for the native secret policy.
 - Cargo/rustc are not emulated by an AST evaluator. Without a genuine guest Rust toolchain they must report unavailable. C compilation and execution must emit genuine `EM_RISCV` output and exact nontrivial results.
 
-Native and browser-WASM acceptance are verified separately; this provenance record alone is not a capability claim.
+The native package tests check exact output, ELF identity, filesystem changes, in-memory CoW restore, vsock admission and pinned source identities. The browser and desktop acceptance tests belong to the remaining workbench item.
