@@ -71,6 +71,10 @@ path = "src/bin/teacher-paraphrase.rs"
 required-features = ["historical-reference"]
 
 [[bin]]
+name = "prepare-chat-jsonl"
+path = "src/bin/prepare-chat-jsonl.rs"
+
+[[bin]]
 name = "prepare-chat-parquet"
 required-features = ["parquet-input"]
 
