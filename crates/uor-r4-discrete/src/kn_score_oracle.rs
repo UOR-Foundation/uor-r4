@@ -17,6 +17,32 @@ struct OracleOrder {
     discounts: [i128; 3],
 }
 
+/// Chen–Goodman from n1..n4, or KenLM's fallback (1/2, 1, 3/2) for the whole
+/// order when an n_i is zero or an estimate leaves [0, i]. Small counts only.
+pub fn oracle_discounts(spectrum: [i128; 4]) -> [i128; 3] {
+    let fallback = [M / 2, M, 3 * M / 2];
+    if spectrum.contains(&0) {
+        return fallback;
+    }
+    let [n1, n2, n3, n4] = spectrum;
+    let s = n1 + 2 * n2;
+    let pairs = [(n1, n2), (n2, n3), (n3, n4)];
+    let estimates: Vec<i128> = pairs
+        .into_iter()
+        .zip(1i128..)
+        .map(|((ni, next), r)| (M * (r * ni * s - (r + 1) * n1 * next)).div_euclid(ni * s))
+        .collect();
+    if estimates
+        .iter()
+        .zip(1i128..)
+        .all(|(&d, r)| (0..=r * M).contains(&d))
+    {
+        [estimates[0], estimates[1], estimates[2]]
+    } else {
+        fallback
+    }
+}
+
 pub struct KnOracle {
     highest: usize,
     orders: Vec<OracleOrder>,
@@ -61,28 +87,7 @@ impl KnOracle {
                 }
                 adjusted.insert(gram, a);
             }
-            // Chen–Goodman, or KenLM's fallback (1/2, 1, 3/2) for the whole
-            // order when an n_i is zero or an estimate leaves [0, i].
-            let mut discounts = [M / 2, M, 3 * M / 2];
-            if !spectrum.contains(&0) {
-                let [n1, n2, n3, n4] = spectrum;
-                let s = n1 + 2 * n2;
-                let pairs = [(n1, n2), (n2, n3), (n3, n4)];
-                let estimates: Vec<i128> = pairs
-                    .into_iter()
-                    .zip(1i128..)
-                    .map(|((ni, next), r)| {
-                        (M * (r * ni * s - (r + 1) * n1 * next)).div_euclid(ni * s)
-                    })
-                    .collect();
-                if estimates
-                    .iter()
-                    .zip(1i128..)
-                    .all(|(&d, r)| (0..=r * M).contains(&d))
-                {
-                    discounts = [estimates[0], estimates[1], estimates[2]];
-                }
-            }
+            let discounts = oracle_discounts(spectrum);
             orders.push(OracleOrder {
                 adjusted,
                 contexts,

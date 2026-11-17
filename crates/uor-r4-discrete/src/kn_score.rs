@@ -71,7 +71,9 @@ impl KnDiscounts {
 
     /// The order's discounts and whether they are `FALLBACK`: Chen–Goodman
     /// when every n_i > 0 and every estimate lies in `[0, i M]`, else the
-    /// fallback for the whole order, as KenLM does. Overflow is still refused.
+    /// fallback for the whole order, as KenLM does. Overflow is refused, but
+    /// only in the estimates computed before the first degenerate one (as in
+    /// KenLM's order of checks); that needs counts near 2^60.
     pub fn with_fallback(count_of_counts: [u64; 4]) -> Result<(Self, bool)> {
         Ok(match Self::chen_goodman(count_of_counts)? {
             Ok(dq) => (Self { dq }, false),
@@ -641,6 +643,21 @@ mod tests {
             KnDiscounts::with_fallback([u64::MAX; 4]).is_err(),
             "overflow"
         );
+        // The oracle's own rule agrees on each branch: in range, a zero n_i,
+        // D2 < 0 with every n_i > 0 (D87's order 0), and D3 < 0 alone.
+        let spectra = [
+            [4_132_730, 413_614, 122_848, 56_120],
+            [2, 1, 1, 1],
+            [0, 1, 1, 1],
+            [7, 6, 11, 11],
+            [1, 1, 100, 1],
+            [100, 50, 20, 1000],
+        ];
+        for n in spectra {
+            let (host, _) = KnDiscounts::with_fallback(n).expect("discounts");
+            let oracle = crate::kn_score_oracle::oracle_discounts(n.map(i128::from));
+            assert_eq!(host.dq.map(i128::from), oracle, "n1..n4 {n:?}");
+        }
 
         let tokens = kn_score_small_vocabulary_stream(0x421f, 30_000);
         const N: u32 = 2;
