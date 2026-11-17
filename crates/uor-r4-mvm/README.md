@@ -31,7 +31,8 @@ The module ends at line 45,938. `r4_compositional_gllm` begins at line 45,940 an
 ## UOR modifications
 
 - `mvm_cc.rs` is byte-identical to upstream. `spiralcore_vsock.rs` contains only the exact 188-line module above.
-- `mvm.rs` has exactly two adaptations: `crate::lexlean_generated::r4_spiralcore_vsock` becomes `crate::spiralcore_vsock::r4_spiralcore_vsock`, and `include_bytes!("mvm_initramfs.bin")` becomes `crate::mvm_initramfs::MVM_INITRAMFS`. The provenance test reverses only those strings and reproduces the upstream hash.
+- [The emulator patch](provenance/mvm-uor.patch) records both import substitutions and the local ELF, snapshot and frame-length changes. The provenance test reverses that unified diff in memory and checks the upstream length and SHA-256.
+- The local ELF parser validates every program header and supplies checked file and guest-memory ranges to the loader. Snapshots save the next sector number. The vsock sender checks the full payload length and the receiver requires one complete frame.
 - `mvm_initramfs.rs` is generated from the pinned binary into a Rust byte slice, so no compiled initramfs binary is committed. Its bytes and SHA-256 are tested.
 - Vendored modules are `#[rustfmt::skip]` so package formatting cannot change upstream hashes; new tests and adapter code remain rustfmt-checked.
 - `lib.rs` exposes native compiler and emulator APIs to the host program. The fixed CLI uses guest files and numeric input. Tests use synthetic placeholders for the native secret policy.

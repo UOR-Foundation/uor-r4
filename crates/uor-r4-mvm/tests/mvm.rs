@@ -241,3 +241,57 @@ fn mvm_invalid_elf_cid_domain_and_secret_are_refused() {
         .build_vsock_packet(4, 4096, 0, 0, &vec![0; 65_537])
         .is_err());
 }
+
+#[test]
+fn cow_restore_replays_sector_allocation_and_preserves_files() {
+    let mut original = MvmSandbox::boot_default().expect("boot");
+    original
+        .write_guest_file("/workspace/first", b"first")
+        .unwrap();
+    let snapshot = original.snapshot_cow();
+    original
+        .write_guest_file("/workspace/second", b"second")
+        .unwrap();
+    let expected = original.export_dirty_cow_sectors();
+    original
+        .write_guest_file("/workspace/third", b"third")
+        .unwrap();
+
+    let mut fresh = MvmSandbox::boot_default().expect("fresh boot");
+    for vm in [&mut original, &mut fresh] {
+        vm.restore_cow(&snapshot);
+        vm.write_guest_file("/workspace/second", b"second").unwrap();
+        assert_eq!(
+            vm.read_guest_file("/workspace/first").as_deref(),
+            Some(b"first".as_slice())
+        );
+        assert_eq!(
+            vm.read_guest_file("/workspace/second").as_deref(),
+            Some(b"second".as_slice())
+        );
+        assert!(vm.read_guest_file("/workspace/third").is_none());
+        assert_eq!(vm.export_dirty_cow_sectors(), expected);
+    }
+}
+
+#[test]
+fn vsock_delivers_exact_limit_and_refuses_padding() {
+    use uor_r4_mvm::{MvmError, SPIRALCORE_MAX_PAYLOAD};
+    let sender = MvmSandbox::boot_default().expect("boot");
+    let mut receiver = MvmSandbox::boot_with_cid(4).expect("boot receiver");
+    let payload = vec![b'x'; SPIRALCORE_MAX_PAYLOAD];
+    let packet = sender.build_vsock_packet(4, 4096, 0, 0, &payload).unwrap();
+    receiver
+        .deliver_vsock_packet(&packet)
+        .expect("deliver exact limit");
+    assert_eq!(receiver.pop_vsock_inbox(4096).unwrap().payload, payload);
+    let mut padded = sender.build_vsock_packet(4, 4096, 0, 0, b"note").unwrap();
+    padded.push(0);
+    assert!(matches!(
+        receiver.deliver_vsock_packet(&padded),
+        Err(MvmError::FrameRejected(
+            FrameVerdict::RefusedPayloadTooLarge
+        ))
+    ));
+    assert!(receiver.pop_vsock_inbox(4096).is_none());
+}

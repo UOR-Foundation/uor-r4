@@ -44,17 +44,42 @@ fn readme_pins_upstream_commit_and_hashes() {
 }
 
 #[test]
-fn mvm_adaptations_are_only_the_declared_two_paths() {
+fn reversing_declared_mvm_patch_recovers_pinned_upstream_bytes() {
     let adapted = String::from_utf8(source("mvm.rs")).expect("mvm.rs UTF-8");
-    let upstream = adapted
-        .replace(
-            "crate::spiralcore_vsock::r4_spiralcore_vsock::",
-            "crate::lexlean_generated::r4_spiralcore_vsock::",
-        )
-        .replace(
-            "crate::mvm_initramfs::MVM_INITRAMFS",
-            "include_bytes!(\"mvm_initramfs.bin\")",
-        );
+    let lines: Vec<_> = adapted.split_inclusive('\n').collect();
+    let mut patch = include_str!("../provenance/mvm-uor.patch")
+        .split_inclusive('\n')
+        .peekable();
+    assert_eq!(patch.next(), Some("--- a/mvm.rs\n"));
+    assert_eq!(patch.next(), Some("+++ b/mvm.rs\n"));
+    let mut upstream = String::new();
+    let mut cursor = 0;
+    while let Some(header) = patch.next() {
+        assert!(header.starts_with("@@ "));
+        let target = header
+            .split_whitespace()
+            .nth(2)
+            .unwrap()
+            .strip_prefix('+')
+            .unwrap();
+        let (start, count) = target.split_once(',').unwrap_or((target, "1"));
+        let count = count.parse::<usize>().unwrap();
+        // A zero-line range starts immediately after this one-based line number.
+        let start = start.parse::<usize>().unwrap() - usize::from(count > 0);
+        upstream.extend(lines[cursor..start].iter().copied());
+        cursor = start;
+        while let Some(line) = patch.next_if(|line| !line.starts_with("@@ ")) {
+            if let Some(original) = line.strip_prefix('-') {
+                upstream.push_str(original);
+            } else {
+                assert_eq!(line.strip_prefix('+'), Some(lines[cursor]));
+                cursor += 1;
+            }
+        }
+        assert_eq!(cursor - start, count);
+    }
+    upstream.extend(lines[cursor..].iter().copied());
+    assert_eq!(upstream.len(), 98_525);
     assert_eq!(sha(upstream.as_bytes()), MVM_SHA);
 }
 

@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod elf;
 #[rustfmt::skip]
 mod mvm;
 #[rustfmt::skip]

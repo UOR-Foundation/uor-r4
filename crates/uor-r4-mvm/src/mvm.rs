@@ -13,8 +13,8 @@ use std::rc::Rc;
 use sha2::{Digest, Sha256};
 
 use crate::spiralcore_vsock::r4_spiralcore_vsock::{
-    admit_guest_socket, admit_host_egress, admit_rv64_elf, admit_spiralcore_frame,
-    EgressPolicyCheck, EgressVerdict, Elf64HeaderSummary, ElfAdmission, FrameVerdict,
+    admit_guest_socket, admit_host_egress, admit_spiralcore_frame,
+    EgressPolicyCheck, EgressVerdict, ElfAdmission, FrameVerdict,
     SocketAdmission, SpiralCoreFrame,
 };
 use crate::mvm_cc::{compile_c_to_rv64_elf, CCompileError};
@@ -159,6 +159,7 @@ pub struct MvmCowSnapshot {
     dirs: BTreeSet<String>,
     cow_sectors: BTreeMap<u32, Vec<u8>>,
     dirty_sectors: BTreeSet<u32>,
+    next_sector: u32,
 }
 
 /// Structured result of executing a command chain inside `MVM-Wasm`.
@@ -203,49 +204,10 @@ pub fn admit_spiralcore_header(hdr: &SpiralCoreHeader, max_payload_bytes: usize)
 
 /// Admit a 64-bit `EM_RISCV` ELF64 image via `R4.SpiralCoreVsock.admitRv64Elf`.
 pub fn admit_elf64_riscv(bytes: &[u8]) -> ElfAdmission {
-    if bytes.len() < 64 {
-        return ElfAdmission::RefusedBadMagic;
+    match crate::elf::parse(bytes, GUEST_RAM_BYTES) {
+        Ok(_) => ElfAdmission::ElfAdmitted,
+        Err(refusal) => refusal,
     }
-    let magic_valid = &bytes[0..4] == b"\x7fELF";
-    let elf_class64 = bytes[4] == 2;
-    let little_endian = bytes[5] == 1;
-    let machine_code = u16::from_le_bytes([bytes[18], bytes[19]]) as u64;
-    let entry = u64::from_le_bytes([
-        bytes[24], bytes[25], bytes[26], bytes[27], bytes[28], bytes[29], bytes[30], bytes[31],
-    ]);
-    let phnum = u16::from_le_bytes([bytes[56], bytes[57]]) as usize;
-    let phoff = u64::from_le_bytes([
-        bytes[32], bytes[33], bytes[34], bytes[35], bytes[36], bytes[37], bytes[38], bytes[39],
-    ]) as usize;
-    let phentsize = u16::from_le_bytes([bytes[54], bytes[55]]) as usize;
-
-    let mut load_segments = 0u64;
-    if magic_valid && elf_class64 && little_endian && phentsize >= 56 {
-        for i in 0..phnum {
-            let off = phoff.saturating_add(i.saturating_mul(phentsize));
-            if off + 56 <= bytes.len() {
-                let p_type = u32::from_le_bytes([
-                    bytes[off],
-                    bytes[off + 1],
-                    bytes[off + 2],
-                    bytes[off + 3],
-                ]);
-                if p_type == 1 {
-                    load_segments += 1;
-                }
-            }
-        }
-    }
-
-    admit_rv64_elf(Elf64HeaderSummary {
-        magic_valid,
-        elf_class64,
-        little_endian,
-        machine_code,
-        entry_aligned: entry >= 0x1000 && entry.is_multiple_of(2),
-        segment_count: load_segments,
-        max_segments: 16,
-    })
 }
 
 #[derive(Debug, Clone)]
@@ -508,6 +470,7 @@ impl MvmSandbox {
             dirs: self.dirs.clone(),
             cow_sectors: self.cow_sectors.clone(),
             dirty_sectors: self.dirty_sectors.clone(),
+            next_sector: self.next_sector,
         }
     }
 
@@ -517,6 +480,7 @@ impl MvmSandbox {
         self.dirs = snap.dirs.clone();
         self.cow_sectors = snap.cow_sectors.clone();
         self.dirty_sectors = snap.dirty_sectors.clone();
+        self.next_sector = snap.next_sector;
     }
 
     fn mount_initramfs(&mut self, img: &[u8]) -> Result<(), MvmError> {
@@ -799,6 +763,9 @@ impl MvmSandbox {
         e8_orbit: u8,
         payload: &[u8],
     ) -> Result<Vec<u8>, MvmError> {
+        if payload.len() > SPIRALCORE_MAX_PAYLOAD {
+            return Err(MvmError::FrameRejected(FrameVerdict::RefusedPayloadTooLarge));
+        }
         let hdr = SpiralCoreHeader {
             magic: SPIRALCORE_MAGIC,
             src_cid: self.guest_cid,
@@ -831,7 +798,7 @@ impl MvmSandbox {
             return Err(MvmError::FrameRejected(FrameVerdict::RefusedInvalidCid));
         }
         let end = 16usize.saturating_add(hdr.payload_len as usize);
-        if wire.len() < end {
+        if wire.len() != end {
             return Err(MvmError::FrameRejected(
                 FrameVerdict::RefusedPayloadTooLarge,
             ));
@@ -1043,80 +1010,15 @@ impl MvmSandbox {
         let Some(elf) = self.read_guest_file(exec_path) else {
             return Err(MvmError::NotFound(exec_path.to_string()));
         };
-        let adm = admit_elf64_riscv(&elf);
-        if adm != ElfAdmission::ElfAdmitted {
-            return Err(MvmError::ElfRejected(adm));
-        }
-
+        let image = crate::elf::parse(&elf, proc_state.ram.len()).map_err(MvmError::ElfRejected)?;
         proc_state.ram.fill(0);
         proc_state.regs = [0u64; 32];
         proc_state.lr_reservation = None;
-
-        let entry = u64::from_le_bytes([
-            elf[24], elf[25], elf[26], elf[27], elf[28], elf[29], elf[30], elf[31],
-        ]);
-        let phoff = u64::from_le_bytes([
-            elf[32], elf[33], elf[34], elf[35], elf[36], elf[37], elf[38], elf[39],
-        ]) as usize;
-        let phentsize = u16::from_le_bytes([elf[54], elf[55]]) as usize;
-        let phnum = u16::from_le_bytes([elf[56], elf[57]]) as usize;
-
+        let entry = image.entry;
         let mut max_end = 0x20000u64;
-        for i in 0..phnum {
-            let off = phoff + i * phentsize;
-            let p_type = u32::from_le_bytes([elf[off], elf[off + 1], elf[off + 2], elf[off + 3]]);
-            if p_type != 1 {
-                continue;
-            }
-            let p_offset = u64::from_le_bytes([
-                elf[off + 8],
-                elf[off + 9],
-                elf[off + 10],
-                elf[off + 11],
-                elf[off + 12],
-                elf[off + 13],
-                elf[off + 14],
-                elf[off + 15],
-            ]) as usize;
-            let p_vaddr = u64::from_le_bytes([
-                elf[off + 16],
-                elf[off + 17],
-                elf[off + 18],
-                elf[off + 19],
-                elf[off + 20],
-                elf[off + 21],
-                elf[off + 22],
-                elf[off + 23],
-            ]);
-            let p_filesz = u64::from_le_bytes([
-                elf[off + 32],
-                elf[off + 33],
-                elf[off + 34],
-                elf[off + 35],
-                elf[off + 36],
-                elf[off + 37],
-                elf[off + 38],
-                elf[off + 39],
-            ]) as usize;
-            let p_memsz = u64::from_le_bytes([
-                elf[off + 40],
-                elf[off + 41],
-                elf[off + 42],
-                elf[off + 43],
-                elf[off + 44],
-                elf[off + 45],
-                elf[off + 46],
-                elf[off + 47],
-            ]);
-
-            if p_offset.saturating_add(p_filesz) > elf.len() {
-                return Err(MvmError::ElfRejected(ElfAdmission::RefusedSegmentOverflow));
-            }
-            proc_state.write_bytes(p_vaddr, &elf[p_offset..p_offset + p_filesz])?;
-            let seg_end = p_vaddr.saturating_add(p_memsz);
-            if seg_end > max_end {
-                max_end = seg_end;
-            }
+        for segment in image.segments {
+            proc_state.write_bytes(segment.address, segment.data)?;
+            max_end = max_end.max(segment.end);
         }
 
         proc_state.brk_addr = (max_end + 4095) & !4095;
