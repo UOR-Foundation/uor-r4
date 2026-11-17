@@ -4,7 +4,7 @@ Lab: codex. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harn
 
 ## Cancel probe
 
-Fresh review found that the public refresh changed roadmap sources outside the docs-status-refresh item's base scope. The owner directed the public documentation and roadmap refresh. The Codex top session approved registration of the missing paths and a generated roadmap preview with the source change. Compare the exact #4060 head with the existing scope before editing.
+Fresh review found that the public refresh changed roadmap sources outside the docs-status-refresh item's base scope. The owner directed the public documentation and roadmap refresh. The Codex top session proposed registration of the missing paths and a generated roadmap preview with the source change. Its post-review decision is recorded in the REPORT. Compare the exact #4060 head with the existing scope before editing.
 
 ## Scope and done check
 

@@ -16,7 +16,7 @@ The complete comparison covers 66 changed paths at content head `9f8f2ec1efb4c6b
 
 ## Checks run at the head
 
-Compared the added scope entries, in order, with every path reported by the base policy. The old list is an exact prefix of the new list. The generator command matches the command recorded in the generated roadmap. The whitespace check passed.
+Compared the added scope entries, in order, with every path reported by the base policy. The old list is an exact prefix of the new list. The supported entry point is `cargo run -q --locked -p xtask -- roadmap render`. With `--check` it compares the document with the registered items. The whitespace check passed.
 
 ## Skills used
 
@@ -29,3 +29,7 @@ The content PR owns the public prose, item dispositions and demonstrations. Its 
 ## Plain summary
 
 The registration covers the forty additional roadmap sources for the public refresh. Readers can review the generated roadmap alongside its inputs, then check it against the live tracker after delivery.
+
+## Top-session decision after adversarial review
+
+[codex] The owner requested a repository-wide public guide and a complete reconciliation of issues. We compared the charter's source-first issue rule with the existing item, the M1 close, the open M2–M8 chain and the 16 November written-state decision. The outside review verified that these 40 literal paths cover the extra sources and preserve the other 117 entries. Its objections to the Cargo command and the wording about Kimi-only records are incorporated above. The top session approves this scope and the preview timing under §5.1. The rendered page can now be reviewed with its proposed inputs. Live issue sync and readback still follow the merge. Reversal is a one-item scope change. This registration authorizes no model run or milestone change. [Charter](../../../../../CHARTER.md) · [Milestone tracker](https://github.com/UOR-Foundation/uor-r4/issues/2028) · [Content PR](https://github.com/UOR-Foundation/uor-r4/pull/4060)
