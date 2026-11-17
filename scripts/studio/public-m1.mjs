@@ -76,6 +76,13 @@ export function validateM1Receipt(receipt) {
   assert.deepEqual(browser_top8, native_serving.top8, 'browser and native top-8 differ');
 }
 
+export function validateM1CardPins(card, receipt) {
+  assert.equal(card.sha256, receipt.artifact.sha256, 'catalog model SHA-256 differs');
+  assert.equal(card.tokenizer_sha256, receipt.tokenizer.sha256, 'catalog tokenizer SHA-256 differs');
+  assert.equal(card.schema, receipt.artifact.schema, 'catalog model schema differs');
+  assert.equal(card.size_bytes, receipt.artifact.bytes, 'catalog model byte count differs');
+}
+
 export function publicM1Card(selector, dest) {
   if (selector.public_release !== PUBLIC_M1_ID || Object.keys(selector).length !== 1) {
     throw new Error('Unknown public release or attempt to override its pins');

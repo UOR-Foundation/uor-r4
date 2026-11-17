@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { chromium } from 'playwright';
+import { PUBLIC_M1_ID, validateM1CardPins } from '../../scripts/studio/public-m1.mjs';
 
 const url = new URL(process.argv[2]);
 const sha = '04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d';
@@ -53,13 +54,19 @@ try {
         if (permittedRoots.includes(root.url())) downloadsByRoot.set(root.url(), response);
     });
     page.on('pageerror', error => errors.push(error.message));
+    const catalogResponse = page.waitForResponse(new URL('models.json', url).href);
     await page.goto(url.href);
     await page.getByRole('button', { name: 'Models', exact: true }).click();
     const load = page.getByRole('button', { name: 'Load M1 next-token predictor (seed 1)', exact: true });
-    await load.waitFor();
     assert.deepEqual(external, []);
-    const catalog = await (await context.request.get(new URL('models.json', url).href)).json();
-    const card = catalog.models.find(entry => entry.id === 'm1-discrete-trunk-seed-1');
+    const response = await catalogResponse;
+    assert.equal(response.status(), 200);
+    const catalog = await response.json();
+    const cards = catalog.models.filter(entry => entry.id === PUBLIC_M1_ID);
+    assert.equal(cards.length, 1, 'expected precisely one M1 catalog entry');
+    const [card] = cards;
+    assert.equal(card.url, permittedRoots[0]);
+    assert.equal(card.tokenizer_url, permittedRoots[1]);
     assert.equal(card.served_forward_audit_schema, 'uor-r4.m1-discrete-served-forward/1');
     const receiptUrl = new URL(card.audit_url, url);
     assert.equal(receiptUrl.origin, url.origin);
@@ -71,6 +78,7 @@ try {
     const receiptSha = createHash('sha256').update(receiptBytes).digest('hex');
     assert.equal(receiptSha, 'ff370aefd6ba8062e2316c5478a8d428b8e220f8c5da2d47f7b0eeed24bfe479');
     assert.equal(card.served_forward_audit_sha256, receiptSha);
+    validateM1CardPins(card, measured);
     await load.evaluate(button => button.addEventListener('click', event => {
         if (event.isTrusted) window.__m1LoadClickTime = performance.timeOrigin + event.timeStamp;
     }, { capture: true, once: true }));

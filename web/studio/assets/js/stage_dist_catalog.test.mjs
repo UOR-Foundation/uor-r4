@@ -5,7 +5,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeStudioCatalog } from '../../../../scripts/studio/catalog.mjs';
-import { validateM1Receipt } from '../../../../scripts/studio/public-m1.mjs';
+import { publicM1Card, PUBLIC_M1_ID, validateM1CardPins, validateM1Receipt } from '../../../../scripts/studio/public-m1.mjs';
 
 function fixtureRoot() {
     const root = mkdtempSync(join(tmpdir(), 'uor-studio-catalog-'));
@@ -50,6 +50,19 @@ test('public M1 publication takes only its fixed release selector', () => {
     assert.equal(card.tokenizer_sha256, 'a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377');
     assert.throws(() => stage({ ...selector, hf_url: 'https://example.org/other.d11' }), /override/);
     assert.throws(() => stage({ public_release: 'fbs' }), /Unknown/);
+});
+
+test('the live verifier requires all four served card pins independently of the downloaded bytes', () => {
+    const root = fixtureRoot();
+    const card = publicM1Card({ public_release: PUBLIC_M1_ID }, root);
+    const receipt = JSON.parse(readFileSync(join(root, card.audit_url), 'utf8'));
+    validateM1CardPins(card, receipt);
+    for (const field of ['sha256', 'tokenizer_sha256', 'schema', 'size_bytes']) {
+        const omitted = { ...card };
+        delete omitted[field];
+        assert.throws(() => validateM1CardPins(omitted, receipt), /catalog/);
+        assert.throws(() => validateM1CardPins({ ...card, [field]: 'wrong' }, receipt), /catalog/);
+    }
 });
 
 test('the measured M1 workload and raw decisions are required even when the two claimed outputs agree', () => {
