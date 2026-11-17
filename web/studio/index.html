@@ -732,7 +732,7 @@
             if (switchTo !== false) {
                 app.activeConversationId = conversation.id;
                 if (app.composerInput) app.composerInput.reset(conversation.draft);
-                if (app.mode === 'wasm' && app.caps && app.worker) {
+                if (app.mode === 'wasm' && app.caps && !isDiscreteCapabilities(app.caps) && app.worker) {
                     app.worker.postMessage({ action: 'close_session', payload: { conversationId: conversation.id } });
                 }
             }
@@ -1067,12 +1067,14 @@
 
         function renderDiscretePrediction(message) {
             var predictionGenerationId = app.predictionRequests[message.id];
-            if (message.id === app.activePredictionRequestId && predictionGenerationId !== undefined) {
+            var matchesRequest = message.id === app.activePredictionRequestId && predictionGenerationId !== undefined;
+            if (matchesRequest) {
                 delete app.predictionRequests[message.id];
                 app.activePredictionRequestId = null;
                 if (app.activeGenerationId === predictionGenerationId) app.activeGenerationId = null;
                 app.generating = false;
                 updateComposerState();
+                app.lastPrediction = { generationId: predictionGenerationId, artifactSha256: app.caps && app.caps.artifact_sha256, tokens: Array.isArray(message.decoded) ? message.decoded : [] };
                 document.dispatchEvent(new CustomEvent('uor-generation-finished', { detail: { outcome: 'complete', generationId: predictionGenerationId } }));
             }
             var result = $('#predictorResult');
@@ -2701,6 +2703,9 @@
             },
             sendPrompt: function (text) {
                 return sendFromComposer(String(text || ''));
+            },
+            predictionResult: function (generationId) {
+                return app.lastPrediction && app.lastPrediction.generationId === generationId ? app.lastPrediction : null;
             },
             predict: function (text) {
                 return runPrediction(String(text || '')) ? app.activeGenerationId : false;

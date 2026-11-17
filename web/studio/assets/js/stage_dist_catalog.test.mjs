@@ -34,3 +34,19 @@ test('dist catalog matches the pre-change publisher for identical synthetic inpu
     execFileSync('bash', [basePublisher, root, published], { cwd: repo, stdio: 'pipe' });
     assert.equal(readFileSync(join(dist, 'models.json'), 'utf8'), readFileSync(join(published, 'models.json'), 'utf8'));
 });
+
+test('public M1 publication takes only its fixed release selector', () => {
+    const root = fixtureRoot();
+    const manifest = join(root, 'trained.json');
+    const stage = (entry) => {
+        writeFileSync(manifest, JSON.stringify([entry]));
+        return writeStudioCatalog({ dest: root, trainedManifestPath: manifest });
+    };
+    const selector = { public_release: 'm1-discrete-trunk-seed-1' };
+    const card = stage(selector).models[1];
+    assert.match(card.url, /\/resolve\/1fec0d4c42d4d5929a0cf08b1a0f17291d1dbc55\//);
+    assert.equal(card.sha256, '04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d');
+    assert.equal(card.tokenizer_sha256, 'a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377');
+    assert.throws(() => stage({ ...selector, hf_url: 'https://example.org/other.d11' }), /override/);
+    assert.throws(() => stage({ public_release: 'fbs' }), /Unknown/);
+});

@@ -598,6 +598,9 @@ async function loadPublished(idOrEntry, operation) {
     }
     var arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
     var parsed = parseUorLutHeader(arrayBuffer);
+    if (entry.schema && parsed.schema !== entry.schema) {
+        throw new Error('Artifact schema does not match the catalog pin: expected ' + entry.schema + ', got ' + parsed.schema);
+    }
     var parsedVocab = parsed.shape ? Number(parsed.shape.vocab || parsed.shape.vocabulary || 0) : 0;
     var tokenizerArtifact = null;
     if (entry.tokenizerUrl) {

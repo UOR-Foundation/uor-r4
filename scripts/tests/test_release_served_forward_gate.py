@@ -70,7 +70,11 @@ def write_receipt(path, artifact, report=None):
 
 def studio_source(root):
     source = root / "studio-src"
-    (source / "pkg").mkdir(parents=True)
+    subprocess.run(
+        [REPO / "scripts/studio/runtime-files.sh", "copy", REPO / "web/studio", source, "--allow-generated-missing"],
+        check=True,
+    )
+    (source / "pkg").mkdir(parents=True, exist_ok=True)
     (source / "index.html").write_text("<!doctype html>\n", encoding="utf-8")
     for name in ("uor_r4_integer.js", "uor_r4_integer_bg.wasm"):
         (source / "pkg" / name).write_bytes(name.encode())

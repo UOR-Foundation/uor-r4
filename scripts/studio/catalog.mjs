@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { publicM1Card } from './public-m1.mjs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, copyFileSync, mkdirSync, unlinkSync } from 'node:fs';
@@ -89,6 +90,10 @@ export function writeStudioCatalog({ dest, publicUrl = '', publicLabel = 'Public
     }
     mkdirSync(join(dest, 'models'), { recursive: true });
     for (const entry of entries) {
+      if (entry && Object.hasOwn(entry, 'public_release')) {
+        manifest.models.push(publicM1Card(entry));
+        continue;
+      }
       const id = String((entry && entry.id) || '').trim();
       if (!/^[a-z0-9][a-z0-9._-]{2,63}$/.test(id)) throw new Error('trained entry id is invalid: ' + JSON.stringify(entry && entry.id));
       const label = typeof entry.label === 'string' ? entry.label.trim() : '';

@@ -1019,3 +1019,14 @@ test('restoring the healthy model updates the visible status label and readiness
     });
     assert.equal(chatReadiness(), true);
 });
+
+test('a published model rejects a changed schema, artifact hash or tokenizer hash before selection', async () => {
+    const bytes = artifactBytes();
+    const entry = { id: 'pinned', label: 'Pinned', url: 'https://example.com/model' };
+    const { api, events } = await fresh(async (url) => String(url).endsWith('tokenizer')
+        ? new Response('{}') : response(bytes));
+    await assert.rejects(api.loadPublished({ ...entry, schema: 'uor-r4.lut-discrete-trunk/1' }), /schema does not match/);
+    await assert.rejects(api.loadPublished({ ...entry, sha256: '0'.repeat(64) }), /sha256 mismatch/);
+    await assert.rejects(api.loadPublished({ ...entry, tokenizerUrl: 'https://example.com/tokenizer', tokenizerSha256: '0'.repeat(64) }), /Tokenizer sha256/);
+    assert.equal(events.some((event) => event.type === 'uor-model-source-changed'), false);
+});
