@@ -93,9 +93,10 @@ jobs:
           test -f book/index.html
           test ! -L book
           test ! -e book/studio
-          unexpected=$(find book \( -iname .git -o \( ! -type f ! -type d \) \) -print -quit)
+          unexpected=$(find book \( -iname .git -o -iname .gitignore -o -iname .gitattributes -o -iname .gitmodules \
+            -o \( ! -type f ! -type d \) \) -print -quit)
           if [ -n "$unexpected" ]; then
-            echo "::error::reserved Git metadata, link or special file in the book"
+            echo "::error::Git control file, link or special file in the book"
             exit 1
           fi
 
@@ -147,13 +148,14 @@ jobs:
           test -f book/index.html
           test -d site/studio
           previous=$(git -C site rev-parse HEAD)
-          # Refuse archive contents that could overwrite the checkout or the Studio.
-          for reserved in .git studio; do
-            if [ -e "book/$reserved" ] || [ -L "book/$reserved" ]; then
-              echo "::error::reserved path in book: $reserved"
-              exit 1
-            fi
-          done
+          test ! -L book
+          test ! -e book/studio
+          unexpected=$(find book \( -iname .git -o -iname .gitignore -o -iname .gitattributes -o -iname .gitmodules \
+            -o \( ! -type f ! -type d \) \) -print -quit)
+          if [ -n "$unexpected" ]; then
+            echo "::error::Git control file, link or special file in the book"
+            exit 1
+          fi
           # The book replaces everything except .git and studio/.
           find site -mindepth 1 -maxdepth 1 ! -name .git ! -name studio -exec rm -rf {} +
           cp -R book/. site/
@@ -164,6 +166,15 @@ jobs:
           JS
           touch site/.nojekyll
           git -C site add -A
+          # Git's local excludes and attribute filters also apply to the index.
+          # Compare the original checked bytes with exactly what a commit would store.
+          while IFS= read -r -d '' file; do
+            expected=$(git -C site hash-object --no-filters --stdin < "$file")
+            if ! staged=$(git -C site rev-parse --verify --quiet ":0:${file#book/}") || [ "$expected" != "$staged" ]; then
+              printf 'Checked book file missing or changed in the Git index: %q\n' "$file" >&2
+              exit 1
+            fi
+          done < <(find book -type f -print0)
           git -C site diff --cached --exit-code HEAD -- studio
           if git -C site diff --cached --quiet; then
             echo "nothing changed"

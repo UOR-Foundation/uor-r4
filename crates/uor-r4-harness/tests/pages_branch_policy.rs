@@ -374,3 +374,79 @@ fn a_forward_lease_never_authorizes_a_non_linear_pages_commit() {
         );
     }
 }
+
+#[test]
+fn git_control_files_are_refused_before_upload_and_again_before_publication() {
+    let fixture = tempfile::tempdir().unwrap();
+    let root = fixture.path();
+    let original = pages_fixture(root);
+    let book = root.join("book");
+    fs::create_dir_all(book.join(".assets")).unwrap();
+    fs::write(
+        book.join("index.html"),
+        r#"<img src=".assets/diagram.svg">"#,
+    )
+    .unwrap();
+    fs::write(book.join(".assets/diagram.svg"), "<svg/>").unwrap();
+    let package = shell_step("Package the checked book");
+    let publish = shell_step("Publish");
+    for parent in [&book, &book.join(".assets")] {
+        for (name, contents) in [
+            (".gitignore", "diagram.svg\n"),
+            (".gitattributes", "*.svg text eol=lf\n"),
+            (".gitmodules", ""),
+            (".git", "gitdir: elsewhere\n"),
+        ] {
+            let path = parent.join(name);
+            fs::write(&path, contents).unwrap();
+            for (boundary, shell) in [("upload", &package), ("publication", &publish)] {
+                let attempted = run(root, "bash", &["-c", shell]);
+                assert!(
+                    !attempted.status.success(),
+                    "{boundary} accepted {}",
+                    path.display()
+                );
+                assert_eq!(
+                    git(&root.join("origin.git"), &["rev-parse", "gh-pages"]),
+                    original
+                );
+            }
+            fs::remove_file(path).unwrap();
+        }
+    }
+}
+
+#[test]
+fn staged_book_files_must_match_checked_bytes_even_with_local_git_settings() {
+    let fixture = tempfile::tempdir().unwrap();
+    let root = fixture.path();
+    let original = pages_fixture(root);
+    let book = root.join("book");
+    let image = b"<svg>\r\n</svg>\r\n";
+    fs::create_dir_all(book.join(".assets")).unwrap();
+    fs::write(
+        book.join("index.html"),
+        r#"<img src=".assets/diagram.svg">"#,
+    )
+    .unwrap();
+    fs::write(book.join(".assets/diagram.svg"), image).unwrap();
+    let remote = root.join("origin.git");
+    let publish = shell_step("Publish");
+    for (name, value) in [
+        ("exclude", "diagram.svg\n"),
+        ("attributes", "*.svg text eol=lf\n"),
+    ] {
+        let setting = root.join("site/.git/info").join(name);
+        fs::write(&setting, value).unwrap();
+        assert!(
+            !run(root, "bash", &["-c", &publish]).status.success(),
+            "unchecked {name} changed the published tree"
+        );
+        assert_eq!(git(&remote, &["rev-parse", "gh-pages"]), original);
+        fs::remove_file(setting).unwrap();
+    }
+    ok(run(root, "bash", &["-c", &publish]));
+    let blob = run(&remote, "git", &["show", "gh-pages:.assets/diagram.svg"]);
+    assert!(blob.status.success());
+    assert_eq!(blob.stdout, image);
+}
