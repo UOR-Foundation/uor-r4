@@ -31,3 +31,7 @@ After protected merge, compare the merged files with the reviewed head, repeat t
 ## Plain summary
 
 The public queue can retain the active milestones, authorized research and contributor gaps while the roadmap files preserve the experiments that might be revisited.
+
+## Maintainer disposition
+
+I checked the proposed closures against the live commitments. In particular, #2655 has an explicit owner reopening for an outside contributor’s GPU comparison, and #3939 still has unfinished Studio integration. Both remain scheduled on GitHub. Each of the thirteen retired configurations retains the conditions that would justify scheduling it again.
