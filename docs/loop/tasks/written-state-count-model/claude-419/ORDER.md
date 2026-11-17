@@ -27,9 +27,10 @@ come from claude-418 (adjusted below N, raw at N).
 
 In exact arithmetic the masses sum to M for every context: the discounted terms sum to
 `A·M − Σ_v D(a(hv))`, and γ's numerator equals that deficit. Only the floors remove mass. The
-scorer therefore gives a **sub-distribution**: every `P_N ≤` the exact value, and the per-target
-deficit is below `2·(N + 2)` units of 2^-48. The unit proves this on fixtures by summing all 4,096
-masses.
+scorer therefore gives a **sub-distribution**: every `P_N ≤` the exact value. Each level loses
+less than 3 units: the discounted term's floor, γ's floor scaled by `P_{k−1}/M ≤ 1`, and the
+outer floor. So the per-target deficit is below `3·(N + 1)` units of 2^-48. The unit proves this
+on fixtures by summing all 4,096 masses.
 
 ## Scope
 
@@ -44,7 +45,7 @@ masses.
 - Host tests:
   - a hand fixture worked out in comments;
   - discount refusals;
-  - Σ of all 4,096 masses in `[M − 2(N+2)·4096, M]` for every context of a seeded stream;
+  - Σ of all 4,096 masses in `[M − 3(N+1)·4096, M]` for every context of a seeded stream;
   - scorer = oracle on seeded streams (orders 1..4);
   - order 0 = unigram KN against uniform;
   - an unseen context falls back to order k − 1.
