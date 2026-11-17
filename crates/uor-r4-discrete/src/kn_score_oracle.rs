@@ -23,8 +23,8 @@ pub struct KnOracle {
 }
 
 impl KnOracle {
-    /// None when an order's count-of-counts has a zero or a discount leaves [0, i].
-    pub fn new(tokens: &[u16], highest: usize) -> Option<Self> {
+    /// Counts every order 0..=highest and takes its discounts.
+    pub fn new(tokens: &[u16], highest: usize) -> Self {
         let mut orders = Vec::new();
         for k in 0..=highest {
             let mut raw: BTreeMap<(Vec<u16>, u16), i128> = BTreeMap::new();
@@ -61,20 +61,27 @@ impl KnOracle {
                 }
                 adjusted.insert(gram, a);
             }
-            if spectrum.contains(&0) {
-                return None;
-            }
-            let [n1, n2, n3, n4] = spectrum;
-            let s = n1 + 2 * n2;
-            let pairs = [(n1, n2), (n2, n3), (n3, n4)];
-            let mut discounts = [0i128; 3];
-            for (i, (ni, next)) in pairs.into_iter().enumerate() {
-                let r = i as i128 + 1;
-                let d = (M * (r * ni * s - (r + 1) * n1 * next)).div_euclid(ni * s);
-                if d < 0 || d > r * M {
-                    return None;
+            // Chen–Goodman, or KenLM's fallback (1/2, 1, 3/2) for the whole
+            // order when an n_i is zero or an estimate leaves [0, i].
+            let mut discounts = [M / 2, M, 3 * M / 2];
+            if !spectrum.contains(&0) {
+                let [n1, n2, n3, n4] = spectrum;
+                let s = n1 + 2 * n2;
+                let pairs = [(n1, n2), (n2, n3), (n3, n4)];
+                let estimates: Vec<i128> = pairs
+                    .into_iter()
+                    .zip(1i128..)
+                    .map(|((ni, next), r)| {
+                        (M * (r * ni * s - (r + 1) * n1 * next)).div_euclid(ni * s)
+                    })
+                    .collect();
+                if estimates
+                    .iter()
+                    .zip(1i128..)
+                    .all(|(&d, r)| (0..=r * M).contains(&d))
+                {
+                    discounts = [estimates[0], estimates[1], estimates[2]];
                 }
-                discounts[i] = d;
             }
             orders.push(OracleOrder {
                 adjusted,
@@ -82,7 +89,7 @@ impl KnOracle {
                 discounts,
             });
         }
-        Some(Self { highest, orders })
+        Self { highest, orders }
     }
 
     /// The Q48 mass of `tokens[j]` after its history, by the claude-419 rule.

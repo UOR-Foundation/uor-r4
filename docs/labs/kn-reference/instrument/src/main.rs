@@ -321,6 +321,18 @@ fn run(args: &[String]) -> Result<(), Failure> {
         }
     }
     let tables = KnTables::new(args.highest, orders)?;
+    for (k, order) in order_json.iter_mut().enumerate() {
+        let k = k as u32;
+        let (discounts, _, _) = tables
+            .order_tables(k)
+            .ok_or_else(|| fail(format!("no order-{k} table")))?;
+        let fallback = tables.discount_fallback(k) == Some(true);
+        order["discounts_q48"] = serde_json::json!(discounts.dq);
+        order["discount_fallback"] = serde_json::json!(fallback);
+        if fallback {
+            eprintln!("order {k}: KenLM fallback discounts (1/2, 1, 3/2)");
+        }
+    }
     let masses = KnScorer::new(0, &tables)?.score(query)?;
     eprintln!(
         "gpu scored {} targets, {} ms",

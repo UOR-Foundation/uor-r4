@@ -163,6 +163,40 @@ fn kn_score_cuda_matches_the_host_scorer_at_high_orders() {
     }
 }
 
+/// kn_score.rs's small-vocabulary stream, copied: 40 ids, one draw in 300 a
+/// BOS, so orders 0 and 1 take the fallback discounts.
+fn small_vocabulary_stream(seed: u64, len: usize) -> Vec<u16> {
+    let mut state = seed | 1;
+    let mut stream = vec![NGRAM_BOS];
+    while stream.len() < len {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        let r = (state >> 16) as u32;
+        stream.push(if r % 300 == 0 {
+            NGRAM_BOS
+        } else {
+            (5 + (r >> 9) % 40) as u16
+        });
+    }
+    stream
+}
+
+/// claude-421: the GPU reads the fallback discounts as uploaded.
+#[test]
+fn kn_score_cuda_matches_the_host_scorer_with_fallback_discounts() {
+    let train = small_vocabulary_stream(0x421f, 30_000);
+    let other = small_vocabulary_stream(0x4220, 10_000);
+    let host = tables(&train, 2);
+    assert_eq!(host.discount_fallback(0), Some(true));
+    assert_eq!(host.discount_fallback(2), Some(false));
+    let scorer = KnScorer::new(0, &host).expect("scorer");
+    for (name, query) in [("train", &train), ("other seed", &other)] {
+        let want = host.scored_masses(query).expect("host masses");
+        assert_eq!(scorer.score(query).expect("gpu masses"), want, "{name}");
+    }
+}
+
 #[test]
 fn kn_score_cuda_empty_and_bos_only_queries_score_nothing() {
     let train = kn_score_stream(0x421c, 6_000);
@@ -234,7 +268,7 @@ fn kn_score_cuda_real_slice_equals_the_cpu_oracle() {
         .expect("scorer")
         .score(query)
         .expect("score");
-    let oracle = KnOracle::new(train, N as usize).expect("oracle discounts");
+    let oracle = KnOracle::new(train, N as usize);
     let expected: Vec<u64> = (0..query.len())
         .filter(|&j| query[j] != NGRAM_BOS)
         .map(|j| u64::try_from(oracle.mass(query, j)).expect("an oracle mass fits u64"))
