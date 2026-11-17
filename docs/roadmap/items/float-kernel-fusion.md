@@ -3,13 +3,19 @@ id: float-kernel-fusion
 title: One kernel list for the float crate, and fused kernels for the served quantizers
 milestone: research
 area: training
-status: ready
+status: held
 open_to: lab
 needs_gpu: true
 depends_on: []
 notebook: docs/research/notebook/float-training.md
 scope: [crates/uor-r4-float-train/build.rs, crates/uor-r4-float-train/src/lib.rs, crates/uor-r4-float-train/src/cuda_stack.cu, crates/uor-r4-float-train/src/cuda_stack_kernels.rs, crates/uor-r4-float-train/src/fused_quantize*.rs, crates/uor-r4-float-train/src/fused_quantize*.cu, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/tests/no_training_crate_dep.rs, crates/uor-r4-float-train/tests/twenty_four_kernel_controls.rs, crates/uor-r4-float-train/tests/fused_*.rs, crates/uor-r4-float-train/Cargo.toml, docs/harness/prep/float-kernel-fusion*, docs/loop/tasks/float-kernel-fusion/**, docs/research/notebook/float-training.md, docs/roadmap/items/float-kernel-fusion.md]
 ---
+
+**November 17, 2026 · closed as not planned.** The kernel inventory and bit-identical finite fusion controls landed. The matched RTX 5090 cost comparison and default decision remain open for that float recipe. The active #4063 path uses other kernels. Reopen if a named training job will use this flag and its measured stage cost would decide the default. [November queue decision](../../loop/tasks/infra-loop-harness/codex-10/DECISION.md) · [Written-state experiment](https://github.com/UOR-Foundation/uor-r4/issues/4063) · [claude-285](https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/float-kernel-fusion/claude-285/REPORT.md)
+
+### Historical registration and evidence
+
+The original rationale, acceptance criteria and work instructions follow.
 
 ## Why it matters
 

@@ -10,6 +10,12 @@ depends_on: []
 scope: [docs/harness/prep/hopf-retained-fibre-test*, docs/labs/hopf-retained-fibre-test/**, docs/loop/tasks/hopf-retained-fibre-test/**]
 ---
 
+**November 17, 2026 · closed as not planned.** No selected discrete path consumes the retained fibre. The conditional Hopf-sector address in P2 under #4063 tests a different quantity. Reopen the fibre comparison when a discrete consumer depends on it and an integer-DEV control can isolate retention. [November queue decision](../../loop/tasks/infra-loop-harness/codex-10/DECISION.md) · [Written-state experiment](https://github.com/UOR-Foundation/uor-r4/issues/4063) · [antigravity-63](https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/hopf-retained-fibre-test/antigravity-63/REPORT.md)
+
+### Historical registration and evidence
+
+The original rationale, acceptance criteria and work instructions follow.
+
 ## Why it matters
 
 It is the reopen condition for a PARKED attention-scoring replacement.

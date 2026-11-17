@@ -10,6 +10,12 @@ depends_on: []
 scope: [docs/harness/prep/r-full-epoch-revisit-schedules*, docs/labs/r-full-epoch-revisit-schedules/**, docs/loop/tasks/r-full-epoch-revisit-schedules/**]
 ---
 
+**November 17, 2026 · closed as not planned.** Stage T ended with the one-pass schedule covering 1,049,856 of 2,425,925 targets (43.28%). Its full-epoch and frequent-token revisit arms were never compared. P1 under #4063 measures a native count stream. Reopen the schedule comparison if a chosen learner uses those updates and target coverage would decide its schedule. [November queue decision](../../loop/tasks/infra-loop-harness/codex-10/DECISION.md) · [Written-state experiment](https://github.com/UOR-Foundation/uor-r4/issues/4063) · [antigravity-66](https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/r-full-epoch-revisit-schedules/antigravity-66/REPORT.md)
+
+### Historical registration and evidence
+
+The original rationale, acceptance criteria and work instructions follow.
+
 ## Why it matters
 
 Checks whether the low top-1 is partly a coverage problem.

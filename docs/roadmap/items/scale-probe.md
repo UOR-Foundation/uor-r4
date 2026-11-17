@@ -3,13 +3,19 @@ id: scale-probe
 title: Measure how ability grows with width and data
 milestone: research
 area: training
-status: ready
+status: held
 open_to: lab
 needs_gpu: true
 depends_on: [one-model-end-to-end]
 notebook: docs/research/notebook/float-training.md
 scope: [docs/harness/prep/scale-probe*, docs/labs/scale-probe/**, docs/roadmap/items/scale-probe.md, docs/loop/tasks/scale-probe/**, docs/model/pipeline-map.md, docs/research/notebook/float-training.md]
 ---
+
+**November 17, 2026 · closed as not planned.** The w128 and w256 FBS probes ran on human text. Their w512 arm ran out of memory, leaving the width comparison incomplete. P1 under #4063 measures the native count base at three D87 data fractions. Reopen the FBS width probe if a selected recipe needs its scaling slope and w512 fits under the original controls. [November queue decision](../../loop/tasks/infra-loop-harness/codex-10/DECISION.md) · [Written-state experiment](https://github.com/UOR-Foundation/uor-r4/issues/4063) · [claude-317](https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/scale-probe/claude-317/REPORT.md)
+
+### Historical registration and evidence
+
+The original rationale, acceptance criteria and work instructions follow.
 
 ## Why it matters
 

@@ -3,13 +3,19 @@ id: training-step-cost
 title: Split the training backward, and run a cheaper rival search against (a)
 milestone: research
 area: training
-status: ready
+status: held
 open_to: lab
 needs_gpu: true
 depends_on: [fbs-cost-profile]
 notebook: docs/research/notebook/float-training.md
 scope: [crates/uor-r4-float-train/build.rs, crates/uor-r4-float-train/src/lib.rs, crates/uor-r4-float-train/src/cuda_stack_kernels.rs, crates/uor-r4-float-train/src/top8_positions.rs, crates/uor-r4-float-train/src/top8_positions.cu, crates/uor-r4-float-train/src/in_space_long.rs, crates/uor-r4-float-train/src/bin/train-in-space.rs, crates/uor-r4-float-train/src/native_vector_writer.rs, crates/uor-r4-float-train/src/geometric_stack_native.rs, crates/uor-r4-float-train/src/geometric_stack_native_cuda.rs, crates/uor-r4-float-train/src/hamilton_sheet.rs, docs/harness/prep/training-step-cost*, docs/loop/tasks/training-step-cost/**, docs/research/notebook/float-training.md, docs/roadmap/items/training-step-cost.md]
 ---
+
+**November 17, 2026 · closed as not planned.** The fused selector reduced synthetic step time by 40.1% but changed tied gradients. Its flag stays off. The native written-state phases in #4063 do not run this float backward. Reopen only if a named b64L consumer needs the matched quality and step-time A/B before choosing the selector. [November queue decision](../../loop/tasks/infra-loop-harness/codex-10/DECISION.md) · [Written-state experiment](https://github.com/UOR-Foundation/uor-r4/issues/4063) · [Fused selector measurement](https://github.com/UOR-Foundation/uor-r4/pull/3826)
+
+### Historical registration and evidence
+
+The original rationale, acceptance criteria and work instructions follow.
 
 ## Why it matters
 
