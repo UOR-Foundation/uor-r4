@@ -10,9 +10,9 @@ depends_on: []
 scope: [docs/harness/prep/hopf-retained-fibre-test*, docs/labs/hopf-retained-fibre-test/**, docs/loop/tasks/hopf-retained-fibre-test/**]
 ---
 
-**November 17, 2026 · retired from the schedule under D68.** No selected discrete path consumes the retained fibre. The conditional Hopf-sector address in P2 under #4063 tests a different quantity. Reopen the fibre comparison when a discrete consumer depends on it and an integer-DEV control can isolate retention. [November queue decision](../../loop/tasks/infra-loop-harness/codex-10/DECISION.md) · [Written-state experiment](https://github.com/UOR-Foundation/uor-r4/issues/4063) · [antigravity-63](https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/hopf-retained-fibre-test/antigravity-63/REPORT.md)
+**November 17, 2026 · open as a conditional language experiment.** Casey's D72 ruling kept the Hopf retained-fibre map READY. The mechanism board names this test as its next action. The controlled integer-DEV run stays held until a discrete consumer can use the fibre. Compare base only, base plus the retained fibre, and explicit bank tags at equal retained bytes, including fibre removal or permutation. Failed sector routing remains PARKED. The conditional Hopf-sector address in #4063 measures another quantity. [Owner ruling](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6379430093) · [Mechanism board](../../mechanisms/README.md) · [Registered controls](../../mechanisms/hopf-observation.md#what-would-reopen-it)
 
-### Historical registration and evidence
+### Original registration and evidence
 
 The original rationale, acceptance criteria and work instructions follow.
 

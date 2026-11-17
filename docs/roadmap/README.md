@@ -20,8 +20,8 @@ Each item's GitHub issue is generated from its file by `cargo xtask roadmap sync
 
 | Status | Items |
 |---|---|
-| ready | 26 |
-| held | 16 |
+| ready | 27 |
+| held | 15 |
 | decision | 0 |
 | done | 114 |
 | total | 156 |
@@ -156,6 +156,7 @@ These items are ready and open to anyone.
 | [Build a lawful GPU comparator for the historical S1.4 icosian snap replay](items/icosian-snap-parity.md) | ready | anyone | yes | none | [#2655](https://github.com/UOR-Foundation/uor-r4/issues/2655) |
 | [Define one persistent native training/serving state and its operator parity](items/native-space-state-contract.md) | ready | a lab | no | none | [#3973](https://github.com/UOR-Foundation/uor-r4/issues/3973) |
 | [Score one model end to end on prompts it has not seen, with tokens per second](items/one-model-end-to-end.md) | ready | a lab | yes | [turn-memory-reply](items/turn-memory-reply.md) | [#3407](https://github.com/UOR-Foundation/uor-r4/issues/3407) |
+| [Measure how ability grows with width and data](items/scale-probe.md) | ready | a lab | yes | [one-model-end-to-end](items/one-model-end-to-end.md) | [#3472](https://github.com/UOR-Foundation/uor-r4/issues/3472) |
 | [Make the native writer's admission hold at every seed](items/writer-admission.md) | ready | a lab | yes | [one-decoder](items/one-decoder.md) | [#3394](https://github.com/UOR-Foundation/uor-r4/issues/3394) |
 | [Test the written-state geometric count model against the frozen reference](items/written-state-count-model.md) | ready | a lab | yes | [m2-donor-corpus-generation](items/m2-donor-corpus-generation.md) | [#4063](https://github.com/UOR-Foundation/uor-r4/issues/4063) |
 | [Build a sigmoid-free gate for E8 orbit memory and rerun it on GPU](items/e8-orbit-memory-sigmoid-free-iteration.md) | held | a lab | yes | [float-training-module](items/float-training-module.md) | [#2822](https://github.com/UOR-Foundation/uor-r4/issues/2822) |
@@ -170,7 +171,6 @@ These items are ready and open to anyone.
 | [Build a lawful pointer, then run the forced-copy oracle](items/r-lawful-pointer-forced-copy-oracle.md) | held | a lab | yes | none | [#2880](https://github.com/UOR-Foundation/uor-r4/issues/2880) |
 | [Test discrete Hamming binding (VSA) on the current writer](items/r-vsa-hamming-binding.md) | held | a lab | yes | none | [#2888](https://github.com/UOR-Foundation/uor-r4/issues/2888) |
 | [Port read binding to a Flock or Relation read](items/read-binding-on-lawful-read.md) | held | a lab | yes | none | [#2889](https://github.com/UOR-Foundation/uor-r4/issues/2889) |
-| [Measure how ability grows with width and data](items/scale-probe.md) | held | a lab | yes | [one-model-end-to-end](items/one-model-end-to-end.md) | [#3472](https://github.com/UOR-Foundation/uor-r4/issues/3472) |
 | [Bring training as served back inside the 2x operational gate](items/served-rounding-cost.md) | held | a lab | yes | none | [#3594](https://github.com/UOR-Foundation/uor-r4/issues/3594) |
 | [Split the training backward, and run a cheaper rival search against (a)](items/training-step-cost.md) | held | a lab | yes | [fbs-cost-profile](items/fbs-cost-profile.md) | [#3391](https://github.com/UOR-Foundation/uor-r4/issues/3391) |
 | [Serve the turn memory from the integer artifact on the laptop](items/turn-memory-integer.md) | held | a lab | yes | [route-plus-memory](items/route-plus-memory.md) | [#3392](https://github.com/UOR-Foundation/uor-r4/issues/3392) |
