@@ -168,11 +168,17 @@ class ReleaseReceiptTests(unittest.TestCase):
             ordinary = json.loads(manifest.read_text(encoding="utf-8"))[1]
             ordinary["id"] = "m1-discrete-trunk-seed-1"
             fixed = {"public_release": "m1-discrete-trunk-seed-1"}
-            for entries in ([ordinary, fixed], [fixed, ordinary]):
+            for entries in ([ordinary], [ordinary, fixed], [fixed, ordinary]):
                 manifest.write_text(json.dumps(entries), encoding="utf-8")
                 rejected = subprocess.run(completed.args, capture_output=True, text=True)
                 self.assertNotEqual(rejected.returncode, 0)
-                self.assertIn("Duplicate Studio model id", rejected.stderr)
+                self.assertIn("Reserved public M1 model id", rejected.stderr)
+
+            ordinary["id"] = "ordinary-duplicate"
+            manifest.write_text(json.dumps([ordinary, ordinary]), encoding="utf-8")
+            duplicate = subprocess.run(completed.args, capture_output=True, text=True)
+            self.assertNotEqual(duplicate.returncode, 0)
+            self.assertIn("Duplicate Studio model id", duplicate.stderr)
 
     def test_studio_refuses_missing_and_tampered_receipts_before_copy(self):
         with tempfile.TemporaryDirectory() as directory:

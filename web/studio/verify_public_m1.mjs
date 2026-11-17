@@ -11,9 +11,30 @@ const expected = [223, 952, 2359, 2471, 23, 263, 964, 1520];
 const browser = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : { channel: 'chrome' });
 try {
     const context = await browser.newContext();
+    await context.addInitScript(() => {
+        // Observe the ordinary page-to-worker call without replacing its payload or result.
+        const post = Worker.prototype.postMessage;
+        const observations = [];
+        window.__m1WorkerPredictions = observations;
+        Worker.prototype.postMessage = function (message, ...args) {
+            if (message?.action === 'predict_discrete') {
+                const observation = { prefix: [...message.payload.tokenIds] };
+                observations.push(observation);
+                const onReply = event => {
+                    const reply = event.data;
+                    if (reply?.id !== message.id || reply.action !== 'discrete_prediction_result') return;
+                    observation.reply = { sha256: reply.artifact_sha256, top8: reply.top8, token: reply.prediction, cells: reply.admitted_cells };
+                    this.removeEventListener('message', onReply);
+                };
+                this.addEventListener('message', onReply);
+            }
+            return post.call(this, message, ...args);
+        };
+    });
     const page = await context.newPage();
     const external = [];
     const externalRequests = [];
+    const downloadsByRoot = new Map();
     const errors = [];
     const releaseBase = 'https://huggingface.co/caseyallard/uor-r4-m1-model/resolve/1fec0d4c42d4d5929a0cf08b1a0f17291d1dbc55/';
     const permittedRoots = [releaseBase + 't16-frozen-zero-seed1-trunk.d11', releaseBase + 'tokenizer-seed-1.json'];
@@ -24,6 +45,12 @@ try {
         while (root.redirectedFrom()) root = root.redirectedFrom();
         externalRequests.push(request);
         external.push({ method: request.method(), origin: target.origin, root: root.url() });
+    });
+    context.on('response', response => {
+        if (response.status() !== 200) return;
+        let root = response.request();
+        while (root.redirectedFrom()) root = root.redirectedFrom();
+        if (permittedRoots.includes(root.url())) downloadsByRoot.set(root.url(), response);
     });
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(url.href);
@@ -36,9 +63,12 @@ try {
     assert.equal(card.served_forward_audit_schema, 'uor-r4.m1-discrete-served-forward/1');
     const receiptUrl = new URL(card.audit_url, url);
     assert.equal(receiptUrl.origin, url.origin);
-    const receipt = await context.request.get(receiptUrl.href);
+    const receipt = await context.request.get(receiptUrl.href, { maxRedirects: 0 });
     assert.equal(receipt.status(), 200);
-    const receiptSha = createHash('sha256').update(await receipt.body()).digest('hex');
+    assert.equal(receipt.url(), receiptUrl.href);
+    const receiptBytes = await receipt.body();
+    const measured = JSON.parse(receiptBytes);
+    const receiptSha = createHash('sha256').update(receiptBytes).digest('hex');
     assert.equal(receiptSha, 'ff370aefd6ba8062e2316c5478a8d428b8e220f8c5da2d47f7b0eeed24bfe479');
     assert.equal(card.served_forward_audit_sha256, receiptSha);
     await load.evaluate(button => button.addEventListener('click', event => {
@@ -63,6 +93,11 @@ try {
         assert.equal(request.method, 'GET');
         assert.ok(request.origin === 'https://huggingface.co' || /^https:\/\/(?:[a-z0-9-]+\.)+cdn\.hf\.co$/.test(request.origin), 'Unexpected download origin: ' + request.origin);
     }
+    const tokenizerResponse = downloadsByRoot.get(permittedRoots[1]);
+    assert.ok(tokenizerResponse, 'missing browser tokenizer download');
+    const tokenizerBytes = await tokenizerResponse.body();
+    assert.equal(tokenizerBytes.length, measured.tokenizer.bytes);
+    assert.equal(createHash('sha256').update(tokenizerBytes).digest('hex'), measured.tokenizer.sha256);
     const downloads = external.length;
     await context.setOffline(true);
     await page.getByRole('textbox', { name: 'Prediction prefix', exact: true }).fill(prompt);
@@ -70,11 +105,17 @@ try {
     const result = page.getByRole('region', { name: 'Next-token predictions' });
     await result.waitFor();
     const tokens = await result.getByRole('listitem').allTextContents();
+    const calls = await page.evaluate(() => window.__m1WorkerPredictions);
+    assert.equal(calls.length, 1);
+    const workload = measured.browser_workload;
+    assert.equal(prompt, workload.prompt);
+    assert.deepEqual(calls[0].prefix, workload.prefix);
+    assert.deepEqual(calls[0].reply, { sha256: sha, top8: workload.native_serving.top8, token: workload.native_serving.token, cells: workload.native_serving.admitted_cells });
     assert.deepEqual(tokens.map(text => Number(/^ID (\d+)/.exec(text)?.[1])), expected);
     assert.equal(await page.locator('html').getAttribute('data-predictor-prompt-length'), '7');
     assert.equal(external.length, downloads);
     assert.deepEqual(errors, []);
-    console.log(JSON.stringify({ prompt, artifact_sha256: sha, tokenizer: model.modelTokenizer, tokens, external_before_load: externalBeforeLoad, download_requests: external, offline_prediction: true }));
+    console.log(JSON.stringify({ prompt, worker_prefix: calls[0].prefix, artifact_sha256: sha, tokenizer_sha256: measured.tokenizer.sha256, tokenizer: model.modelTokenizer, tokens, external_before_load: externalBeforeLoad, download_requests: external, offline_prediction: true }));
 } finally {
     await browser.close();
 }

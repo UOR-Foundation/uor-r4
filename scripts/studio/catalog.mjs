@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { publicM1Card } from './public-m1.mjs';
+import { PUBLIC_M1_ID, publicM1Card } from './public-m1.mjs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, copyFileSync, mkdirSync, unlinkSync } from 'node:fs';
@@ -95,6 +95,7 @@ export function writeStudioCatalog({ dest, publicUrl = '', publicLabel = 'Public
         continue;
       }
       const id = String((entry && entry.id) || '').trim();
+      if (id === PUBLIC_M1_ID) throw new Error('Reserved public M1 model id: ' + id);
       if (!/^[a-z0-9][a-z0-9._-]{2,63}$/.test(id)) throw new Error('trained entry id is invalid: ' + JSON.stringify(entry && entry.id));
       const label = typeof entry.label === 'string' ? entry.label.trim() : '';
       if (!label) throw new Error(id + ': label is required');

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const releaseId = 'm1-discrete-trunk-seed-1';
+export const PUBLIC_M1_ID = 'm1-discrete-trunk-seed-1';
 const revision = '1fec0d4c42d4d5929a0cf08b1a0f17291d1dbc55';
 const release = 'https://huggingface.co/caseyallard/uor-r4-m1-model/resolve/' + revision;
 const receiptPath = 'scripts/studio/public-m1-served-forward.json';
@@ -77,17 +77,17 @@ export function validateM1Receipt(receipt) {
 }
 
 export function publicM1Card(selector, dest) {
-  if (selector.public_release !== releaseId || Object.keys(selector).length !== 1) {
+  if (selector.public_release !== PUBLIC_M1_ID || Object.keys(selector).length !== 1) {
     throw new Error('Unknown public release or attempt to override its pins');
   }
   const bytes = evidenceBytes(receiptPath, receiptSha);
   const receipt = JSON.parse(bytes);
   validateM1Receipt(receipt);
-  const auditName = releaseId + '.uorlut.audit.json';
+  const auditName = PUBLIC_M1_ID + '.uorlut.audit.json';
   mkdirSync(join(dest, 'models'), { recursive: true });
   writeFileSync(join(dest, 'models', auditName), bytes);
   return {
-    id: releaseId, kind: 'published', primary: true, label: 'M1 next-token predictor (seed 1)',
+    id: PUBLIC_M1_ID, kind: 'published', primary: true, label: 'M1 next-token predictor (seed 1)',
     url: release + '/t16-frozen-zero-seed1-trunk.d11', tokenizer_url: release + '/tokenizer-seed-1.json',
     format: 'UORLUT01', schema: receipt.artifact.schema, size_bytes: receipt.artifact.bytes,
     sha256: receipt.artifact.sha256, tokenizer_sha256: receipt.tokenizer.sha256,
