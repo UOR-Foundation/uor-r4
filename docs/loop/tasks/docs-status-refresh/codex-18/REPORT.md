@@ -26,10 +26,10 @@ The issue census counted 52 originally open issues and found 156 source-backed i
 
 The parallel audit skill separated issue reconciliation, PR review and live Studio checks. The image-generation skill supplied the editorial illustration.
 
-## Plain summary
-
-The research guide now gives a reproducible M1 example and a dated account of the next experiment. The roadmap records what was delivered, superseded or still requires a measurement.
-
 ## Still open
 
 Publication uses the protected branch, followed by the existing docs-site workflow and a live URL check. The current M1 release and the synthetic demo are separately identified in the Studio change. Milestone verification remains with the original registered experiments.
+
+## Plain summary
+
+The research guide now gives a reproducible M1 example and a dated account of the next experiment. The roadmap records what was delivered, superseded or still requires a measurement.
