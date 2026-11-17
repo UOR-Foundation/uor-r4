@@ -842,3 +842,4 @@ and none matched its reference, so the package is useful local instrumentation,
 not model-quality or useful-chat evidence. See
 [deepseek-240](../../loop/tasks/cpu-training-pilot/deepseek-240/REPORT.md).
 
+<!-- End of preserved pilot chronology. -->
