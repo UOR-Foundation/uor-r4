@@ -51,7 +51,11 @@ fn parse_source(spec: &str) -> Result<Source> {
     })
 }
 
-/// The `(role, content)` pairs of a row's `messages` array.
+/// The `(role, content)` pairs of one row.
+///
+/// The donor bank keeps the prompts in `messages` and the donor's own replies in `turns`, one
+/// `{answer, reasoning}` per prompt, so a row is written as user 0, assistant 0, user 1,
+/// assistant 1, …. A row whose replies arrive as plain `assistant` messages is read as is.
 fn messages(line: &str) -> Result<Vec<(String, String)>> {
     let value: serde_json::Value =
         serde_json::from_str(line).map_err(|e| format!("a row is not JSON: {e}"))?;
@@ -60,7 +64,37 @@ fn messages(line: &str) -> Result<Vec<(String, String)>> {
         .ok_or("a row has no messages field")?
         .as_array()
         .ok_or("the messages field is not an array")?;
-    let mut out = Vec::with_capacity(list.len());
+    let mut out = Vec::with_capacity(list.len() * 2);
+    if let Some(turns) = value.get("turns").and_then(|v| v.as_array()) {
+        for (index, turn) in turns.iter().enumerate() {
+            let prompt = list
+                .get(index)
+                .and_then(|m| m.get("content"))
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let answer = turn
+                .get("answer")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let reasoning = turn
+                .get("reasoning")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            // The donor's answer is the reply; its reasoning is kept only when there is no answer,
+            // so the first corpus is plain chat and a row is not lost to an empty answer.
+            let reply = if answer.trim().is_empty() {
+                reasoning.trim().to_owned()
+            } else {
+                answer.trim().to_owned()
+            };
+            if prompt.trim().is_empty() || reply.is_empty() {
+                break;
+            }
+            out.push(("user".to_owned(), prompt.to_owned()));
+            out.push(("assistant".to_owned(), reply));
+        }
+        return Ok(out);
+    }
     for message in list {
         let role = message
             .get("role")
