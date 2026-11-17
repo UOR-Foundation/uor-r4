@@ -22,6 +22,25 @@ __device__ __forceinline__ bool key_less(u64 ahi, u64 alo, u64 bhi, u64 blo) {
     return ahi < bhi || (ahi == bhi && alo < blo);
 }
 
+// floor(x / d) for d > 0, integer instructions only. nvcc's own 128-bit
+// division calls a routine that the integer PTX admission refuses (it holds
+// .f32), so: the high word by one native 64-bit divide, then the low word by
+// 64 shift-and-subtract steps on a remainder below d.
+__device__ __forceinline__ u128 div_u128_u64(u128 x, u64 d) {
+    u64 hi = (u64)(x >> 64), lo = (u64)x;
+    u64 q_hi = hi / d;
+    u128 r = (u128)(hi - q_hi * d);
+    u64 q_lo = 0;
+    for (int b = 63; b >= 0; --b) {
+        r = (r << 1) | (u128)((lo >> b) & 1ull);
+        if (r >= (u128)d) {
+            r -= (u128)d;
+            q_lo |= 1ull << b;
+        }
+    }
+    return ((u128)q_hi << 64) | (u128)q_lo;
+}
+
 // One thread per target j = positions[i]: masses[i] gets its Q48 mass and
 // flags[i] is 1 when that mass is 0 or reaches 2^64.
 extern "C" __global__ void kn_score_targets(const u16 *tokens, const u32 *positions, u32 count, u32 highest, const u32 *ctx_off, const u64 *ctx_keys, const u64 *ctx_total, const u32 *ctx_counts, const u32 *tri_off, const u64 *tri_keys, const u16 *tri_next, const u32 *tri_count, const u64 *discounts, u64 *masses, u32 *flags) {
@@ -54,7 +73,7 @@ extern "C" __global__ void kn_score_targets(const u16 *tokens, const u32 *positi
             else a1 = mid;
         }
         if (a0 == ctx_off[k + 1u] || ctx_keys[2u * a0] != lo || ctx_keys[2u * a0 + 1u] != hi) continue;
-        u128 total = (u128)ctx_total[a0];
+        u64 total = ctx_total[a0];
         u128 n1 = ctx_counts[3u * a0], n2 = ctx_counts[3u * a0 + 1u], n3 = ctx_counts[3u * a0 + 2u];
         // Lower bound over the triples of order k by (key, next).
         u32 b0 = tri_off[k], b1 = tri_off[k + 1u];
@@ -69,10 +88,11 @@ extern "C" __global__ void kn_score_targets(const u16 *tokens, const u32 *positi
         if (b0 < tri_off[k + 1u] && tri_keys[2u * b0] == lo && tri_keys[2u * b0 + 1u] == hi && tri_next[b0] == target)
             a = tri_count[b0];
         u128 d1 = discounts[3u * k], d2 = discounts[3u * k + 1u], d3 = discounts[3u * k + 2u];
-        u128 gamma = (d1 * n1 + d2 * n2 + d3 * n3) / total;
+        u128 gamma = div_u128_u64(d1 * n1 + d2 * n2 + d3 * n3, total);
         u128 da = a == 0u ? (u128)0 : (a == 1u ? d1 : (a == 2u ? d2 : d3));
         u128 kept = (u128)a * m - da;
-        mass = kept / total + gamma * mass / m;
+        // M = 2^48, so floor(gamma * mass / M) is a shift of a non-negative word.
+        mass = div_u128_u64(kept, total) + ((gamma * mass) >> 48);
     }
     bool bad = mass == (u128)0 || (mass >> 64) != (u128)0;
     masses[i] = (u64)mass;
