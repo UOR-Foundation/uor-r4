@@ -7764,19 +7764,23 @@ fn past_window_objective(checkpoint: &Path) -> Result<PointObjective> {
     })
 }
 
-/// Refuses `carry` over panels whose carry contexts differ (#3714): the model reads one C, the
-/// largest, so a shorter panel would decode at the longer C while its file names its own.
-/// `contexts` is each past-window panel's name and the context its windows run at.
-fn carry_contexts_agree(contexts: &[(&str, usize)]) -> Result<()> {
-    if let Some(&(first, c)) = contexts.first() {
-        if let Some(&(other, oc)) = contexts.iter().find(|&&(_, oc)| oc != c) {
-            return Err(invalid(format!(
-                "past-window rule carry reads one context, and the panels' differ: {first} at \
-                 {c}, {other} at {oc}; score them in separate runs"
-            )));
-        }
+/// Only carry changes the loaded model's context. Use the common panel C even when
+/// the checkpoint window W is larger. Each past-window file records that same C.
+fn score_context_override<'a>(
+    rule: Option<PastWindowRule>,
+    mut panels: impl Iterator<Item = (&'a str, usize)>,
+) -> Result<Option<usize>> {
+    if rule != Some(PastWindowRule::Carry) {
+        return Ok(None);
     }
-    Ok(())
+    let (first, c) = panels.next().ok_or_else(|| invalid("past-window rule carry needs a panel"))?;
+    if let Some((other, oc)) = panels.find(|&(_, oc)| oc != c) {
+        return Err(invalid(format!(
+            "past-window rule carry reads one context, and the panels' differ: {first} at \
+             {c}, {other} at {oc}; score them in separate runs"
+        )));
+    }
+    Ok(Some(c))
 }
 
 /// A panel cut by a past-window rule (claude-287): the rule, W, the context the panel's windows
@@ -10019,17 +10023,10 @@ pub fn score_rows(
             past,
         });
     }
-    // Under `carry` the model reads one C, so every panel must run at the same one (#3714).
-    if past_window == Some(PastWindowRule::Carry) {
-        let contexts: Vec<(&str, usize)> = splits
-            .iter()
-            .filter(|s| s.past.is_some())
-            .map(|s| (s.name.as_str(), s.context))
-            .collect();
-        carry_contexts_agree(&contexts)?;
-    }
-    // Under `carry` the model reads the longest panel's C (claude-287).
-    let model_context = splits.iter().map(|s| s.context).max().unwrap_or(context).max(context);
+    let model_context = score_context_override(
+        past_window,
+        splits.iter().filter(|s| s.past.is_some()).map(|s| (s.name.as_str(), s.context)),
+    )?;
     for (i, (name, _)) in traces.iter().enumerate() {
         if !splits.iter().any(|s| s.name == *name) || traces[..i].iter().any(|(n, _)| n == name) {
             return Err(invalid(format!(
@@ -10051,8 +10048,8 @@ pub fn score_rows(
         )));
     }
     // claude-287: no weight is sized by the window, so the model reads C as it is.
-    if past_window == Some(PastWindowRule::Carry) {
-        model.set_context(model_context)?;
+    if let Some(c) = model_context {
+        model.set_context(c)?;
     }
     let model = model;
     // The run's objective, read and required above whenever a past-window rule is set.
@@ -25622,17 +25619,22 @@ mod tests {
     }
 
     /// #3714 item 3: `carry` reads one context, so panels at different C are refused, naming both;
-    /// panels at one C, a single panel and no panel pass.
+    /// a single panel or panels with the same C select exactly that C.
     #[test]
     fn carry_refuses_panels_at_different_contexts() {
-        let refused = carry_contexts_agree(&[("short", 2048), ("long", 4096)])
+        let carry = |panels: &[(&str, usize)]| {
+            score_context_override(Some(PastWindowRule::Carry), panels.iter().copied())
+        };
+        let refused = carry(&[("short", 2048), ("long", 4096)])
             .expect_err("panels at different C must be refused")
             .to_string();
         assert!(refused.contains("short at 2048, long at 4096"), "{refused}");
-        assert!(carry_contexts_agree(&[("a", 2048), ("b", 2048), ("c", 4096)]).is_err());
-        assert!(carry_contexts_agree(&[("a", 4096), ("b", 4096)]).is_ok());
-        assert!(carry_contexts_agree(&[("a", 2048)]).is_ok());
-        assert!(carry_contexts_agree(&[]).is_ok());
+        assert!(carry(&[("a", 2048), ("b", 2048), ("c", 4096)]).is_err());
+        assert_eq!(carry(&[("a", 4096), ("b", 4096)]).unwrap(), Some(4096));
+        assert!(carry(&[]).is_err());
+        let checkpoint_window = 4096;
+        assert_eq!(carry(&[("short", 2048)]).unwrap().unwrap_or(checkpoint_window), 2048);
+        assert_eq!(score_context_override(None, [("short", 2048)].into_iter()).unwrap(), None);
     }
 
     /// claude-287: the queries by their note's distance in widths of W: every query counts, a
