@@ -675,6 +675,8 @@ fn main() -> Result<()> {
         register_picks: None,
         register_select: None,
         width: uor_r4_float_train::hamilton_sheet::SHEET_WIDTH,
+        vocab_size: uor_r4_float_train::hamilton_sheet::SHEET_VOCAB,
+        layers: 6,
         type_spin: false,
         hamming_copy_key: 1,
         hamming_copy_keys: None,
@@ -1035,6 +1037,24 @@ fn main() -> Result<()> {
                 })
             }
             "--width" => config.width = number(&value)?,
+            "--vocab-size" => {
+                let vocab = usize::try_from(number(&value)?).map_err(|_| FloatTrainError::Invalid("--vocab-size too big".to_owned()))?;
+                if vocab < 8 || vocab > 65_536 {
+                    return Err(FloatTrainError::Invalid(
+                        "--vocab-size must be 8..65536 (UORT stores u16 ids)".to_owned(),
+                    ));
+                }
+                config.vocab_size = vocab;
+            }
+            "--layers" => {
+                let layers = usize::try_from(number(&value)?).map_err(|_| FloatTrainError::Invalid("--layers too big".to_owned()))?;
+                if layers == 0 || layers > 64 {
+                    return Err(FloatTrainError::Invalid(
+                        "--layers must be 1..64".to_owned(),
+                    ));
+                }
+                config.layers = layers;
+            }
             "--context" => {
                 config.context = uor_r4_float_train::in_space_long::training_context(number(&value)?)?;
                 context_given = true;

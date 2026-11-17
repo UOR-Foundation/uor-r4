@@ -3109,14 +3109,27 @@ pub fn build_hamilton_model(seed: u64, device: &Device) -> Result<StackModel> {
 
 /// The sheet's model at `width` in place of `SHEET_WIDTH`; every other setting is the sheet's.
 pub fn build_hamilton_model_at(seed: u64, width: usize, device: &Device) -> Result<StackModel> {
+    build_hamilton_model_with(seed, width, 6, SHEET_VOCAB, device)
+}
+
+/// The same model at an explicit depth, width and vocabulary. The sheet's heads, MLP width, gates,
+/// objective and native writer are unchanged, so a run at `(width, 6, SHEET_VOCAB)` is the sheet's
+/// own model byte for byte. The context is set by the caller (`StackModel::set_context`).
+pub fn build_hamilton_model_with(
+    seed: u64,
+    width: usize,
+    layers: usize,
+    vocab_size: usize,
+    device: &Device,
+) -> Result<StackModel> {
     let mut config = StackConfig::transformer_control(seed);
     config.arch = StackArch::Geometric;
-    config.pattern = "rrrrrr".into();
+    config.pattern = "r".repeat(layers);
     config.width = width;
     config.heads = SHEET_HEADS;
     config.mlp_hidden = SHEET_MLP_HIDDEN;
     config.context = SHEET_CONTEXT;
-    config.vocab_size = SHEET_VOCAB;
+    config.vocab_size = vocab_size;
     config.rotation = true;
     config.rotation_group = RotationGroup::Quaternion;
     config.gate = Gate::Hamilton;

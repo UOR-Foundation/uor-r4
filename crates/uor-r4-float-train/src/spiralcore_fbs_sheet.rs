@@ -98,7 +98,20 @@ pub fn build_fbs_model_at(
     width: usize,
     device: &Device,
 ) -> Result<StackModel> {
-    let mut model = hs::build_hamilton_model_at(seed, width, device)?;
+    build_fbs_model_with(arm, seed, width, 6, hs::SHEET_VOCAB, device)
+}
+
+/// The same model at an explicit depth and vocabulary, for a run at a larger table than the sheet's
+/// (the general-text corpus). `(width, 6, SHEET_VOCAB)` is the sheet's own model.
+pub fn build_fbs_model_with(
+    arm: FbsArm,
+    seed: u64,
+    width: usize,
+    layers: usize,
+    vocab_size: usize,
+    device: &Device,
+) -> Result<StackModel> {
+    let mut model = hs::build_hamilton_model_with(seed, width, layers, vocab_size, device)?;
     if arm == FbsArm::TwoAtomMix {
         model.widen_fbs_queries_two_path()?;
     }

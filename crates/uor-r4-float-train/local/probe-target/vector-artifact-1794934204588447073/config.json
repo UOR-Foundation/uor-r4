@@ -1,0 +1,40 @@
+{
+  "arch": "geometric",
+  "context": 4,
+  "gate": "hamilton",
+  "head": "spiralcore_product",
+  "heads": 4,
+  "mlp_hidden": 64,
+  "native_vector_head": {
+    "address_credit": "target-cell-versus-admitted-cell-margin; surrogate",
+    "geometry": "32a15af2d48680e331d5c1823dbb128dd23e01c4a9cf2f98d8bd0ef0c1a2937c",
+    "identity_partition": "token-id-modulo-256; quotient is collision slot",
+    "query_ports": "first-and-last-whole-8D-block; alias at width8",
+    "schema": "uor-r4.shared-native-vector-writer/1",
+    "score": "negative-mean-L1-displacement; raw",
+    "source_sha256": "8507a7ae337bfdd5f96d030bac33c1423f782cc5600c5988c8ee645324f6307c",
+    "spec": {
+      "kept_cells": 8,
+      "vocabulary": 257,
+      "width": 32
+    }
+  },
+  "pattern": "r",
+  "quaternion_weights": "spiralcore_fbs",
+  "read": "dot",
+  "rec_gates": "geometric",
+  "rotation": false,
+  "seed": 3,
+  "spiralcore_fbs_projection": {
+    "fbs_source_sha256": "917cb942811971d63cbe499f3a1641d3360c4dde7ebdc6b87e298c3cf1bbd747",
+    "plans": {
+      "32/32": "886089bd216e11284aa39e2f6eb9f76a35cc40f96a6d35297adfeee602cd6116",
+      "32/64": "a1c056438b64d15e584e8283bf370481e784f5d4300be5079101b34f5daf2d1f",
+      "32/8": "385a2eab5f1e02fd466423f100456d2d852083b5d9ace40415e8d29d5a4a0fa5",
+      "64/32": "89b792836c59949a41619d76f2dcf6fad39ca54f193c25b1326c39189cf4cbaa"
+    },
+    "schema": "spiralcore-fbs-projection/1"
+  },
+  "vocab_size": 257,
+  "width": 32
+}

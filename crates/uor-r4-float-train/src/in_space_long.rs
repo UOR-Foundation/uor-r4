@@ -41,7 +41,7 @@ use crate::geometric_stack::{
 use crate::hamilton_sheet::{self as hs, CausalWindow, HamiltonArm, SHEET_CONTEXT};
 use crate::query_cache::{CachedRows, QueryCacheWriter};
 use crate::spiralcore_fbs_arms::{self as arms, FbsArm};
-use crate::spiralcore_fbs_sheet::{build_fbs_model_at, panel_loss};
+use crate::spiralcore_fbs_sheet::{build_fbs_model_at, build_fbs_model_with, panel_loss};
 use crate::{invalid, sha256_bytes, Result};
 
 /// Written only after every checkpoint tensor and sidecar is closed. A controller may freeze
@@ -141,6 +141,15 @@ pub struct LongConfig {
     /// The trunk's width: the shared table's columns and every read's width (default 256,
     /// `hamilton_sheet::SHEET_WIDTH`); a multiple of 8.
     pub width: usize,
+    /// The shared table's rows: the token vocabulary (default 4,096,
+    /// `hamilton_sheet::SHEET_VOCAB`). Left out of `config.json` at the default, so a run at the
+    /// sheet's vocabulary writes the same file as before.
+    #[serde(skip_serializing_if = "is_sheet_vocab")]
+    pub vocab_size: usize,
+    /// The trunk's depth (default 6, the sheet's `"rrrrrr"`). Left out of `config.json` at the
+    /// default.
+    #[serde(skip_serializing_if = "is_six_layers")]
+    pub layers: usize,
     /// The Hamming read's type heads compare positions through SpiralCore's path-dependent
     /// icosian transport (`HammingReads::with_type_spin`, claude-151); off by default.
     pub type_spin: bool,
@@ -1090,8 +1099,9 @@ fn check_checkpoint_model(model: &StackModel, config: &LongConfig) -> Result<()>
             "geometric".into(),
         ));
     }
-    if saved.pattern != "rrrrrr" {
-        return Err(mismatch("pattern", saved.pattern.clone(), "rrrrrr".into()));
+    let pattern = "r".repeat(config.layers);
+    if saved.pattern != pattern {
+        return Err(mismatch("pattern", saved.pattern.clone(), pattern));
     }
     if saved.gate != Gate::Hamilton || saved.rec_gates != RecGates::Geometric {
         return Err(invalid(format!(
@@ -1100,7 +1110,7 @@ fn check_checkpoint_model(model: &StackModel, config: &LongConfig) -> Result<()>
         )));
     }
     for (name, got, want) in [
-        ("vocabulary", saved.vocab_size, hs::SHEET_VOCAB),
+        ("vocabulary", saved.vocab_size, config.vocab_size),
         ("heads", saved.heads, hs::SHEET_HEADS),
         ("MLP width", saved.mlp_hidden, hs::SHEET_MLP_HIDDEN),
     ] {
@@ -1375,15 +1385,15 @@ fn start_hamming(
     }
     if config.hamming_ask {
         // One question row per token of the shared table (`build_fbs_model_at`'s vocabulary).
-        reads = reads.with_ask(hs::SHEET_VOCAB)?;
+        reads = reads.with_ask(config.vocab_size)?;
     }
     if config.hamming_hold > 0 {
         // One gain per token of the same shared table.
-        reads = reads.with_hold(config.hamming_hold, hs::SHEET_VOCAB)?;
+        reads = reads.with_hold(config.hamming_hold, config.vocab_size)?;
     }
     if config.hamming_carry_question > 0 {
         // claude-335: one carry gain per token of the same shared table.
-        reads = reads.with_carry(config.hamming_carry_question, hs::SHEET_VOCAB)?;
+        reads = reads.with_carry(config.hamming_carry_question, config.vocab_size)?;
     }
     let reads = start_place(config, reads)?;
     crate::flock_read_hamming::set_hamming_reads(Some(reads.clone()));
@@ -1657,6 +1667,16 @@ fn is_sheet_context(n: &usize) -> bool {
     *n == SHEET_CONTEXT
 }
 
+/// `vocab_size` at the sheet's vocabulary ([`LongConfig::vocab_size`]).
+fn is_sheet_vocab(n: &usize) -> bool {
+    *n == hs::SHEET_VOCAB
+}
+
+/// `layers` at the sheet's six ([`LongConfig::layers`]).
+fn is_six_layers(n: &usize) -> bool {
+    *n == 6
+}
+
 /// `context` as a training window ([`LongConfig::context`], claude-273): 2 to 4,096 tokens, the
 /// stack's own range, or an error.
 pub fn training_context(context: usize) -> Result<usize> {
@@ -1678,7 +1698,14 @@ fn build_long_model(arm: FbsArm, config: &LongConfig, device: &Device) -> Result
             check_checkpoint_model(&model, config)?;
             model
         }
-        None => build_fbs_model_at(arm, config.seed, config.width, device)?,
+        None => build_fbs_model_with(
+            arm,
+            config.seed,
+            config.width,
+            config.layers,
+            config.vocab_size,
+            device,
+        )?,
     };
     model.set_context(training_context(config.context)?)?;
     Ok(model)
@@ -15754,8 +15781,18 @@ fn load_named_split(split: &TrainSplit) -> Result<(Vec<u32>, Vec<u8>)> {
         .chunks_exact(2)
         .map(|w| u32::from(u16::from_le_bytes([w[0], w[1]])))
         .collect();
-    if tokens.first() != Some(&hs::SHEET_BOS_ID)
-        || tokens.iter().any(|&t| t as usize >= hs::SHEET_VOCAB)
+    // The split declares its own vocabulary in the UORT header (bytes 16..20), so a corpus built
+    // with a larger tokenizer loads without being mistaken for the sheet's 4,096.
+    let declared = u32::from_le_bytes(
+        token_bytes[16..20]
+            .try_into()
+            .map_err(|_| invalid("a short UORT header"))?,
+    ) as usize;
+    // A header written without a vocabulary (0) is a legacy fixture and means the sheet's.
+    let vocab_size = if declared == 0 { hs::SHEET_VOCAB } else { declared };
+    if vocab_size == 0
+        || tokens.first() != Some(&hs::SHEET_BOS_ID)
+        || tokens.iter().any(|&t| t as usize >= vocab_size)
     {
         return Err(invalid(
             "the split does not open with BOS, or has an id past the vocabulary",
@@ -18751,6 +18788,8 @@ mod tests {
             register_picks: None,
             register_select: None,
             width: hs::SHEET_WIDTH,
+            vocab_size: hs::SHEET_VOCAB,
+            layers: 6,
             type_spin: false,
             hamming_copy_key: 1,
             hamming_copy_keys: None,
