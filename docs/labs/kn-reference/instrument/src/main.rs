@@ -284,8 +284,12 @@ fn run(args: &[String]) -> Result<(), Failure> {
     let wanted = KnQuery::from_stream(query, args.highest)?;
     let mut orders: Vec<(NgramOrderDigest, _, _)> = Vec::new();
     let mut order_json = Vec::new();
+    let train_tokens = train.len();
+    let counter = NgramCounter::new(0, train)?;
+    // claude-422: the counter holds TRAIN on the device and the host copy is
+    // never read again, so its 4 GB are freed before the counting.
+    drop(train_all);
     {
-        let counter = NgramCounter::new(0, train)?;
         for k in 0..=args.highest {
             let mut assembler = NgramAssembler::new_adjusted(k, false)?;
             let mut filter = wanted.filter(k)?;
@@ -324,6 +328,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
             orders.push((digest, triples, contexts));
         }
     }
+    drop(counter);
     let tables = KnTables::new(args.highest, orders)?;
     for (k, order) in order_json.iter_mut().enumerate() {
         let k = k as u32;
@@ -378,7 +383,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
             "query_sha256": query_sha256,
             "id_bytes_sha256": sha256_hex(&id_bytes),
             "classes_sha256": sha256_hex(&classes_bytes),
-            "train_tokens": train.len(),
+            "train_tokens": train_tokens,
             "query_tokens": query.len(),
         },
         "orders": order_json,
