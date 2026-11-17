@@ -632,7 +632,8 @@ mod tests {
             KnDiscounts::with_fallback([7, 6, 11, 11]).expect("D87 order 0");
         assert!(fell_back);
         assert_eq!(fallback.dq, [M as u64 / 2, M as u64, 3 * M as u64 / 2]);
-        assert!(KnDiscounts::with_fallback([0, 1, 1, 1]).expect("zero").1);
+        let (_, zero_fell_back) = KnDiscounts::with_fallback([0, 1, 1, 1]).expect("zero");
+        assert!(zero_fell_back);
         let (strict, fell_back) = KnDiscounts::with_fallback([2, 1, 1, 1]).expect("strict");
         assert!(!fell_back);
         assert_eq!(
