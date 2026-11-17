@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e2987d2e.js";
+            window.path_to_searchindex_js = "../searchindex-cecb64cb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-78e3d836.js"></script>
@@ -193,7 +193,7 @@ numbers first, then the limits and what is still open.</p>
 <strong>hypothesis</strong>. A passing check shows code does what it says; it is not a trained capability, and
 <code>NOT_RUN</code> never means passed.</p>
 <h2 id="a-count-baseline-for-the-next-experiment"><a class="header" href="#a-count-baseline-for-the-next-experiment">A count baseline for the next experiment</a></h2>
-<p>On the D87 tuning split, the order-2 modified Kneser–Ney scorer measured 2.004736 bits per byte overall and 2.194312 on novel targets. The GPU scorer agreed with an independent host oracle on the checked real-data slice. This establishes an instrument for comparing later designs. The sealed baseline and geometric-model comparison are separate steps. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-421/REPORT.md">Scorer report</a> · <a href="where-were-going.html#the-current-experiment">Next experiment</a></p>
+<p>On the D87 tuning split, the order-2 modified Kneser–Ney scorer measured 2.004736 bits per byte overall and 2.194312 on novel targets. The GPU scorer agreed with an independent host oracle on the checked real-data slice. This establishes an instrument for comparing later designs. The subsequent order-10 reference scored 1.418136 overall and 1.743746 on novel targets on the sealed test. The geometric model still needs its own comparison. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-421/REPORT.md">Scorer report</a> · <a href="where-were-going.html#the-current-experiment">Next experiment</a></p>
 <h2 id="m1-is-complete"><a class="header" href="#m1-is-complete">M1 is complete</a></h2>
 <p>The closing artifact is antigravity-110's <code>trunk-joint-pointer-v1-d11</code>, a discrete 19-table
 <code>uor-r4.lut-discrete-trunk/1</code> model exported as two seeded <code>UORLUT01</code> files. It is not the separate
@@ -315,7 +315,7 @@ multiplication and are historical evidence, not the D11 product.</p>
 <tr><td>Recall of a told value</td><td>314 / 320 / 325 of 578 questions, three seeds</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-358/REPORT.md">claude-358</a></td></tr>
 <tr><td>Exact replies, with / without the turn memory</td><td>377–441 / 171–211 of 2,218, three seeds</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-376/REPORT.md">V0, claude-376</a></td></tr>
 <tr><td>Next capability milestone</td><td>M2: grounded complete replies</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">PLAN</a></td></tr>
-<tr><td>Work in progress</td><td>The November 16 written-state study measured 2.004736 bits per byte on DEV-tune with its order-2 count reference. Selecting and sealing the reference precedes the geometric comparison</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md#approved-sequences">Phase order</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-421/REPORT.md">P0 calibration</a>, <a href="https://github.com/UOR-Foundation/uor-r4/pull/4058">sealed-reference follow-up</a></td></tr>
+<tr><td>Work in progress</td><td>The selected order-10 reference measured 1.418136 bits per byte overall and 1.743746 on novel targets on the sealed DEV-test. The geometric model comparison remains open</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md#approved-sequences">Phase order</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-421/REPORT.md">P0 calibration</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-422/REPORT.md">sealed reference</a></td></tr>
 <tr><td>Products shipped</td><td>None; M1 is not an alpha release</td><td><a href="../products/index.html">products</a></td></tr>
 </tbody>
 </table>
