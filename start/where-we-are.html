@@ -37,7 +37,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-06ef63c9.js";
+            window.path_to_searchindex_js = "../searchindex-31a119fa.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-78e3d836.js"></script>
@@ -179,7 +179,7 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/d5eb4a55656726b04ea79b06968f91905933c925"><code>d5eb4a556</code></a> (2026-11-14); 4 later commits change its sources.</small></p>
+                        <p class="page-freshness"><small>Checked against its sources at <a href="https://github.com/UOR-Foundation/uor-r4/commit/d5eb4a55656726b04ea79b06968f91905933c925"><code>d5eb4a556</code></a> (2026-11-14); 5 later commits change its sources.</small></p>
 
 <h1 id="where-uor-r4-is-today"><a class="header" href="#where-uor-r4-is-today">Where UOR-R4 is today</a></h1>
 <p><strong>In one paragraph.</strong> UOR-R4 is pre-alpha: <strong>1 of 8 milestones is complete</strong>, and no model holds a
@@ -192,6 +192,8 @@ numbers first, then the limits and what is still open.</p>
 <p>Terms are in the <a href="glossary.html">glossary</a>. Claims are labelled <strong>proof</strong>, <strong>measurement</strong> or
 <strong>hypothesis</strong>. A passing check shows code does what it says; it is not a trained capability, and
 <code>NOT_RUN</code> never means passed.</p>
+<h2 id="a-count-baseline-for-the-next-experiment"><a class="header" href="#a-count-baseline-for-the-next-experiment">A count baseline for the next experiment</a></h2>
+<p>On the D87 tuning split, the order-2 modified Kneser–Ney scorer measured 2.004736 bits per byte overall and 2.194312 on novel targets. The GPU scorer agreed with an independent host oracle on the checked real-data slice. This establishes an instrument for comparing later designs. The sealed baseline and geometric-model comparison are separate steps. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-421/REPORT.md">Scorer report</a> · <a href="where-were-going.html#the-current-experiment">Next experiment</a></p>
 <h2 id="m1-is-complete"><a class="header" href="#m1-is-complete">M1 is complete</a></h2>
 <p>The closing artifact is antigravity-110's <code>trunk-joint-pointer-v1-d11</code>, a discrete 19-table
 <code>uor-r4.lut-discrete-trunk/1</code> model exported as two seeded <code>UORLUT01</code> files. It is not the separate
@@ -227,7 +229,7 @@ generated-copy rate, and not new reply kinds or useful conversation.</p>
 <tr><td>Integer serving (D11)</td><td>Exact 14,287-row DEV export/reference agreement and planted-fault control; integer multiply and divide are allowed, floats remain banned</td><td>The M1 pair and the separate FBS <code>lut-stack/5</code> export</td><td><a href="../mechanisms/lut-serving.html">serving dossier</a></td></tr>
 <tr><td>Exact-read oracle</td><td>True-address 80/80 against 0/80 no-memory and 20/80 sieve</td><td>Exact-read oracle only, not learned address formation or M3</td><td><a href="../mechanisms/exact-memory.html">exact memory</a></td></tr>
 <tr><td>Object-store consumer</td><td>Consumer built; frozen 384-item host-control panel passes</td><td>On-model M3 run needs a selected M1 or M2 model; host controls are not M3 qualification</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/labs/object-store-consumer-m3/README.md">consumer record</a></td></tr>
-<tr><td>Browser worker and Studio</td><td>Synthetic parity harness and live M1 top-8 next-token prediction, with self-hosted assets and stack-bound tokenizers</td><td>Language base, not chat; no qualified bundled product or M7 accepted-model parity</td><td><a href="../products/web-client.html">web client</a></td></tr>
+<tr><td>Browser worker and Studio</td><td>Synthetic parity harness and the deployed M1 seed-1 top-eight predictor with its bound tokenizer</td><td>Language base, not chat; no qualified bundled product or M7 accepted-model parity</td><td><a href="../products/web-client.html">web client</a></td></tr>
 <tr><td>Desktop shell</td><td>Native Tauri/Rust backend and durable session restore on the seed-5 synthetic artifact</td><td>No qualified trained product bundle</td><td><a href="../products/desktop-client.html">desktop client</a></td></tr>
 </tbody>
 </table>
@@ -275,10 +277,7 @@ not language-model training. The integer crate now restores that trained state w
 conversion and runs the same shared transition: after 64 trained steps, the restored state and its
 transition results match as raw words. No token generation is claimed (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/native-space-state-contract/codex-8/REPORT.md">codex-8</a>). The discrete path's CUDA training, CPU training and integer serving now
 agree on the same fixture bytes, on two fixtures (<a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-372/REPORT.md">claude-372</a>).</p>
-<p><strong>In progress (14 Nov).</strong> Carrying the state across training windows, V1
-(<a href="https://github.com/UOR-Foundation/uor-r4/pull/3979">#3979</a>); today training carries no state
-from one window to the next. Vector-native reads, V2(a)
-(<a href="https://github.com/UOR-Foundation/uor-r4/pull/3978">#3978</a>). Neither has a result yet.</p>
+<p><strong>November 15 FBS experiments.</strong> In <code>uor-r4-float-train</code>, V1 carried training state across windows and V2(a) added three optional reads. At 16,384 steps Flock-g chose the correct fact on 494–504 of 512 questions in each of the four far-distance seed/bucket combinations. Its best answer accuracy was 0.023 against the 0.90 bar. The remaining gap was using the selected fact to answer. <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-380/REPORT.md">V1</a> · <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-386/REPORT.md">V2 follow-up</a></p>
 <p>The point-key and nearest-readout units of late October (claude-217 to claude-232) are recorded
 in the <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/research/notebook/float-training.md">float-training notebook</a> and the
 <a href="../research/open-questions.html">open questions</a>.</p>
@@ -316,7 +315,7 @@ multiplication and are historical evidence, not the D11 product.</p>
 <tr><td>Recall of a told value</td><td>314 / 320 / 325 of 578 questions, three seeds</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-358/REPORT.md">claude-358</a></td></tr>
 <tr><td>Exact replies, with / without the turn memory</td><td>377–441 / 171–211 of 2,218, three seeds</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/one-model-end-to-end/claude-376/REPORT.md">V0, claude-376</a></td></tr>
 <tr><td>Next capability milestone</td><td>M2: grounded complete replies</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">PLAN</a></td></tr>
-<tr><td>Work in progress</td><td>One native integer state for training and serving (D85); carrying it across training windows (V1) and vector-native reads (V2(a))</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md">PLAN</a>, <a href="https://github.com/UOR-Foundation/uor-r4/pull/3979">#3979</a>, <a href="https://github.com/UOR-Foundation/uor-r4/pull/3978">#3978</a></td></tr>
+<tr><td>Work in progress</td><td>The November 16 written-state study measured 2.004736 bits per byte on DEV-tune with its order-2 count reference. Selecting and sealing the reference precedes the geometric comparison</td><td><a href="https://github.com/UOR-Foundation/uor-r4/blob/main/PLAN.md#approved-sequences">Phase order</a>, <a href="https://github.com/UOR-Foundation/uor-r4/blob/main/docs/loop/tasks/written-state-count-model/claude-421/REPORT.md">P0 calibration</a>, <a href="https://github.com/UOR-Foundation/uor-r4/pull/4058">sealed-reference follow-up</a></td></tr>
 <tr><td>Products shipped</td><td>None; M1 is not an alpha release</td><td><a href="../products/index.html">products</a></td></tr>
 </tbody>
 </table>
