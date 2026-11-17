@@ -256,16 +256,29 @@ pub fn write_streams(
     out: &Path,
     tokenizer_sha: &str,
 ) -> Result<Vec<Value>, String> {
-    if !(6..=40).contains(&bloom_log2) {
-        return Err(format!("bloom_log2 {bloom_log2} is outside 6..=40"));
+    if !(6..=34).contains(&bloom_log2) {
+        return Err(format!("bloom_log2 {bloom_log2} is outside 6..=34"));
     }
+    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let canon = |p: &Path| {
+        p.canonicalize()
+            .map_err(|e| format!("{}: {e}", p.display()))
+    };
+    let out_canon = canon(out)?;
     for (p, _) in &plan.shards {
-        if p.parent() == Some(out) {
+        if canon(p)?.starts_with(&out_canon) {
             return Err(format!("{} is inside --out", p.display()));
         }
     }
+    // A fresh parts folder: a stale part from an earlier run would be joined or left behind.
     let parts = out.join("parts");
-    std::fs::create_dir_all(&parts).map_err(|e| format!("{}: {e}", parts.display()))?;
+    if parts.exists() {
+        return Err(format!(
+            "{} exists; remove it, or use a new --out",
+            parts.display()
+        ));
+    }
+    std::fs::create_dir(&parts).map_err(|e| format!("{}: {e}", parts.display()))?;
     let table = id_bytes(coder)?;
     let table_sha = hex(&sha(&[&table]));
     std::fs::write(out.join("id-bytes.u8"), &table).map_err(|e| e.to_string())?;

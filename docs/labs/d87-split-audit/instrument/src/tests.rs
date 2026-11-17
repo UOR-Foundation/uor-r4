@@ -750,6 +750,22 @@ fn target_bytes_are_text_bytes_less_the_dropped() {
 }
 
 #[test]
+fn a_shard_inside_out_or_a_stale_parts_folder_is_refused() {
+    let d = Dir::new("streams-refuse");
+    let (sp, c) = (stream_splitter(), stream_coder());
+    let p = plan(&sp, &stream_shards(&d, &sp), 2).unwrap();
+    // The shards sit in `d`, so an --out of `d` itself, or of `d/.` , holds them.
+    for out in [d.0.clone(), d.0.join(".")] {
+        let e = streams::write_streams(&p, &c, 2, 12, &out, "fixture").unwrap_err();
+        assert!(e.contains("is inside --out"), "{e}");
+    }
+    let out = d.0.join("out");
+    std::fs::create_dir_all(out.join("parts")).unwrap();
+    let e = streams::write_streams(&p, &c, 2, 12, &out, "fixture").unwrap_err();
+    assert!(e.contains("parts exists"), "{e}");
+}
+
+#[test]
 fn a_wrong_byte_table_is_refused() {
     let c = stream_coder();
     let t = tokenize(&c, &rec("r", &["hi there"], &[("", "an answer")])).unwrap();
