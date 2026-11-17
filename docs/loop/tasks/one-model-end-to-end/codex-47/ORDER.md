@@ -13,7 +13,7 @@ costs are the same shape: a full-width intermediate materialised to compare iden
 Everything below is aimed by that table; if a stage is not where this order expects it, the order
 changes rather than the table.
 
-## U1 — The objective's whole-table scan (largest expected win)
+## U1 — DONE: the objective's whole-table scan (largest win, measured)
 
 **Now:** `nearest_loss_on` calls `nearest_scores(query, table)` — `rows × vocabulary × width` =
 **17.2 G distance elements, ≈ 69 GB of intermediate per forward** — then 8 rounds of `best_positions`.
@@ -24,9 +24,16 @@ The bounded fused pass (`top8_positions::nearest_positions`, `--fast-rivals 1`) 
 with the writer's own admission — 8 cells × 32 slots = 256 candidates of 8,192 — and exact-score
 those. The second is the geometric route: the identity shortlist is the writer's own choice rule.
 
-**Gate:** on a fixed 4,096-row sample, the rivals and the loss equal the full scan (exact), or the
-shortlist's miss rate is reported and the objective is redefined on the shortlist — no silent change
-of the bar. Then tokens/s.
+**Done.** The exclusion was `FAST_RIVALS && !cell` with no reason in the code: the fused pass returns
+the table's nearest wrong positions, and the cell hinge reads the nearest one of the same tensor, so
+it takes the same pass. The gate is exact — `train_loss 1.00331` and `dev_loss 2.83191` at step 64
+are **identical** with and without the fused pass — and the step went **38 s → 19 s for 64 steps**,
+a 2.0× step speedup (0.59 → 0.30 s/step). Every run should pass `--fast-rivals 1` with `cell`.
+
+Measured stage profile before the fix (655.8 ms/step): **backward 616.6 ms (94 %)**, forward layers
+~30 ms, embed 3.7 ms, optimizer 4.1 ms, `objective.readback` 1.0 ms. The backward carries both the
+projection's siblings and the objective's table gradient, so the ablation above (cell 38 s vs
+cell+fast 19 s) is what separated them: **the table scan was ~0.29 s of the 0.59 s step.**
 
 ## U2 — The route per output, not per row
 

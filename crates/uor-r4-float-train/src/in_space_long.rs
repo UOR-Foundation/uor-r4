@@ -2051,7 +2051,11 @@ fn check_fused_targets(targets: &[u32], rows: usize, vocabulary: usize) -> Resul
 fn nearest_loss_on(table: &Tensor, query: &Tensor, targets: &[u32], cell: bool) -> Result<Tensor> {
     let (rows, width) = query.dims2()?;
     let device = query.device();
-    let (rivals, target_ids) = if FAST_RIVALS.with(|on| on.get()) && !cell {
+    // The fused pass returns the table's `SHEET_RIVALS` nearest wrong positions, which is what both
+    // hinge forms read: the mean over them (nearest) and the nearest one alone (cell). It was
+    // gated off for the cell objective with no reason in the code; the cell form reads a subset of
+    // the same tensor, so it takes the same pass.
+    let (rivals, target_ids) = if FAST_RIVALS.with(|on| on.get()) {
         check_fused_targets(targets, rows, table.dim(0)?)?;
         let target_ids = Tensor::from_vec(targets.to_vec(), rows, device)?;
         let rivals = crate::top8_positions::nearest_positions(
