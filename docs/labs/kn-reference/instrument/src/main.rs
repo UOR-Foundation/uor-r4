@@ -263,6 +263,10 @@ fn run(args: &[String]) -> Result<(), Failure> {
         )));
     }
     let train_all = read_uort_tokens(&train_bytes)?;
+    // claude-422: TRAIN's file bytes are needed only for their hash. Freed
+    // here, they no longer hold 4 GB of host memory through the counting.
+    let train_sha256 = sha256_hex(&train_bytes);
+    drop(train_bytes);
     let query_all = read_uort_tokens(&query_bytes)?;
     let train = &train_all[..record_prefix(&train_all, args.per_mille)?];
     let query_len = record_prefix(&query_all, args.per_mille)?;
@@ -370,7 +374,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
         "check_host": args.check_host,
         "sealed_run": args.sealed_run,
         "inputs": {
-            "train_sha256": sha256_hex(&train_bytes),
+            "train_sha256": train_sha256,
             "query_sha256": query_sha256,
             "id_bytes_sha256": sha256_hex(&id_bytes),
             "classes_sha256": sha256_hex(&classes_bytes),
