@@ -108,9 +108,13 @@ the **readout**: an address/value that survives the mix, in the same integer sta
 - A **30 M model** (512 width, 12 layers, 8,192 vocab, 512 context) builds and steps on the real
   corpus: 8 steps in 7 s at batch 8 → about **4,500 tokens/s**, so one 332 M-token epoch is **~20 h**
   on this 4090.
-- **DEV is still the narrow pinned `ft/dev`** (its own shas, token count, eligible targets and
-  `SHEET_VOCAB`). Its readings for a donor run are meaningless until a donor DEV slice with its own
-  pins exists — that is the next unit before any long run.
+- **DEV**: `--dev DIR` scores an unpinned split and `--dev-tokens N` caps it. A donor DEV from
+  held-out shards 3–4 (`/tmp/opencode/donor-dev`) at 200 k tokens is **1,052 windows / 101,175
+  rows**, a 21× cheaper evaluation than the full 2.13 M rows. The narrow pinned `ft/dev` is a
+  different tokenizer and world and must never be used for a donor run.
+- **Speed**: the objective's whole-table scan was half the step; the cell objective now takes the
+  fused top-8 pass with identical loss (0.59 → 0.30 s/step). The remaining cost is the projection
+  backward's per-row route and sibling work (U2, codex-47).
 
 ## 7. Assets and pins that exist now
 
@@ -119,7 +123,8 @@ the **readout**: an address/value that survives the mix, in the same integer sta
 | Donor corpus (prompts) | `/mnt/plexpool/uor-r4-corpus/m2-donor-corpus-2026-11-16/inputs/bank*.jsonl.zst` | 692,364 prompts, no replies |
 | Donor replies | `.../api-a/shard-*.jsonl.zst` (225 shards) | 457,601 rows, `turns[{answer,reasoning}]` |
 | 32k tokenizer | `/mnt/plexpool/uor-r4-corpus/tokenizer-32768-2026-11-17.json` | 32,509 merges |
-| Tokenized corpus | `/tmp/opencode/donor-tokens/` (tmpfs — move to the pool) | 457,021 conversations, **332,425,562 tokens**, 229 M targets; tokens `507cf271…`, mask `4865da8d…` |
+| Tokenized corpus, 8k (the one to train on) | `/mnt/plexpool/uor-r4-corpus/tokens-8k-2026-11-17/` | **456,619 conversations, 388,405,825 tokens**, 274 M targets, vocab 8,192; tokens `de5c05bc…`, mask `0949302f…` |
+| Tokenized corpus, 32k (unusable: the writer caps at 8,192) | `/mnt/plexpool/uor-r4-corpus/tokens-2026-11-17/` | 457,021 conversations, 332,425,562 tokens; tokens `507cf271…`, mask `4865da8d…` |
 | Pinned narrow recipe | `docs/loop/tasks/one-model-end-to-end/codex-34/ORDER.md` | reproduces all nine `[memory]` fingerprints |
 | Narrow corpus | `/tmp/opencode/next02-inputs/mw-balp/train` | 8.13 M tokens, sha `1fc3f4ec…` |
 | Reader/writer bin | `crates/uor-r4-training/src/bin/prepare-chat-jsonl.rs` | JSONL `messages` **or** `turns` → UORT |
