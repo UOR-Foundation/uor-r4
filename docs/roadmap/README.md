@@ -34,7 +34,7 @@ These items are ready and open to anyone.
 |---|---|---|
 | [Test D5-b address assignment with measured co-access and distance](items/d5b-coaccess-assignment.md) | M5 | [#2657](https://github.com/UOR-Foundation/uor-r4/issues/2657) |
 | [Track discrete Clippy drift, PR coverage and the K16 timing instrument](items/discrete-clippy-k16-coverage.md) | infra | [#3168](https://github.com/UOR-Foundation/uor-r4/issues/3168) |
-| [Reproduce the sealed S1.4 icosian transport comparison](items/icosian-snap-parity.md) | research | [#2655](https://github.com/UOR-Foundation/uor-r4/issues/2655) |
+| [Build a lawful GPU comparator for the historical S1.4 icosian snap replay](items/icosian-snap-parity.md) | research | [#2655](https://github.com/UOR-Foundation/uor-r4/issues/2655) |
 | [Measure M1-class laptop cost on the accepted served model](items/m5-laptop-full-path-measurement.md) | M5 | [#2862](https://github.com/UOR-Foundation/uor-r4/issues/2862) |
 | [Build the library, CLI and browser bit-identity parity harness](items/m7-parity-library-cli-browser.md) | M7 | [#2867](https://github.com/UOR-Foundation/uor-r4/issues/2867) |
 | [Independently verify the alpha on consumer hardware](items/m8-independent-verification.md) | M8 | [#2869](https://github.com/UOR-Foundation/uor-r4/issues/2869) |
@@ -156,7 +156,7 @@ These items are ready and open to anyone.
 | [Bring every status page, picture and tracker up to 31 Oct 2026](items/docs-status-refresh.md) | ready | a lab | no | none | [#3380](https://github.com/UOR-Foundation/uor-r4/issues/3380) |
 | [Connect training and integer serving behind shared stage interfaces](items/end-to-end-integration.md) | ready | a lab | no | [integer-hamming-read](items/integer-hamming-read.md), [fbs-serving-kernels](items/fbs-serving-kernels.md), [native-space-state-contract](items/native-space-state-contract.md) | [#4064](https://github.com/UOR-Foundation/uor-r4/issues/4064) |
 | [One kernel list for the float crate, and fused kernels for the served quantizers](items/float-kernel-fusion.md) | ready | a lab | yes | none | [#3678](https://github.com/UOR-Foundation/uor-r4/issues/3678) |
-| [Reproduce the sealed S1.4 icosian transport comparison](items/icosian-snap-parity.md) | ready | anyone | yes | none | [#2655](https://github.com/UOR-Foundation/uor-r4/issues/2655) |
+| [Build a lawful GPU comparator for the historical S1.4 icosian snap replay](items/icosian-snap-parity.md) | ready | anyone | yes | none | [#2655](https://github.com/UOR-Foundation/uor-r4/issues/2655) |
 | [Define one persistent native training/serving state and its operator parity](items/native-space-state-contract.md) | ready | a lab | no | none | [#3973](https://github.com/UOR-Foundation/uor-r4/issues/3973) |
 | [Score one model end to end on prompts it has not seen, with tokens per second](items/one-model-end-to-end.md) | ready | a lab | yes | [turn-memory-reply](items/turn-memory-reply.md) | [#3407](https://github.com/UOR-Foundation/uor-r4/issues/3407) |
 | [Refuse unreadable inputs to the past-window scorer](items/past-window-scorer-refusals.md) | ready | anyone | no | none | [#3714](https://github.com/UOR-Foundation/uor-r4/issues/3714) |

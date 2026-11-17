@@ -1,30 +1,30 @@
 ---
 id: icosian-snap-parity
-title: Reproduce the sealed S1.4 icosian transport comparison
+title: Build a lawful GPU comparator for the historical S1.4 icosian snap replay
 milestone: research
 area: evaluation
 status: ready
 open_to: anyone
 needs_gpu: true
 depends_on: []
-scope: [crates/uor-r4-training/examples/stack-snap-parity.rs, crates/uor-r4-training/src/stack_snap_parity.rs, docs/harness/prep/icosian-snap-parity*, docs/labs/icosian-snap-parity/**, docs/roadmap/items/icosian-snap-parity.md, docs/loop/tasks/icosian-snap-parity/**]
+scope: [docs/harness/prep/icosian-snap-parity*, docs/labs/icosian-snap-parity/**, docs/roadmap/items/icosian-snap-parity.md, docs/loop/tasks/icosian-snap-parity/**]
 ---
 
 ## Why it matters
 
-The archived kernel has a sealed result that an external researcher can reproduce with public inputs.
+The September 29 extract reports 2,477 root mismatches in 1,177,878 selections and top-1 agreement of 0.991943359375 across 4,096 positions in 16 windows. The source directory lacked a `report_output` manifest. The extract marks it `UNSEALED` and records separate SHA-256 hashes for `attempt.json` and `snap-parity.json`. These are the historical values an independent measurement can check. [Hash-bound S1.4 extract](../../../archive/evidence/s1-4-snap-parity-2026-09-29.json)
 
 ## What is missing
 
-The model files, held-out tokens and SHA256SUMS are public. The original question about obtaining inputs is resolved. The registered comparison still needs an independent replay receipt against the sealed counts. [Issue 2655](https://github.com/UOR-Foundation/uor-r4/issues/2655#issuecomment-6300190469) · [Issue 2655](https://github.com/UOR-Foundation/uor-r4/issues/2655#issuecomment-6391158177)
+**First deliverable.** Build and review a separate GPU comparator for the root selections and unnormalized top-1 choices. The public inputs include the model, held-out tokens and `SHA256SUMS`. The legacy Rust example loads `Device::Cpu` and computes log-softmax during scoring. Its program and original invocation are historical evidence. A lawful comparator must execute the model comparison on the GPU, exclude banned calculations from its compiled and loaded paths, and preserve the registered selection and tie rules. [Legacy implementation](../../../crates/uor-r4-training/src/stack_snap_parity.rs) · [Contributor handoff](https://github.com/UOR-Foundation/uor-r4/issues/2655#issuecomment-6391158177) · [Public inputs](https://huggingface.co/datasets/caseyallard/uor-r4-data/tree/main/s1-4-parity-2026-09-29)
 
 ## Done when
 
-Under the reviewed sheet, report selections, root mismatches and top-1 agreement against the sealed comparison, with hashes and hardware identity. Record a differing result without tuning the registered comparison.
+A reviewed GPU comparator reproduces the named measurements on the pinned inputs under its own FIT-reviewed sheet. Report the selections, mismatches, top-1 agreement, input and comparator hashes, and hardware. Record any difference from the hash-bound historical counts using the registered comparison.
 
 ## How to start
 
-Use the contributor instructions and public inputs linked below. Attach hardware specifications and verify the sheet’s non-author FIT before running the historical comparison.
+Start with the comparator repair in a separately built Rust/CUDA instrument under `docs/labs/icosian-snap-parity/`. Check root selection, ties, and raw-score argmax on finite controls. An independent replay can proceed only after the comparator passes review, its sheet has a non-author FIT, and the applicable GPU pre-run review passes. The original CPU command is outside this registration. [Charter §§3.2–3.5 and §4.5](../../../CHARTER.md)
 
 ## Rules that apply
 

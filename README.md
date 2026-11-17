@@ -30,7 +30,7 @@ printf '%s  %s\n' 04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c14
 
 The JSON result contains `"generated_ids": [223]`. This is one next-token prediction.
 
-In the [Studio version with the M1 predictor](https://github.com/UOR-Foundation/uor-r4/pull/4066), open **Models**, choose **Load M1 next-token predictor (seed 1)** and enter `The capital of France is`. Select **Predict next tokens** to see eight ranked candidates. The first token ID for that exact input is **223**. The first load downloads about 87 MB of weights and tokenizer. The prediction runs on your device. The Agent task replay is a separate tool. [Open Studio](https://uor-foundation.github.io/uor-r4/studio/) · [Public model files](https://huggingface.co/caseyallard/uor-r4-m1-model/tree/1fec0d4c42d4d5929a0cf08b1a0f17291d1dbc55)
+The hash-checked CLI above is the reproducible path to token ID **223**. A staged browser build also ranked 223 first among eight candidates for the same text. On November 17 the public Studio catalog listed only `synthetic-seed-5`. The seed-1 control and its tokenizer still need a successful prediction on the public deployment. [Public Studio](https://uor-foundation.github.io/uor-r4/studio/) · [Staged browser instructions and evidence](docs/products/web-client.md#run-the-seed-1-example) · [Studio update](https://github.com/UOR-Foundation/uor-r4/pull/4066)
 
 ## Current research direction
 
