@@ -7,7 +7,7 @@ status: done
 open_to: lab
 needs_gpu: false
 depends_on: []
-scope: [crates/uor-r4-discrete/src/address_cells.rs, crates/uor-r4-discrete/src/bin/position-qualify.rs, crates/uor-r4-discrete/src/d11_export.rs, crates/uor-r4-discrete/src/device.rs, crates/uor-r4-discrete/src/normalization_mechanism.rs, crates/uor-r4-discrete/src/prime_zeta.rs, crates/uor-r4-discrete/src/stage_t.rs, crates/uor-r4-discrete/src/trunk.rs, crates/uor-r4-discrete/src/wider_carrier.rs, crates/uor-r4-discrete/src/within_cell_writer.rs, crates/uor-r4-discrete/src/writer_bucket_qualification.rs, crates/uor-r4-discrete/tests/read_off_ablation_controls.rs, crates/uor-r4-source-interface/src/lib.rs, xtask/src/docs_catalog.rs, xtask/src/docs_relink.rs, xtask/src/docs_rewrite_refs.rs, xtask/src/docs_stubs.rs, xtask/src/figures_math.rs, xtask/src/figures_charts.rs, docs/loop/tasks/infra-outsider-repairs/**]
+scope: [crates/uor-r4-discrete/src/address_cells.rs, crates/uor-r4-discrete/src/bin/position-qualify.rs, crates/uor-r4-discrete/src/d11_export.rs, crates/uor-r4-discrete/src/device.rs, crates/uor-r4-discrete/src/normalization_mechanism.rs, crates/uor-r4-discrete/src/prime_zeta.rs, crates/uor-r4-discrete/src/stage_t.rs, crates/uor-r4-discrete/src/trunk.rs, crates/uor-r4-discrete/src/wider_carrier.rs, crates/uor-r4-discrete/src/within_cell_writer.rs, crates/uor-r4-discrete/src/writer_bucket_qualification.rs, crates/uor-r4-discrete/tests/read_off_ablation_controls.rs, crates/uor-r4-source-interface/src/lib.rs, xtask/src/docs_catalog.rs, xtask/src/docs_relink.rs, xtask/src/docs_rewrite_refs.rs, xtask/src/docs_stubs.rs, xtask/src/figures_math.rs, xtask/src/figures_charts.rs, docs/loop/tasks/infra-outsider-repairs/**, crates/uor-r4-discrete/src/e_means.rs, crates/uor-r4-discrete/src/kn_score.rs, crates/uor-r4-discrete/src/ngram_count.rs, crates/uor-r4-discrete/src/ngram_count_cuda.rs, crates/uor-r4-discrete/src/ngram_count_device.rs, crates/uor-r4-discrete/src/pick_read_cuda.rs, crates/uor-r4-discrete/tests/native_vector_cuda.rs]
 done_class: host
 ---
 
@@ -53,6 +53,10 @@ Read `CHARTER.md` §5.5, `docs/loop/README.md` (the outsider clause and the `uor
 - **Outsiders (CHARTER §5.3, docs/loop README):** a maintainer lab adopts with a tagged record naming the order it writes.
 
 ## Sources
+
+### November 2026 follow-up on #3168
+
+The next lint repair covers eight files in `uor-r4-discrete`. Seven new paths in this item's scope cover the n-gram counter and scorer, CUDA test code and E-means fixture. The existing scope already covers `d11_export.rs`. The adoption unit checks the contributor's source changes against the pinned driver sources and reports the remaining strict Clippy diagnostics. Its result and the open CI gate belong on #3168. [Contributor PR #4059](https://github.com/UOR-Foundation/uor-r4/pull/4059)
 
 - PRs [#3424](https://github.com/UOR-Foundation/uor-r4/pull/3424), [#3425](https://github.com/UOR-Foundation/uor-r4/pull/3425), [#3426](https://github.com/UOR-Foundation/uor-r4/pull/3426); issues [#3168](https://github.com/UOR-Foundation/uor-r4/issues/3168), [#2792](https://github.com/UOR-Foundation/uor-r4/issues/2792), [#2796](https://github.com/UOR-Foundation/uor-r4/issues/2796).
 - Owner direction, [#2028 owner log comment 6527705969](https://github.com/UOR-Foundation/uor-r4/issues/2028#issuecomment-6527705969) (30 Oct 2026; excerpt, ellipses as quoted).
