@@ -116,3 +116,84 @@ fn kn_score_cuda_empty_and_bos_only_queries_score_nothing() {
         .is_empty());
     assert!(scorer.score(&[4096]).is_err(), "a 13-bit id is refused");
 }
+
+/// claude-421's 1% real-stream oracle: TRAIN's first 1% is counted on the GPU
+/// through the filter and DEV-tune's first 1% is scored on the GPU; every
+/// mass equals the independent CPU oracle `KnOracle` at N = 2. Each slice is
+/// cut at a record start. DEV-test is sealed and is never read here.
+/// Run: `UOR_KN_TRAIN=train.tokens.u16 UOR_KN_QUERY=dev-tune.tokens.u16
+/// cargo test --release --features cuda --lib -- --ignored kn_score_cuda_real_slice`.
+#[test]
+#[ignore = "needs UOR_KN_TRAIN and UOR_KN_QUERY, claude-420's UORT streams"]
+fn kn_score_cuda_real_slice_equals_the_cpu_oracle() {
+    use crate::kn_filter::KnQuery;
+    use crate::kn_score_oracle::KnOracle;
+    use crate::ngram_count::{read_uort_tokens, NgramAssembler};
+    use crate::ngram_count_device::NgramCounter;
+    const N: u32 = 2;
+    let read = |var: &str| {
+        let path = std::env::var(var).unwrap_or_else(|_| panic!("{var} names a UORT stream"));
+        read_uort_tokens(&std::fs::read(&path).expect("read stream")).expect("UORT stream")
+    };
+    let cut = |tokens: &[u16]| {
+        let mark = tokens.len() / 100;
+        tokens[..=mark]
+            .iter()
+            .rposition(|&t| t == NGRAM_BOS)
+            .filter(|&at| at > 0)
+            .expect("the first 1% holds a whole record")
+    };
+    let train_all = read("UOR_KN_TRAIN");
+    let train = &train_all[..cut(&train_all)];
+    let query_all = read("UOR_KN_QUERY");
+    let query = &query_all[..cut(&query_all)];
+    let wanted = KnQuery::from_stream(query, N).expect("query");
+    let counter = NgramCounter::new(0, train).expect("counter");
+    let mut orders = Vec::new();
+    for k in 0..=N {
+        let mut assembler = NgramAssembler::new_adjusted(k, false).expect("assembler");
+        let mut filter = wanted.filter(k).expect("filter");
+        counter
+            .count_order_adjusted_with(k, N, 1 << 24, &mut |partition| {
+                assembler.push(partition)?;
+                filter.keep(partition)
+            })
+            .expect("count");
+        let (digest, _, _) = assembler.finish();
+        let (triples, contexts) = filter.finish();
+        eprintln!(
+            "real slice order {k}: grams {} contexts {} kept triples {} contexts {} n1..n4 {:?}",
+            digest.grams,
+            digest.contexts,
+            triples.len(),
+            contexts.len(),
+            digest.count_of_counts
+        );
+        orders.push((digest, triples, contexts));
+    }
+    drop(counter);
+    let tables = KnTables::new(N, orders).expect("tables");
+    let gpu = KnScorer::new(0, &tables)
+        .expect("scorer")
+        .score(query)
+        .expect("score");
+    let oracle = KnOracle::new(train, N as usize).expect("oracle discounts");
+    let expected: Vec<u64> = (0..query.len())
+        .filter(|&j| query[j] != NGRAM_BOS)
+        .map(|j| u64::try_from(oracle.mass(query, j)).expect("an oracle mass fits u64"))
+        .collect();
+    assert_eq!(gpu.len(), expected.len());
+    let first = (0..gpu.len()).find(|&i| gpu[i] != expected[i]);
+    assert_eq!(first, None, "the GPU path differs from the CPU oracle");
+    let distinct: std::collections::BTreeSet<u64> = gpu.iter().copied().collect();
+    assert!(
+        distinct.len() > 1000,
+        "the slice's masses are not degenerate"
+    );
+    eprintln!(
+        "real slice: train {} tokens, query {} tokens, {} targets, gpu = oracle",
+        train.len(),
+        query.len(),
+        gpu.len()
+    );
+}

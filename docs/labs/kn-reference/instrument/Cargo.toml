@@ -24,3 +24,8 @@ serde_json = "1"
 sha2 = "0.10.8"
 uor-r4-discrete = { path = "../../../../crates/uor-r4-discrete" }
 uor-r4-integer = { path = "../../../../crates/uor-r4-integer" }
+
+# The workspace's vendored sources, as the k16 timing instrument takes them.
+[patch.crates-io]
+cudarc = { path = "../../../../third_party/cudarc-0.19.10" }
+arrayref = { path = "../../../../third_party/arrayref" }
