@@ -8,15 +8,15 @@ The item allowed the charter and its history to change, but left the current pub
 
 ## What changed
 
-I approved eleven named paths needed to implement Casey’s permanent branches decision. The registration covers the two workflow files, three harness modules, registry, workspace instructions, Studio publisher and its regression tests. The implementation follows as a separate reviewed change.
+I approved ten named paths needed to implement Casey’s permanent branches decision. The registration covers the two workflow files, three harness modules, registry, workspace instructions, Studio publisher and its regression tests. The implementation follows as a separate reviewed change.
 
 ## Measurements
 
-The original 63 entries are intact. Eleven additional paths bring the list to 74. The harness manual is already a shared path under the claim policy and requires no item-specific registration.
+The original 63 entries are intact. Ten additional paths bring the list to 73. The harness manual is already a shared path under the claim policy and requires no item-specific registration.
 
 ## Checks run at the head
 
-Compared the old and new parsed lists. The old list remains an identical prefix and the eleven named files are the only additions. All other lines of the item remain byte-identical. The staged patch passes the whitespace check. Verification uses the current xtask roadmap check and the base-built harness’s loop pr-check with explicit base, head and head-ref.
+Compared the old and new parsed lists. The old list remains an identical prefix and the ten named files are the only additions. All other lines of the item remain byte-identical. The staged patch passes the whitespace check. Verification uses the current xtask roadmap check and the base-built harness’s loop pr-check with explicit base, head and head-ref.
 
 ## Skills used
 
