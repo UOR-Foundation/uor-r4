@@ -27,7 +27,10 @@ key holds at most 10 context tokens (`NGRAM_MAX_ORDER`), so this unit can reach 
    on real data. A fresh-context non-author reviewer gives the FIT.
 2. **The oracle at the chosen N.** claude-421's ignored real-slice test compares the GPU path with
    the independent `KnOracle` at N = 2 on 1%. It gains two settings, `UOR_KN_N` and
-   `UOR_KN_PER_MILLE`; their defaults keep claude-421's check. No other code changes.
+   `UOR_KN_PER_MILLE`; their defaults keep claude-421's check. No other code changes was the plan.
+   *Amended at the REPORT:* three memory-only repairs (`53cb85ee2`, `a15bb17b1`, `347f0122e`, each
+   `cmp`-identical on DEV-tune) and the one-unit floor (`c63510aa2`, governed by the second sheet,
+   `r-star-sealed-2-2026-11-17.md`) were added after the sweep and the first sealed crash.
 3. **The sweep on DEV-tune** (wick). `kn-reference` at N = 1..=10, each run with `--check-host`,
    against all of TRAIN and all of DEV-tune, with DEV-tune's novel mask.
 4. **The choice.** N\* is the N with the fewest Q12 bits over all DEV-tune targets; a tie goes to the
