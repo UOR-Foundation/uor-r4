@@ -214,10 +214,10 @@ and `454bb30fc` and `d8e67c66` are historical identities. Publishing a newer pag
 
 ```sh
 # dry run against the preview branch: builds, stages, commits locally, pushes nothing
-scripts/studio/build-and-publish.sh --target gh-pages-preview --stage-dir /tmp/studio-staged
+scripts/studio/build-and-publish.sh --typed --target gh-pages-preview --stage-dir /tmp/studio-staged
 
 # after review, publish the live site from a clean, attached main checkout (owner/Lead only)
-scripts/studio/build-and-publish.sh --target gh-pages --push --yes
+scripts/studio/build-and-publish.sh --typed --target gh-pages --push --yes
 ```
 
 **Why not in CI yet.** Making the Studio build part of the workflow needs
