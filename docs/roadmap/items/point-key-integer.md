@@ -3,7 +3,7 @@ id: point-key-integer
 title: Serve the point key's opening in the integer artifact on the laptop
 milestone: research
 area: serving
-status: ready
+status: held
 open_to: lab
 needs_gpu: false
 depends_on: [one-model-end-to-end, turn-memory-integer, integer-retention-rates, integer-nearest-readout]
@@ -26,6 +26,8 @@ The integer artifact cannot hold the float table, since no floating point is all
 - **(d)** the export needs its own item. This is that item.
 
 ## What is missing
+
+**Disposition, 17 November 2026.** The original three-seed p-x run depended on the Q5 readout in #3462. The owner stopped Q5 and its incomplete replay was archived. Close this configuration as not planned. Reopening requires an explicitly selected consumer and a registered parity repair for this exact artifact. The point-key mechanism and its negative remain in the record. Native replay and the written-state experiment continue under #3973 and #4063.
 
 **November 17, 2026.** The integer table, search and grader landed. Claimed parity for the original p-x experiment still requires localization of the earlier readout mismatch. The owner stopped that Q5 investigation. Retain p-x as unrun unless a reviewed decision revives the original checkpoint comparison. Native-state replay belongs to #3973. [PR #3452](https://github.com/UOR-Foundation/uor-r4/pull/3452) · [PR #3454](https://github.com/UOR-Foundation/uor-r4/pull/3454) · [PR #3544](https://github.com/UOR-Foundation/uor-r4/pull/3544)
 
