@@ -8,7 +8,7 @@ The contributor guide presents D37's float training and discrete export gap as c
 
 ## What changed
 
-The top Codex session approved registering the exact contributor-guide path on 17 November 2026 after comparing the public guidance with D85 and Charter §3.7. This follows #4067's separate registration before content delivery. To reverse the registration, remove the appended entry in a subsequent scope review. The contribution wording belongs to the public documentation follow-up. [Charter](../../../../../CHARTER.md) · [D85](../../../../integration/DECISIONS.md)
+Fresh-context decision review on 17 November, Codex launch `01a1eb15-ca72-74a3-ade2-a012b238346c`, examined head `9eb68143a5c8e3d40ba04570e8327eebd39cf534`. It accepted the exact one-path scope edit and requested a record of the decision and cancel probe. The top Codex session approves that edit after this review. M2 grounding and M3 memory feed the native model whose lossless replay is required at M4. Contributor instructions pointing those researchers toward a float training/export gap contradict D85 and Charter §3.7. The open PR inventory had two edits to this roadmap item: #4060 uses the guide, and #4070 is this registration. No other open change provides the registration, and the base has neither an exact scope entry nor a shared path for it. The cancel probe did not fire. This follows #4067's separate registration before content delivery. To reverse the registration, remove the appended entry in a subsequent scope review. The contribution wording belongs to the public documentation follow-up. [Charter](../../../../../CHARTER.md) · [D85](../../../../integration/DECISIONS.md)
 
 ## Measurements
 
