@@ -168,8 +168,15 @@ and is corrected here.
 overfits from 0.54 epochs at 8.13 M tokens for a 1.11 M-value trunk. claude-152's "13× more text
 hurt" was *13× more mixed text* (long general chat), so mixture and volume are separated: codex-34
 generates 8× the **same** mixture with the same seed and shares and trains the same 16,384 steps to
-the same pass count. If dev loss does not improve at the same pass count, the trunk is not
-data-limited and capacity (the k-term arm) is the fork.
+the same pass count. **Measured (codex-34): it does not.** 8× the unique data (64.9 M tokens, 6.0×
+distinct responses, 94.9 % of them new, mixture and seed unchanged) and the panel is flat — **56 /
+256 against 57 / 256** — at 3× the steps and 4.3× the tokens seen; frames are flat too (31 of 56
+against 34 of 57). Token loss improves 0.931 → 0.571 while the **address term worsens 1.316 →
+1.954**, so the sum rises, and `length2` reaches 33/64 (best yet) while `length4` falls 12 → 6. So:
+volume is not the lever at this scale; the reply-frame defect is **corpus shape** (one frame per
+intent, no GPU spend, targets 23 of the 57); the address term rising with the read's tables
+(143,079 → 541,807 reply keys) is the next lead; and k-term capacity stays the untested lever for
+multi-token composition.
 
 **The compatibility gate, proven.** `fbs-export --legacy-artifact` reproduces arm r's artifact **byte
 for byte** (`f21046823640ea40…`), before and after the `terms`/`counts` change in codex-30 slice 2.
