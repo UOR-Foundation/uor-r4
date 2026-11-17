@@ -146,6 +146,7 @@ jobs:
           set -euo pipefail
           test -f book/index.html
           test -d site/studio
+          previous=$(git -C site rev-parse HEAD)
           # Refuse archive contents that could overwrite the checkout or the Studio.
           for reserved in .git studio; do
             if [ -e "book/$reserved" ] || [ -L "book/$reserved" ]; then
@@ -169,4 +170,10 @@ jobs:
             exit 0
           fi
           git -C site commit -q -m "docs site from ${GITHUB_SHA}"
-          git -C site push origin HEAD:refs/heads/gh-pages
+          published=$(git -C site rev-parse HEAD)
+          if [ "$(git -C site show -s --format=%P "$published")" != "$previous" ]; then
+            echo "::error::the candidate must have the staged Pages head as its only parent"
+            exit 1
+          fi
+          git -C site push --force-with-lease="refs/heads/gh-pages:$previous" \
+            origin "$published:refs/heads/gh-pages"

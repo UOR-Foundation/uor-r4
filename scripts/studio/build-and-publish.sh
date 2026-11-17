@@ -60,7 +60,12 @@ die() { printf 'build-and-publish: %s\n' "$*" >&2; exit 2; }
 publish_studio() {
     local checkout=$1 previous=$2 published rollback
     published=$(git -C "$checkout" rev-parse HEAD)
-    git -C "$checkout" push origin "$published:refs/heads/gh-pages" || return 1
+    if [ "$(git -C "$checkout" show -s --format=%P "$published")" != "$previous" ]; then
+        echo "refusing to publish: the candidate must have the staged Pages head as its only parent" >&2
+        return 1
+    fi
+    git -C "$checkout" push --force-with-lease="refs/heads/gh-pages:$previous" \
+        origin "$published:refs/heads/gh-pages" || return 1
     rollback="git push --force-with-lease=refs/heads/gh-pages:$published origin $previous:refs/heads/gh-pages"
     say "PUSHED gh-pages -> $published"
     say "rollback if needed: $rollback"

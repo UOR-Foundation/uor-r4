@@ -243,6 +243,14 @@ fn studio_requires_an_explicit_live_target_and_forbids_the_archive() {
     assert!(String::from_utf8_lossy(&out.stderr).contains("explicit --target gh-pages"));
 }
 
+fn studio_publish_shell(previous: &str) -> String {
+    let (before, rest) = STUDIO.split_once("publish_studio() {\n").unwrap();
+    let (body, after) = rest.split_once("\n}\n").unwrap();
+    assert!(!before.contains("--force-with-lease") && !after.contains("--force-with-lease"));
+    assert!(after.contains("if [ \"$push\" = 1 ]; then\n        publish_studio "));
+    format!("set -eu\nsay() {{ echo \"$*\"; }}\npublish_studio() {{\n{body}\n}}\npublish_studio . {previous}")
+}
+
 #[test]
 fn a_reported_rollback_cannot_overwrite_a_newer_pages_publication() {
     let dir = tempfile::tempdir().unwrap();
@@ -251,11 +259,7 @@ fn a_reported_rollback_cannot_overwrite_a_newer_pages_publication() {
     let site = root.join("site");
     git(&site, &["commit", "--allow-empty", "-qm", "new Studio"]);
     let published = git(&site, &["rev-parse", "HEAD"]);
-    let (before, rest) = STUDIO.split_once("publish_studio() {\n").unwrap();
-    let (body, after) = rest.split_once("\n}\n").unwrap();
-    assert!(!before.contains("--force-with-lease") && !after.contains("--force-with-lease"));
-    assert!(after.contains("if [ \"$push\" = 1 ]; then\n        publish_studio "));
-    let shell = format!("set -eu\nsay() {{ echo \"$*\"; }}\npublish_studio() {{\n{body}\n}}\npublish_studio . {previous}");
+    let shell = studio_publish_shell(&previous);
     let published_message = ok(run(&site, "bash", &["-c", &shell]));
     let rollback = published_message
         .lines()
@@ -275,4 +279,98 @@ fn a_reported_rollback_cannot_overwrite_a_newer_pages_publication() {
     let failed = run(&site, "bash", &["-c", &shell]);
     assert!(!failed.status.success());
     assert!(!String::from_utf8_lossy(&failed.stdout).contains("rollback"));
+}
+
+// Interleave the fixture action after the actual book shell commits and before its push.
+fn publish_book_with_post_commit(root: &Path, action: &str) -> Output {
+    fs::create_dir(root.join("book")).unwrap();
+    fs::write(root.join("book/index.html"), "new book").unwrap();
+    let hook = root.join("site/.git/hooks/post-commit");
+    fs::write(&hook, format!("#!/bin/sh\n{action}\n")).unwrap();
+    ok(run(root, "chmod", &["+x", hook.to_str().unwrap()]));
+    run(root, "bash", &["-c", &shell_step("Publish")])
+}
+
+#[test]
+fn neither_in_flight_publisher_can_restore_a_rolled_back_studio() {
+    for publisher in ["book", "Studio"] {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let original = pages_fixture(root);
+        let site = root.join("site");
+        let remote = root.join("origin.git");
+        fs::write(site.join("studio/index.html"), "rolled-back Studio").unwrap();
+        git(&site, &["commit", "-qam", "publish new Studio"]);
+        let newer = git(&site, &["rev-parse", "HEAD"]);
+        let published = ok(run(
+            &site,
+            "bash",
+            &["-c", &studio_publish_shell(&original)],
+        ));
+        let rollback = published
+            .lines()
+            .find_map(|line| line.strip_prefix("rollback if needed: "))
+            .unwrap();
+
+        let stale = if publisher == "book" {
+            publish_book_with_post_commit(root, rollback)
+        } else {
+            git(&site, &["commit", "--allow-empty", "-qm", "staged Studio"]);
+            ok(run(&site, "bash", &["-c", rollback]));
+            run(&site, "bash", &["-c", &studio_publish_shell(&newer)])
+        };
+        assert_eq!(git(&site, &["rev-parse", "HEAD^"]), newer);
+        assert!(
+            !stale.status.success(),
+            "{publisher} revived a rolled-back publication"
+        );
+        assert_eq!(
+            git(&remote, &["rev-parse", "gh-pages"]),
+            original,
+            "{publisher}"
+        );
+        assert_eq!(
+            git(&remote, &["show", "gh-pages:studio/index.html"]),
+            "Studio"
+        );
+    }
+}
+
+#[test]
+fn a_forward_lease_never_authorizes_a_non_linear_pages_commit() {
+    for publisher in ["book", "Studio"] {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let original = pages_fixture(root);
+        let site = root.join("site");
+        let other_parent = git(&site, &["commit-tree", "HEAD^{tree}", "-m", "other root"]);
+        let merge = git(
+            &site,
+            &[
+                "commit-tree",
+                "HEAD^{tree}",
+                "-p",
+                &original,
+                "-p",
+                &other_parent,
+                "-m",
+                "merge",
+            ],
+        );
+        let refused = if publisher == "book" {
+            publish_book_with_post_commit(root, &format!("git update-ref HEAD {merge}"))
+        } else {
+            git(&site, &["update-ref", "HEAD", &merge]);
+            run(&site, "bash", &["-c", &studio_publish_shell(&original)])
+        };
+        assert_eq!(git(&site, &["rev-parse", "HEAD"]), merge);
+        assert!(
+            !refused.status.success(),
+            "{publisher} published a merge commit"
+        );
+        assert_eq!(
+            git(&root.join("origin.git"), &["rev-parse", "gh-pages"]),
+            original
+        );
+    }
 }
