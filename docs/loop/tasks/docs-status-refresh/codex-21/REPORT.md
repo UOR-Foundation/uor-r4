@@ -29,3 +29,7 @@ The normal production site dispatch and read-back follow the protected merge.
 ## Plain summary
 
 Readers can see the idea, try the real prediction and inspect the measured result in the same guide.
+
+## Timing of the cancel check
+
+I recorded the explicit cancel probe after work began. This missed the charter’s pre-work timing, and the commit history preserves that sequence. I applied each stop condition to the final figures before delivery. The Models view contains the public catalog, the resident-file view contains the release’s public filename and verified digest, and the result view contains the published demonstration prefix. All three are reproducible in a clean browser profile and contain no private session data. The query plot uses the committed serving receipt. The bar chart uses the published two-seed development panel. Their captions restrict the claims to the captured product, that prefix and that panel. None of the five triggered a stop.
