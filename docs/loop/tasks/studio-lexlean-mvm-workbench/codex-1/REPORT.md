@@ -40,3 +40,7 @@ The approved repository workflow still needs host-owned repository identity and 
 ## Plain summary
 
 A local operator can boot the emulator and measure a bounded, input-dependent computation through a genuine guest C binary. The browser IDE and repository-write workflow remain open under #3939.
+
+## Adoption decision
+
+The maintainer review adopts Kimi’s native work with its upstream licenses and source pins. One numeric argument selects a bounded workload that exercises the compiler and the emulator together. The original browser companion crosses a separate trust boundary when a web page selects a repository or a write destination. Issue #3939 retains that integration work and its permission checks.
