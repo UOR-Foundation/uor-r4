@@ -4,7 +4,7 @@ Lab: codex. Item: [docs-status-refresh](../../../../roadmap/items/docs-status-re
 
 ## What did not work
 
-The published Studio catalog offered a synthetic fixture. A model-only URL import verified the M1 stack while leaving its text tokenizer unbound. The public guide now distinguishes artifact availability, deployment and accepted-model parity. A separate Studio change pairs the immutable public files and exercises the rendered predictor. Local mdBook 0.4 produced a different page count from the publication toolchain. The pinned Mermaid plugin still warns about mdBook 0.5.0 versus 0.5.4; #3972 tracks that warning.
+The initial November 17 Studio check at `90dea3e24` found only the synthetic fixture. A model-only URL import verified the M1 stack while leaving its text tokenizer unbound. The public guide now distinguishes artifact availability, deployment and accepted-model parity. PR #4066 subsequently published the paired loader. Local mdBook 0.4 produced a different page count from the publication toolchain. The pinned Mermaid plugin still warns about mdBook 0.5.0 versus 0.5.4; #3972 tracks that warning.
 
 ## What changed
 
@@ -13,6 +13,8 @@ The README and book entry points lead with the research question, the M1 weights
 Reviewed all 52 issues open when the unit started. The roadmap now registers previously standalone defects against their existing IDs, preserves the pilot chronology, and identifies the frozen-reference experiment (#4063) and shared interfaces (#4064). The parent, seven milestone bodies and compute board preserve the earlier descriptions as dated history. #3801 closed on delivered instrumentation. #3876 closed after the contributor repair passed on merged main. #2846, #3450, #3462 and #3594 closed as not planned, with their historical evidence and revival conditions retained. The M1 milestone closed after its final untriggered fallback was moved. Source, render and live tracker have distinct verification steps.
 
 ## Measurements
+
+The production Studio check on November 17 used main `e19cf2188` and Pages `2878cdc02`. The catalog listed `synthetic-seed-5` and `m1-discrete-trunk-seed-1`. Chrome made zero off-origin requests before the explicit model load, verified the bound weights and tokenizer, and returned the native IDs 223, 952, 2359, 2471, 23, 263, 964, 1520 offline for `The capital of France is`. The CLI with `--max-tokens 1` returned `[223]`. [Published catalog](https://github.com/UOR-Foundation/uor-r4/blob/2878cdc029c1d232e7468e4751a610cc91fc8ab0/studio/models.json) · [Reproduction](../../../../products/web-client.md#run-the-seed-1-example)
 
 The issue census counted 52 originally open issues and found 156 source-backed issue mappings after registration. The historical pilot text contains 842 lines and 56,170 preserved bytes.
 
@@ -28,7 +30,7 @@ The parallel audit skill separated issue reconciliation, PR review and live Stud
 
 ## Still open
 
-Publication uses the protected branch, followed by the existing docs-site workflow and a live URL check. The current M1 release and the synthetic demo are separately identified in the Studio change. Milestone verification remains with the original registered experiments.
+Publication uses the protected branch, followed by the existing docs-site workflow and a live URL check. Milestone verification remains with the original registered experiments.
 
 ## Plain summary
 

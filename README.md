@@ -30,7 +30,7 @@ printf '%s  %s\n' 04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c14
 
 The JSON result contains `"generated_ids": [223]`. This is one next-token prediction.
 
-The hash-checked CLI above is the reproducible path to token ID **223**. A staged browser build also ranked 223 first among eight candidates for the same text. On November 17 the public Studio catalog listed only `synthetic-seed-5`. The seed-1 control and its tokenizer still need a successful prediction on the public deployment. [Public Studio](https://uor-foundation.github.io/uor-r4/studio/) · [Staged browser instructions and evidence](docs/products/web-client.md#run-the-seed-1-example) · [Studio update](https://github.com/UOR-Foundation/uor-r4/pull/4066)
+The CLI returns one greedy token, ID **223** (a space). To see the eight ranked candidates for the same prefix, open **Models** in the public Studio, choose **Load M1 next-token predictor (seed 1)**, enter `The capital of France is` in **Prediction prefix**, then choose **Predict next tokens**. On November 17, the browser ranked 223 first with its network disabled after loading. [Public Studio](https://uor-foundation.github.io/uor-r4/studio/) · [Full result and model hashes](docs/products/web-client.md#run-the-seed-1-example) · [Published catalog](https://github.com/UOR-Foundation/uor-r4/blob/2878cdc029c1d232e7468e4751a610cc91fc8ab0/studio/models.json)
 
 ## Current research direction
 

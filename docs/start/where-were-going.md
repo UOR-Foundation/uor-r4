@@ -115,7 +115,7 @@ come almost entirely from the turn memory's table. Useful conversation has not b
 | Milestones complete | **1 of 8 (M1)** | [#2029](https://github.com/UOR-Foundation/uor-r4/issues/2029) |
 | Next milestone | M2: grounded complete replies | [PLAN](../../PLAN.md) |
 | Immediate problem | Facts come from the exact turn memory's table, not the learned state: 171–211 exact replies of 2,218 without it, 377–441 with it | [V0, claude-376](../loop/tasks/one-model-end-to-end/claude-376/REPORT.md) |
-| Work in progress | One native state for training and serving (D85); V1 and V2(a) | [PLAN](../../PLAN.md#native-space-cycle), [#3979](https://github.com/UOR-Foundation/uor-r4/pull/3979), [#3978](https://github.com/UOR-Foundation/uor-r4/pull/3978) |
+| Work in progress | The November 16 written-state study measured 2.004736 bits per byte on DEV-tune with its order-2 count reference. Selecting and sealing the reference precedes the geometric comparison | [Phase order](../../PLAN.md#approved-sequences), [P0 calibration](../loop/tasks/written-state-count-model/claude-421/REPORT.md), [sealed-reference follow-up](https://github.com/UOR-Foundation/uor-r4/pull/4058) |
 | M4 | Lawful likelihood built; full accepted-model serving and held-out score open | [serving and export](../model/serving-and-export.md) |
 | Products shipped | None | [products](../products/README.md) |
 

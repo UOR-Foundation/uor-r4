@@ -96,7 +96,7 @@ quality, CLI, session and audit path; M7's distribution check is separate.
 | # | Meaning | Current state |
 |---|---|---|
 | M1 | **It predicts text.** Six bars through the saved integer model, including fresh and held-out-phrasing transfer | **Complete** |
-| M2 | **It answers from memory.** ≥256/512 complete correct DEV replies and ≥40% fresh | In progress |
+| M2 | **It answers from memory.** On the same model, ≥256/512 complete, correct saved replies and ≥52/128 fresh opposite-role pairs with both replies complete and distinct | In progress |
 | M3 | **It remembers across sessions.** Provenance, correction, abstention, reset and restart | In progress |
 | M4 | **It is served.** Accepted model with lossless native serialization and raw-word parity; held-out quality **≤0.90 BPB**; M1–M3 bars through `uor-chat`; bit-identical continuation after restore; full CLI/session/audit path | Qualification requires the selected M3 model and its measured [M4 artifact](../roadmap/items/m4-export-uorlut01-cli.md) |
 | M5 | **It is cheap on a laptop.** Latency, memory, energy and selected access measured | [Protocol registered](../roadmap/items/m5-laptop-full-path-measurement.md), accepted-model measurements open |

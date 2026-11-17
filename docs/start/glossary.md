@@ -161,7 +161,7 @@ flowchart LR
 | # | Meaning |
 |---|---|
 | M1 | It predicts text (a saved discrete model beats both count tables through the integer export) |
-| M2 | It answers from memory (at least 256 of 512 development replies, and 40% on a fresh panel) |
+| M2 | It answers from memory (the same model gives complete, correct replies to ≥256/512 saved questions and two complete, distinct replies on ≥52/128 fresh opposite-role pairs) |
 | M3 | It remembers across sessions |
 | M4 | It is served: exported to `UORLUT01` and run from the command line |
 | M5 | It is cheap on a laptop, with the cost measured |

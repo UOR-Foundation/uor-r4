@@ -22,7 +22,7 @@ Replies must be grounded in the exact memory and the object store, with relation
 
 ## Done when
 
-The selected native student produces complete, correct replies on at least 256/512 saved questions and at least 40% of genuinely fresh ones under the existing graders. D85 requires lossless D11 serialization and bit-identical native train/serve replay. The historical D37 float route reported an export gap.
+The same native student must pass both graders. It must give complete, correct replies on at least 256/512 saved questions. On the 256 fresh questions it must score at least 52/128 opposite-role history pairs with **both** replies in each qualifying pair complete and distinct. [Frozen paired grader](../../harness/panels/m2-fresh256.json) D85 requires lossless D11 serialization and bit-identical native train/serve replay. The historical D37 float route reported an export gap.
 
 ## How to start
 

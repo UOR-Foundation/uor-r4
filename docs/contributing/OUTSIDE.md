@@ -35,7 +35,7 @@ cargo run   -q --locked -p xtask -- figures
 cargo run   -q --locked -p uor-r4-claim-wording -- .
 ```
 
-These commands build and test the default substrate. To run a model locally, follow the [released M1 predictor example](../../README.md#try-the-m1-predictor). It returns ranked next tokens. The [Studio guide](../products/web-client.md) describes the browser workflow and its verification.
+These commands build and test the default substrate. To run a model locally, follow the [released M1 predictor example](../../README.md#try-the-m1-predictor). With `--max-tokens 1`, the CLI returns one greedy ID, `generated_ids: [223]` (a space). The public Studio shows eight ranked candidates for the same prefix. [Browser example](../products/web-client.md#run-the-seed-1-example)
 
 ## Getting data
 

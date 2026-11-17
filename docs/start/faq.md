@@ -61,9 +61,9 @@ Matrix multiplication is nearly all of a transformer's arithmetic, so removing i
 
 They are different jobs. GPU results are the default and remain the qualification authority, because host runs historically gave wrong timing and evidence, and spending GPU only where a run can change a decision keeps costs down ([charter](../../CHARTER.md), section 3.5). D84 permits only the named CPU training program to run development training, evaluation and parity on the workstation; those results do not replace a GPU bar. The finished model is meant to run on the user's own device: serving the exported integer file on a laptop CPU, in a browser or on Apple silicon is the product and does not require the research-compute GPU (section 3.6). Scoring an exported model for a milestone still counts as research compute.
 
-### 10. Why can training use decimals when serving cannot?
+### 10. What number format do training and serving use?
 
-Decimals train faster, and only the shipped file has to be integer ([charter](../../CHARTER.md), section 3.7, from decision D37). Any float-trained candidate must report its **export gap**, the quality lost when it is snapped to whole numbers, and a gap above the noise band disqualifies it. The current discrete model avoids the question because it is integer from end to end. For the float-trained FBS trunk the gap is inside the bar at DEV scope under the unsnapped contract `lut-stack/5` (claude-182). See [serving and export](../model/serving-and-export.md).
+D85 requires a shared integer or fixed-point representation for the native model. Training and serving use the same typed operators, and the artifact preserves the state losslessly. Floating point serves as a reference or diagnostic. Under the historical D37 route, a float-trained FBS trunk reported an export gap inside the bar on DEV under its unsnapped `lut-stack/5` contract (claude-182). [Charter §3.7](../../CHARTER.md) · [Serving and export](../model/serving-and-export.md)
 
 ### 11. Why primes, zeta zeros, E8 and quaternions? Do they actually help?
 
@@ -81,7 +81,7 @@ You can build it and run its checks, but you cannot hold a useful chat with it. 
 
 ### 14. Is there a web or desktop app?
 
-No qualified conversational app ships. M1 ranks up to eight candidate next tokens. Its public weight file and matching tokenizer form a pair. The web-client guide identifies the models in the deployed catalog. Its synthetic parity harness passes. The Tauri desktop shell verifies durable session behavior on a synthetic artifact. Neither client bundles a qualified conversational product ([products](../products/README.md), [web client](../products/web-client.md), [desktop client](../products/desktop-client.md)).
+No qualified conversational app ships. The public Studio ranks eight candidate next tokens with the trained M1 seed-1 model after an explicit download of its weights and matching tokenizer. Its synthetic parity harness passes. The Tauri desktop shell verifies durable session behavior on a synthetic artifact. Neither client bundles a qualified conversational product ([products](../products/README.md), [web client](../products/web-client.md), [desktop client](../products/desktop-client.md)).
 
 ### 15. What about the models on Hugging Face?
 

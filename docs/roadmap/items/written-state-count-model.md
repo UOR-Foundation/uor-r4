@@ -7,7 +7,8 @@ status: ready
 open_to: lab
 needs_gpu: true
 depends_on: [m2-donor-corpus-generation]
-scope: [crates/uor-r4-discrete/**, crates/uor-r4-integer/src/discrete_d11.rs, crates/uor-r4-integer/src/bin/uor-chat.rs, crates/uor-r4-integer/tests/discrete*, docs/labs/kn-reference/**, docs/loop/tasks/written-state-count-model/**, docs/roadmap/items/written-state-count-model.md]
+notebook: docs/research/notebook/m4-serving.md
+scope: [docs/research/notebook/m4-serving.md, docs/research/notebook/data-tokenizer.md, crates/uor-r4-discrete/**, crates/uor-r4-integer/src/discrete_d11.rs, crates/uor-r4-integer/src/bin/uor-chat.rs, crates/uor-r4-integer/tests/discrete*, docs/labs/kn-reference/**, docs/loop/tasks/written-state-count-model/**, docs/roadmap/items/written-state-count-model.md]
 done_class: gpu
 ---
 
@@ -25,7 +26,7 @@ Follow the accepted phase table, including its stop and fallback branches. P1 ch
 
 ## How to start
 
-Read the last merged phase report and the native-state contract, then take the first unmet gate in the phase table. The P0 scorer or a trained control alone cannot advance a model milestone. [Native-space contract](../../loop/tasks/written-state-count-model/claude-409/NATIVE-SPACE.md)
+Record each model or scoring result in the [serving notebook](../../research/notebook/m4-serving.md), and split or census provenance in the [data notebook](../../research/notebook/data-tokenizer.md). Read the last merged phase report and the native-state contract, then take the first unmet gate in the phase table. The P0 scorer or a trained control alone cannot advance a model milestone. [Native-space contract](../../loop/tasks/written-state-count-model/claude-409/NATIVE-SPACE.md)
 
 ## Rules that apply
 
