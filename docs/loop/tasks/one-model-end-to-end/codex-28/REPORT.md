@@ -145,3 +145,34 @@ The margin **does** change the argmax (1399 → 617 → 1856), so the ask weight
 already names this as the gap: five selection rules and four aggregation rules for one operation.
 The unit is a learned per-head weight (or copy precedence at the reply's first row), measured on this
 exact bare episode and on held-out values — with the value-swap and the oracle-key falsifiers.
+
+## The aggregation sweep: the head mix is not the obstruction either
+
+The copy-vs-ask share is already a per-lane table (`hamming.d*.weight`, row 0 copy, row 1 type;
+d6 means 5.13M against 1.91M, so the copy carries 2.7× the type weight). Sweeping it on the bare
+episode:
+
+| Variant | first reply token |
+|---|---|
+| as trained | 1399 |
+| copy weights zeroed | 617 |
+| type weights ×4 | 617 |
+| copy weights halved | 617 |
+| margin 60 bits (from the prior sweep) | 1856 |
+| **the value** | **971** |
+
+Zeroing the copy entirely leaves 617. So neither the copy's weight, the ask's weight, nor the margin
+decides this row: **the writer's own nearest token is 617**, and the read's move is an additive hint
+that cannot displace it. The move's global scale is fixed by the engine's exponent check ("the
+Hamming read's exponents are not this engine's"), so a scale counterfactual is refused by design — the
+move is small by convention, not by accident.
+
+**What this means.** On a *fresh* bare phrasing the first token is the writer's prior, not the read's
+choice. That is the item's own fresh-phrasing problem (the anchors use phrasings the TRAIN templates
+do not hold), and it lives in the trunk's query at the reply row, not in any head. The read
+mechanisms we built remain necessary for the value's *position*, but they are not sufficient to make
+it the argmax on unseen wording.
+
+**Next:** the fresh-template measurement (the item's strata) and a recall-corpus run whose questions
+are paraphrased the way the anchors are — not more read tuning. The read's work is done up to its
+stage; the remaining failure is the trunk, and it should be measured on the panel the item names.
