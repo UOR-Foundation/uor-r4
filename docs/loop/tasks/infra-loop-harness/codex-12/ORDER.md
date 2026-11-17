@@ -4,15 +4,15 @@ Lab: codex. Item: [infra-loop-harness](../../../../roadmap/items/infra-loop-harn
 
 ## Goal and cancel probe
 
-Casey chose "main, gh-pages, and a new archive branch; retire the preview and update its publishing workflow". The subsequent policy change must update all active writers and cleanup guards, including the two publishing entry points. At this base, the maintenance item covers the charter and rule log but omits the twelve file paths below. Cancel if all twelve are already present or covered.
+Casey chose "main, gh-pages, and a new archive branch; retire the preview and update its publishing workflow". The subsequent policy change must update all active writers and cleanup guards, including the two publishing entry points. At this base, the maintenance item covers the charter and rule log but omits the eleven file paths below. Cancel if all eleven are already present or covered.
 
 ## Scope
 
-Append only the twelve missing exact files to the scope of `docs/roadmap/items/infra-loop-harness.md`. The policy work covers the docs and cleanup workflows; Git, delivery and status protection in the harness; the protected-branch registry; the harness and workspace manuals; the Studio publishing helper, Studio and workflow regressions and Studio manual. This registration and its ORDER/REPORT are the only changes in this unit.
+Append only the eleven missing exact files to the scope of `docs/roadmap/items/infra-loop-harness.md`. The policy work covers the docs and cleanup workflows; Git, delivery and status protection in the harness; the protected-branch registry; the workspace manual; the Studio publishing helper, Studio and workflow regressions and Studio manual. This registration and its ORDER/REPORT are the only changes in this unit.
 
 ## Done when
 
-Compare the parsed old and new scope and verify the old prefix and all other item text byte for byte. Confirm the only additions are the twelve paths, rerun the roadmap check, and apply the repo-local PR policy. The subsequent implementation must repeat the scope check from a main tip containing this registration.
+Compare the parsed old and new scope and verify the old prefix and all other item text byte for byte. Confirm the only additions are the eleven paths, rerun the roadmap check, and apply the repo-local PR policy. The subsequent implementation must repeat the scope check from a main tip containing this registration.
 
 ## Stop and decide if
 
