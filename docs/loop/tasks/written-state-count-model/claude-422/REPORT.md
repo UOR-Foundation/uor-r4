@@ -17,7 +17,13 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Sheets: [first](../../../../harness/pr
 - **Two sealed crashes** [claude]. Neither wrote a JSON.
   - **Crash 1** (`c422-sealed3`) was the 16 GiB kill (rc 137) at 590 s, while counting order 6. The `KnQuery` repair fixed it.
   - **Crash 2** came after all eleven orders were counted. The GPU scorer stopped with "target 8880153 has a KN mass of 0 or of 2^64 or more".
-- **One fact about DEV-test leaked before the seal** [claude]: crash 2's message. At N = 10, the target at DEV-test stream position 8,880,153 had a Q48 mass that floors to 0. Nothing else about DEV-test was seen. N\* = 10 had been fixed on DEV-tune before it, so nothing fed back.
+- **What was seen of DEV-test before the seal** [claude, widened at review]. No mass, bit count or BPB was seen. Three things were:
+  - crash 2's message: at N = 10, the target at DEV-test stream position 8,880,153 had a Q48 mass that floors to 0;
+  - DEV-test's token count (21,354,897);
+  - per-order coverage counts against TRAIN, meaning the kept triples and contexts, which the crash logs print for orders 0–5 (crash 1) and 0–10 (crash 2).
+
+  N\* = 10 had been fixed on DEV-tune before any of these, and the floor rule follows from the code alone, so nothing fed back.
+- **The stop rule was bent once** [claude, from the review]. The first sheet allows one repeat of a crash. That repeat ran with repair `347f0122e` already in, and no new sheet. The second sheet recorded it afterward, and the sealed run is under the second sheet.
 - **R\*'s definition gained a second rule, from my own decision review** (the second sheet, logged for Casey) [claude]. The interpolated mass is floored at one Q48 unit, `max(P_N, 1)`, in `KnTables::mass`, the kernel and `KnOracle::mass` (`c63510aa2`).
   - It can only lower R\*'s bits, so it makes bar Q harder, never easier.
   - It leaves every DEV-tune mass unchanged: step 2's run is byte-identical but for `masses_at_floor = 0`.
@@ -69,9 +75,9 @@ Lab: claude. Order: [ORDER.md](ORDER.md). Sheets: [first](../../../../harness/pr
   | novel | **1,394,996** | 1,569,371 | 1,656,558 |
 
 - **Time and memory of the sealed run.**
-  - Wall time was 2,045 s. Counting TRAIN took 1,847 s (90%), GPU scoring about 2 s, and the host check 196 s.
-  - Peak device memory was 11,145 MiB (the whole GPU) and peak resident memory 10.1 GB.
-  - On DEV-tune at N = 10: 1,843 s and 9.96 GB.
+  - Wall time was 2,045 s: the read 3.5 s, counting TRAIN 1,843 s (90%), GPU scoring 1.8 s, and the host check 196 s.
+  - Peak device memory was 11,145 MiB (the whole GPU), and peak resident memory 10,127,144 KiB (9.66 GiB).
+  - On DEV-tune at N = 10: 1,843 s and 9,964,080 KiB (9.50 GiB).
 
 ## What the numbers say
 
@@ -85,7 +91,7 @@ Most of the time goes into counting, not scoring. Order 10 emits 1.29 B grams, a
   - CUDA tests pass, 13 / 13, including the GPU floor test.
   - The kernel negative: with the floor line set aside, the floor test fails at its assert (left `[…, 0, …]`, right `[…, 1, …]`). The source was restored `cmp`-identical.
   - DEV-tune N = 10 is byte-identical to the passed `sweep-10.json` but for `masses_at_floor = 0`.
-  - Headroom: 9.96 GB, against the 12 GiB line.
+  - Headroom: 9.50 GiB, against the 12 GiB line.
   - The oracle at N = 10, 2‰ (17,132 targets): GPU = oracle.
   - The sealed run passes B1.
 - **Sheet 1, on DEV-tune:**
@@ -103,6 +109,8 @@ native-space-cycle (read before the counter changes), working-discipline.
 - **The counter's waste.** It sorts and emits every gram and filters afterward. The N sweep recounted TRAIN for each N, about 2 h. The candidates are to filter by the query's contexts before the sort, to count each order once per sweep, and to build a suffix-array index of TRAIN once. Each should be profiled per phase first.
 - **A wider-key R\*** (the scaled fixed point, or a key past 10 tokens), reported beside the sealed one.
 - **The PPMd anchor** (DECISION §2) is its own unit.
+- **No test runs on every build covers the oracle's floor** (`KnOracle::mass`, `p.max(1)`). The oracle builds from tokens, not tables, so it cannot read the underflow fixture. An underflowing token stream for it is a small later test. The sealed number does not depend on it, since the sealed run compares GPU with host only.
+- **Where the records are.** `run1/sealed/logs/` is wick's whole log folder, so it repeats the sweep logs. Its `head.txt` names crash 1's code (`a15bb17b1`). The sealed run's code is `8ace4e23d`, named in `run1/sealed/fix2/head.txt` and in `run1/sealed/HEAD-OF-SEALED-RUN.txt`.
 
 ## Plain summary
 
