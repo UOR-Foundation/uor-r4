@@ -10,11 +10,15 @@ The former publishing workflow recreated a branch the owner asked to retire. Thr
 
 The owner designated main, gh-pages and archive. I applied that decision to the charter clause and recorded the change in the charter log. Main carries research, gh-pages carries the public book and Studio, and archive preserves original commits. Short-lived delivery branches follow the existing pull-request lifecycle.
 
-A push to main builds and checks the book with a read-only token. A manual dispatch from main selecting gh-pages passes the checked book to a separate publisher. Its push targets only gh-pages. The publisher verifies that the Studio tree is intact. Branch cleanup protects all three permanent names, and the Studio helper accepts only the live destination.
+A push to main builds and checks the book with a read-only token. A manual dispatch from main selecting gh-pages passes the checked book to a separate publisher. Its push targets only gh-pages. The publisher verifies that the Studio tree is intact. It transports the checked book as an archive to preserve hidden assets. After a successful Studio update, its printed rollback command pins the lease to the exact commit that the helper published. Branch cleanup protects all three permanent names, and the Studio helper accepts only the live destination.
+
+## Measurements
+
+All 213 files in the built book matched by SHA-256 before and after the workflow’s artifact handoff. Six Rust publishing regressions and eight pre-existing typed runtime checks passed. The full harness library suite passed 689 tests with one ignored.
 
 ## Checks run at the head
 
-The local workflow and Studio destination tests exercised a real bare Git remote, verified the live book updates, protected the Studio tree and refused conflicting book paths. The complete Python workflow/Studio regression set passed 13 checks. The pinned book build checked 106 pages with zero broken links. Rust formatting and shell syntax passed.
+The local workflow and Studio destination tests exercised a real bare Git remote, verified the live book updates, protected the Studio tree and refused conflicting book paths. The signed-off local exercises include a linked hidden file, colliding paths, the exact post-publication rollback lease and a concurrent writer. The pinned book build checked 107 pages with zero broken links. Rust formatting and shell syntax passed.
 
 ## Skills used
 
