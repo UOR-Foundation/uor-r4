@@ -325,11 +325,9 @@ fn read_checkpoint_file(path: &Path, root: Option<&Path>) -> Result<Vec<u8>> {
     }
     #[cfg(target_os = "linux")]
     {
-        const O_NONBLOCK: i32 = 0o4000;
-        const O_NOFOLLOW: i32 = 0o400000;
         let mut file = OpenOptions::new()
             .read(true)
-            .custom_flags(O_NONBLOCK | O_NOFOLLOW)
+            .custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW)
             .open(&canonical)
             .map_err(|error| format!("{}: {error}", canonical.display()))?;
         if !file

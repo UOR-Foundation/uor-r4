@@ -4,11 +4,13 @@ Lab: codex. [ORDER](ORDER.md). Maintainer follow-up to [PR #3889](https://github
 
 ## What did not work
 
-At `d824de345`, the batch success test expected a Linux descriptor operation on macOS, and both optional test hooks could truncate existing receipts. In this verification, the default Linux cross-build also failed to find Linux C headers for BLAKE3’s NEON implementation.
+At `d824de345`, the batch success test expected a Linux descriptor operation on macOS, and both optional test hooks could truncate existing receipts. The next review at `0f4c31185` found that two open flags in the Linux reader used fixed numeric values across architectures. In this verification, the default Linux cross-build also failed to find Linux C headers for BLAKE3’s NEON implementation.
 
 ## What changed
 
 Both platform tests use the same valid two-arm fixture. Linux tests the ordering and byte-identical repeat. Other targets require the documented Linux-containment refusal and verify that no report exists. The two optional receipt hooks call the same create-new writer. Its regression first retains a receipt, attempts to replace it with a shorter one and compares the saved bytes to the original.
+
+The manifest reader now passes `libc::O_NOFOLLOW` and `libc::O_NONBLOCK` to the operating system. The CPU crate declares `libc` for Linux targets using the existing workspace lock at 0.2.186. Its regular-file and opened-descriptor containment checks still follow the open.
 
 ## Measurements
 
@@ -19,6 +21,8 @@ On Apple silicon macOS all eight tests of the audit binary passed. A separate in
 - `cargo test --locked --offline -p uor-r4-cpu-train --bin cpu-carry-hold-audit` on macOS.
 - `cargo check --locked --offline --target aarch64-unknown-linux-gnu -p uor-r4-cpu-train --tests --features blake3/pure` checked the Linux test code with the portable hash backend.
 - `rustfmt --check --edition 2021` on the changed Rust file and `git diff --check` passed.
+
+The host and AArch64 checks above passed again after the flag correction. The locked libc source provides different definitions for AArch64 and MIPS64 as required by their respective Linux ABIs.
 
 ## Skills used
 

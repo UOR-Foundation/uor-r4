@@ -17,3 +17,7 @@ Test the successful batch on Linux and the explicit refusal with no output on ot
 ## Stop list
 
 Leave production checkpoint parsing, checkpoint data, the historical experiment, its evidence hashes and its resource ledger untouched.
+
+## Follow-up to review at `0f4c31185`
+
+The second review found target-specific Linux open flags encoded as numeric literals. Extend this repair to the reader’s `custom_flags` argument, the CPU crate’s Linux-only dependency declaration and the workspace lockfile. Use the locked `libc` constants, leave descriptor containment and regular-file checks in place, and check the host and Linux targets again.
