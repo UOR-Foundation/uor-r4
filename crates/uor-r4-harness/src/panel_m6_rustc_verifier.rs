@@ -90,32 +90,19 @@ fn env_without_git() -> Vec<(String, String)> {
 fn run_bounded(
     cmd: &mut Command,
     timeout: std::time::Duration,
+    capture: &Path,
 ) -> io::Result<std::process::Output> {
-    let serial = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let stem = format!("uor-verify-io-{}-{serial}", std::process::id());
-    let out_path = std::env::temp_dir().join(format!("{stem}.stdout"));
-    let err_path = std::env::temp_dir().join(format!("{stem}.stderr"));
-
-    struct FileGuard(PathBuf);
-    impl Drop for FileGuard {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_file(&self.0);
-        }
-    }
+    let out_path = capture.with_extension("stdout");
+    let err_path = capture.with_extension("stderr");
 
     let out_file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&out_path)?;
-    let _out_guard = FileGuard(out_path.clone());
     let err_file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&err_path)?;
-    let _err_guard = FileGuard(err_path.clone());
 
     cmd.stdin(Stdio::null()).stdout(out_file).stderr(err_file);
 
@@ -234,6 +221,7 @@ fn verify_source(rust_source: &str) -> io::Result<VerifyOutcome> {
             .env_clear()
             .envs(env.iter().map(|(k, v)| (k.as_str(), v.as_str()))),
         COMPILE_TIMEOUT,
+        &tmp.path().join("compile"),
     );
 
     match compile {
@@ -255,6 +243,7 @@ fn verify_source(rust_source: &str) -> io::Result<VerifyOutcome> {
             .env_clear()
             .envs(env.iter().map(|(k, v)| (k.as_str(), v.as_str()))),
         RUN_TIMEOUT,
+        &tmp.path().join("run"),
     );
 
     match run {
