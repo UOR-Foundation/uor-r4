@@ -58,6 +58,7 @@ def grade_case($grades;$dict;$classes):
   then error("arm endpoint/eligibility/abstention mismatch: "+$id) else . end |
   if any(selectors[]; . as $a | $rows[$a].masks!=$masks) then error("mask mismatch: "+$id+" computed "+($masks|tojson)) else . end |
   {id:$id,pair:$g.pair,role:$g.role,source:$g.asked_start,truth_length:($truth|length),registered:$registered,
+   triplet:($ids[:($gold.fact_end+1)]+$ids[$g.asked_start:]),
    coverage:$coverage,family:($g.factors.connector_set//"historical"),gold:$gold,masks:$masks,
    corresponding:($c|corresponding($gold)),candidates:$candidates,
    base_class:class_of($c.source;$ids;$classes),
@@ -93,9 +94,15 @@ def examples:
     first($cases[] | .arms.Current as $b | select((.arms[$a]|direction($b))==$m) |
       {arm:$a,move:$m,case:.id,expected:$b.expected,asked:.source,current_source:$b.selected,treatment_source:.arms[$a].selected,
        current:$b.generated,treatment:.arms[$a].generated})];
+def triplets:
+  group_by(.triplet) as $g |
+  if any($g[]; (map(.truth_length)|sort)!=[1,2,3]) then error("broken connector-only triplet") else
+    {triplets:($g|length),correct_at_all_three:(arms|map(. as $a|{key:$a,value:($g|count_if(all(.arms[$a].right_source)))})|from_entries)}
+  end;
 def summary:
   . as $c |
   {cases:length,arms:(arms | map(. as $a|{key:$a,value:($c|score_arm($a))})|from_entries),
+   triplets:(if $split=="primary" or $split=="fresh" then triplets else null end),
    comparisons:compare,joint_vs_word:pair("WordStart";"Both"),joint_vs_order:pair("Ordered";"Both"),
    length:by_length,coverage:(group_by(.coverage)|map({coverage:.[0].coverage}+stratum)),
    family_by_length:(group_by(.family,.truth_length)|map({family:.[0].family,length:.[0].truth_length}+stratum)),
