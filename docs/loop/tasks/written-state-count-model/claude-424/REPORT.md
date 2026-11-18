@@ -19,7 +19,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
   It uses integer keys, sorted vectors and binary search. It refuses the top order, a partition of the wrong order and keys that fall.
 - **`kn-reference --extension-census`.** The sink feeds each order to that order's census. The flag writes the census JSON and returns after the count, with no scoring. It refuses `--check-host` and `--sealed-run`. Without the flag the instrument does what it did before.
 - **Tests:**
-  - `kn_extension_census_counts_as_brute_force` checks the census against suffixes rebuilt from the oracle's tokens, at two seeds, N = 4. It also checks the three refusals.
+  - `kn_extension_census_counts_as_brute_force` checks the census against suffixes rebuilt from the oracle's tokens, on one TRAIN seed (0x424a) and one query seed (0x424b), N = 4. It also checks the three refusals.
   - `the_extension_census_scores_nothing` checks the instrument path.
 
 ## Measurements
@@ -65,7 +65,7 @@ All figures here are estimates from measured counts and claude-423's measured ph
   - the host `kn_` and `ngram_count` tests pass, 32 / 32;
   - the instrument's tests pass, 6 / 6.
 - **G2, negative gate:** with the suffix set to the triple's own key instead of `back_off(key)`, the brute-force test fails (0 against 2,863).
-- **G3, wick:** the census completed at the head. For every k in 0..9, its order-k total equals the order-k+1 `grams` of claude-423's `sweep-10.log` (10 / 10, [`head.txt`](run1/c424/head.txt)). Its per-order count records are identical to claude-423's in all 10 shared fields across all 11 orders. The query sha matches DEV-tune's.
+- **G3, wick:** the census completed at the head. For every k in 0..9, its order-k total equals the order-k+1 `grams` of claude-423's `sweep-10.log` (10 / 10, [`head.txt`](run1/c424/head.txt)). Its per-order count records are identical to claude-423's in all 10 shared fields across all 11 orders: `jq -S '.orders'` of `census-10.json` is `cmp`-identical to claude-423's `sweep-10.json` orders restricted to those fields. The query sha matches DEV-tune's.
 - **G4:** this REPORT.
 - **Not run:** the CUDA test suite on wick. The new code is host-only, and the census run exercised the GPU counter end to end.
 
@@ -81,4 +81,4 @@ working-discipline.
 
 ## Plain summary
 
-If the count kept only what DEV-tune's queries read, it would still have to build about one in seven of the lower-order grams. Most of those sit in the lowest orders, where nearly everything is needed. Filtering alone therefore removes most of the wasted high-order work but none of the integrity hashing, which still needs every gram. The next unit, claude-425, removes the repeated passes first.
+If the count kept only what DEV-tune's queries read, it would still have to build about one in seven of the grams below the top order. Most of those sit in the lowest orders, where nearly everything is needed. Filtering alone therefore removes most of the wasted high-order work but none of the integrity hashing, which still needs every gram. The next unit, claude-425, removes the repeated passes first.
