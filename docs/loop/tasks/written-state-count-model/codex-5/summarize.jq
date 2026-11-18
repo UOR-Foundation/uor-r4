@@ -10,7 +10,7 @@ def move: if .>0 then "later" elif .<0 then "earlier" else "tie" end;
 def error_label: if .first_wrong==null then "exact" else (.first_wrong|tostring) end;
 def correct_pair: group_by(.pair)|count_where(length==2 and all(.right_source));
 def stats:
-  {rows:length,source:count_where(.right_source),opening:count_where(.generated[0]==.expected[0]),
+  {rows:length,source:count_where(.right_source),abstained:count_where(.selected==null),distractor:count_where(.selected==.other_start),opening:count_where(.generated[0]==.expected[0]),
    value:count_where(.whole_value),exact:count_where(.first_wrong==null),first_wrong:dist(error_label),
    moves_vs_content:dist(.delta|move),
    wrong_expected:dist(.wrong_expected),wrong_emitted:dist(.wrong_emitted)};
@@ -38,6 +38,7 @@ def corresponding_anchor:
 def conditional_extraction:
   {rows:length,correct_query_and_fact_spans:count_where(.query_exact and .fact_exact),
    correct_source:count_where(.right_source),whole_value:count_where(.whole_value),
+   source_displacement:dist(if .selected==null then "abstain" else (.selected-.asked_start) end),
    reliable:(if length==0 then null else 4*count_where(.right_source)>=3*length end)};
 def tally_arms: group_by(.arm)|map({key:.[0].arm,value:stats})|from_entries;
 def stratify(f): group_by(f)|map({level:(.[0]|f),arms:tally_arms});
