@@ -66,6 +66,7 @@ pub struct DeviceScorer {
     shape: CudaSlice<i32>,
     plans: CudaSlice<i32>,
     trunk: CudaSlice<u32>,
+    has_pointer_trunk: bool,
     function: sys::CUfunction,
     module: Module,
     stream: Arc<CudaStream>,
@@ -109,6 +110,7 @@ impl DeviceScorer {
             shape: stream.clone_htod(&tables.shape).map_err(cuda)?,
             plans: stream.clone_htod(&tables.plans).map_err(cuda)?,
             trunk: stream.clone_htod(&tables.trunk).map_err(cuda)?,
+            has_pointer_trunk: tables.trunk.first() == Some(&1) && tables.shape[1] == 4,
             function,
             module,
             stream,
@@ -129,6 +131,9 @@ impl DeviceScorer {
         rows: &PackedRows,
         interventions: &[[i32; 2]],
     ) -> Result<(Vec<RowScore>, Vec<[i32; POINTER_TRACE_WORDS]>), String> {
+        if !self.has_pointer_trunk {
+            return Err("pointer diagnostics require the four-block 19-table trunk".into());
+        }
         if interventions.len() != rows.lengths.len()
             || interventions
                 .iter()

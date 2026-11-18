@@ -9,6 +9,20 @@ On Wick's RTX 4090, both unchanged M1 models emitted token 1155 (`ĠG`) at answe
 3. **Identity at the writer.** Preserving native selection and mixing, then setting the pre-writer token to the correct ID, makes all 16 opening tokens correct at each seed. Only 12/16 complete value spans survive this intervention. At offset 1 in all four `red kite` cases the writer receives 1999 (`Ġkite`), admits its cell 9 and ranks [878, 1999, …]. It emits 878 (`ak`). A post-hoc static inspection of both artifacts found that these two IDs have the same cell and byte-identical 128-byte token vectors (SHA-256 `f6c6124e9d2dc248ce741dc76ff2954bf872cad2ea49fbe3940069bea7e5e8b3`). The distance tie always goes to the lower ID. Across all 4,096 IDs per model, a census of the exact (token-vector bytes, cell) pairs gives 4,008 unique pairs, 87 collision classes and a maximum multiplicity of three. The fixed ranking therefore excludes at least 88 IDs from greedy emission at each seed. This is a vocabulary-type result. Token frequencies and resulting corpus error were not measured.
 4. **Stopping.** Forcing the entire correct span as emitted tokens and then releasing the model gives 12 replies with the right value followed by period/EOS and four with the right value followed by exclamation/EOS, at each seed. All 16 retain the forced value. All 16 miss the registered next token, immediate EOS. On these cases after the supplied value the remaining error is punctuation policy.
 
+### Which table selected `ĠG` on the first Ann question?
+
+Post-hoc static read of both released files for the first opening decision. The last token is ID 28 (`:`) and the read code is 9241 at both seeds. The recurrence code is 29312 at seed 1 and 64691 at seed 2. The entries below are raw counts from the named `discrete.trunk.*_table` sections. Each section holds little-endian `(key, token ID, count)` triples, with an absent pair scoring zero. Compound keys concatenate two 16-bit words, high component first. [Serving score definition](../../../../../crates/uor-r4-integer/src/discrete_d11.rs#L532-L557)
+
+| Table | Key at seed 1 / seed 2 | Weight | Count for 1155 at seed 1 / seed 2 | Count for 677 at seed 1 / seed 2 |
+|---|---|---:|---:|---:|
+| query_read | 1844249 / 1844249 | 64 | 633 / 633 | 9 / 9 |
+| query_rec | 1864320 / 1899699 | 32 | 126 / 12 | 0 / 0 |
+| read_rec | 605647488 / 605682867 | 8 | 8 / 1 | 0 / 0 |
+| read | 9241 / 9241 | 2 | 633 / 633 | 9 / 9 |
+| query | 28 / 28 | 1 | 13952 / 13952 | 88 / 88 |
+
+The native successor is 2241, so neither candidate receives the pointer bonus. Seed 1's 1155 score is 40,512 + 4,032 + 64 + 1,266 + 13,952 = **59,826**. Seed 2 gives 40,512 + 384 + 8 + 1,266 + 13,952 = **56,122**. For 677 both seeds give 576 + 0 + 0 + 18 + 88 = **682**. Changing the pointer to the asked source gives **938**. All four native totals and both interventions match the independent CUDA trace. The largest contribution to the shared wrong opening is the (last token, read code) table, followed by the last-token table. This identifies the votes that selected `ĠG` on this prompt. Their training counts alone do not identify which training texts produced them.
+
 ## Arm outcomes
 
 The numbers below are counts out of 16. “Opening” and “value” refer to fed output IDs, including deliberate controls. Finished means the model eventually emitted EOS within the 16-token cap. Slash entries give seed 1 / seed 2. Roles with `red fox` and `red kite` intentionally share an opening ID; first-token agreement alone cannot establish correct role selection.
@@ -29,6 +43,10 @@ The numbers below are counts out of 16. “Opening” and “value” refer to f
 The Pick intervention substitutes the selected successor identity in the native mixer. The upstream Relation read still computes its original vector. The direct writer arms preserve the natural pointer and the mixed choice and change only which token is passed into the geometric writer. Every rollout follows its own fed prefix. The forced-token receipts distinguish what the model predicted from what the experiment supplied. After the controlled span, the pointer, writer and emission all resume ordinary operation.
 
 ## Checks and evidence
+
+On the eight opposite-role pairs, changing the requested role changed the opening read code on 8/8 pairs at each seed and the recurrence code on 8/8 and 6/8. All eight pairs at each seed nevertheless kept the same natural source offset and mixed opening ID in the pair. Some information about the changed question reaches the read, then disappears from the winning decision. A standalone host regression run of the scorer passed 26 tests with one ignored.
+
+After review, the public GPU diagnostic refuses any artifact without the four-block 19-table pointer trunk before launch. A targeted four-table CUDA fixture verified the refusal (1/1). At 16:01:51–16:01:53 UTC a clean process per seed using the guarded executable (SHA-256 `ef18f073e759fe8b4bfd383c9cb0d6ce2efdb9cda90d573a71389c5e11d7ed30`) reproduced both original JSON files byte for byte.
 
 Two independent selector calculations (CUDA root L1/2 and host sign-code XOR/popcount, plus the native orbit selection) agreed on 1,167/1,108 steps. The ordinary Rust serving path reproduced all native-mode read vectors, candidates, IDs and loss words on 713/674 steps, including steps after interventions expired. On unchanged native prefixes the original untraced CUDA path with changed target labels reproduced all decisions on 179/166 steps. Reloading seed 1 in a fresh process reproduced its entire original JSON byte for byte. A fixture changed by one whitespace byte was refused with exit 1 before scoring and produced no receipt.
 
