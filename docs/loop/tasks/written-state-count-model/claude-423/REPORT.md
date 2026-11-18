@@ -4,22 +4,16 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 
 ## What did not work, first
 
-- **The GPU is not where the time goes** [claude]. Before this unit, "counting TRAIN is 90%" was read as GPU counting. It is not. Of the 1,817 s the eleven orders take at N = 10 on DEV-tune:
-  - host work on every gram takes **1,186 s (65%)**: building records, extension runs, the adjust, the assembler's hash and the filter's scan;
-  - device-to-host copies take 91 s (5%);
-  - all GPU kernels together take **490 s (27%)**.
-- **One GPU phase is mostly waste** [claude]. `select` makes a full pass over all 2.09 B TRAIN tokens for every partition, 256 passes per order. It takes about 24 s per order whatever the order, 261 s in all, which is more than the whole radix sort (198 s).
-- **Order k+1 is counted twice, as suspected** [claude]. At every order k < N, the adjusted counter counts order k+1 over order k's ranges to get its extension runs, and then counts it again as its own order. That is 375 s of the counting (21%).
-- **No fix is built here**, as the ORDER says. The savings below are bounds from measured times, not results.
+- **Host work dominated the recorded order intervals** [claude run, codex readback]. Five host operations total **1,186.821 s (65.3%)** of **1,816.625 s**. Four intervals around CUDA-driving routines total **490.724 s (27.0%)**, including host allocations and launches, scalar reads during scans and waits for the stream. Device-to-host copies took 90.640 s. The remaining 48.440 s is unattributed inside the order timers. No device-event or kernel-only time was measured.
+- **Selection repeatedly scans TRAIN.** Orders 0–9 each made 256 partition counts and spent 23.458–26.881 s in selection. Order 10 made 128 counts and spent 13.761 s. Selection took 260.940 s across orders, compared with 198.145 s around radix sort.
+- **Extension counting repeats work.** At orders below N, counting order k+1 for extension runs took 374.996 s. Those outer intervals overlap the inner count phases.
+- **Run provenance [codex].** The ORDER's procedure specified an N = 10 slice and G3 specified a full pass. The packet shows full DEV-tune. The prior [non-author FIT](../../../../harness/prep/r-star-sealed-2026-11-17.md) and the [second FIT](../../../../harness/prep/r-star-sealed-2-2026-11-17.md) cover claude-422. No contemporaneous FIT covering this additional `c423-profile` scoring pass was located in the reviewed records. Its Charter §4.5 provenance remains unverified.
 
 ## What changed
 
-- `ngram_count_device.rs` [claude]:
-  - `CountPhases` and `NgramCounter::take_phases`: integer nanosecond totals in atomics, reset when read;
-  - each GPU phase ends with a stream synchronize, so its time is its own;
-  - the adjusted counter times its own count, its order-k+1 extension count, the runs and the adjust apart.
-- `kn-reference` [claude]: one `phases ms` line per order on stderr, with the sink's `push` (assembler) and `keep` (filter) timed apart. The JSON is unchanged.
-- `ngram_count_cuda.rs` [claude]: `ngram_count_cuda_phase_totals_are_recorded_and_reset`.
+The original run [claude] recorded phase totals in integer nanoseconds and printed milliseconds per order to stderr. The implementation at `61d011ee5` inserted extra stream synchronizations after select, sort and emit for every ordinary nonempty partition count. The sink timed the assembler's `push` and the query filter's `keep` separately.
+
+The review repair [codex] leaves profiling disabled on ordinary `NgramCounter::new` calls. `enable_phase_timing()` enables the timers and extra fences, and the reference instrument enables them only when invoked with `--profile-phases`. The CUDA regression compares ordinary and profiled order digests and checks that only the profiled counter accumulates timings. The archived run predates this repair.
 
 ## Measurements
 
@@ -34,46 +28,40 @@ The run is wick's 4090 at `61d011ee5`, budget 2^24, all of TRAIN against all of 
 
 The phase totals for N = 10, summed over orders 0–10:
 
-| Phase | Where | Seconds | Share of 1,817 s |
-|---|---|---|---|
-| filter `keep` | host | 379 | 21% |
-| `select` (a whole-stream pass per partition) | GPU | 261 | 14% |
-| extension runs | host | 261 | 14% |
-| assembler `push` (the whole-order SHA-256) | host | 241 | 13% |
-| radix sort | GPU | 198 | 11% |
-| record building | host | 185 | 10% |
-| adjust | host | 120 | 7% |
-| device-to-host copies | transfer | 91 | 5% |
-| boundaries, emit, scans | GPU | 31 | 2% |
-| histograms | GPU | 0.5 | 0% |
-| other: filter set-up, `finish` | host | about 50 | 3% |
+| Phase | Measurement boundary | Seconds |
+|---|---|---:|
+| Query filter `keep` | Host | 378.940 |
+| Selection | CUDA-driving routine | 260.940 |
+| Extension runs | Host | 261.207 |
+| Assembler `push` | Host validation, census, totals and hashing | 241.203 |
+| Radix sort | CUDA-driving routine | 198.145 |
+| Record building | Host | 185.150 |
+| Adjust | Host | 120.321 |
+| Device-to-host copies | Copy calls | 90.640 |
+| Boundaries, emit, scans | CUDA-driving routine | 31.178 |
+| Histogram | CUDA-driving routine | 0.461 |
+| Unattributed inside the order timer | Remainder after summing logged milliseconds | 48.440 |
 
-The split of the count phases:
-- order k's own count: 395 s;
-- the order-k+1 extension count: 375 s.
-
-Per order:
-- the sort grows with the order, from 3.4 s at order 0 to 34 s at order 9;
-- `select` stays at about 24 s;
-- the host phases (records, runs, adjust, push and keep) grow with the grams, from 1.6 s at order 1 to 229 s at order 9.
+The order timer begins after `wanted.filter(k)` and stops before either `finish()` call. The enclosing own-count and extension-count intervals measured 395.469 s and 374.996 s respectively. Adding those times to the table would double-count work. The sort interval rose from 3.386 s at order 0 to 34.064 s at order 9. The five host operations grew from 1.633 s at order 1 to 228.912 s at order 9.
 
 ## What the numbers say
 
-Each candidate fix, with the most it can save (bounded by the times above):
-1. **Filter on the GPU, before the copy.** Keep only the grams whose context the query reads, and the order-k+1 grams whose suffix is one of them. That leaves about 0.27% of the grams for the host. It removes most of the copies, record building, runs, adjust and keep: **up to about 1,036 s (57%)**. The whole-order digest (`push`, 241 s) still needs every gram, unless it moves to the GPU (**up to 1,277 s, 70%**) or runs as a separate audit pass.
-2. **One bucketing pass per order instead of a stream pass per partition.** Bucket targets by their partition token once. That cuts `select` from 261 s to about two passes per order: **up to about 250 s (14%)**.
-3. **Count each order once.** Orders k and k+1 split on the same partition token (`partition_offset` = 1), so one count of order k+1 per range can serve both steps. That removes the 375 s extension count, part of which item 1 already removes.
-4. **The N sweep.** An order-k adjusted table is the same for every N > k. This is checked here: orders 0–3 of the N = 4 and N = 10 runs have identical triple and context digests, counts of counts and discounts. Order 4 differs, because at N = 4 it is the top order and keeps raw counts. So one N = 10 run already holds every lower N's tables except the top order's raw counts. The 2 h sweep could be one run plus ten top-order raw counts.
+1. **Filtering before copies.** The DEV-tune query retained 1,842,098 of 1,286,910,428 order-10 triples (0.143%). The earlier sealed DEV-test query retained about 0.27%. Both figures describe final triples. The number of extension records needed to produce them is unknown. The five intervals for copies, record building, extension runs, adjust and keep total 1,036.258 s. Some of that work must still run to produce and validate the required output. The 241.203 s in `NgramAssembler::push` includes canonical ordering, partition-seam validation, census reconstruction, count-of-counts verification, totals and SHA-256. A proposed filter must preserve the full-order counts for discounts and both canonical digests. The profile does not isolate a saving for moving SHA-256 or establish that the combined 1,277.461 s can be removed.
+2. **Bucket once per order.** Selection occupied 260.940 s in this implementation. Replacing repeated whole-stream selection could reduce that interval. The replacement's allocation, bucketing and transfer costs need measurement.
+3. **Reuse counted orders.** Own-order and extension-order ranges share a partition token. Reuse may reduce the 374.996 s spent in extension counting. Its savings overlap the first proposal, and storing or re-partitioning reusable records also costs time.
+4. **Reuse lower orders across the N sweep.** Orders 0–3 in the N = 4 and N = 10 logs have identical counts, discounts and digests. Order 4 has raw counts when it is the top order. A shared sweep would still need each top order's raw counts and verification.
 
-With items 1–3, counting is bounded below by the sort and emit: about 230 s, and about half that once each order is counted once. That holds **only if the whole-order SHA-256 also leaves the host**. With it still there, the bound is about 230 + 241 s, roughly 8 minutes. So the 30-minute count could plausibly become **3–5 minutes**, or about 8 with the host digest kept. These are estimates from the profile, not measurements.
+The original **3–5 minute** count is an optimization hypothesis. The profile supplies neither an end-to-end bound nor a separate eight-minute estimate with the host digest retained. Extension volume, validation, data movement and the replacement implementation remain unmeasured.
 
 ## Checks run at the head
 
 - **G1, laptop, at `61d011ee5`:** the stub-nvcc `cargo check -p uor-r4-discrete --features cuda --lib --tests` and the instrument's `cargo check --features cuda` are clean. The host `kn_` and `ngram_count` tests pass, 31 / 31.
-- **G2, wick:** the CUDA tests `ngram_count_cuda kn_score_cuda kn_filter` pass, 14 / 14, including the new phase-totals test.
-- **G3, wick:** the N = 10 JSON is `cmp`-identical to claude-422's `sweep-10.json` but for `masses_at_floor`. The timers and synchronizes change no output.
+- **G2, wick, at the original run head:** the CUDA tests `ngram_count_cuda kn_score_cuda kn_filter` pass, 14 / 14, including the new phase-totals test.
+- **G3, wick:** the N = 10 JSON is `cmp`-identical to claude-422's `sweep-10.json` but for `masses_at_floor`. All pre-existing JSON fields agree for that historical run, and `masses_at_floor` is zero.
 - **G4:** this REPORT.
 - **Not run:** a negative of the new test. It asserts `extension_count_ns > 0` directly, so dropping that tick would fail it by construction. It was not run on wick.
+
+**Post-review host checks [codex].** The repaired source passed ten `kn_` library tests, 21 `ngram_count` library tests and five standalone instrument tests, including the default-off/explicit-profile CLI case. With a local stub nvcc and `UOR_NVCC_ARCH=compute_89`, `cargo check --locked -p uor-r4-discrete --features cuda --lib --tests` and the instrument’s `cargo check --locked --features cuda` passed. These checks type-checked the paired CUDA regression. They did not compile a real CUDA image or run it. The native-space contract check passed. The stored N = 10 JSON agrees with every prior field after removing the added zero floor count, and the N = 4 and N = 10 records agree for orders 0–3. The original run packet is unchanged.
 
 ## Skills used
 
@@ -81,9 +69,9 @@ working-discipline.
 
 ## Still open
 
-- Build fix 1 (filter before the copy, with the digest moved to the GPU), then fix 2. Each needs a `cmp` check of its JSON against `sweep-10.json`.
-- Fix 3 and the shared N sweep come after.
+- A filtered implementation must reproduce whole-order totals, counts of counts, discounts, digests and query scores. Measure the required extension records and end-to-end cost before comparing it with bucketing or count reuse.
+- The new opt-in and paired CUDA digest regression have no post-repair hardware run in this record. The full historical profile's FIT provenance remains open.
 
 ## Plain summary
 
-We timed every step of the counter that builds R\*. Most of its half hour is not GPU math. It is single-threaded CPU code touching each of more than a billion grams, of which the query keeps a quarter of one percent. Moving that filter onto the GPU, and scanning TRAIN once per order instead of 256 times, could bring the count from about 30 minutes to about 3–5 minutes. Nothing was changed in what is counted.
+Five host operations took about two thirds of the order timers. Moving the query filter may reduce that cost if the full counts and integrity checks survive. The profile gives engineers a place to start. A faster count and a trained written-state model remain separate, unmeasured outcomes.

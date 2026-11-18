@@ -20,8 +20,9 @@ use std::sync::Arc;
 use std::time::Instant;
 
 /// Integer nanosecond totals of the counter's phases since the last
-/// [`NgramCounter::take_phases`] (claude-423). Each GPU phase ends with a
-/// stream synchronize, so its time is its own. `own_count_ns` and
+/// [`NgramCounter::take_phases`] when profiling is enabled. These are wall
+/// times around driver routines, including host work and device waits.
+/// `own_count_ns` and
 /// `extension_count_ns` split [`NgramCounter::count_partition`]'s wall time
 /// in the adjusted counter between order k itself and the order k+1 it
 /// counts for its extension runs; the six inner phases cover both.
@@ -122,7 +123,7 @@ pub struct NgramCounter {
     functions: Vec<CudaFunction>,
     tokens: CudaSlice<u16>,
     n: u32,
-    clock: [AtomicU64; PHASES],
+    clock: Option<[AtomicU64; PHASES]>,
 }
 
 impl NgramCounter {
@@ -153,21 +154,41 @@ impl NgramCounter {
             functions,
             tokens: device_tokens,
             n,
-            clock: std::array::from_fn(|_| AtomicU64::new(0)),
+            clock: None,
         })
     }
 
-    fn tick(&self, phase: usize, since: Instant) {
-        self.clock[phase].fetch_add(nanos(since), Ordering::Relaxed);
+    /// Enable wall-clock phase accounting and its three extra stream fences per
+    /// nonempty partition. Ordinary counters keep their original scheduling.
+    pub fn enable_phase_timing(&mut self) {
+        self.clock
+            .get_or_insert_with(|| std::array::from_fn(|_| AtomicU64::new(0)));
     }
 
-    fn sync(&self) -> Result<()> {
-        self.stream.synchronize().map_err(cuda)
+    fn start_phase(&self) -> Option<Instant> {
+        self.clock.as_ref().map(|_| Instant::now())
     }
 
-    /// The phase totals since the last call, which resets them (claude-423).
+    fn tick(&self, phase: usize, since: Option<Instant>) {
+        if let (Some(clock), Some(started)) = (&self.clock, since) {
+            clock[phase].fetch_add(nanos(started), Ordering::Relaxed);
+        }
+    }
+
+    fn finish_device_phase(&self, phase: usize, since: Option<Instant>) -> Result<()> {
+        if since.is_some() {
+            self.stream.synchronize().map_err(cuda)?;
+            self.tick(phase, since);
+        }
+        Ok(())
+    }
+
+    /// Read and reset the totals. A counter without phase timing returns zeroes.
     pub fn take_phases(&self) -> CountPhases {
-        let take = |phase: usize| self.clock[phase].swap(0, Ordering::Relaxed);
+        let Some(clock) = &self.clock else {
+            return CountPhases::default();
+        };
+        let take = |phase: usize| clock[phase].swap(0, Ordering::Relaxed);
         CountPhases {
             histogram_ns: take(HISTOGRAM),
             select_ns: take(SELECT),
@@ -232,7 +253,7 @@ impl NgramCounter {
 
     /// [`Self::partition_histogram`], timed as the histogram phase.
     fn timed_histogram(&self, order: u32) -> Result<Vec<u64>> {
-        let started = Instant::now();
+        let started = self.start_phase();
         let histogram = self.partition_histogram(order)?;
         self.tick(HISTOGRAM, started);
         Ok(histogram)
@@ -354,16 +375,16 @@ impl NgramCounter {
         if n == 0 {
             return Ok(NgramPartition::default());
         }
-        self.clock[PARTITIONS].fetch_add(1, Ordering::Relaxed);
-        let started = Instant::now();
+        if let Some(clock) = &self.clock {
+            clock[PARTITIONS].fetch_add(1, Ordering::Relaxed);
+        }
+        let started = self.start_phase();
         let selected = self.select(order, range)?;
-        self.sync()?;
-        self.tick(SELECT, started);
-        let started = Instant::now();
+        self.finish_device_phase(SELECT, started)?;
+        let started = self.start_phase();
         let sorted = self.sort(order, selected, n)?;
-        self.sync()?;
-        self.tick(SORT, started);
-        let started = Instant::now();
+        self.finish_device_phase(SORT, started)?;
+        let started = self.start_phase();
         let mut gram_flag = self.zeros::<u32>(n as usize + 1)?;
         let mut context_flag = self.zeros::<u32>(n as usize)?;
         let mut launch = self.stream.launch_builder(self.function("ngram_boundaries"));
@@ -408,15 +429,14 @@ impl NgramCounter {
         launch.arg(&context_start).arg(&gram_start).arg(&ind12).arg(&contexts).arg(&mut records);
         // SAFETY: one thread per context; records hold 4 x contexts words.
         unsafe { launch.launch(grid(contexts)) }.map_err(cuda)?;
-        self.sync()?;
-        self.tick(EMIT, started);
-        let started = Instant::now();
+        self.finish_device_phase(EMIT, started)?;
+        let started = self.start_phase();
         let keys = self.stream.clone_dtoh(&keys).map_err(cuda)?;
         let next = self.stream.clone_dtoh(&next).map_err(cuda)?;
         let counts = self.stream.clone_dtoh(&counts).map_err(cuda)?;
         let records = self.stream.clone_dtoh(&records).map_err(cuda)?;
         self.tick(DOWNLOAD, started);
-        let started = Instant::now();
+        let started = self.start_phase();
         let mut partition = NgramPartition {
             count_of_counts: [t12 & 0xffff_ffff, t12 >> 32, t34 & 0xffff_ffff, t34 >> 32],
             ..NgramPartition::default()
@@ -507,7 +527,7 @@ impl NgramCounter {
         }
         if order == 0 {
             let mut raw = NgramAssembler::new(0, true)?;
-            let started = Instant::now();
+            let started = self.start_phase();
             let unigram_plan = self.count_order(0, budget, &mut raw)?;
             self.tick(OWN_COUNT, started);
             let (_, unigrams, _) = raw.finish();
@@ -515,7 +535,7 @@ impl NgramCounter {
             let plan = if highest >= 1 {
                 let plan = self.plan(1, budget)?;
                 for range in &plan {
-                    let started = Instant::now();
+                    let started = self.start_phase();
                     let extended = self.count_partition(1, range)?;
                     self.tick(EXTENSION_COUNT, started);
                     continuation.add(&extended)?;
@@ -541,22 +561,22 @@ impl NgramCounter {
                     Some(histogram) => {
                         let targets = histogram[range.lo as usize..range.hi as usize].iter().sum();
                         let same_tokens = PartitionRange { lo: range.lo, hi: range.hi, targets };
-                        let started = Instant::now();
+                        let started = self.start_phase();
                         let extended = self.count_partition(order + 1, &same_tokens)?;
                         self.tick(EXTENSION_COUNT, started);
                         Some(extended)
                     }
                     None => None,
                 };
-                let started = Instant::now();
+                let started = self.start_phase();
                 let runs = extension_runs(order, highest, range.lo, range.hi, extended.as_ref())?;
                 self.tick(RUNS, started);
                 runs
             };
-            let started = Instant::now();
+            let started = self.start_phase();
             let counted = self.count_partition(order, range)?;
             self.tick(OWN_COUNT, started);
-            let started = Instant::now();
+            let started = self.start_phase();
             let adjusted =
                 adjust_partition_from_runs(order, highest, range.lo, range.hi, &counted, &runs)?;
             self.tick(ADJUST, started);

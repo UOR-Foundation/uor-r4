@@ -7,7 +7,7 @@ Unit: claude-423, the counter's phase profile. It follows claude-422, which seal
 
 R\*'s sealed run took 2,045 s. 90% of that was counting TRAIN on the GPU, and scoring took about
 2 s. Wall time per order is all that exists. Three things are suspected and none is measured:
-- Order 10 emits 1.29 B grams and the filter keeps 0.27%.
+- In the earlier sealed DEV-test run, order 10 emitted 1.29 B grams and that query retained 0.27%. The profile below uses DEV-tune.
 - `count_order_adjusted_with` counts order k+1 again, over order k's ranges, to get its
   extension runs. So most orders are counted twice.
 - The host sink hashes every gram.
@@ -19,7 +19,7 @@ measured.
 
 1. **Phase timers in `NgramCounter`.** These are integer nanosecond totals in atomics, read with
    `take_phases`:
-   - histogram and plan;
+   - the histogram used to plan partitions;
    - select;
    - radix sort;
    - boundaries, emit and scans;
@@ -27,12 +27,12 @@ measured.
    - host record building.
 
    The adjusted counter also times its own count and its order-k+1 extension count apart, and
-   the runs and adjust steps. A stream synchronize closes each GPU phase so that its time is its
-   own. Outputs are unchanged.
+   the runs and adjust steps. With profiling enabled, additional stream fences close the select, sort and emit intervals. Their elapsed wall times include the host driver work and waits.
 2. **`kn-reference` prints one phase line per order** to stderr, with the sink (assembler push
-   and filter keep) timed apart. The JSON is unchanged, so a run's JSON stays `cmp`-stable.
-3. **Profile on wick.** DEV-tune at N = 4 in full, then N = 10 on a slice. This is an
-   engineering timing on DEV-tune only. DEV-test is not read.
+   and filter keep) timed apart. The timing lines go to stderr. G3 compares the existing JSON fields and accounts for the added floor count.
+3. **Profile on wick.** As originally written, this procedure called for full DEV-tune at N = 4 and a slice at N = 10, while G3 below called for full DEV-tune at N = 10. The run packet records both orders at full size (`per_mille: 1000`) and 10,807,417 targets scored at N = 10. No DEV-test run is in this packet.
+
+**Retrospective clarification [codex].** The contradiction above existed at dispatch. The [claude-422 FIT](../../../../harness/prep/r-star-sealed-2026-11-17.md) and its [second sheet](../../../../harness/prep/r-star-sealed-2-2026-11-17.md) name the earlier sealed-reference unit. No contemporaneous non-author FIT covering the additional full `c423-profile` GPU scoring run was located in this unit, the linked sheet or the PR record. Charter §4.5 provenance for that pass remains unverified. The archived results describe the historical diagnostic and leave P1 and the sealed reference bars unchanged. After review, the counter and instrument require explicit phase-timing opt-in. The original command used the earlier implementation with unconditional timers.
 
 ## Gates
 

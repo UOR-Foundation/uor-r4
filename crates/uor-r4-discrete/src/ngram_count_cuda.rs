@@ -271,9 +271,13 @@ fn ngram_count_cuda_real_stream_adjusted_matches_the_oracle() {
 #[test]
 fn ngram_count_cuda_phase_totals_are_recorded_and_reset() {
     let tokens = stream(1_000_000, 0x423_1, 29);
-    let counter = NgramCounter::new(0, &tokens).expect("counter");
-    assert_eq!(counter.take_phases(), CountPhases::default(), "a new counter has timed nothing");
-    let (_, _, _, planned) = gpu_adjusted(&counter, 1, 3, 9_000);
+    let mut counter = NgramCounter::new(0, &tokens).expect("counter");
+    let (ordinary, ..) = gpu_adjusted(&counter, 1, 3, 9_000);
+    assert_eq!(counter.take_phases(), CountPhases::default(), "default counting has no timing");
+    counter.enable_phase_timing();
+    assert_eq!(counter.take_phases(), CountPhases::default(), "enabling starts at zero");
+    let (profiled, _, _, planned) = gpu_adjusted(&counter, 1, 3, 9_000);
+    assert_eq!(ordinary, profiled, "profiling preserves the order digest");
     let phases = counter.take_phases();
     assert!(planned > 1, "budget 9,000 gave one partition");
     assert!(phases.partitions >= planned as u64, "{phases:?}");
