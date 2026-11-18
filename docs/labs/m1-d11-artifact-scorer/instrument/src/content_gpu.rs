@@ -110,7 +110,8 @@ impl Gpu {
         m: &Prototypes,
         ablated: bool,
     ) -> Result<Vec<Choice>, Fail> {
-        Ok(self.rank(data, roots, m, ablated, None)?.0)
+        let (choices, _) = self.rank(data, roots, m, ablated, None)?;
+        Ok(choices)
     }
     #[cfg(feature = "entity-pair-chain")]
     pub fn traced(
