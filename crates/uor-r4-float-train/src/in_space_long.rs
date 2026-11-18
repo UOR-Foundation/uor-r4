@@ -2013,11 +2013,27 @@ fn voronoi_loss(
 /// [`PointObjective::Nearest`] (each of the `rival` scores' hinges, averaged) or
 /// [`PointObjective::Cell`] (only the hinge of the best-scoring rival), against `target`.
 fn rival_hinge(rival: &Tensor, target: &Tensor, cell: bool) -> Result<Tensor> {
+    // The margin must be in the score's units: the score is `-mean|q - v|` over `width` lanes, so a
+    // margin of 1.0 asks for a separation 512 times the per-lane gradient and can never saturate.
+    // `--token-margin` sets it to a reachable fraction of the score (codex-50).
+    let margin = TOKEN_MARGIN.with(|cell| cell.get());
     if cell {
-        Ok(hinge(&rival.max_keepdim(1)?, target, 1.0)?.mean_all()?)
+        Ok(hinge(&rival.max_keepdim(1)?, target, margin)?.mean_all()?)
     } else {
-        Ok(hinge(rival, target, 1.0)?.mean_all()?)
+        Ok(hinge(rival, target, margin)?.mean_all()?)
     }
+}
+
+thread_local! {
+    /// The token hinge's margin (`--token-margin`, default 1.0). The score is a mean over the
+    /// carrier's width, so its achievable separation is small; a margin above it leaves the hinge
+    /// permanently violated and its gradient a constant push.
+    static TOKEN_MARGIN: std::cell::Cell<f64> = const { std::cell::Cell::new(1.0) };
+}
+
+/// Set the token hinge's margin for this process.
+pub fn set_token_margin(margin: f64) {
+    TOKEN_MARGIN.with(|cell| cell.set(margin));
 }
 
 /// [`PointObjective::Nearest`] or [`PointObjective::Cell`]: the target against the whole table's

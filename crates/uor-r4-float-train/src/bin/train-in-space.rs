@@ -1037,6 +1037,17 @@ fn main() -> Result<()> {
                 })
             }
             "--width" => config.width = number(&value)?,
+            "--token-margin" => {
+                let margin: f64 = value
+                    .parse()
+                    .map_err(|e: std::num::ParseFloatError| FloatTrainError::Invalid(e.to_string()))?;
+                if !(margin.is_finite() && margin > 0.0) {
+                    return Err(FloatTrainError::Invalid(
+                        "--token-margin must be a positive finite number".to_owned(),
+                    ));
+                }
+                uor_r4_float_train::in_space_long::set_token_margin(margin);
+            }
             "--dev" => {
                 uor_r4_float_train::in_space_long::set_dev_override(Some(PathBuf::from(&value)));
             }
