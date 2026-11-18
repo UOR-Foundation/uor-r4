@@ -81,4 +81,4 @@ working-discipline.
 
 ## Plain summary
 
-If the count kept only what DEV-tune's queries read, it would still have to build about one in seven of the grams below the top order. Most of those sit in the lowest orders, where nearly everything is needed. Filtering alone therefore removes most of the wasted high-order work but none of the integrity hashing, which still needs every gram. The next unit, claude-425, removes the repeated passes first.
+If the count kept only what DEV-tune's queries read, it would still have to build about one in seven of the grams above order 0 (906,297,478 of 6,731,115,027). These are the grams that feed the lower orders' continuation counts. About half of them (48.3%) are order-1 to order-4 grams backing off to orders 0–3, where 51–100% of grams are needed. From order 6 up, under 8% are needed. Filtering alone therefore removes most of the wasted high-order work but none of the integrity hashing, which still needs every gram. The next unit, claude-425, removes the repeated passes first.
