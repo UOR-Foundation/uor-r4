@@ -1,7 +1,7 @@
 # ORDER: written-state-count-model, codex-1
 
 Lab: codex
-Item: written-state-count-model
+Item: [written-state-count-model](../../../../roadmap/items/written-state-count-model.md) (#4063)
 References #4063, #4064 and #3407.
 
 Casey requested two parallel teams on November 18. Run a role-swap diagnosis on Wick, trace the discrete source through emission, and advance the equal-byte count comparison.
