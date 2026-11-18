@@ -191,23 +191,26 @@ struct StreamHasher {
 }
 
 impl StreamHasher {
-    fn new(domain: &[u8], order: u32, chunk: usize) -> Self {
+    fn new(domain: &[u8], order: u32, chunk: usize) -> Result<Self> {
         let mut hash = Sha256::new();
         hash.update(domain);
         hash.update([order as u8]);
         let (sender, receiver) = sync_channel::<Vec<u8>>(HASH_CHANNEL_DEPTH);
-        let thread = std::thread::spawn(move || {
-            for bytes in receiver {
-                hash.update(&bytes);
-            }
-            hash
-        });
-        Self {
+        let thread = std::thread::Builder::new()
+            .name(format!("ngram-hash-{order}"))
+            .spawn(move || {
+                for bytes in receiver {
+                    hash.update(&bytes);
+                }
+                hash
+            })
+            .map_err(|error| invalid(format!("an n-gram hasher thread did not start: {error}")))?;
+        Ok(Self {
             chunk: chunk.max(1),
             buffer: Vec::with_capacity(chunk.max(1)),
             sender: Some(sender),
             thread: Some(thread),
-        }
+        })
     }
 
     fn update(&mut self, bytes: &[u8]) {
@@ -305,8 +308,8 @@ impl NgramAssembler {
         Ok(Self {
             order,
             keep,
-            triple_hash: StreamHasher::new(triples, order, chunk),
-            context_hash: StreamHasher::new(contexts, order, chunk),
+            triple_hash: StreamHasher::new(triples, order, chunk)?,
+            context_hash: StreamHasher::new(contexts, order, chunk)?,
             last_triple: None,
             pending_context: None,
             targets: 0,

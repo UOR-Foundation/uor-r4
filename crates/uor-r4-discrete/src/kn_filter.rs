@@ -400,9 +400,6 @@ mod tests {
         assert_ne!(by_order[2], by_order[0], "orders above 0 change the masses");
     }
 
-    /// The census, against a count rebuilt from tokens: each order-k+1
-    /// triple's suffix context is its context with the oldest token dropped,
-    /// and order k's query keys are listed again from the query stream.
     /// claude-426: the cursor filter keeps exactly the records a binary search
     /// into the query lists keeps. The query adds keys absent from TRAIN (ids
     /// 1..4 and 4095 never occur there), keys after the last record, and, when
@@ -472,6 +469,9 @@ mod tests {
         }
     }
 
+    /// The census, against a count rebuilt from tokens: each order-k+1
+    /// triple's suffix context is its context with the oldest token dropped,
+    /// and order k's query keys are listed again from the query stream.
     #[test]
     fn kn_extension_census_counts_as_brute_force() {
         let train = kn_filter_stream(0x424a, 6_000);
