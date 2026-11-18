@@ -53,6 +53,18 @@ impl WriterSpec {
     }
 }
 
+thread_local! {
+    /// Score the writer's cells by the whole carrier against their centroids (`--writer-address
+    /// centroids`, codex-52) instead of two 8D ports against the 16 orbit roots. Off by default, so
+    /// every existing call keeps the port address.
+    static WRITER_CENTROIDS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Choose the writer's cell address for this process.
+pub fn set_writer_centroids(on: bool) {
+    WRITER_CENTROIDS.with(|cell| cell.set(on));
+}
+
 #[derive(Clone)]
 pub struct NativeVectorWriter {
     table: Tensor,
@@ -281,7 +293,36 @@ impl NativeVectorWriter {
         self.check(&token.vector)?;
         Ok(token.vector.clone())
     }
+    /// Each cell's centroid: the mean of its own table rows (`token-id mod CELLS` partitions the
+    /// table), derived from the served table and carrying no new learned parameter.
+    fn cell_centroids(&self) -> Result<Tensor> {
+        let (vocab, width) = self.table.dims2()?;
+        let slots = vocab / CELLS;
+        if slots == 0 || slots * CELLS != vocab {
+            return Err(invalid(
+                "the cell centroids need a table whose vocabulary is a whole multiple of 256",
+            ));
+        }
+        Ok(self
+            .table
+            .reshape((slots, CELLS, width))?
+            .mean(0)?)
+    }
+
     fn address_scores(&self, query: &Tensor) -> Result<Tensor> {
+        // The whole-vector address (codex-52): score every cell by the carrier's distance to the
+        // cell's centroid over all lanes, instead of two 8D ports against the 16 orbit roots. The
+        // ports read 16 of the width's coordinates; the centroid reads all of them, and it is
+        // derived from the same table and the same identity partition.
+        if WRITER_CENTROIDS.with(|cell| cell.get()) {
+            let centroids = self.cell_centroids()?;
+            return Ok(query
+                .unsqueeze(1)?
+                .broadcast_sub(&centroids.unsqueeze(0)?)?
+                .abs()?
+                .mean(2)?
+                .neg()?);
+        }
         let rows = query.dim(0)?;
         let port = |start| -> Result<Tensor> {
             Ok(query

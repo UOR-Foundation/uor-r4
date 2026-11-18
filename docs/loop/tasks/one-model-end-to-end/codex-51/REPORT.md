@@ -34,3 +34,11 @@ ports until the hinge reads 1.0000 and the writer scores 345 where whole-table n
 
 The longer run at the corrected recipe: `nearest`, `--lr 0.001 --lr-end 0`, batch 24 / micro 6,
 32,768 steps = 0.9 epochs, four evaluations, ~5.7 h. Bar: `nearest` above T2's 15.99 %.
+
+## The address, built (codex-52)
+
+The writer's cell address now has a second form behind `--writer-address centroids`: each cell is
+scored by the carrier's distance to the cell's centroid over all 512 lanes, derived from the served
+table (`token-id mod 256`), no new learned parameter. Off by default, so the port path is unchanged
+code and every existing run and test is bit-identical. 4 writer tests pass. The float A/B and the
+integer parity unit are ordered in `codex-52/ORDER.md`.

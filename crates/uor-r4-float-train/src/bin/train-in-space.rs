@@ -1066,6 +1066,19 @@ fn main() -> Result<()> {
                 }
                 config.vocab_size = vocab;
             }
+            "--writer-address" => {
+                match value.as_str() {
+                    "ports" => uor_r4_float_train::native_vector_writer::set_writer_centroids(false),
+                    "centroids" => {
+                        uor_r4_float_train::native_vector_writer::set_writer_centroids(true)
+                    }
+                    other => {
+                        return Err(FloatTrainError::Invalid(format!(
+                            "--writer-address wants ports or centroids, not {other}"
+                        )))
+                    }
+                }
+            }
             "--kept-cells" => {
                 let kept = usize::try_from(number(&value)?)
                     .map_err(|_| FloatTrainError::Invalid("--kept-cells too big".to_owned()))?;
