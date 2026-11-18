@@ -4,7 +4,7 @@
 //! hands, in canonical order, to an [`NgramAssembler`].
 
 use crate::ngram_count::{
-    adjust_partition_from_runs, check_tokens, extension_runs, partition_offset,
+    adjust_partition_from_runs, bucket_starts, check_tokens, extension_runs, partition_offset,
     partition_target_bound, plan_partitions,
     stream_length_bound, NgramAssembler, NgramContext, UnigramContinuation,
     NgramPartition, NgramTriple, PartitionRange, NGRAM_MAX_ORDER, NGRAM_VOCABULARY,
@@ -16,7 +16,7 @@ use cudarc::driver::{
 };
 use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
 /// Integer nanosecond totals of the counter's phases since the last
@@ -64,11 +64,15 @@ const CUBIN: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ngram-count.cubin
 const TARGET: &str = include_str!(concat!(env!("OUT_DIR"), "/cuda-image-target.txt"));
 
 /// The kernel inventory admitted by `build.rs`.
-pub const NGRAM_COUNT_ENTRIES: [&str; 16] = [
+pub const NGRAM_COUNT_ENTRIES: [&str; 20] = [
     "ngram_token_hist",
     "ngram_token_hist_reduce",
     "ngram_select_flags",
     "ngram_select_scatter",
+    "ngram_bucket_hist",
+    "ngram_bucket_scatter",
+    "ngram_slice_flags",
+    "ngram_slice_scatter",
     "ngram_radix_hist",
     "ngram_radix_scatter",
     "ngram_scan32_reduce",
@@ -90,6 +94,8 @@ const THREADS: u32 = 256;
 const HIST_BLOCKS: u32 = 256;
 /// Targets examined per selection window: bounds the flag and scan buffers.
 const SELECT_WINDOW: u32 = 1 << 26;
+/// Positions per warp tile of the slot-1 bucket sort (`BUCKET_TILE` in the .cu).
+const BUCKET_TILE: u32 = 1 << 20;
 
 fn cuda(error: impl std::fmt::Display) -> Error {
     Error::Cuda(error.to_string())
@@ -116,6 +122,14 @@ pub fn compiled_ngram_count_image() -> [String; 3] {
     ]
 }
 
+/// claude-425: every position j in 1..n stably sorted by its slot-1 token
+/// t[j-1], built once per counter on the first order k >= 1 selection.
+/// Bucket v is `positions[starts[v]..starts[v + 1]]`, ascending in j.
+struct Buckets {
+    positions: CudaSlice<u32>,
+    starts: Vec<u32>,
+}
+
 /// One CUDA context holding the resident token stream.
 pub struct NgramCounter {
     _context: Arc<CudaContext>,
@@ -124,6 +138,7 @@ pub struct NgramCounter {
     tokens: CudaSlice<u16>,
     n: u32,
     clock: Option<[AtomicU64; PHASES]>,
+    buckets: OnceLock<Buckets>,
 }
 
 impl NgramCounter {
@@ -155,6 +170,7 @@ impl NgramCounter {
             tokens: device_tokens,
             n,
             clock: None,
+            buckets: OnceLock::new(),
         })
     }
 
@@ -307,8 +323,103 @@ impl NgramCounter {
         self.read_one(&total, 0)
     }
 
-    /// The targets of `order` whose partition token is in lo..hi, in stream order.
+    /// The targets of `order` whose partition token is in lo..hi. Order 0
+    /// scans the stream; every order k >= 1 compacts only the slot-1 buckets
+    /// lo..hi, so its positions come bucket by bucket (ascending within each)
+    /// rather than in stream order. The sorted result is the same: `sort` is a
+    /// stable LSD sort whose key includes slot 1, so positions with equal keys
+    /// share a bucket and keep their ascending order either way.
     fn select(&self, order: u32, range: &PartitionRange) -> Result<CudaSlice<u32>> {
+        if partition_offset(order) == 0 {
+            return self.select_stream(order, range);
+        }
+        self.select_slice(order, range, self.buckets()?)
+    }
+
+    /// The cached slot-1 buckets, sorted on the first call.
+    fn buckets(&self) -> Result<&Buckets> {
+        if let Some(buckets) = self.buckets.get() {
+            return Ok(buckets);
+        }
+        let built = self.build_buckets()?;
+        Ok(self.buckets.get_or_init(|| built))
+    }
+
+    /// Stable counting sort of positions 1..n by t[j-1]: bin-major per-tile
+    /// histograms, one exclusive scan, a stable scatter.
+    fn build_buckets(&self) -> Result<Buckets> {
+        let positions = self.n.saturating_sub(1);
+        let tiles = positions.div_ceil(BUCKET_TILE).max(1);
+        let words = u64::from(NGRAM_VOCABULARY) * u64::from(tiles);
+        let len = u32::try_from(words)
+            .ok()
+            .filter(|&len| len < u32::MAX)
+            .ok_or_else(|| invalid("bucket histogram exceeds the u32 scan"))?;
+        let mut hist = self.zeros::<u32>(len as usize + 1)?;
+        let mut sorted = self.zeros::<u32>(positions as usize)?;
+        let config = LaunchConfig { grid_dim: (tiles, 1, 1), block_dim: (32, 1, 1), shared_mem_bytes: 0 };
+        if positions > 0 {
+            let mut launch = self.stream.launch_builder(self.function("ngram_bucket_hist"));
+            launch.arg(&self.tokens).arg(&self.n).arg(&tiles).arg(&mut hist);
+            // SAFETY: one warp per tile; positions j in 1..n read t[j-1]; hist holds 4096 x tiles + 1 words.
+            unsafe { launch.launch(config) }.map_err(cuda)?;
+        }
+        let total = self.scan32(&mut hist, len)?;
+        if total != positions {
+            return Err(invalid(format!("bucket sort placed {total} of {positions} positions")));
+        }
+        if positions > 0 {
+            let mut launch = self.stream.launch_builder(self.function("ngram_bucket_scatter"));
+            launch.arg(&self.tokens).arg(&self.n).arg(&tiles).arg(&hist).arg(&mut sorted);
+            // SAFETY: the scanned offsets partition 0..positions; each slot is written once.
+            unsafe { launch.launch(config) }.map_err(cuda)?;
+        }
+        let scanned = self.stream.clone_dtoh(&hist).map_err(cuda)?;
+        let starts = bucket_starts(&scanned, tiles as usize, positions)?;
+        Ok(Buckets { positions: sorted, starts })
+    }
+
+    /// Compact the order-k targets of buckets lo..hi; the count must equal
+    /// the plan's.
+    fn select_slice(&self, order: u32, range: &PartitionRange, buckets: &Buckets) -> Result<CudaSlice<u32>> {
+        let size = u32::try_from(range.targets).map_err(|_| invalid("partition exceeds u32"))?;
+        let mut pos = self.zeros::<u32>(size as usize)?;
+        let (first, last) = (buckets.starts[range.lo as usize], buckets.starts[range.hi as usize]);
+        let slice = last
+            .checked_sub(first)
+            .ok_or_else(|| invalid("bucket slice runs backwards"))?;
+        let mut flags = self.zeros::<u32>(slice.min(SELECT_WINDOW) as usize + 1)?;
+        let mut out_base = 0u32;
+        let mut begin = first;
+        while begin < last {
+            let count = (last - begin).min(SELECT_WINDOW);
+            let mut launch = self.stream.launch_builder(self.function("ngram_slice_flags"));
+            launch.arg(&self.tokens).arg(&buckets.positions).arg(&begin).arg(&count).arg(&order).arg(&mut flags);
+            // SAFETY: begin + count <= last <= positions; ngram_admitted reads only after j >= order.
+            unsafe { launch.launch(grid(count)) }.map_err(cuda)?;
+            let selected = self.scan32(&mut flags, count)?;
+            // Checked before the scatter, so a miscounted slice never writes past `pos`.
+            let next_base = out_base
+                .checked_add(selected)
+                .filter(|&total| total <= size)
+                .ok_or_else(|| invalid("partition selection exceeded its planned size"))?;
+            let mut launch = self.stream.launch_builder(self.function("ngram_slice_scatter"));
+            launch.arg(&self.tokens).arg(&buckets.positions).arg(&begin).arg(&count).arg(&order).arg(&flags).arg(&out_base).arg(&mut pos);
+            // SAFETY: out_base + scan < next_base <= size, checked above.
+            unsafe { launch.launch(grid(count)) }.map_err(cuda)?;
+            out_base = next_base;
+            begin += count;
+        }
+        if out_base != size {
+            return Err(invalid(format!("partition selected {out_base} targets, planned {size}")));
+        }
+        Ok(pos)
+    }
+
+    /// The targets of `order` whose partition token is in lo..hi, in stream
+    /// order, from a scan of the whole stream: order 0's selection, and the
+    /// reference the bucket slices are tested against.
+    fn select_stream(&self, order: u32, range: &PartitionRange) -> Result<CudaSlice<u32>> {
         let size = u32::try_from(range.targets).map_err(|_| invalid("partition exceeds u32"))?;
         let mut pos = self.zeros::<u32>(size as usize)?;
         let off = partition_offset(order) as u32;
@@ -585,5 +696,40 @@ impl NgramCounter {
             sink(&adjusted)?;
         }
         Ok(plan)
+    }
+}
+
+/// Test-only views of the selection (claude-425).
+#[cfg(test)]
+impl NgramCounter {
+    /// The selected positions of one partition, from the whole-stream scan
+    /// (`stream`) or from the path `count_partition` takes.
+    pub(crate) fn selected_positions(&self, order: u32, range: &PartitionRange, stream: bool) -> Result<Vec<u32>> {
+        let pos = match stream {
+            true => self.select_stream(order, range)?,
+            false => self.select(order, range)?,
+        };
+        let mut words = self.stream.clone_dtoh(&pos).map_err(cuda)?;
+        words.truncate(range.targets as usize);
+        Ok(words)
+    }
+
+    /// `positions` after the counter's gram sort of `order`.
+    pub(crate) fn sorted_positions(&self, order: u32, positions: &[u32]) -> Result<Vec<u32>> {
+        let n = u32::try_from(positions.len()).map_err(|_| invalid("positions exceed u32"))?;
+        let pos = self.stream.clone_htod(positions).map_err(cuda)?;
+        let sorted = self.sort(order, pos, n)?;
+        self.stream.clone_dtoh(&sorted.slice(0..positions.len())).map_err(cuda)
+    }
+
+    /// Plant a bucket-offset miscount: move bucket `bin`'s start `down`
+    /// positions earlier, into bucket bin-1, after building the buckets.
+    pub(crate) fn plant_bucket_start_shift(&mut self, bin: usize, down: u32) -> Result<()> {
+        self.buckets()?;
+        let buckets = self.buckets.get_mut().expect("buckets were just built");
+        buckets.starts[bin] = buckets.starts[bin]
+            .checked_sub(down)
+            .ok_or_else(|| invalid("planted shift runs below zero"))?;
+        Ok(())
     }
 }

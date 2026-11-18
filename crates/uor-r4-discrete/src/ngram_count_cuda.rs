@@ -7,7 +7,9 @@
 // digit groups name the unit and the case rather than bytes.
 #![allow(clippy::unusual_byte_groupings)]
 
-use crate::ngram_count::{NgramAssembler, NgramContext, NgramOrderDigest, NgramTriple, NGRAM_BOS};
+use crate::ngram_count::{
+    NgramAssembler, NgramContext, NgramOrderDigest, NgramTriple, PartitionRange, NGRAM_BOS,
+};
 use crate::ngram_count_device::{CountPhases, NgramCounter};
 use crate::ngram_count_oracle::{oracle_adjusted, oracle_count, plant_one_count};
 
@@ -294,4 +296,81 @@ fn ngram_count_cuda_phase_totals_are_recorded_and_reset() {
     }
     assert_eq!(counter.take_phases(), CountPhases::default(), "take_phases resets the totals");
     eprintln!("phase totals at order 1 under N = 3: {phases:?}");
+}
+
+/// A BOS-dense stream (claude-425): every id is BOS with chance 1/4, else one
+/// of `narrow` ids, so order 10 is admitted only on long BOS-free runs.
+fn bos_dense_stream(len: usize, seed: u64, narrow: u32) -> Vec<u16> {
+    let mut state = seed | 1;
+    (0..len)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let r = (state >> 20) as u32;
+            if r.is_multiple_of(4) { 0 } else { (1 + (r >> 2) % narrow) as u16 }
+        })
+        .collect()
+}
+
+/// Each partition's bucket-slice positions are the whole-stream positions as
+/// a set, and the gram sort makes them the identical sorted array.
+fn assert_slices_match_stream(counter: &NgramCounter, order: u32, budget: u64, what: &str) -> usize {
+    let plan = counter.plan(order, budget).expect("plan");
+    for range in &plan {
+        let stream_pos = counter.selected_positions(order, range, true).expect("stream select");
+        let slice_pos = counter.selected_positions(order, range, false).expect("slice select");
+        assert!(stream_pos.windows(2).all(|w| w[0] < w[1]), "{what}: stream select ascends");
+        let mut as_set = slice_pos.clone();
+        as_set.sort_unstable();
+        assert!(as_set == stream_pos, "{what} order {order} range {range:?}: slice set differs");
+        if stream_pos.is_empty() {
+            continue;
+        }
+        let from_stream = counter.sorted_positions(order, &stream_pos).expect("sort stream");
+        let from_slice = counter.sorted_positions(order, &slice_pos).expect("sort slice");
+        assert!(from_stream == from_slice, "{what} order {order} range {range:?}: sorted arrays differ");
+    }
+    plan.len()
+}
+
+#[test]
+fn ngram_count_cuda_bucket_slices_equal_the_stream_select() {
+    for (len, seed, narrow) in [(200_000usize, 0x425_1u64, 0u32), (1_000_000, 0x425_2, 29)] {
+        let tokens = stream(len, seed, narrow);
+        let counter = NgramCounter::new(0, &tokens).expect("counter");
+        for budget in [9_000u64, 60_000] {
+            for order in 1..=10u32 {
+                let what = format!("len {len} narrow {narrow} budget {budget}");
+                let partitions = assert_slices_match_stream(&counter, order, budget, &what);
+                if budget == 9_000 && len == 1_000_000 {
+                    assert!(partitions > 1, "{what} order {order}: one partition");
+                }
+            }
+        }
+    }
+    let tokens = bos_dense_stream(500_000, 0x425_3, 5);
+    let counter = NgramCounter::new(0, &tokens).expect("counter");
+    for budget in [9_000u64, 60_000] {
+        assert_slices_match_stream(&counter, 10, budget, &format!("BOS-dense budget {budget}"));
+    }
+    let admitted: u64 = counter.plan(10, 9_000).expect("plan").iter().map(|r| r.targets).sum();
+    assert!(admitted > 0, "the BOS-dense stream admits no order-10 target");
+}
+
+#[test]
+fn ngram_count_cuda_bucket_offset_miscount_is_refused() {
+    let tokens = stream(100_000, 0x425_4, 13);
+    let mut counter = NgramCounter::new(0, &tokens).expect("counter");
+    let histogram = counter.partition_histogram(1).expect("histogram");
+    let range = PartitionRange { lo: 5, hi: 4096, targets: histogram[5..].iter().sum() };
+    let control = counter.selected_positions(1, &range, false).expect("unplanted slice select");
+    assert_eq!(control.len() as u64, range.targets);
+    // Bucket 5 now starts 50 positions inside bucket 4: the slice gains 50
+    // positions whose slot-1 token is 4, and the exact count refuses it.
+    counter.plant_bucket_start_shift(5, 50).expect("plant");
+    let planted = counter.selected_positions(1, &range, false);
+    assert!(planted.is_err(), "a planted bucket-offset miscount was accepted");
+    let message = format!("{:?}", planted.err());
+    assert!(message.contains("planned"), "refused for another reason: {message}");
 }
