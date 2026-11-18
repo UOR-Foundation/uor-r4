@@ -22,7 +22,18 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
   worker. "Hasher busy" is a worker's encoding plus hashing, so it is not like for like with
   claude-427's figure, which was hashing alone.
 - **No test pins the memory bound.** Queue depth one per worker is set in the code and was
-  measured on wick (below). No laptop test fails if a deeper queue is set.
+  measured on wick (below). No laptop test fails if a deeper queue is set, and no test observes
+  a full queue, so "handed faster than the workers drain" is the test's intent, not a measurement.
+- **The ORDER's backwards-context clause is met only through the triple check** (found in
+  review). A partition's first context key equals its first triple key, and the triples are
+  checked in strict order across partitions. So the cross-partition context order check after
+  the census cannot fire on its own. The refusal test now asserts the triple-order message. The
+  one check after the census that can fire is the order ≥ 1 seam refusal, and the first version
+  of the test did not cover it. With the seam check moved after the sends, every test stayed
+  green. The test now covers it (see the checks below).
+- **A dead worker is reported late.** If a worker has stopped, `send` drops the partition and
+  `push_owned` still returns `Ok`. The failure comes out as a panic at `finish`, not as an
+  `Err`. This is unchanged from claude-426's hash threads.
 
 ## What changed
 
@@ -33,8 +44,9 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 2. **`NgramAssembler::push_owned(partition)`** (`ngram_count.rs`).
    - **On the caller,** in order: the triple checks, the context checks, `check_census` and its
      compare, the seam check, and the cross-partition context order check. That last one moved
-     here from the merge loop, so a backwards partition is refused, with the same message,
-     before any byte reaches a worker. Then the counters and, in tests, the kept triples.
+     here from the merge loop. It keeps its message, but it is now a backstop: the triple-order
+     check refuses a backwards partition first. Then come the counters and, in tests, the kept
+     triples.
    - **Then one `Arc<NgramPartition>` goes to two worker threads per order,** one for triples
      and one for contexts, over a `sync_channel` of depth one (`WORKER_QUEUE_DEPTH`).
      - Each worker encodes its records into a `chunk`-byte buffer (`ChunkedHash`) and hashes
@@ -54,10 +66,14 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
      `push`. The triples, contexts, counts and both digests equal a whole-stream inline SHA-256.
      At order 0, at least three partitions hold the one context, so the merge across partitions
      is exercised. Partitions are handed faster than the workers drain.
-   - `ngram_count_refused_partition_hands_nothing_on` covers orders 1–2. A planted
-     count-of-counts is refused ("count-of-counts"), and a partition handed again is refused
-     ("ascending"). After both refusals, `finish` equals a clean assembler's: a refused
-     partition hands nothing on.
+   - `ngram_count_refused_partition_hands_nothing_on` covers orders 1–2.
+     - A planted count-of-counts is refused ("count-of-counts").
+     - A partition handed again is refused by the triple-order check, with its exact message.
+     - After both refusals, `finish` equals a clean assembler's.
+     - At order 1, an order-1 context split across two partitions is refused ("straddles a
+       partition seam"), and `finish` again equals a clean assembler's.
+
+     So a refused partition hands nothing on.
 
 ## Measurements
 
@@ -116,8 +132,10 @@ the count (claude-427: 695.6 s, 78.4%).
 - **G4 passes on both counts.** Push fell 117.3 s (78.0%), against a bar of at least 36.6 s.
   Peak RSS rose 699 MiB, against a ceiling of 4 GiB. Both send waits are now under 10 ms, so the
   caller no longer waits on hashing.
-- **Why memory rose so little.** Each order holds at most the partition in progress and one
-  queued, and a partition's `Arc` is freed as soon as both its workers finish with it. The rise
+- **Why memory rose so little.** Each worker holds at most the partition in progress and one
+  queued, and a partition's `Arc` is freed as soon as both its workers finish with it. An
+  order's two workers can be on different partitions, so an order holds at most two partitions
+  beyond the caller's. In the worst case that is about 20 across the ten orders. The rise
   is close to the size of one average order-10 partition (about 740 MiB), well under the 4 GiB
   the ORDER allowed for in the worst case. The run does not show which partitions were held.
 - **The workers kept up.** Between the sweep wall and the process wall there are about 12 s in
@@ -133,7 +151,8 @@ the count (claude-427: 695.6 s, 78.4%).
 
 ## Checks run at the head
 
-- **G1, laptop** at `9aa35386c`:
+- **G1, laptop** at `9aa35386c`, and again after the review's test-only change (the engine
+  code wick ran is unchanged):
   - host `kn_` and `ngram_count` tests: 38/38 (36 before, plus the two new ones);
   - stub-nvcc `cargo check -p uor-r4-discrete --features cuda --lib --tests`: clean;
   - the instrument's `cargo check --features cuda`: clean, and its tests 7/7. A first try at
@@ -147,7 +166,15 @@ the count (claude-427: 695.6 s, 78.4%).
   - with the context worker's order-0 merge disabled, `ngram_count_owned_push_equals_inline_sha`
     fails with the order-0 contexts unmerged;
   - with the worker's tail buffer never hashed, it fails on a digest mismatch at order 0 with a
-    1 MiB chunk.
+    1 MiB chunk;
+  - added after review: with the seam and context-order checks moved after both sends,
+    `ngram_count_refused_partition_hands_nothing_on` fails on its seam `finish` equality, and
+    every other `ngram_count` test passes (25 of 26). Restored, then `cmp` equal, and the narrow
+    suite was 38/38 again.
+- **Review:** a fresh-context review at `434bf9425` gave APPROVE, with one MEDIUM (the
+  backwards-context clause and seam coverage above, fixed in the test) and four LOWs. One LOW was
+  wording (the per-worker memory bound, fixed). The other three are listed above and under Still
+  open.
 - **G3, wick** at `9aa35386c`: PASS (above).
 - **G4:** PASS (above).
 
@@ -166,6 +193,11 @@ None beyond the loop's own steps.
   together, and the next host targets after D3's choice.
 - **Run-to-run variance on wick:** a gain smaller than about 20 s in one phase still needs
   repeat runs to be believed.
+- **Small code follow-ups from review,** none of which moves a byte:
+  - `push_owned` could return `Err` when a worker has stopped, instead of only panicking at
+    `finish`;
+  - `NgramAssembler::context_records` is public but no longer filled while pushing, since kept
+    contexts come back from `finish`. It has no reader today; it could be removed or made private.
 
 ## Plain summary
 

@@ -1642,14 +1642,55 @@ mod tests {
                 .push_owned(planted)
                 .expect_err("planted count-of-counts");
             assert!(census.to_string().contains("count-of-counts"), "{census}");
+            // Handed again, the partition goes backwards. The triple-order
+            // check refuses it; the context-order check behind the census
+            // cannot fire on its own, since a partition's first context key
+            // equals its first triple key.
             let backwards = refused
                 .push(&parts[0])
                 .expect_err("a partition handed twice");
-            assert!(backwards.to_string().contains("ascending"), "{backwards}");
+            assert!(
+                backwards
+                    .to_string()
+                    .contains("n-gram triples are not in strictly ascending order"),
+                "{backwards}"
+            );
             clean.push(&parts[1]).expect("second");
             refused.push(&parts[1]).expect("second after the refusals");
             assert_eq!(refused.finish(), clean.finish(), "order {order}");
         }
+        // The seam refusal is the one check after the census that can fire:
+        // an order-1 context split across two partitions. It must also hand
+        // nothing on.
+        let key = PrimeRouteKey::from_context(&[7]).unwrap().word();
+        let half = |next: u16| NgramPartition {
+            triples: vec![NgramTriple {
+                key,
+                next,
+                count: 1,
+            }],
+            contexts: vec![NgramContext {
+                key,
+                total: 1,
+                followers: 1,
+                n1: 1,
+                n2: 0,
+                n3_plus: 0,
+            }],
+            count_of_counts: [1, 0, 0, 0],
+        };
+        let mut clean = NgramAssembler::new(1, true).expect("assembler");
+        let mut refused = NgramAssembler::new(1, true).expect("assembler");
+        clean.push_owned(half(1)).expect("first half");
+        refused.push_owned(half(1)).expect("first half");
+        let seam = refused
+            .push_owned(half(2))
+            .expect_err("a context across a seam");
+        assert!(
+            seam.to_string().contains("straddles a partition seam"),
+            "{seam}"
+        );
+        assert_eq!(refused.finish(), clean.finish(), "seam");
     }
 
     fn refusal(order: u32, partitions: &[NgramPartition]) -> String {
