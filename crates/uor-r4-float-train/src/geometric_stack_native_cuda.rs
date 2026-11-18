@@ -276,7 +276,6 @@ pub(crate) fn spiralcore_fbs_fwd(
     let device = &q.device;
     let metadata = spiralcore_fbs_device_plan(plan, device)?;
     let error = zeros::<u32>(device, 1)?;
-    let threads = rows * plan.output_blocks;
     let mut dims = xl.shape().dims().to_vec();
     let last = dims.len() - 1;
     dims[last] = 8 * plan.output_blocks;
@@ -284,23 +283,30 @@ pub(crate) fn spiralcore_fbs_fwd(
     args.extend(spiralcore_fbs_metadata(plan, &metadata));
     let storage = match x.dtype() {
         DType::F32 => {
-            let out = uninit::<f32>(device, threads * 8)?;
+            let out = uninit::<f32>(device, rows * plan.output_blocks * 8)?;
             args.push(Arg::f(&out));
             args.push(Arg::u(&error));
             args.extend(spiralcore_fbs_dimensions(plan, rows)?);
-            launch(device, "spiralcore_fbs_fwd", threads, &args)?;
+            launch_groups(
+                device,
+                "spiralcore_fbs_fwd",
+                (plan.output_blocks, rows.div_ceil(256), 1),
+                (256, 1, 1),
+                &args,
+            )?;
             drop(args);
             storage(out, device)
         }
         DType::BF16 => {
-            let out = uninit::<half::bf16>(device, threads * 8)?;
+            let out = uninit::<half::bf16>(device, rows * plan.output_blocks * 8)?;
             args.push(Arg::b(&out));
             args.push(Arg::u(&error));
             args.extend(spiralcore_fbs_dimensions(plan, rows)?);
-            crate::cuda_stack_kernels::cuda::launch_bf16(
+            crate::cuda_stack_kernels::cuda::launch_groups_bf16(
                 device,
                 "spiralcore_fbs_fwd",
-                threads,
+                (plan.output_blocks, rows.div_ceil(256), 1),
+                (256, 1, 1),
                 &args,
             )?;
             drop(args);
@@ -439,7 +445,25 @@ pub(crate) fn spiralcore_fbs_bwd(
         }
         Ok(())
     };
-    run("spiralcore_fbs_bwd", rows * plan.output_blocks, &args)?;
+    // One CUDA block per output block (codex-54): the route and its siblings are walked once into
+    // shared memory by the kernel, so the launch is a grid over outputs rather than over items.
+    if bf16 {
+        crate::cuda_stack_kernels::cuda::launch_groups_bf16(
+            device,
+            "spiralcore_fbs_bwd",
+            (plan.output_blocks, rows.div_ceil(256), 1),
+            (256, 1, 1),
+            &args,
+        )?;
+    } else {
+        launch_groups(
+            device,
+            "spiralcore_fbs_bwd",
+            (plan.output_blocks, rows.div_ceil(256), 1),
+            (256, 1, 1),
+            &args,
+        )?;
+    }
     drop(args);
     let (dq, dx) = scratch.reduce(
         device,

@@ -48,9 +48,9 @@ pub const TRAIN_BATCHES: usize = STEPS;
 /// sheet registered `517bffcc…0b0d`, the same kernels with float `atomicAdd` sums. claude-180
 /// moved this pin, which claude-179 had left behind.
 pub const PINNED_SPIRALCORE_FBS_CU_SHA256: &str =
-    "3fbfc796bc61d519495ae4bb2bcf52f05a058990ea2463c0210d4f73de9d38e8";
+    "4b51663dc07de7e64feffb6a05bb977c68a7687c9fe1ae902fb92d8e73da0330";
 pub const PINNED_SPIRALCORE_FBS_RS_SHA256: &str =
-    "6eb2b09d5602322b7628a83f4cd3c2ee35c59d78786cb349fd92c4519ebbe3cd";
+    "8b1882a88eebd0555c3f2f540069e53035bf739d6a1eeb16aeb33acdc5c1a451";
 pub const PINNED_CUDA_STACK_CU_SHA256: &str =
     "c577fce92ab965798857bd3f9d19ab86f65326dd501d8f8daf1537c0c9e9cb17";
 pub const PINNED_FRESH_TOKENS_SHA256: &str =
