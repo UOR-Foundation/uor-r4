@@ -363,6 +363,18 @@ fn fixture() -> Result<(), Fail> {
         return Err("known GPU training/displacement/dedup inventory".into());
     }
     let bank = Bank { classes, relations };
+    let malformed = Choice {
+        query: Some(4),
+        fact: Some(u32::MAX),
+        source: None,
+    };
+    if resolve(&prefixes[0], &roots, &bank, roots[11], malformed).is_ok()
+        || gpu
+            .predict(&pack(&prefixes[0], 4, u32::MAX)?, &roots, &bank, roots[11])
+            .is_ok()
+    {
+        return Err("invalid maximum fact address accepted".into());
+    }
     let check = |ids: &[u32], q: u32, f: u32, bank: &Bank, roots: &[u32]| -> Result<Arms, Fail> {
         let oldroot = roots[11];
         let out = gpu.predict(&pack(ids, q, f)?, roots, bank, oldroot)?;

@@ -111,7 +111,7 @@ pub fn resolve(
         (Some(q), Some(f)) => (q as usize, f as usize),
         _ => return Err(invalid("partial span anchor")),
     };
-    if q >= ids.len() || f + 1 >= q || ids[f] != ids[q] {
+    if q >= ids.len() || q.saturating_sub(f) < 2 || ids[f] != ids[q] {
         return Err(invalid("invalid frozen span anchor"));
     }
     let orbit = spiralcore_orbit_roots();
