@@ -4,13 +4,13 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 
 ## What did not work, first
 
-- **The host work that reads every gram shrank by only 32.4 s (2.5%)** [claude]. In claude-423
-  the six host steps that read every own-order gram took 1,277.4 s; here they take 1,245.0 s.
+- **The host work that reads every gram shrank by only 32.6 s (2.6%)** [claude]. In claude-423
+  the six host steps that read every own-order gram took 1,277.5 s; here they take 1,244.8 s.
   Copies and record building fell by 117.3 s, because the separate extension count is gone. But
   `runs` (+42.3 s), `adjust` (+22.9 s), `push` (+11.7 s) and `keep` (+7.9 s) each got slower
   for the same work, by 84.7 s together. The cause is not measured. One candidate is that the sweep now interleaves
   11 orders' assemblers, filters and query lists per range, where claude-423 finished one order
-  before starting the next. Those host steps are now 86% of the sweep's wall time (1,245.0 of
+  before starting the next. Those host steps are now 86% of the sweep's wall time (1,244.8 of
   1,447.0 s).
 - **Peak resident memory rose 2.51 GiB (2,634,664 KiB),** from 8,864,644 KiB to 11,499,308 KiB. Likely cause, not
   measured: every order's query filter (its sorted contexts and pairs) now stays alive for the
@@ -151,7 +151,7 @@ working-discipline.
 - **Why runs, adjust, push and keep got slower** in the interleaved sweep (+84.7 s), and the
   2.51 GiB of extra resident memory. A per-order timing of a sweep that drops each order's
   filter when it finishes, or one at N = 4, would separate the causes.
-- **Fix 1: the host work that reads every gram (1,245.0 s).** The scout ranks the steps:
+- **Fix 1: the host work that reads every gram (1,244.8 s).** The scout ranks the steps:
   - first, a cursor in `keep` and hashing on parallel threads, which keep the digest
     (est. ~640 s → ~50 s);
   - then partitions held on the device, which needs a parallel digest and so a recorded
@@ -167,4 +167,4 @@ whole 2.09 B-token stream for every partition. It also counts each order once in
 It gives exactly the same counts, digests and discounts as before at N = 10. The GPU part of the
 count fell from 491 s to 163 s, and the whole count from 1,817 s to 1,447 s. What remains is
 almost all host work over every one of the 6.7 B grams: copying, hashing and filtering. That
-work fell only 2.5% here and is the next target.
+work fell only 2.6% here and is the next target.
