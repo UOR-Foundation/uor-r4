@@ -18,6 +18,11 @@ const PRIOR_TRACES: [&str; 2] = [
     "ce39bae0ccc4ef72e9dba937a672cd5b615a34aa5e30819306b3c5cd0ddd0055",
 ];
 const STOPS: [u32; 4] = [16, EOS, 0, 201];
+// Byte identities from the blind TRAIN-only fit, sealed before writer rollout.
+const TRAINED_STATES: [&str; 2] = [
+    "5981d5716bb9674646cb5292da5455abf349dea7367be682ef310974c88f1c07",
+    "c54dc669339bc22a57a8ee676141ec780b5ba5ea3185940de65a96811ca94944",
+];
 
 #[derive(Deserialize)]
 struct FittedState {
@@ -118,7 +123,8 @@ pub fn run(
     let fitted: FittedState = parse(&state_bytes)?;
     let picks_bytes = contents(picks_path)?;
     let picks: Selections = parse(&picks_bytes)?;
-    if fitted.arm != "trained"
+    if state_hash != TRAINED_STATES[seed]
+        || fitted.arm != "trained"
         || fitted.artifact_sha256 != artifact_hash
         || picks.artifact_sha256 != artifact_hash
         || picks.state_sha256 != state_hash
@@ -245,7 +251,20 @@ pub fn run(
         }
         let value = &r.case.prefix[r.case.asked_start..r.case.asked_end];
         let wrong = first_wrong(emitted, &r.case.expected);
+        let selector_match = if r.arm == Arm::Learned {
+            r.source.and_then(|source| {
+                let anchor = r.case.prefix.len().checked_sub(1 + usize::from(fitted.anchor_back))?;
+                let key = (source as usize).checked_sub(usize::from(fitted.lookback))?;
+                let query_id = *r.case.prefix.get(anchor)?;
+                let key_id = *r.case.prefix.get(key)?;
+                Some(json!({"query_position":anchor,"query_id":query_id,"query_roots":roots[query_id as usize],
+                    "matched_position":key,"matched_id":key_id,"matched_roots":roots[key_id as usize]}))
+            })
+        } else {
+            None
+        };
         rows.push(json!({"case":r.case.id,"pair":r.case.pair,"role":r.case.role,"arm":format!("{:?}",r.arm),
+            "selector_match":selector_match,
             "asked_start":r.case.asked_start,"selected":r.source,"right_source":r.source==Some(r.case.asked_start as u32),
             "expected":r.case.expected,"generated":emitted,"whole_value":emitted.starts_with(value),"exact":wrong.is_none(),
             "first_wrong":wrong,"previous_first_wrong":first_wrong(old,&r.case.expected),"previous_generated":old,
