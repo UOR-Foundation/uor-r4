@@ -4,13 +4,13 @@
 
 Advancing to a later word can discard the first word of a correct value. On #4090’s previously inspected fresh panel, the continuation operator lost 83 correct addresses per seed. Every loss skipped “old”: 42 instances of “old lamp” and 41 of “old ring.” On the 288-prompt historical regression it lost 42 correct starts. A rule restricted to forward moves also cannot recover an address that WordStart already placed too late. Both interventions leave the previously frozen entity choice in place.
 
-## What ran
+## What changed
 
 W reproduces the #4090 WordStart baseline. C retains W unless a longer complete registered connector supports moving forward, or contiguous pieces from W are strictly closer to a TRAIN connector-piece root than to a TRAIN value-onset root and there is a legal landing. The comparison uses the four-root SpiralCore integer orbit distance, bounded by the frozen three-token connector window. E emits EOS ID 1 on the device step where the original copy cursor, after making progress, encounters one of the original source delimiters. CE enables both. At a copy cap, fence, empty copy or abstention, the existing writer controls the outcome. Neither intervention fits new weights. Both seed artifacts use the same measured word/cursor operators. [Protocol](SHEET.md) · [Independent FIT](FIT.md) · [Pre-run release](PRE-RUN.md) · [Native selector](selector/README.md) · [Writer](writer/README.md)
 
 The primary 1,728 prompts and the earlier 1,728-prompt #4090 transfer set were already studied. The separate new transfer set has 1,728 additional prompts with new names, values, phrasings and two partly or wholly unfamiliar connector families. Each large panel contains 864 role swaps, with the two connectors independently varied from one to three tokens. Prior (288) and original (16) are historical regressions. Each seed saw exactly the same prompts; report per-seed counts. [Transfer census](TRANSFER-CENSUS.json) · [Grader and case files](rollouts/README.md)
 
-## First wrong token and exact replies
+## Measurements
 
 Indices count emitted BPE IDs from zero, and an exact reply must emit the complete requested value immediately followed by EOS, with equal length. “Later” includes removal of the last error. A shared first token can move an error later while the selected value remains wrong.
 
@@ -35,16 +35,20 @@ With “Sam found red. Tom found just black” and a request for Tom, the refere
 
 The opposite failure occurs in “Jen has old ring. Jim has old lamp. Skip Jim. About Jen, which item did the note list?” The requested value begins at 6, ID 782 (“ old”). E emits [782,2291,1] exactly. C advances to 7 and CE emits [2291,1] (“ ring”, EOS), wrong at token 0. W’s original first error was the period at index 2. On this earlier transfer the 95 earlier errors comprise 83 moves from 2→0 and 12 from 1→0. On the historical 288 prompts C moved 62 errors earlier, none later, and CE fell to 74 exact versus E’s 116. On the original 16, E and CE each produced five exact.
 
-## Checks and interpretation
+## Checks run at the head
 
-Both seed runs produced the same paired decision counts. The four real arms ran with the grade file withheld for 43,904 trajectories (234,193 CUDA/serving integer transitions); the subsequent graded run reproduced every blinded trajectory’s digest. The seven-arm scored run covered 10,976 prompt/seed rows, 76,832 trajectories and 417,607 device/serving transitions. All 22,560 historical WordStart, Oracle and Disabled trajectories reproduced their #4090 records, including 146,381 writer transitions. The gold-source Oracle+EOS was exact on every measured prompt using the same eight-token copy limit as the other arms. The native-only and original oracle arms produced zero replies exact through EOS. The independent grader rejected a planted period in place of EOS. All 192 integer library tests passed, as did the serving-wasm host feature check. See [raw-word finite tests](writer/finite/seed1.json), [input fingerprints](BLIND-INPUTS.json) and [paired counts](rollouts/README.md).
+Both seed runs produced the same paired decision counts. The four real arms ran with the grade file withheld for 43,904 trajectories (234,193 CUDA/serving integer transitions); the subsequent graded run reproduced every blinded trajectory’s digest. The seven-arm scored run covered 10,976 prompt/seed rows, 76,832 trajectories and 417,607 device/serving transitions. All 22,560 historical WordStart, Oracle and Disabled trajectories reproduced their #4090 records, including 146,381 writer transitions. The gold-source Oracle+EOS was exact on every measured prompt using the same eight-token copy limit as the other arms. The native-only and original oracle arms produced zero replies exact through EOS. The independent grader rejected a planted period in place of EOS. All ten independently repeated graded files and all ten repeated selector files matched their originals byte for byte. All 192 integer library tests passed, as did the serving-wasm host feature check. See [raw-word finite tests](writer/finite/seed1.json), [input fingerprints](BLIND-INPUTS.json) and [paired counts](rollouts/README.md).
+
+The [sealed Wick bundle](https://huggingface.co/datasets/caseyallard/uor-r4-store/blob/b05051bc96a52394f77a4e21818f39482caaa104/results/codex/continuation-eos-20261118/continuation-eos-wick.tar.gz) contains the new tapes, source predictions, bare witnesses, primary and repeat writer outputs, fixtures, build logs and run commands. The downloaded file matched SHA-256 `cac8ff75f3efbe576b6d1f61167ad2ce12dde59b05927b1ed32cf70bd9cd2482`. The unchanged historical inputs are in the [previous Wick bundle](https://huggingface.co/datasets/caseyallard/uor-r4-store/blob/58b98f50068eafbfe97bd8f89508757a0d63a49b/results/codex/value-connectors-20261118/value-connectors-wick.tar.gz).
+
+## Skills used
+
+The native-space-cycle skill supplied the shared integer state, committed-token replay and device/serving equality requirements.
+
+## Still open
 
 Continuation and end-of-copy EOS both cleared their preregistered follow-up criteria on primary and new transfer. The stopping intervention fixes a distinct error after a correctly addressed copy in this short-answer format. The geometry of “old” still triggers an unwanted advance, and the training bank supplies uneven evidence across connectors and answer openings. Of the 660 residual transfer errors, 591 have at least one incorrectly located or missing frozen entity boundary; 69 occur with all four boundaries correct. For the latter group the unresolved connector counts are 30 “found just”, 30 “found and hid”, and 9 “held”. Two correctly emitted replies occur in cases whose entity boundaries disagree with gold; their selected value address is nevertheless correct. The split preserves the distinction between locating the entity and locating the value after it. Every measured target requests a bare item plus EOS; deciding when prose should continue after quoting an item remains open.
 
 ## Plain summary
 
 On the new 1,728-prompt transfer set, continuation alone recovered 190 requested sources but left the first error at the native token after the answer. EOS alone converted 878 already-correct sources into exact replies. Together the two changes yielded 1,068 exact replies, and every remaining reply diverged on its first token. The serving default and P3 status retain their prior settings.
-
-## Skills used
-
-The native-space-cycle skill supplied the shared integer state, committed-token replay and device/serving equality requirements.
