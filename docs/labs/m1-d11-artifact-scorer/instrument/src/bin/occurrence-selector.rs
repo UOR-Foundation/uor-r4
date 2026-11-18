@@ -156,12 +156,20 @@ fn generate(tok: &ByteBpeTokenizer, held: bool) -> Result<Corpus, Fail> {
                             } else {
                                 (left, right, v0, v1)
                             };
-                            let text=match (held,form){
-                    (false,0)=>format!("{a} picked {va}. {b} picked {vb}. What did {ask} pick? Skip {other}."),
-                    (false,_)=>format!("{a} kept {va}. {b} kept {vb}. Which did {ask} keep? Disregard {other}."),
-                    (true,0)=>format!("{a} took {va}. {b} took {vb}. What was {ask} taking? Exclude {other}."),
-                    (true,_)=>format!("{a} saved {va}. {b} saved {vb}. Which did {ask} save? Omit {other}."),
-                };
+                            let text = match (held, form) {
+                                (false, 0) => format!(
+                                    "{a} picked {va}. {b} picked {vb}. What did {ask} pick? Skip {other}."
+                                ),
+                                (false, _) => format!(
+                                    "{a} kept {va}. {b} kept {vb}. Which did {ask} keep? Disregard {other}."
+                                ),
+                                (true, 0) => format!(
+                                    "{a} took {va}. {b} took {vb}. What was {ask} taking? Exclude {other}."
+                                ),
+                                (true, _) => format!(
+                                    "{a} saved {va}. {b} saved {vb}. Which did {ask} save? Omit {other}."
+                                ),
+                            };
                             let prefix = encoder
                                 .encode_assistant_prefix(&[Message {
                                     role: "user",
@@ -435,13 +443,18 @@ fn main() -> Result<(), Fail> {
         return Err("missing command".into());
     };
     let p: Vec<_> = paths.iter().map(Path::new).collect();
-    match(op.to_str(),p.as_slice()){
-        (Some("prepare"),[tok,dir])=>prepare(tok,dir),
-        (Some("fixture"),[])=>fixture(),
-        (Some("fit"),[model,train,out])=>fit(model,train,out),
-        (Some("predict"),[model,state,inputs,out])=>predict(model,state,inputs,out),
-        (Some("grade"),[held,pred,out])=>grade(held,pred,out),
-        _=>Err("occurrence-selector prepare TOKENIZER NEW_DIR | fixture | fit MODEL TRAIN NEW_DIR | predict MODEL STATE PREFIXES NEW_JSON | grade HELDOUT PREDICTIONS NEW_JSON".into()),
+    match (op.to_str(), p.as_slice()) {
+        (Some("prepare"), [tok, dir]) => prepare(tok, dir),
+        (Some("fixture"), []) => fixture(),
+        (Some("fit"), [model, train, out]) => fit(model, train, out),
+        (Some("predict"), [model, state, inputs, out]) => predict(model, state, inputs, out),
+        (Some("grade"), [held, pred, out]) => grade(held, pred, out),
+        _ => Err(concat!(
+            "occurrence-selector prepare TOKENIZER NEW_DIR | fixture | ",
+            "fit MODEL TRAIN NEW_DIR | predict MODEL STATE PREFIXES NEW_JSON | ",
+            "grade HELDOUT PREDICTIONS NEW_JSON"
+        )
+        .into()),
     }
 }
 #[cfg(test)]
