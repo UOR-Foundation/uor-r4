@@ -466,7 +466,13 @@ impl NgramCounter {
     /// slot k .. slot 1, low 6 bits before high 6 bits of each. With `left`
     /// (claude-429), three passes on the 13-bit left digit L(j) come first, so
     /// L is the least significant key and equal digits of one gram are adjacent.
-    fn sort(&self, order: u32, mut pos: CudaSlice<u32>, n: u32, left: bool) -> Result<CudaSlice<u32>> {
+    fn sort(
+        &self,
+        order: u32,
+        mut pos: CudaSlice<u32>,
+        n: u32,
+        left: bool,
+    ) -> Result<CudaSlice<u32>> {
         let tiles = n.div_ceil(RADIX_TILE);
         let blocks = tiles.div_ceil(RADIX_WARPS);
         let config = LaunchConfig { grid_dim: (blocks, 1, 1), block_dim: (RADIX_WARPS * 32, 1, 1), shared_mem_bytes: 0 };
@@ -618,7 +624,10 @@ impl NgramCounter {
         let mut ind12 = self.zeros::<u64>(grams as usize + 1)?;
         let mut ind34 = self.zeros::<u64>(grams as usize + 1)?;
         let mut violations = match adjust {
-            true => self.stream.clone_htod(&[0u32, 0, u32::MAX, u32::MAX]).map_err(cuda)?,
+            true => self
+                .stream
+                .clone_htod(&[0u32, 0, u32::MAX, u32::MAX])
+                .map_err(cuda)?,
             false => self.zeros::<u32>(1)?,
         };
         let adjust_word = u32::from(adjust);
@@ -675,7 +684,10 @@ impl NgramCounter {
         let started = self.start_phase();
         let keys = self.stream.clone_dtoh(&keys).map_err(cuda)?;
         let next = self.stream.clone_dtoh(&next).map_err(cuda)?;
-        let counts = self.stream.clone_dtoh(&counts.slice(0..grams as usize)).map_err(cuda)?;
+        let counts = self
+            .stream
+            .clone_dtoh(&counts.slice(0..grams as usize))
+            .map_err(cuda)?;
         let records = self.stream.clone_dtoh(&records).map_err(cuda)?;
         self.tick(DOWNLOAD, started);
         let started = self.start_phase();
@@ -850,7 +862,9 @@ impl NgramCounter {
         mut sink: impl FnMut(u32, NgramPartition) -> Result<()>,
     ) -> Result<Vec<PartitionRange>> {
         if highest > NGRAM_MAX_ORDER {
-            return Err(invalid(format!("adjusted counts need N <= {NGRAM_MAX_ORDER}, got {highest}")));
+            return Err(invalid(format!(
+                "adjusted counts need N <= {NGRAM_MAX_ORDER}, got {highest}"
+            )));
         }
         let mut continuation = UnigramContinuation::new();
         let mut plan = Vec::new();
@@ -863,7 +877,11 @@ impl NgramCounter {
                 for order in (1..=highest).rev() {
                     let histogram = &histograms[order as usize - 1];
                     let targets = histogram[range.lo as usize..range.hi as usize].iter().sum();
-                    let same_tokens = PartitionRange { lo: range.lo, hi: range.hi, targets };
+                    let same_tokens = PartitionRange {
+                        lo: range.lo,
+                        hi: range.hi,
+                        targets,
+                    };
                     let started = self.start_phase();
                     let adjusted = self.count_partition_adjusted(order, highest, &same_tokens)?;
                     self.tick(OWN_COUNT, started);

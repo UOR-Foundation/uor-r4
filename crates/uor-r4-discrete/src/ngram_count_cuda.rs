@@ -413,7 +413,9 @@ fn gpu_sweep(
     budget: u64,
     keep: &[u32],
 ) -> crate::Result<(Vec<Assembled>, usize)> {
-    assemble_sweep(highest, keep, |sink| counter.count_adjusted_sweep(highest, budget, sink))
+    assemble_sweep(highest, keep, |sink| {
+        counter.count_adjusted_sweep(highest, budget, sink)
+    })
 }
 
 /// The host-runs sweep with `tamper` on each raw partition, assembled.
@@ -475,16 +477,30 @@ fn ngram_count_cuda_sweep_counts_no_extension() {
     let phases = counter.take_phases();
     assert!(ordinary == profiled, "profiling preserves the sweep's records");
     assert_eq!(phases.extension_count_ns, 0, "{phases:?}");
-    assert!(phases.own_count_ns > 0, "own count recorded no time: {phases:?}");
+    assert!(
+        phases.own_count_ns > 0,
+        "own count recorded no time: {phases:?}"
+    );
     assert_eq!((phases.runs_ns, phases.adjust_ns), (0, 0), "{phases:?}");
     assert!(shared > 1, "budget 9,000 gave one shared partition");
-    assert!(phases.partitions <= 3 * shared as u64 + unigram_partitions, "{phases:?}, {shared} shared ranges");
+    assert!(
+        phases.partitions <= 3 * shared as u64 + unigram_partitions,
+        "{phases:?}, {shared} shared ranges"
+    );
     eprintln!("sweep phase totals under N = 3: {phases:?}");
-    let (host, _) = gpu_sweep_host(&counter, 3, 9_000, &mut |_, _| {}, &every_order(3)).expect("host sweep");
+    let (host, _) =
+        gpu_sweep_host(&counter, 3, 9_000, &mut |_, _| {}, &every_order(3)).expect("host sweep");
     let phases = counter.take_phases();
-    assert!(host == ordinary, "the host-runs sweep assembles the device sweep's records");
+    assert!(
+        host == ordinary,
+        "the host-runs sweep assembles the device sweep's records"
+    );
     assert_eq!(phases.extension_count_ns, 0, "{phases:?}");
-    for (name, ns) in [("own count", phases.own_count_ns), ("runs", phases.runs_ns), ("adjust", phases.adjust_ns)] {
+    for (name, ns) in [
+        ("own count", phases.own_count_ns),
+        ("runs", phases.runs_ns),
+        ("adjust", phases.adjust_ns),
+    ] {
         assert!(ns > 0, "{name} recorded no time: {phases:?}");
     }
     eprintln!("host-runs sweep phase totals under N = 3: {phases:?}");
@@ -513,10 +529,15 @@ fn ngram_count_cuda_device_sweep_matches_the_oracle() {
             let (orders, partitions) =
                 gpu_sweep(&counter, highest, budget, &every_order(highest)).expect("sweep");
             if budget != u64::MAX {
-                assert!(partitions > 1, "budget {budget} gave one partition, len {len}");
+                assert!(
+                    partitions > 1,
+                    "budget {budget} gave one partition, len {len}"
+                );
             }
             for (order, (got, want)) in orders.iter().zip(&want).enumerate() {
-                let case = format!("len {len} BOS every {every} N {highest} order {order} budget {budget}");
+                let case = format!(
+                    "len {len} BOS every {every} N {highest} order {order} budget {budget}"
+                );
                 assert_eq!(got.0, want.0, "digest, {case}");
                 assert!(got.1 == want.1 && got.2 == want.2, "records, {case}");
             }
@@ -539,13 +560,18 @@ fn ngram_count_cuda_device_sweep_equals_the_host_sweep() {
         for budget in [u64::MAX, 60_000, 9_000] {
             let case = format!("len {len} BOS every {every} N {highest} budget {budget}");
             let keep = every_order(highest);
-            let (device, shared) = gpu_sweep(&counter, highest, budget, &keep).expect("device sweep");
+            let (device, shared) =
+                gpu_sweep(&counter, highest, budget, &keep).expect("device sweep");
             let (host, host_shared) =
-                gpu_sweep_host(&counter, highest, budget, &mut |_, _| {}, &keep).expect("host sweep");
+                gpu_sweep_host(&counter, highest, budget, &mut |_, _| {}, &keep)
+                    .expect("host sweep");
             assert_eq!(shared, host_shared, "shared plan, {case}");
             for (order, (got, want)) in device.iter().zip(&host).enumerate() {
                 assert_eq!(got.0, want.0, "digest, {case} order {order}");
-                assert!(got.1 == want.1 && got.2 == want.2, "records, {case} order {order}");
+                assert!(
+                    got.1 == want.1 && got.2 == want.2,
+                    "records, {case} order {order}"
+                );
             }
         }
     }
@@ -564,19 +590,40 @@ fn ngram_count_cuda_planted_rule4_is_refused() {
     let first = raw
         .triples
         .iter()
-        .find(|triple| PrimeRouteKey::from_word(triple.key).expect("key").slot(2) != Some(NGRAM_BOS))
+        .find(|triple| {
+            PrimeRouteKey::from_word(triple.key).expect("key").slot(2) != Some(NGRAM_BOS)
+        })
         .expect("a gram that is not a document start");
-    let clean = counter.count_partition_adjusted(2, 3, &range).expect("unplanted adjust");
+    let clean = counter
+        .count_partition_adjusted(2, 3, &range)
+        .expect("unplanted adjust");
     assert_eq!(clean.triples.len(), raw.triples.len());
     counter.plant_rule4_violation();
     let message = format!("{:?}", counter.count_partition_adjusted(2, 3, &range).err());
-    let named = format!("order-2 gram (key {:#x}, next {}) has no counted left extension", first.key, first.next);
-    assert!(message.contains("(rule 4)") && message.contains(&named), "refused otherwise: {message}");
-    let again = counter.count_partition_adjusted(2, 3, &range).expect("the plant is spent");
-    assert!(again.triples == clean.triples && again.contexts == clean.contexts, "an unplanted adjust after the refusal");
+    let named = format!(
+        "order-2 gram (key {:#x}, next {}) has no counted left extension",
+        first.key, first.next
+    );
+    assert!(
+        message.contains("(rule 4)") && message.contains(&named),
+        "refused otherwise: {message}"
+    );
+    let again = counter
+        .count_partition_adjusted(2, 3, &range)
+        .expect("the plant is spent");
+    assert!(
+        again.triples == clean.triples && again.contexts == clean.contexts,
+        "an unplanted adjust after the refusal"
+    );
     counter.plant_rule4_violation();
-    let message = format!("{:?}", gpu_sweep(&counter, 3, 60_000, &every_order(3)).err());
-    assert!(message.contains("(rule 4)"), "the sweep refused otherwise: {message}");
+    let message = format!(
+        "{:?}",
+        gpu_sweep(&counter, 3, 60_000, &every_order(3)).err()
+    );
+    assert!(
+        message.contains("(rule 4)"),
+        "the sweep refused otherwise: {message}"
+    );
 }
 
 /// Order k reads only the (key, next) of order k+1's raw triples. A planted
@@ -590,7 +637,8 @@ fn ngram_count_cuda_planted_rule4_is_refused() {
 fn ngram_count_cuda_sweep_orders_read_only_their_extension_types() {
     let tokens = stream(1_000_000, 0x425_4, 29);
     let counter = NgramCounter::new(0, &tokens).expect("counter");
-    let (base, _) = gpu_sweep_host(&counter, 3, 60_000, &mut |_, _| {}, &every_order(3)).expect("sweep");
+    let (base, _) =
+        gpu_sweep_host(&counter, 3, 60_000, &mut |_, _| {}, &every_order(3)).expect("sweep");
     let mut planted = false;
     let mut plant = |order: u32, raw: &mut NgramPartition| {
         if order == 3 && !planted && !raw.triples.is_empty() {
@@ -598,7 +646,8 @@ fn ngram_count_cuda_sweep_orders_read_only_their_extension_types() {
             planted = true;
         }
     };
-    let (moved, _) = gpu_sweep_host(&counter, 3, 60_000, &mut plant, &every_order(3)).expect("planted sweep");
+    let (moved, _) =
+        gpu_sweep_host(&counter, 3, 60_000, &mut plant, &every_order(3)).expect("planted sweep");
     assert!(planted, "no order-3 triple was planted");
     let (moved_top, base_top) = (&moved[3], &base[3]);
     assert_ne!(moved_top.0, base_top.0, "a raw order-3 count change must move order 3");
