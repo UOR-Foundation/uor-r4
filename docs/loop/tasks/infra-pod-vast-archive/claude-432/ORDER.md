@@ -4,6 +4,11 @@ Lab: claude. Item: [one-model-end-to-end](../../../../roadmap/items/one-model-en
 Base: `caa0f10c3` (claude-431, PR #4092). Asked for by Casey on 18 Nov ("Yes, fix it here"), after
 claude-431's REPORT listed the failure under Still open.
 
+## Owner approval
+
+This unit changes the owner path `scripts/pod/uor-pod`. Asked in Claude's chat "Fix the uor-pod
+Vast archive bug next?", Casey answered verbatim: "Yes, fix it here" (2026-11-18T22:34:45Z).
+
 ## Why
 
 On 18 Nov `uor-pod down vast-61321505` refused to delete the pod after copying its results:

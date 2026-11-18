@@ -13,6 +13,9 @@ Lab: claude. ORDER: [ORDER.md](ORDER.md). Base `caa0f10c3`.
 - **One run of G2 did not happen.** The guard refused my first combined command because it
   mixed `git` with the test run, and the restore step still ran. I repeated it as separate
   commands; the result below is from that second run.
+- **The first queue attempt was refused.** `scripts/pod/uor-pod` is an owner path, and the
+  ORDER had no `## Owner approval` section. Casey's answer in this chat is now recorded there
+  verbatim, with its time.
 
 ## What changed
 
