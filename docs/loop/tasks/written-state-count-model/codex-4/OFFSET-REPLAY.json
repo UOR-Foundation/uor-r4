@@ -354,5 +354,36 @@
       "anchor_back": 13,
       "original_bytes_equal_to_4086": true
     }
-  ]
+  ],
+  "original_writer_4086_crosscheck": {
+    "method": "Joined by seed, case and arm. Current Offset corresponds to prior Learned. Compared all per-step fields (before/after cursor words, emitted, copied, native ID and top 8, release and source ID), complete generated and expected IDs, selected source, first wrong, wrong expected and emitted, stop, whole-value and case identities. Both new per-seed original receipts also matched their new repeat byte-for-byte on Wick.",
+    "results": [
+      {
+        "seed": 1,
+        "matched_cases": 16,
+        "matched_case_arms": 48,
+        "matched_steps_by_arm": {
+          "Offset": 104,
+          "Oracle": 56,
+          "Disabled": 179
+        },
+        "matched_steps": 339,
+        "previous_writer_receipt_sha256": "05bbf87ed47c2b45554967239c4fc6a0b421a28bacc34cf4a05524a31bb511cd",
+        "current_writer_receipt_sha256": "0b03921377bdb850747a0cdb9637ffc53fbcb9658797739922c3da4519866d33"
+      },
+      {
+        "seed": 2,
+        "matched_cases": 16,
+        "matched_case_arms": 48,
+        "matched_steps_by_arm": {
+          "Offset": 104,
+          "Oracle": 56,
+          "Disabled": 166
+        },
+        "matched_steps": 326,
+        "previous_writer_receipt_sha256": "e71a829007b7666723af7ef6f007d8e229717ef7557670dd5fd323c657ada909",
+        "current_writer_receipt_sha256": "256af44b31bb826e5886b4610f4ec533c865fababe46d1f4468f69294a46ff20"
+      }
+    ]
+  }
 }
