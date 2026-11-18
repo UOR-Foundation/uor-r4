@@ -76,10 +76,11 @@ Phase totals over orders 0–10, in seconds, from the raw ms in each `count-10.l
 ## What the numbers say
 
 - The cursor did what the scout said: `keep` fell 96%, to 15.8 s, inside the 15–30 s estimate.
-- Threaded hashing cut `push` by 41%: 104.7 s, about half the scout's estimated 218 s cut. Hashing was not all of
+- Threaded hashing cut `push` by 41%: 104.7 s, about half the scout's estimated cut of 206 s
+  (241 s to about 35 s, from claude-423's push). Hashing was not all of
   push; the rest of it is on the caller's thread and is the next thing to time.
 - The count is 38.5% faster with every digest unchanged. 557.7 s came off, against the scout's
-  combined estimate of about 570 s for D1 + D2; the miss on push was offset by the unexplained
+  combined estimate of about 555–570 s for D1 + D2; the miss on push was offset by the unexplained
   falls in other host phases.
 
 ## Checks run at the head
@@ -91,8 +92,9 @@ Phase totals over orders 0–10, in seconds, from the raw ms in each `count-10.l
 - **G2, wick** at `66e812bb9`: `ngram_count_cuda`, `kn_score_cuda` and `kn_filter` 21 passed,
   0 failed, 4 ignored (the real-stream tests, which need UORT streams); the cursor test ran
   there ([`cuda-tests.log`](run1/c426/cuda-tests.log)).
-- **G3, negatives** (both set aside together on the committed code, one build, then restored
-  with `git checkout` and rebuilt green):
+- **G3, negatives** at `66e812bb9`: both fixes were sabotaged in place on that commit (not set
+  aside against the base, as the ORDER worded it), in one build, then restored with
+  `git checkout` and rebuilt green:
   - a cursor that never moves (`while false && …`) fails the cursor test: order 0 from
     partition 0 kept no triples;
   - a `finish` that drops the tail chunk fails the hash test, at order 0 with chunk 40.
