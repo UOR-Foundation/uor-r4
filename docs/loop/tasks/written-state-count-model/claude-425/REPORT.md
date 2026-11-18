@@ -4,15 +4,15 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 
 ## What did not work, first
 
-- **The host work that reads every gram did not shrink; it grew** [claude]. In claude-423 the
-  six host steps that read every own-order gram took 1,277.4 s; here they take 1,245.0 s. Copies
-  and record building fell by 117.3 s, because the separate extension count is gone. But
+- **The host work that reads every gram shrank by only 32.4 s (2.5%)** [claude]. In claude-423
+  the six host steps that read every own-order gram took 1,277.4 s; here they take 1,245.0 s.
+  Copies and record building fell by 117.3 s, because the separate extension count is gone. But
   `runs` (+42.3 s), `adjust` (+22.9 s), `push` (+11.7 s) and `keep` (+7.9 s) each got slower
-  for the same work. The cause is not measured. One candidate is that the sweep now interleaves
+  for the same work, by 84.7 s together. The cause is not measured. One candidate is that the sweep now interleaves
   11 orders' assemblers, filters and query lists per range, where claude-423 finished one order
   before starting the next. Those host steps are now 86% of the sweep's wall time (1,245.0 of
   1,447.0 s).
-- **Peak resident memory rose 2.6 GiB,** from 8,864,644 KiB to 11,499,308 KiB. Likely cause, not
+- **Peak resident memory rose 2.51 GiB (2,634,664 KiB),** from 8,864,644 KiB to 11,499,308 KiB. Likely cause, not
   measured: every order's query filter (its sorted contexts and pairs) now stays alive for the
   whole sweep. Before, each order's filter existed only while that order was counted.
 - **3–5 minutes is still far off.** The count alone takes 1,447 s, down from 1,817 s. The device
@@ -24,6 +24,12 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
   effect. Only the bucket-offset miscount was run with its check set aside against the base.
 - **The real-stream test reaches only orders 0–3.** It uses a 15.5 M-token stream, and orders
   4–10 are checked at full scale only by G4's record comparison.
+- **The extension census on the sweep never ran.**
+  - G4 ran without `--extension-census`, so the new routing (order k's partitions to census
+    k−1) is checked only by reading.
+  - `a_count_only_run_scores_nothing` checks only that `--count-only` and `--extension-census`
+    parse into a count-only run. No test shows that the scorer is skipped.
+  - G4's log does: it ends "nothing was scored" with no scoring line.
 
 ## What changed
 
@@ -63,7 +69,7 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 The G4 run used wick's 4090 at `2c22da962`, budget 2^24, all of TRAIN (2,091,560,001 tokens)
 against DEV-tune's keys at N = 10, with `--count-only --profile-phases`. It was job `c425-g4`;
 the packet is in [`run1/c425/`](run1/c425/).
-- 1,464 s wall; the count itself took 1,447.0 s over 128 shared ranges and 1,408 partitions.
+- 1,464 s wall; the count itself took 1,447.0 s over 128 shared ranges. The counter counted 1,408 partitions: 128 for each of orders 0–10. Order 0's 128 raw partitions are adjusted into one partition before its sink, so the orders were handed 1 + 10 × 128 = 1,281.
 - `count-10.json` has sha256 `518a3e0729867477628ef020d84e8c4a9e90f16d272ac94af5c092c08ecabede`.
 - Nothing was scored, and DEV-test was not read.
 - Peak resident set: 11,499,308 KiB.
@@ -142,8 +148,8 @@ working-discipline.
 
 ## Still open
 
-- **Why runs, adjust, push and keep got slower** in the interleaved sweep (+84.8 s), and the
-  2.6 GiB of extra resident memory. A per-order timing of a sweep that drops each order's
+- **Why runs, adjust, push and keep got slower** in the interleaved sweep (+84.7 s), and the
+  2.51 GiB of extra resident memory. A per-order timing of a sweep that drops each order's
   filter when it finishes, or one at N = 4, would separate the causes.
 - **Fix 1: the host work that reads every gram (1,245.0 s).** The scout ranks the steps:
   - first, a cursor in `keep` and hashing on parallel threads, which keep the digest
@@ -151,6 +157,8 @@ working-discipline.
   - then partitions held on the device, which needs a parallel digest and so a recorded
     change of replay identity.
 - **Orders 4–10 on a real stream** are compared only at full scale, by G4.
+- **A census run on the sweep.** A small `--extension-census` run, with its totals compared to
+  claude-424's `census-10.json`, would exercise the routing this unit only read.
 
 ## Plain summary
 
@@ -159,4 +167,4 @@ whole 2.09 B-token stream for every partition. It also counts each order once in
 It gives exactly the same counts, digests and discounts as before at N = 10. The GPU part of the
 count fell from 491 s to 163 s, and the whole count from 1,817 s to 1,447 s. What remains is
 almost all host work over every one of the 6.7 B grams: copying, hashing and filtering. That
-work did not get cheaper here and is the next target.
+work fell only 2.5% here and is the next target.
