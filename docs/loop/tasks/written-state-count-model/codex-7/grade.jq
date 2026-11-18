@@ -54,6 +54,8 @@ def check_trace($g):
       ($out|length)>16 or ($out[-1]!=1 and ($out|length)!=16) or $r.stop!=(if $out[-1]==1 then "eos" else "cap" end) or
       $r.first_wrong!=$wrong or $r.exact!=($out==$e) or $r.eos_action_step!=$trace.action or
       $r.expected!=$e or $r.pair!=$g.pair or $r.role!=$g.role or $r.asked_start!=$g.asked_start or $r.other_start!=$g.other_start or
+      $r.factors!=$g.factors or $r.gold_positions!=$g.token_positions or
+      $r.first_free!=([$r.steps|to_entries[]|select(.value.copied==0 and .key!=$trace.action)|[.key,.value.emitted]][0]) or
       $r.right_source!=($r.selected==$g.asked_start) or $r.whole_value!=($out[:(($e|length)-1)]==$e[:-1]) or
       [$r.wrong_expected,$r.wrong_emitted]!=(if $wrong==null then [null,null] else [$e[$wrong],$out[$wrong]] end))
   then $r|fail("recorded grade or EOS witness disagrees with canonical grade and emitted IDs") else $r end;
@@ -110,6 +112,9 @@ def summary:
                        n(direction(.arms[$a].first_wrong;.arms[$b].first_wrong)=="earlier")),
             net_exact:(n(.arms[$b].exact)-n(.arms[$a].exact))})})|from_entries)})),
     exact_count_interaction:(n(.arms.ContinuationEos.exact)-n(.arms.Continuation.exact)-n(.arms.WordStartEos.exact)+n(.arms.WordStart.exact)),
+    per_case_exact_interaction:counts(
+      (.arms.ContinuationEos.exact|if . then 1 else 0 end)-(.arms.Continuation.exact|if . then 1 else 0 end)-
+      (.arms.WordStartEos.exact|if . then 1 else 0 end)+(.arms.WordStart.exact|if . then 1 else 0 end)),
     joint_vs_eos_exact_overlap:{both:n(.arms.ContinuationEos.exact and .arms.WordStartEos.exact),
       joint_only:n(.arms.ContinuationEos.exact and (.arms.WordStartEos.exact|not)),
       eos_only:n(.arms.WordStartEos.exact and (.arms.ContinuationEos.exact|not)),
