@@ -473,9 +473,11 @@ fn ngram_count_cuda_sweep_orders_read_only_their_extension_types() {
     };
     let (moved, _) = gpu_sweep(&counter, 3, 60_000, &mut plant, &every_order(3)).expect("planted sweep");
     assert!(planted, "no order-3 triple was planted");
-    assert_ne!(moved[3].0, base[3].0, "a raw order-3 count change must move order 3");
+    let (moved_top, base_top) = (&moved[3], &base[3]);
+    assert_ne!(moved_top.0, base_top.0, "a raw order-3 count change must move order 3");
     for order in 0..3 {
-        assert_eq!(moved[order].0, base[order].0, "order {order} must not read order-3 counts");
+        let (moved_k, base_k) = (&moved[order], &base[order]);
+        assert_eq!(moved_k.0, base_k.0, "order {order} must not read order-3 counts");
     }
     let mut dropped = false;
     let mut drop_one = |order: u32, raw: &mut NgramPartition| {
@@ -496,7 +498,10 @@ fn ngram_count_cuda_sweep_orders_read_only_their_extension_types() {
         }
     };
     match gpu_sweep(&counter, 3, 60_000, &mut drop_one, &[2]) {
-        Ok((orders, _)) => assert_ne!(orders[2].0, base[2].0, "dropping a lone left type must move order 2"),
+        Ok((orders, _)) => {
+            let (dropped_two, base_two) = (&orders[2], &base[2]);
+            assert_ne!(dropped_two.0, base_two.0, "dropping a lone left type must move order 2");
+        }
         Err(error) => eprintln!("dropped left type refused: {error}"),
     }
     assert!(dropped, "no lone order-3 left type was dropped");
