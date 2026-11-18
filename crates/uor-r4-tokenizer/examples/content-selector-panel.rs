@@ -212,7 +212,9 @@ fn datasets(root: &Path, train: bool, tokenizer: &ByteBpeTokenizer) -> Result<()
                                     || prefix[query] != prefix[fact_anchor]
                                     || query_other.is_some_and(|q| prefix[q] != prefix[other_fact])
                                 {
-                                    return Err(format!("target alignment failure in {pair}").into());
+                                    return Err(
+                                        format!("target alignment failure in {pair}").into()
+                                    );
                                 }
                                 let q_tokens = entity_tokens(&question);
                                 let q0 = prefix
@@ -283,11 +285,14 @@ fn run() -> Result<()> {
         let ids: Vec<u32> = serde_json::from_value(v["expected"].clone())?;
         let a = v["asked_start"].as_u64().ok_or("bad source")? as usize;
         let b = v["asked_end"].as_u64().ok_or("bad end")? as usize;
-        if prefix.get(a..b)
-            != ids
-                .split_last()
-                .and_then(|(stop, body)| (*stop == 1).then_some(body))
-        {
+        let answer = prefix
+            .get(a..b)
+            .filter(|s| !s.is_empty())
+            .ok_or("bad original value span")?;
+        let target = ids
+            .strip_suffix(&[1])
+            .ok_or("original target must terminate in EOS")?;
+        if answer != target {
             return Err("original target boundary mismatch".into());
         }
         blind.push(json!({"prefix":prefix}));

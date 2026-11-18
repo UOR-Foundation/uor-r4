@@ -185,11 +185,12 @@ impl Gpu {
 }
 pub const STRIDE: usize = WIDTH + 5;
 const CAP: usize = 288;
+pub const MAX_PREDICTIONS: usize = 4096;
 fn validate(data: &[u32], roots: &[u32], fit: bool) -> Result<u32, Fail> {
     let n = data.len() / STRIDE;
     if !data.len().is_multiple_of(STRIDE)
         || n == 0
-        || n > if fit { CAP } else { 4096 }
+        || n > if fit { CAP } else { MAX_PREDICTIONS }
         || roots.len() != 4096
         || roots.iter().any(|&v| v > 65535)
     {

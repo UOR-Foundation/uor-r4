@@ -43,6 +43,23 @@ struct Predictions {
     rows: Vec<Row>,
 }
 
+struct FittedArm {
+    prototypes: Prototypes,
+    picks: Predictions,
+}
+
+// Exact states frozen after TRAIN and before any writer grading.
+const STATE_DIGESTS: [[&str; 2]; 2] = [
+    [
+        "a9e340c153975b7ac3d8d9157283d78e3c5040d053e052f0fefec570f35b9317",
+        "c3d3e5fc84ed5881e9fad2d8fea2665cb30f9731561658686d89b6b03fced239",
+    ],
+    [
+        "41ff82f106f3e051dfa55406aea4f0fb5e63804210b5a339fe99dfc59b4cf72d",
+        "aa558512de9ca2454d60d43b9f7e8c9e22002680fbe3c0b05eecad35efef0d23",
+    ],
+];
+
 #[derive(Deserialize)]
 struct Row {
     prefix_sha256: String,
@@ -114,11 +131,17 @@ pub fn run(artifact: &str, grade_path: &str, config_path: &str) -> Result<Value,
         }
         state.prototypes.validate().map_err(|e| e.to_string())?;
         let digest = sha256(&bytes);
+        if digest != STATE_DIGESTS[seed][fitted.len()] {
+            return Err("selector state differs from the frozen blind fit".into());
+        }
         let picks = load_picks(picks_path, &artifact_hash, &digest, arm, grades.len())?;
         hashes.push(digest);
-        fitted.push((state, picks));
+        fitted.push(FittedArm {
+            prototypes: state.prototypes,
+            picks,
+        });
     }
-    if fitted[0].0.prototypes != fitted[1].0.prototypes {
+    if fitted[0].prototypes != fitted[1].prototypes {
         return Err("ablation changed prototypes".into());
     }
     let offset = load_picks(
@@ -162,8 +185,8 @@ pub fn run(artifact: &str, grade_path: &str, config_path: &str) -> Result<Value,
                     .flat_map(|t| t.to_le_bytes())
                     .collect::<Vec<_>>(),
             );
-            for (k, (state, picks)) in fitted.iter().enumerate() {
-                let row = &picks.rows[j];
+            for (k, state) in fitted.iter().enumerate() {
+                let row = &state.picks.rows[j];
                 if row.prefix_sha256 != hash
                     || row.choice()
                         != select(&case.prefix, &roots, &state.prototypes, k == 1)
@@ -186,8 +209,8 @@ pub fn run(artifact: &str, grade_path: &str, config_path: &str) -> Result<Value,
                 ));
             }
             for (arm, source) in [
-                (Arm::Content, fitted[0].1.rows[j].source),
-                (Arm::QueryAblated, fitted[1].1.rows[j].source),
+                (Arm::Content, fitted[0].picks.rows[j].source),
+                (Arm::QueryAblated, fitted[1].picks.rows[j].source),
                 (Arm::Offset, offset.rows[j].source),
                 (Arm::Oracle, Some(case.asked_start as u32)),
                 (Arm::Disabled, None),
@@ -215,8 +238,8 @@ pub fn run(artifact: &str, grade_path: &str, config_path: &str) -> Result<Value,
                 return Err(format!("{}: oracle span lost", case.id));
             }
             let choice = match r.arm {
-                Arm::Content => Some(fitted[0].1.rows[j].choice()),
-                Arm::QueryAblated => Some(fitted[1].1.rows[j].choice()),
+                Arm::Content => Some(fitted[0].picks.rows[j].choice()),
+                Arm::QueryAblated => Some(fitted[1].picks.rows[j].choice()),
                 _ => None,
             };
             rows.push(json!({"case":case.id,"pair":case.pair,"role":case.role,"arm":format!("{:?}",r.arm),

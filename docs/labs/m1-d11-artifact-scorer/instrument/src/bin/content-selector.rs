@@ -148,7 +148,10 @@ fn predict(path: &Path, state: &Path, input: &Path, out: &Path) -> Result<(), Fa
         return Err("model/state/TRAIN mismatch".into());
     }
     let queries: Vec<Query> = serde_json::from_slice(&fs::read(input)?)?;
-    let mut bank = Vec::new();
+    if !(1..=gpu::MAX_PREDICTIONS).contains(&queries.len()) {
+        return Err("prediction panel outside device row bounds".into());
+    }
+    let mut bank = Vec::with_capacity(queries.len() * gpu::STRIDE);
     for q in &queries {
         bank.extend(pack(&q.prefix, [BOUNDARY; 4])?);
     }
