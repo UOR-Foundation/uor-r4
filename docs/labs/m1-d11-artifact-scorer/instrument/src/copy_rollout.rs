@@ -65,6 +65,7 @@ struct Rollout<'a> {
     source: Option<u32>,
     state: ExactCopyState,
     prefix: Vec<u32>,
+    first_free: Option<(usize, u32)>,
     steps: Vec<Value>,
 }
 
@@ -163,6 +164,7 @@ pub fn run(
                 source,
                 state: ExactCopyState::new(source, case.prefix.len() as u32),
                 prefix: case.prefix.clone(),
+                first_free: None,
                 steps: Vec::new(),
             });
         }
@@ -219,6 +221,9 @@ pub fn run(
             {
                 return Err("exact copy lost source identity".into());
             }
+            if step.copied == 0 && r.first_free.is_none() {
+                r.first_free = Some((r.steps.len(), step.emitted));
+            }
             r.steps.push(
                 json!({"before":r.state.words(),"after":step.state.words(),"copied":step.copied,
                 "source_id":(step.copied==1).then_some(step.exact_id), "release":step.release,
@@ -243,7 +248,9 @@ pub fn run(
         rows.push(json!({"case":r.case.id,"pair":r.case.pair,"role":r.case.role,"arm":format!("{:?}",r.arm),
             "asked_start":r.case.asked_start,"selected":r.source,"right_source":r.source==Some(r.case.asked_start as u32),
             "expected":r.case.expected,"generated":emitted,"whole_value":emitted.starts_with(value),"exact":wrong.is_none(),
-            "first_wrong":wrong,"previous_first_wrong":first_wrong(old,&r.case.expected),
+            "first_wrong":wrong,"previous_first_wrong":first_wrong(old,&r.case.expected),"previous_generated":old,
+            "first_change_from_disabled":first_wrong(emitted,old),"first_free_step_and_id":r.first_free,
+            "wrong_expected":wrong.and_then(|i|r.case.expected.get(i)),"wrong_emitted":wrong.and_then(|i|emitted.get(i)),
             "stop":if emitted.last()==Some(&EOS){"eos"}else{"cap"},"steps":r.steps}));
     }
     Ok(
