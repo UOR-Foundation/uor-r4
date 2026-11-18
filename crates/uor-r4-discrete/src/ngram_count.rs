@@ -161,7 +161,7 @@ const BUILD_PARALLEL_MIN: usize = 1 << 16;
 /// filled in at most `threads` contiguous chunks on scoped threads, or on the
 /// caller below 2^16 elements or with one thread; the result does not depend
 /// on `threads`.
-pub(crate) fn build_indexed<T, F>(n: usize, threads: usize, f: F) -> Vec<T>
+pub fn build_indexed<T, F>(n: usize, threads: usize, f: F) -> Vec<T>
 where
     T: Send,
     F: Fn(usize) -> T + Sync,
