@@ -16,3 +16,5 @@ entity-pair-chain baseline MODEL CONTENT_STATE SPAN_STATE EXACT_STATE BARE NEW_O
 entity-pair-chain repair MODEL CONTENT_STATE SPAN_STATE EXACT_STATE BARE NEW_OUTPUT
 entity-pair-chain oracle MODEL CONTENT_STATE SPAN_STATE EXACT_STATE BARE PROJECTED_ANCHORS NEW_OUTPUT
 ```
+
+The final-source Wick rebuild, after a tuple-destructuring edit in the legacy GPU wrapper, produced a different executable digest and the same four AOT cubins. All finite cases passed again. All 24 full prediction files from the rebuilt executable matched the sealed originals byte-for-byte. [Final executable digests](final-source/binaries.sha256) · [Final prediction digests](final-source/prediction.sha256)
