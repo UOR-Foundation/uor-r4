@@ -697,6 +697,83 @@ impl NgramCounter {
         }
         Ok(plan)
     }
+
+    /// The adjusted counts of every order 0..=`highest` with each order
+    /// counted once (claude-425). [`Self::count_order_adjusted_with`] counts
+    /// order k+1 again for order k's runs; here one plan, cut from order 1's
+    /// histogram, serves every k >= 1 (order k+1's bins never exceed order
+    /// k's, since both key on t[j-1]), and per range the orders run from
+    /// `highest` down to 1: order k's raw partition is adjusted against the
+    /// runs of order k+1's raw partition over the same tokens, then reduced to
+    /// order k-1's runs, or at k = 1 added to the unigram continuation. Order
+    /// 0 is counted last on its own plan. `sink(k, partition)` receives each
+    /// order's adjusted partitions in ascending key order (the ranges ascend
+    /// in slot 1); calls of different orders interleave, so the caller keeps
+    /// one assembler per order. Returns the shared plan (order 0's when N = 0).
+    pub fn count_adjusted_sweep(
+        &self,
+        highest: u32,
+        budget: u64,
+        mut sink: impl FnMut(u32, &NgramPartition) -> Result<()>,
+    ) -> Result<Vec<PartitionRange>> {
+        self.sweep(highest, budget, &mut |_, _| {}, &mut sink)
+    }
+
+    /// [`Self::count_adjusted_sweep`] with `tamper(k, raw)` applied to each
+    /// raw partition before it is adjusted or reduced to runs: the identity
+    /// outside tests.
+    fn sweep(
+        &self,
+        highest: u32,
+        budget: u64,
+        tamper: &mut dyn FnMut(u32, &mut NgramPartition),
+        sink: &mut dyn FnMut(u32, &NgramPartition) -> Result<()>,
+    ) -> Result<Vec<PartitionRange>> {
+        if highest > NGRAM_MAX_ORDER {
+            return Err(invalid(format!("adjusted counts need N <= {NGRAM_MAX_ORDER}, got {highest}")));
+        }
+        let mut continuation = UnigramContinuation::new();
+        let mut plan = Vec::new();
+        if highest >= 1 {
+            let histograms = (1..=highest)
+                .map(|order| self.timed_histogram(order))
+                .collect::<Result<Vec<_>>>()?;
+            plan = plan_partitions(&histograms[0], budget)?;
+            for range in &plan {
+                let mut runs = Vec::new();
+                for order in (1..=highest).rev() {
+                    let histogram = &histograms[order as usize - 1];
+                    let targets = histogram[range.lo as usize..range.hi as usize].iter().sum();
+                    let same_tokens = PartitionRange { lo: range.lo, hi: range.hi, targets };
+                    let started = self.start_phase();
+                    let mut counted = self.count_partition(order, &same_tokens)?;
+                    self.tick(OWN_COUNT, started);
+                    tamper(order, &mut counted);
+                    let started = self.start_phase();
+                    let adjusted =
+                        adjust_partition_from_runs(order, highest, range.lo, range.hi, &counted, &runs)?;
+                    self.tick(ADJUST, started);
+                    drop(std::mem::take(&mut runs));
+                    sink(order, &adjusted)?;
+                    drop(adjusted);
+                    if order == 1 {
+                        continuation.add(&counted)?;
+                    } else {
+                        let started = self.start_phase();
+                        runs = extension_runs(order - 1, highest, range.lo, range.hi, Some(&counted))?;
+                        self.tick(RUNS, started);
+                    }
+                }
+            }
+        }
+        let mut raw = NgramAssembler::new(0, true)?;
+        let started = self.start_phase();
+        let unigram_plan = self.count_order(0, budget, &mut raw)?;
+        self.tick(OWN_COUNT, started);
+        let (_, unigrams, _) = raw.finish();
+        sink(0, &continuation.adjust(highest, &unigrams)?)?;
+        Ok(if highest >= 1 { plan } else { unigram_plan })
+    }
 }
 
 /// Test-only views of the selection (claude-425).
@@ -712,6 +789,18 @@ impl NgramCounter {
         let mut words = self.stream.clone_dtoh(&pos).map_err(cuda)?;
         words.truncate(range.targets as usize);
         Ok(words)
+    }
+
+    /// [`Self::count_adjusted_sweep`] with `tamper(k, raw)` applied to each
+    /// raw order-k partition (k >= 1) before it is adjusted or handed on.
+    pub(crate) fn count_adjusted_sweep_tampered(
+        &self,
+        highest: u32,
+        budget: u64,
+        tamper: &mut dyn FnMut(u32, &mut NgramPartition),
+        sink: &mut dyn FnMut(u32, &NgramPartition) -> Result<()>,
+    ) -> Result<Vec<PartitionRange>> {
+        self.sweep(highest, budget, tamper, sink)
     }
 
     /// `positions` after the counter's gram sort of `order`.
