@@ -5,12 +5,13 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 ## What did not work, first
 
 - **Threaded hashing did not take hashing off the caller's path** [claude]. Of push's 150.4 s, the
-  caller spent **73.2 s (48.6%) blocked on a full hash channel**: 29.4 s on the triple streams and
+  caller spent **73.2 s (48.6%) in `send` on the hash channels**, which means blocked on a full
+  queue plus the call itself: 29.4 s on the triple streams and
   43.7 s on the context streams. A partition's encoded records are larger than a stream's queue
   (four 4 MiB chunks), so the caller waits for its hasher while each partition is fed. Across
   the sweep, the 22 hasher threads were busy 134.8 s, 0.69% of their combined wall time. They
   sit idle between bursts and are behind during them. This is why claude-426's push fell
-  104.7 s and not the scout's ~206 s.
+  104.7 s, not the ~206 s the scout estimated (from claude-423's 241 s of push to about 35 s).
 - **Push did not get faster, and was not meant to.** It took 150.4 s, against claude-426's
   148.2 s. The +2.2 s includes the timers and run-to-run noise; this unit adds diagnostics only.
 - **Host phases this unit did not touch moved again, by as much as 19 s each.** Against
@@ -104,11 +105,14 @@ the count.
 - **The digest is most of push.** The two feeds take 121.2 s, 80.6% of push: 73.2 s waiting
   on the hashers and 48.0 s encoding records and merging contexts on the caller. Validation
   takes the other 29.2 s (19.4%): the per-record checks and the census.
-- **The hashers are the bottleneck during a feed.** Their busy time (134.8 s) exceeds the feed
-  time (121.2 s). For order 10's context stream, the hasher was busy longer than the feed that
-  supplied it. The caller produces bytes faster than one SHA-256 thread consumes them, and a
-  stream must be hashed in order. So each stream's serial hashing time is a floor; the largest is
-  order 10's context stream, at 17.7 s.
+- **The hashers are the bottleneck during a feed.** The evidence is the 73.2 s the caller
+  spent in `send` on full queues, and order 10's context stream: its hasher was busy 17.7 s
+  against a feed of 16.8 s, and 10.3 s of that feed were waits. (The 134.8 s of busy time
+  summed over 22 threads is no evidence on its own, since the hashers overlap and keep draining
+  after a push returns.) The caller produces bytes faster than one SHA-256 thread consumes them,
+  and a stream must be hashed in order. So each stream's serial hashing time is roughly a floor
+  for the sequential digest. The largest is order 10's context stream, at about 17.7 s, measured
+  beside 21 other hasher threads and with the clock read on every chunk.
 - **What D3 has to take with it.** If D3 keeps every partition on the device, it either moves
   the digest there too, or still sends every gram's bytes to the host to hash in order.
   - **Digest on the device:** a parallel digest, which changes the replay identity. This
@@ -130,7 +134,9 @@ the count.
   - no decimal literal or banned pattern under D32.
 - **G1 negative:** with the `push` totals never written (`if let Some(timing) = None`), the new
   test fails with "order 1: triple checks recorded no time". With the file restored and rebuilt,
-  it passes again.
+  it passes again. The test does not pin the `send_wait` totals: a wait may rightly be zero, so
+  a wait that is never written would still pass it. The waits rest on the wick log, where they
+  are non-zero and below their feeds.
 - **G2, wick** at `20ee2f665`: PASS (above).
 - **G3:** this REPORT.
 
