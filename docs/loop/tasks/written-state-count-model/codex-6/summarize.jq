@@ -124,9 +124,10 @@ def tsv:
     ([$c.id,$c.pair,$c.role,$c.truth_length,$c.registered,$c.coverage,$c.source,$c.corresponding,$c.base_class,
       $v.query_start,$v.query_end,$v.fact_start,$v.fact_end,$c.masks.eligible,$c.masks.word_start,$c.masks.ordered] +
      [arms[] as $a | cell($c;$a)[]])|map(if .==null then "NA" else . end)|@tsv);
+if .schema!="uor-r4.value-writer/1" then error("unrecognized writer schema") else . end |
 ($training[0]|map(. as $r|.prefix[($r.fact_end+1):$r.source])|unique) as $dict |
 ($grading[0]|INDEX(.id)) as $grades | $span_state[0].bank.classes as $classes |
-if ($classes|length)!=4096 or any($dict[];length<1 or length>3) or ($grades|length)!=$n then error("invalid inputs") else . end |
+if ($classes|length)!=4096 or ($dict|length)!=6 or any($dict[];length<1 or length>3) or ($grades|length)!=$n then error("invalid inputs") else . end |
 .differential_steps as $steps | .inputs as $inputs | .rows |
 if (map(.steps|length)|add)!=$steps or length!=6*$n then error("transition/arm count mismatch") else . end |
 group_by(.case)|map(grade_case($grades;$dict;$classes))|
