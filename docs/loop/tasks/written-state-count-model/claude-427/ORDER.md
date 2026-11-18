@@ -37,6 +37,8 @@ which.
   - the host `kn_` and `ngram_count` tests pass, and the instrument's tests pass;
   - a new test: with timing on, the digests equal those with timing off, and every sub-phase
     and hasher-busy total of a non-trivial push is above zero; with timing off they stay zero.
+    A channel wait may rightly be zero (the hasher kept up), so the test checks only that each
+    `send_wait` is no more than the feed it is part of.
 - **G2, wick:** one N = 10 `--count-only --profile-phases` run on all of TRAIN against
   DEV-tune's keys, budget 2^24, as claude-426's G4.
   - Its `count-10.json` without `unit` equals claude-426's `run1/c426/count-10.json` without
