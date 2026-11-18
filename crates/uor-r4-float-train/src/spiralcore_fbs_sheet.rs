@@ -111,7 +111,21 @@ pub fn build_fbs_model_with(
     vocab_size: usize,
     device: &Device,
 ) -> Result<StackModel> {
-    let mut model = hs::build_hamilton_model_with(seed, width, layers, vocab_size, device)?;
+    build_fbs_model_full(arm, seed, width, layers, vocab_size, hs::SHEET_KEPT_CELLS, device)
+}
+
+/// The same model with the writer's kept cells named (`--kept-cells`).
+pub fn build_fbs_model_full(
+    arm: FbsArm,
+    seed: u64,
+    width: usize,
+    layers: usize,
+    vocab_size: usize,
+    kept_cells: usize,
+    device: &Device,
+) -> Result<StackModel> {
+    let mut model =
+        hs::build_hamilton_model_full(seed, width, layers, vocab_size, kept_cells, device)?;
     if arm == FbsArm::TwoAtomMix {
         model.widen_fbs_queries_two_path()?;
     }

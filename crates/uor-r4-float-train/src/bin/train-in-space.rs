@@ -677,6 +677,7 @@ fn main() -> Result<()> {
         width: uor_r4_float_train::hamilton_sheet::SHEET_WIDTH,
         vocab_size: uor_r4_float_train::hamilton_sheet::SHEET_VOCAB,
         layers: 6,
+        kept_cells: uor_r4_float_train::hamilton_sheet::SHEET_KEPT_CELLS,
         type_spin: false,
         hamming_copy_key: 1,
         hamming_copy_keys: None,
@@ -1064,6 +1065,16 @@ fn main() -> Result<()> {
                     ));
                 }
                 config.vocab_size = vocab;
+            }
+            "--kept-cells" => {
+                let kept = usize::try_from(number(&value)?)
+                    .map_err(|_| FloatTrainError::Invalid("--kept-cells too big".to_owned()))?;
+                if !(1..=16).contains(&kept) {
+                    return Err(FloatTrainError::Invalid(
+                        "--kept-cells must be 1..=16 (the native writer's cells)".to_owned(),
+                    ));
+                }
+                config.kept_cells = kept;
             }
             "--layers" => {
                 let layers = usize::try_from(number(&value)?).map_err(|_| FloatTrainError::Invalid("--layers too big".to_owned()))?;

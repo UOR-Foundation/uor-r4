@@ -3122,6 +3122,19 @@ pub fn build_hamilton_model_with(
     vocab_size: usize,
     device: &Device,
 ) -> Result<StackModel> {
+    build_hamilton_model_full(seed, width, layers, vocab_size, SHEET_KEPT_CELLS, device)
+}
+
+/// The same model with the native writer's kept cells named: the writer admits at most this many
+/// cells of the 256 before its final pick (1..=16). Eight is the sheet's.
+pub fn build_hamilton_model_full(
+    seed: u64,
+    width: usize,
+    layers: usize,
+    vocab_size: usize,
+    kept_cells: usize,
+    device: &Device,
+) -> Result<StackModel> {
     let mut config = StackConfig::transformer_control(seed);
     config.arch = StackArch::Geometric;
     config.pattern = "r".repeat(layers);
@@ -3139,7 +3152,7 @@ pub fn build_hamilton_model_with(
     };
     let mut model = StackModel::new(config, device)?;
     model.set_quaternion_weights(QuaternionWeights::SpiralcoreFbs)?;
-    model.set_native_vector_head(SHEET_KEPT_CELLS)?;
+    model.set_native_vector_head(kept_cells)?;
     Ok(model)
 }
 

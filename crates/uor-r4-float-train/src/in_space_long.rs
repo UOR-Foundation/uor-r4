@@ -41,7 +41,7 @@ use crate::geometric_stack::{
 use crate::hamilton_sheet::{self as hs, CausalWindow, HamiltonArm, SHEET_CONTEXT};
 use crate::query_cache::{CachedRows, QueryCacheWriter};
 use crate::spiralcore_fbs_arms::{self as arms, FbsArm};
-use crate::spiralcore_fbs_sheet::{build_fbs_model_at, build_fbs_model_with, panel_loss};
+use crate::spiralcore_fbs_sheet::{build_fbs_model_at, build_fbs_model_full, panel_loss};
 use crate::{invalid, sha256_bytes, Result};
 
 /// Written only after every checkpoint tensor and sidecar is closed. A controller may freeze
@@ -150,6 +150,11 @@ pub struct LongConfig {
     /// default.
     #[serde(skip_serializing_if = "is_six_layers")]
     pub layers: usize,
+    /// The native writer's kept cells (1..=16; default 8, the sheet's). Left out of `config.json` at
+    /// the default. This is the writer's admission width: how many of its 256 cells can open before
+    /// the final pick (`codex-51`).
+    #[serde(skip_serializing_if = "is_sheet_kept_cells")]
+    pub kept_cells: usize,
     /// The Hamming read's type heads compare positions through SpiralCore's path-dependent
     /// icosian transport (`HammingReads::with_type_spin`, claude-151); off by default.
     pub type_spin: bool,
@@ -1677,6 +1682,11 @@ fn is_six_layers(n: &usize) -> bool {
     *n == 6
 }
 
+/// `kept_cells` at the sheet's eight ([`LongConfig::kept_cells`]).
+fn is_sheet_kept_cells(n: &usize) -> bool {
+    *n == hs::SHEET_KEPT_CELLS
+}
+
 /// `context` as a training window ([`LongConfig::context`], claude-273): 2 to 4,096 tokens, the
 /// stack's own range, or an error.
 pub fn training_context(context: usize) -> Result<usize> {
@@ -1698,12 +1708,13 @@ fn build_long_model(arm: FbsArm, config: &LongConfig, device: &Device) -> Result
             check_checkpoint_model(&model, config)?;
             model
         }
-        None => build_fbs_model_with(
+        None => build_fbs_model_full(
             arm,
             config.seed,
             config.width,
             config.layers,
             config.vocab_size,
+            config.kept_cells,
             device,
         )?,
     };
@@ -18840,6 +18851,7 @@ mod tests {
             width: hs::SHEET_WIDTH,
             vocab_size: hs::SHEET_VOCAB,
             layers: 6,
+            kept_cells: hs::SHEET_KEPT_CELLS,
             type_spin: false,
             hamming_copy_key: 1,
             hamming_copy_keys: None,
