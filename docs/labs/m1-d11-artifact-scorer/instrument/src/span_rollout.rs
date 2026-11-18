@@ -9,6 +9,7 @@ use uor_r4_discrete::corpus::sha256;
 use uor_r4_integer::{
     content_selector::{self, Prototypes},
     discrete_d11::ExactCopyState,
+    span_selector::{resolve, Arms, Bank, SpanChoice},
 };
 
 const SEALED: &str =
@@ -51,31 +52,24 @@ struct OldRow {
     choice: content_selector::Choice,
 }
 
-#[derive(Copy, Clone, Deserialize, Serialize)]
-struct Span {
-    query: Option<u32>,
-    fact: Option<u32>,
-    query_start: Option<u32>,
-    query_end: Option<u32>,
-    fact_start: Option<u32>,
-    fact_end: Option<u32>,
-    source: Option<u32>,
+#[derive(Deserialize)]
+struct SpanState {
+    bank: Bank,
 }
 
 #[derive(Deserialize)]
 struct NewRow {
     prefix_sha256: String,
-    span: Span,
-    endpoint_only: Span,
-    connector_only: Span,
+    #[serde(flatten)]
+    choices: Arms,
 }
 
 impl NewRow {
-    fn choice(&self, arm: Arm) -> Option<Span> {
+    fn choice(&self, arm: Arm) -> Option<SpanChoice> {
         match arm {
-            Arm::Span => Some(self.span),
-            Arm::EndpointOnly => Some(self.endpoint_only),
-            Arm::ConnectorOnly => Some(self.connector_only),
+            Arm::Span => Some(self.choices.span),
+            Arm::EndpointOnly => Some(self.choices.endpoint_only),
+            Arm::ConnectorOnly => Some(self.choices.connector_only),
             _ => None,
         }
     }
@@ -94,12 +88,13 @@ pub fn run(
     let baseline_bytes = contents(old_state)?;
     let old_bytes = contents(old_picks)?;
     let new_bytes = contents(picks)?;
+    let span_bytes = contents(state)?;
     let hashes = Digests {
         artifact: sha256(&model_bytes),
         grade: sha256(&grade_bytes),
         baseline_state: sha256(&baseline_bytes),
         baseline_picks: sha256(&old_bytes),
-        span_state: sha256(&contents(state)?),
+        span_state: sha256(&span_bytes),
         span_picks: sha256(&new_bytes),
     };
     if !RELEASED.contains(&hashes.artifact.as_str())
@@ -120,6 +115,14 @@ pub fn run(
         return Err("state or prediction coverage mismatch".into());
     }
     let baseline: OldState = parse(&baseline_bytes)?;
+    let span_state: SpanState = parse(&span_bytes)?;
+    let [connector] = baseline.prototypes.relation.as_slice() else {
+        return Err("expected one connector prototype in pinned baseline".into());
+    };
+    if connector[0] != 1 {
+        return Err("unexpected baseline connector length".into());
+    }
+    let legacy_root = connector[1];
     let (tables, model) = ArtifactTables::from_bytes(&model_bytes)?;
     let roots = model.packed_codebook_roots();
     let device = DeviceScorer::new(0, &tables)?;
@@ -148,6 +151,12 @@ pub fn run(
                 || old_row.choice != choice
             {
                 return Err(format!("{}: frozen anchor/prefix replay differs", c.id));
+            }
+            if resolve(&c.prefix, &roots, &span_state.bank, legacy_root, choice)
+                .map_err(|e| e.to_string())?
+                != new_row.choices
+            {
+                return Err(format!("{}: blind span/connector replay differs", c.id));
             }
             for arm in ARMS {
                 let source = match new_row.choice(arm) {

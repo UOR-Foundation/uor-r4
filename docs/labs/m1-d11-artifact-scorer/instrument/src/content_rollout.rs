@@ -262,6 +262,6 @@ pub(super) fn grade_case(
         )
     });
     let case: Case = serde_json::from_value(core).map_err(|e| e.to_string())?;
-    case.validate(&model)?;
+    case.validate(model)?;
     Ok(case)
 }
