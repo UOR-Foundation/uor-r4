@@ -11,3 +11,16 @@ References #4063 and the codex-3 copy sheet. The earlier best-pick diagnostic (#
 **Resources.** One already-owned RTX 4090 at wick, sm_89, shared private diagnostic flock, check at least 4 GiB free, no paid resource. AOT nvcc integer-only cubin with no runtime compilation. Expected under five minutes device execution plus up to one hour including builds/retries, under 2 GiB process RSS, under 4 GiB build disk, under 5 MiB retained. Preserve exact models, arrays and receipts into their own output directories and abort on an identity or parity failure. No empirical fit or panel scoring before FIT and pre-run approval.
 
 Before observing outcomes, define the descriptive policy success criterion as strictly more correct source positions and strictly more both-correct question pairs than each of no-fit and swapped-label on the 64 held-out records, separately at both base seeds. The disjoint-split inventory, exact TRAIN/held-out/prediction-only files and the lexical/frame generator must be bound before the first fit. Two base seeds sharing the same labels constitute two artifact checks.
+
+### Pre-fit identity receipt on Wick
+
+The released tokenizer JSON files sha256 `a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377` and `f804ecbee34e3c4e0001a737d003e3d620ba2c40722d416e7f3dd64843e2b30e` separately produced byte-identical files. Both lexical inventories and both frames per partition are literal in the Rust generator. The 128 TRAIN, 64 held-out, and 16 pre-existing fixed prompts yielded 208 distinct token arrays.
+
+| Input | SHA256 of exact bytes |
+|---|---|
+| TRAIN inputs and labels | `060ce5f91b5f9a4960d7896200d60f9a3775695031e3a1724b3af77809fcc3d5` |
+| Held-out inputs and labels | `65b26c76be0343387cd25e0efb5605f23f2efd9f2f0f9e94892ba51fdff95190` |
+| Held-out prediction-only | `23f8c8337ed9bb4508525deb77d6d83bce3089f16c8328c80064504a61101f07` |
+| Fixed 16 prediction-only | `58d960c43b61ce5611131d1a0e4a225374a76d523ff5f8c112633f0f47861517` |
+
+The finite sm_89 RTX 4090 test reproduced all 576 CUDA/Rust source decisions on three constructed prefixes with synthetic roots, detected a planted source displacement and a changed swapped-label vote inventory, and checked ties and empty eligibility. The three-entry AOT cubin SHA256 was `9847666304ae7e6eeb158f6c93abba6876a7f51c5e5c6aeb8e64b734962ef1b2`.
