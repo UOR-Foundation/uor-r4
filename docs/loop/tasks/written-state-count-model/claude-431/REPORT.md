@@ -7,17 +7,18 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
 - **G4 could not run on wick; it ran on a rented 5090 instead** [claude]. The ORDER named wick's
   4090 for both binaries. Three wick jobs ran out of GPU memory (`CUDA_ERROR_OUT_OF_MEMORY`):
   - `c431`, budget 2^24: main's count finished (rc 0), and the head's stopped after 55 s. The
-    other container's processes held 5,263 MiB before main's run, and the whole device peaked at
-    23,896 MiB in the head's.
+    other container's processes held 6,383 MiB before main's run and 5,263 MiB before the
+    head's, and the whole device peaked at 23,896 MiB in the head's.
   - `c431b`, budget 2^24, each count waiting for 18 GiB free and retried on an out-of-memory
-    error: main failed all three attempts, 140–143 s in, with 4,687–5,615 MiB in use before
+    error: main failed all three attempts, 141–143 s in, with 4,687–5,615 MiB in use before
     each and whole-device peaks of 23,286–23,990 MiB.
-  - `c431c`, budget 12 GiB of targets: main failed three more times at the same point.
+  - `c431c`, budget 12 × 2^20 targets: main failed three more times, 140–142 s in, with
+    6,639–7,503 MiB in use before each.
   The budget caps the targets per partition (about 16.7 million), not device memory, so it did
   not move the peak: the count needs about 16 GB on its own (16,028 MiB on the idle 5090), and the
   other container's training processes, which grow during a run, left too little. This is the
   instrument, not the change: main failed the same way. G4 and G5 then ran on one Vast RTX 5090
-  (`vast-61321505`, about 52 min at $1.042/h), main and head back to back, at the ORDER's budget
+  (`vast-61321505`, about 52 min at $1.042/h by the launch log), main and head back to back, at the ORDER's budget
   and with the ORDER's comparison. Packets: [`run1/c431/`](run1/c431/),
   [`run1/c431b/`](run1/c431b/), [`run1/c431c/`](run1/c431c/), and the pair
   [`run1/c431p/`](run1/c431p/).
@@ -28,7 +29,9 @@ Lab: claude. Order: [ORDER.md](ORDER.md).
   memory, and the builder allocates each vector once at its final size, as before. The cause was
   not measured. A likely one: records now finish sooner, so more finished partitions wait at once
   in claude-428's hash-worker queues.
-- **The wick negative fails by a panic, not a wrong count.** With each chunk starting one element
+- **The device negative ran on the 5090, not on wick** (G3 named wick), in the same pod job after
+  the pair.
+- **The device negative fails by a panic, not a wrong count.** With each chunk starting one element
   late, the last chunk reads one element past the downloaded arrays (`keys[2 * g]`,
   `ngram_count_device.rs:741`, "index out of bounds: the len is 195568 but the index is
   195568"), and `thread::scope` re-raises it as "a scoped thread panicked". Both oracle tests
@@ -94,8 +97,8 @@ Histogram is 0.2 s in both; runs and adjust are 0 in both.
 - **Every other phase moved by 5.0 s or less.** Download moved most (+5.0 s, 5%); this unit does
   not touch it, and no change in it is credited to the unit.
 - **The host now holds the count.** On this machine download (99.3 s) is the largest phase, 37.8%
-  of the head's count. The host phases (download, records, push, keep) are 220.2 s, 83.8%; the
-  device phases (histogram, select, sort, emit) are 35.4 s, 13.5%.
+  of the head's sweep wall. Of that wall, the host phases (download, records, push, keep) are
+  220.2 s, 83.8%; the device phases (histogram, select, sort, emit) are 35.3 s, 13.5%.
 
 ## Checks run at the head
 
