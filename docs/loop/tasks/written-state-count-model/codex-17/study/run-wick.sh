@@ -274,9 +274,23 @@ for lane in public no-read; do
 done
 for name in "${normal_arms[@]}"; do
     mode="${name#learned-normal-}"
-    /usr/bin/time -v -o "$out/client-$name.time" "$writer" public "$learned_chat" "$out/modes/$mode/normal.d11" \
+    # The public response records the literal artifact argument. The current
+    # directory is the phase root, so this also preserves raw cold row hashes.
+    /usr/bin/time -v -o "$out/client-$name.time" "$writer" public "$learned_chat" "modes/$mode/normal.d11" \
        "$tokenizer" "$held_blind" public "$out/client-$name" >"$out/client-$name.log" 2>&1
 done
+if ((${#normal_arms[@]})); then
+    for name in "${normal_arms[@]}"; do
+        mode="${name#learned-normal-}"
+        jq -n --arg mode "$mode" --argjson model "$(stat -c %s "modes/$mode/normal.d11")" \
+            --argjson bank "$(stat -c %s "modes/$mode/model.bank")" \
+            --argjson client "$(stat -c %s "$learned_chat")" --argjson tokenizer "$(stat -c %s "$tokenizer")" \
+            '{mode:$mode,d11_bytes:$model,embedded_bank_bytes:$bank,client_bytes:$client,
+              tokenizer_bytes:$tokenizer,delivered_file_bytes:($model+$client+$tokenizer)}'
+    done | jq -s '{available:.,all_three_available:(length==3),
+                   equal_delivered_file_bytes:(if length>=2 then (map(.delivered_file_bytes)|unique|length)==1 else null end)}' \
+       > delivered-bytes.json
+fi
 sha256sum --check blind-selections.sha256
 
 phase=post-seal-grade
