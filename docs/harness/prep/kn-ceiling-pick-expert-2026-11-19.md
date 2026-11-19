@@ -1,0 +1,133 @@
+# Prep sheet: the S5 Pick expert, fitted on reserved TRAIN, against its controls (written-state-count-model, claude-439, 19 Nov 2026)
+
+Lab: claude. Item: [written-state-count-model](../../roadmap/items/written-state-count-model.md) (#4063). Order: [claude-439](../../loop/tasks/written-state-count-model/claude-439/ORDER.md), with the corrections in its [STEP0](../../loop/tasks/written-state-count-model/claude-439/STEP0.md). Code: branch `claude/pick-expert-439` at the head the FIT reviews, named in the FIT history below. A later commit may change only documents, or repair a step-1, step-2, B1 or B2 failure under the Stop rule. After any repair every step re-runs from step 1, each into a new folder, and no number from the earlier build is reported. Compute: wick, Casey's own RTX 4090, at no rental. No pod is leased.
+
+## The question
+
+Does a session-copy expert lower D87 DEV-tune bits beyond the count experts? It is read by the Pick XOR + popcount over geometric codes. And does it do so beyond the same expert with its geometry removed (C2, exact token pairs) or scrambled (C3, permuted codes)?
+
+Every arm's weights are fitted on a reserved TRAIN slice R and scored, frozen, on DEV-tune. claude-433 and claude-438 fitted on the set they scored, so this is the first out-of-sample reading of the count mixer.
+
+## Steps
+
+Every step runs on wick, as jobs through `local/claude/wick/wick.sh`, built from a source tarball of the head above with `UOR_NVCC_ARCH=compute_89`. The streams are claude-420's split v1 copies on wick. Their sha256 values are checked against claude-420's `train.json` and `dev-tune.json` before any step:
+- `train.tokens.u16` `c6cba29ead4c745fb47b3f87007d982e72defc9f04102a268709ba0d34d51460`;
+- `dev-tune.tokens.u16` `75c6d1ac479bf120bac3aa60ac160536e8146f8052aa49c002209500799b7d0a`;
+- `dev-tune.novel.u8` `7df42437260bb767e2b1bdfd0cc55a242bd6e0b632a5bcd754852a7ab8aca6af`;
+- id bytes `befb22f6908751ae522a80336afa584eb2c24e36a10b90ad3105e39271a48ac9`.
+
+The trunk is `seed1.d11` (see Base artifact). N = 10, budget 2^24, the KN start and 96 EM passes for every fit, as in claude-438. Every run writes to a new folder under wick's `uor-r4-out/c439/`; no folder is reused (L-002). A completion watcher is armed before each job starts.
+
+Where each part runs:
+- the counts, the lookups and the Pick read run on the 4090;
+- the EM fits over the per-target masses and the bootstrap sums run on wick's host, as claude-433's and claude-438's fits did on their pod's host.
+
+1. **Build and tests at the head, on wick:**
+   - `cargo test --release --features cuda --lib -p uor-r4-discrete -- kn_lookup_cuda kn_score_cuda ngram_count_cuda kn_filter kn_ceiling pick`;
+   - the instrument's own tests.
+   - All must pass.
+2. **The 1‰ slice with the host checks:**
+   - the lookups' host check, as `--check-host` in claude-438;
+   - the CUDA Pick against the CPU oracle `observe_identity_pick` at every DEV-tune target of the slice. Each target's trace words `[pick, d(pick), ties, gate + 1, out root]` per block, and the successor, must be equal word for word.
+   - C2's exact pair and C3's permuted read are checked the same way against their host versions.
+3. **1% and 10% of C** (`--per-mille 10`, `--per-mille 100`): A0, A1, C1, C2, C3 and P+, with `--profile-phases`.
+4. **100% of C**, the same arms, with peak host memory sampled once a second and the GPU peak read from `nvidia-smi`.
+5. **Storage.** Each run's JSON, log and memory samples are copied to the laptop under `local/claude/c439/`, and committed with the REPORT under `run1/`. No count table, stream, mask, id list or Pick tape is copied off wick or committed.
+
+**The arms, in ORDER indexing** (the target is at t, the query pair is (t − 2, t − 1), a candidate pair is (p − 1, p), and p + 1 < t):
+
+| Arm | Pick expert | Bucket class from |
+|---|---|---|
+| A0 pure count | absent | none: claude-438's 176 buckets |
+| A1 Pick | `seed1.d11`'s block codes, Identity transport | A1's own read |
+| C1 read disabled | absent | A1's read (528 buckets, no Pick column) |
+| C2 exact pair | the latest p with the same two token ids | C2's own match (did not fire, distance 0) |
+| C3 permuted codes | A1's read over a seeded permutation of the token rows | C3's own read |
+| P+ | A1 and A0 on the repeated streams below | A1's read |
+
+- **Window.** Candidates lie inside one D87 record (BOS … EOS) and inside the trunk's context of 192: the read's prefix is at most 192 tokens ending at t − 1, cut at the record's BOS.
+- **Fires** means the target has at least three earlier tokens in its record, counting BOS. When it fires, the expert puts 2^48 on the token at p + 1. Where it does not fire, the expert is absent from the bucket's simplex. Distance ties go to the latest p.
+- **C3's permutation:** a Fisher–Yates shuffle of token rows 2 to 4,095 of the code table, driven by splitmix64 with seed 439. BOS (0) and EOS (1) keep their rows, so the code multiset is unchanged.
+- **P+'s streams:** every record body of R and of DEV-tune is cut into 64-token chunks, and each chunk is followed at once by a verbatim copy of itself, so each copy's source is 64 tokens back, inside the window. A0 and A1 are fitted on R⁺ and scored on DEV⁺. The scored set for B2 is the second copies' targets.
+
+## Bar (pre-registered)
+
+- **B1 (identity):** step 2 passes. The CUDA Pick, C2 and C3 equal their host versions at every target of the 1‰ slice. The lookups pass their host check.
+- **B2 (P+, the instrument can show a copy gain):** at every size, A1's bits on DEV⁺'s second copies are at most half of A0's bits on the same targets. If B2 fails, the instrument is broken and no arm's result is read (L-007).
+- **B3 (EM):**
+  - each fit's last `fit_bits` is at most its first;
+  - each fit's scored bits on R equal its last `fit_bits`;
+  - `gap_bound_q12` is written for every fit.
+  - A rise between passes is recorded but does not stop the run.
+- **The reading, at 100% only,** from paired bootstrap bands over DEV-tune's 2,670 records:
+  - For two arms X and Y, d_r = bits_X(r) − bits_Y(r), in Q12, per record r.
+  - 1,000 resamples of the records, with replacement, are driven by splitmix64 with seed 4390. Each resample gives the sum of its d_r.
+  - The band is the 25th and the 975th of the 1,000 sorted sums.
+  - "X beats Y" means the band's upper end is below 0.
+  - The bands read are A1 − A0, A1 − C1, A1 − C2 and A1 − C3, overall and over the novel class.
+
+**Reading map** (fixed before the run):
+- **Geometric gain:** A1 beats A0, C1, C2 and C3. S5's Pick counts as a geometry gain on P1.
+- **Copy gain, no geometry:** A1 beats A0 and C1 but not both C2 and C3. A session copy helps, and these codes add nothing that token identity or any code map does not. The deployable P1 path takes the cheaper of the arms that tie.
+- **Bucket split only:** C1 beats A0 and A1 does not beat C1. The gain comes from splitting buckets, not from copying.
+- **No gain:** A1 does not beat A0. This configuration is closed; the mechanism is not.
+- **I (instrument):** B1, B2 or B3 fails, step 1 fails, or the stream check fails. The repair is made under this sheet, and no number from that build is reported.
+
+**Recorded, with no bar:**
+- each arm's DEV-tune micro-BPB, overall and novel;
+- its fit bits on R and its bound;
+- A0 against R\* = 1,432,318 micro-BPB, labelled "C is TRAIN minus R, not claude-422's TRAIN";
+- the fire rate and the share of fired targets at distance 0, for A1, C2 and C3;
+- the fitted Pick weight per bucket class;
+- the 1% and 10% bands;
+- wall time, phases and memory at each size.
+
+## Base artifact
+
+- **Code:** `claude/pick-expert-439` at the head the FIT names. The job writes the tarball's commit to `head.txt`.
+- **Trunk:** `local/codex/public-m1-predictor/seed1.d11`, sha256 `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d`.
+  - It is the trunk the count work already binds (`BASE` in `count-replay.rs` and `count-score.rs`; `TRUNK` in codex's `pick-reachability.rs`).
+  - Its tokenizer gives the same ids as D87's (STEP0 §1).
+  - No saved D11 artifact is in Pick mode. A1 reads this trunk's token blocks with Identity transport, through the same device path as `pick-reachability.rs` (`identity_pick_inventory`, `ReadSpec::Pick`, position word 3).
+- **Streams:** claude-420's split v1, the files above, checked by sha256.
+- **Machine:** wick's RTX 4090 (24 GB), shared with a transcode and with Codex. claude-433's 100% run peaked at 16,028 MiB of device memory. If the 4090 has less than that free when a size starts, the job waits for it and does not run beside the other jobs.
+
+## Data split
+
+- **C** (counts): TRAIN's records whose index mod 128 is not 0, cut at 1%, 10% and 100% of the stream at a record start, as `record_prefix` does.
+- **R** (fit): TRAIN's records whose index mod 128 is 0, at full size for every cut of C. That is 4,060 of 519,580 records and about 16.3M targets. R and C share no record, and no R record enters any count table.
+- The split is fixed by record index before any score is read.
+- **Scoring:** DEV-tune, 2,670 records, 10,807,417 targets, weights frozen.
+- **P+:** R⁺ and DEV⁺ are built from R and DEV-tune only.
+- **DEV-test is not read by any step.** It stays sealed for gate (b).
+
+## Minimum test power
+
+- The bits are exact integer sums. The only sampling is the bootstrap over records, which is the unit the bar reads.
+- The 1% and 10% runs give each band's width before 100% is read. Nothing is changed after seeing them: N, R, the bucket rule, the passes, the start, the seeds and the chunk length are all fixed here.
+- If the 100% A1 − A0 band holds 0, the REPORT gives its width in micro-BPB, as the smallest gain this run could have shown.
+- B2's margin is wide on purpose: in P+ every second copy's source is in the window, so a working read cuts those bits far below half.
+
+## Cost
+
+- **Rental:** none; wick is Casey's own GPU.
+- **Time, estimated from claude-433's 5090 run** (289 s raw count; 137 s for 24 passes of four fits over 10.8M targets, so about 1.4 s per pass per fit):
+  - the raw count at 100% is about 7 min on the 4090;
+  - each fit on R is about 3.5 min, five fits about 17 min;
+  - P+'s two fits on R⁺ (about 32.6M targets) are about 14 min;
+  - the Pick reads are minutes.
+  - So about 45 min at 100%, and under two hours for every size together.
+- **Host memory:** the largest mass table, R⁺ with 14 experts, is about 3.7 GB.
+
+## Stop rule
+
+- A failure in step 1 or 2 stops the job before step 3. It is repaired under this sheet.
+- A crash at any size is repeated once, under a new name (`<name>-retry`) beside the crashed run's files, which are kept. A second crash at the same size needs a new sheet.
+- A B1, B2 or B3 failure stops the reading. It is an instrument fault, and no band from that build is reported.
+- Each size is run once. The first JSON written at a size is its record.
+- No DEV-tune number feeds back into any parameter this sheet fixes.
+- If wick is unreachable, or its GPU stays busy for more than six hours, the unit asks for a rented 4090 or 5090 in the caps (§3.6) under a new sheet line. It does not wait.
+
+FIT history: none yet.
+
+TEST FITNESS: PENDING - written 19 Nov at the sheet's first commit; a fresh-context non-author FIT reviews it at the code head.
