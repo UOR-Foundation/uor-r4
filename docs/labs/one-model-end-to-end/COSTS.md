@@ -140,3 +140,45 @@ token is corpus-dependent. It does say that until a **same-corpus count baseline
 **same rows**, we cannot distinguish "2 bits behind because the transport is weak" from "2 bits behind
 because this dev is harder per token". That baseline is the next unit, and it must be computed inside
 the eval so the row set is bit-identical rather than approximately equal.
+
+## The queue landed (19 Nov): C1, the readout, the slope, and the batch curve
+
+**C1, the 0.89-epoch run with the centroid address** (`runs/gen-long-cent`, 32,768 steps, 19,184 s):
+
+| step | epoch | nearest | pick (top-1) | admitted | bits |
+|---|---|---|---|---|---|
+| 2,048 | 0.06 | 9,266 | 7,793 | 12,249 | 7.9712 |
+| 8,192 | 0.22 | 12,422 | 8,733 | 12,381 | 7.3563 |
+| 16,384 | 0.45 | 14,029 | 10,433 | 14,330 | 7.2384 |
+| 32,768 | 0.89 | **15,888** | **12,018** | **15,994** | **6.9468** |
+
+- **C1 fails its floor: `nearest` 15,888/101,175 = 15.70 %** against T2's **15.99 %** — 0.29 points
+  below a bigram count table after 0.89 epochs (402 M tokens seen).
+- **The readout is no longer the limiter**: pick 11.88 % against nearest 15.70 %, and admission
+  15.81 % is *above* nearest. Before the address fix the same trunk picked at 0.4 %. So ~76 % of the
+  trunk's information now reaches the served token, and the count of lost answers fell from 19 in 20
+  to 1 in 4.
+- **Bits are still falling**: 7.971 → 6.947 over 16x tokens, **~0.26 bits per doubling**, with no
+  plateau. (Published dense curves fall ~0.18 bits per doubling, so the slope is not the weak part;
+  the *level* is, and the level needs a same-corpus baseline before it can be judged.)
+- **Batch curve** (256 steps each): 24 → **51.3 µs/token**, 32 → 48.6, 48 → 42.6, **64 → 40.8**.
+  A **1.26×** win at batch 64, not the 2.4x that batch 8 → 24 gave, because the fixed cost was
+  already amortised at 24. Adopt 64.
+- **The kept-cells A/B is void**: `kc-8` and `kc-16` produced *identical* `admitted` (13,215 and
+  12,859 at 2,048/4,096 with matching step-0) although `kc-16`'s config records `kept_cells: 16`.
+  Either admission is evaluated with a fixed 8 cells or the flag does not reach the eval's writer.
+  It no longer matters for capability — admission (15.81 %) already exceeds nearest (15.70 %) — so
+  the A/B is retired rather than diagnosed, and the anomaly is recorded so nobody cites those arms.
+- **The feedback arm is confounded**, as its own script made it: it trained at batch 48 for 4,096
+  steps (100 M tokens, lr 0.001 decaying over 4,096) while the comparison ran batch 24. Its
+  `nearest` 15,032 is not evidence that the centroid address hurt training. The clean readout
+  comparison remains the evaluation A/B, where the trunk was held fixed.
+
+## What the last number means for the decision
+
+The model is **at bigram parity and 1.02 bits above its own start**, with a slope that has not
+flattened and a readout that no longer throws the signal away. Against published dense models of the
+same size (~5.3 bits on web text) the optimistic bound of 6.95 is ~1.6 bits behind — but that
+comparison crosses corpora and cannot decide anything on its own. **The missing measurement is a
+count baseline in bits on the same rows**, and then whether the gap to it widens or narrows with
+tokens. Both are cheap and neither needs a new training run.
