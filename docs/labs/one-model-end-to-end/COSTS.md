@@ -182,3 +182,51 @@ same size (~5.3 bits on web text) the optimistic bound of 6.95 is ~1.6 bits behi
 comparison crosses corpora and cannot decide anything on its own. **The missing measurement is a
 count baseline in bits on the same rows**, and then whether the gap to it widens or narrows with
 tokens. Both are cheap and neither needs a new training run.
+
+## The baseline on identical rows (19 Nov): the model is 2.6 bits behind a bigram
+
+The count baseline is now computed on the eval's **own rows** — `UOR4_DUMP_ROWS` writes each row's
+(conditioning token, target, the model's rank of that target, copy flag), and the counts come from
+the same 385,284,895-token TRAIN the model trained on. 101,175 rows, no row-set mismatch:
+
+| ranker | bits (mean log2(rank+1)) | top-1 | implied mean rank |
+|---|---|---|---|
+| unigram | 7.3181 | 6.20 % | ~158 |
+| **bigram** (tie-break: unigram) | **4.3128** | **16.47 %** | ~20 |
+| model, 0.89 ep | **6.9468** | 15.70 % | ~123 |
+
+**The model is 2.63 bits behind a bigram count table**, and 6.9468 is its *optimistic* bound. Both are
+rank codes on the same rows, so the comparison is exact. **Top-1 hid this**: at 15.70 % against
+16.47 % the model looks like parity, while in information terms it ranks the target ~6x further down
+(~123 against ~20).
+
+**It is not a memorisation effect.** Split by whether the row copies its prompt:
+
+| subset | rows | model bits | bigram bits | gap |
+|---|---|---|---|---|
+| copies the prompt | 5.2 % | 7.374 | 4.227 | **+3.15** |
+| does not copy | 94.8 % | 6.923 | 4.318 | **+2.61** |
+
+The model is **2.6 bits behind on the 95 % of rows where copying cannot help**, and it ranks the target
+above the bigram on only **18.7 %** of rows. That is an information-extraction deficit, not a
+table-memorisation one.
+
+**And scale cannot close it at the measured rate.** The gap narrows from 3.658 bits at 25.2 M tokens
+(step 2,048) to 2.634 at 402.7 M (step 32,768) — **0.256 bits per doubling**, so closing the remaining
+2.634 needs ~10.3 doublings, about **1,250x more tokens (~500 B)**. At the measured 40.8 µs/token
+(batch 64) that is **~236 days of this card**, and 1,300 epochs over a 385 M-token corpus, which would
+memorise rather than generalise. **Scale is refused by arithmetic, not by preference.**
+
+## Where the deficit points
+
+The token hinge's margin defaults to **1.0** while the score is `-mean|q-v|` over 512 lanes; the code's
+own comment says a margin of 1.0 "can never saturate". The observed dev token hinge is **0.916**, i.e.
+the margin is violated on nearly every row and its gradient is a constant push rather than a ranking
+signal. A hinge that cannot distinguish "close rival" from "far rival" trains a model to put the target
+in the top ~120 and no better — which is exactly the rank distribution measured.
+
+That makes the margin the leading suspect, and it is a one-flag change (`--token-margin`). Running now:
+two arms at 4,096 steps with reachable margins (0.10 and 0.25), against the margin-1.0 reference of
+**bits 7.2223 at the same 50 M tokens**. Gate, fixed before the numbers: a reachable margin must reach
+**below 7.02 bits** (0.2 better) at equal tokens, or the margin is not the deficit and the next suspect
+is the transport.

@@ -3241,7 +3241,7 @@ fn row_picks(
             // The target's rank under the same metric as `nearest`, as a rank-code length
             // (codex-57): one pass over the scores this eval already computed, so bits per token
             // costs nothing extra, and reproducing `nearest` from it is the instrument's check.
-            {
+            let above = {
                 let target_idx = Tensor::from_vec(targets.clone(), targets.len(), model.device())?;
                 let target_score = scores.gather(&target_idx.unsqueeze(1)?, 1)?.squeeze(1)?;
                 let above = scores
@@ -3256,6 +3256,21 @@ fn row_picks(
                 }
                 rows += above.len();
                 RANK_BITS.set((sum, rows));
+                above
+            };
+            // The count baseline's rows, written only when the instrument asks (`UOR4_DUMP_ROWS`):
+            // the token a bigram conditions on, the target it must rank, this model's rank of that
+            // target, and whether the row copies its prompt. Same rows, one file, so the baseline
+            // and the model are compared on identical rows and split by whether copying can help.
+            if let Ok(path) = std::env::var("UOR4_DUMP_ROWS") {
+                use std::io::Write as _;
+                let mut file = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
+                for (i, &target) in targets.iter().enumerate() {
+                    file.write_all(&ids[scored[i] as usize].to_le_bytes())?;
+                    file.write_all(&target.to_le_bytes())?;
+                    file.write_all(&((above[i] as u32) + 1).to_le_bytes())?;
+                    file.write_all(&u32::from(copies[i]).to_le_bytes())?;
+                }
             }
             if let (Some(sink), Some((rows, reply)), Some((hamming, rates))) =
                 (trace.as_deref_mut(), named, captured)
