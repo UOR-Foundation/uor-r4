@@ -1,0 +1,5 @@
+# First value decision on the released Wick panel
+
+Re-run compare.sh with the unpacked codex-16 archive, the codex-16 evidence directory and a new output directory. It checks the cold manifests and original row identity before joining the GPU candidate words. The table gives one row per distinct residual. Both seeds agree. The archive and commit that bind the raw emissions are in the [prior unit](../../codex-16/evidence/storage.json).
+
+All 11 correct original addresses were in the frozen eligibility and WordStart masks. None was selected by Current, WordStart, ordered, combined, or continuation. The first recorded divergence is selection of the value start. Four gold starts preceded the chosen WordStart. Four scans found only connector bits, and three stopped at an earlier nonconnector with no WordStart bit. In every case the gold and actual starts were reachable, and the actual writer copied from its wrong nominated source to the correct delimiter and EOS. The finite interface keeps the absolute candidate addresses visible for a later learned decision. No model score on new text follows from retaining a candidate.
