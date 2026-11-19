@@ -14,6 +14,8 @@ tok=$old/assets/tokenizer-seed$seed.json
 w=$old/bins/writer-c
 chat=$old/native-finite/source/target/release/uor-chat
 labels=$PWD/grading/held-grades.json
+check=$PWD/driver/fresh-validity-check
+reader=$PWD/grading/blind-semantic-v2.json
 out=$PWD/$stage-seed$seed
 mkdir "$out" "$out/blind"
 cp panel/held-blind.json "$out/blind/held-blind.json"
@@ -23,6 +25,7 @@ bash driver/finite-client.sh "$out/client-calibration" > "$out/finite-calibratio
 # public and no-read processes see the same complete unmarked prompts.
 if [[ $stage == repeat ]]; then cp grading/mutated.json "$out/blind/held-grades.json"; fi
 jq '[.[]|{start:0,end:(.prefix|length)}]' "$blind" > "$out/all-original-positions.json"
+"$check" "$tok" "$blind" "$labels" "$reader" "$out/independent-preflight.json"
 "$w" select "$m" "$blind" public - - "$out/public.json"
 "$w" select "$m" "$blind" no-read - - "$out/no-read.json"
 "$w" select "$m" "$blind" oracle "$out/all-original-positions.json" "$labels" "$out/requested.json"
@@ -45,6 +48,10 @@ jq -e '(.rows|length)==24 and all(.rows[];.exact==true and .terminal_eos and .so
 jq -e '(.rows|length)==24 and all(.rows[];.exact==false)' "$out/forced-rival-grade.json" >/dev/null
 "$w" grade "$out/forced-gold.json" "$out/forced-gold-run" grading/mutated.json - "$out/wrong-key-grade.json"
 jq -e '(.rows|length)==24 and all(.rows[];.exact==false)' "$out/wrong-key-grade.json" >/dev/null
+"$check" observed "$tok" "$labels" "$reader" - "$out/forced-gold-grade.json" "$out/forced-gold-independent.json"
+"$check" observed "$tok" "$labels" "$reader" - "$out/forced-rival-grade.json" "$out/forced-rival-independent.json"
+"$check" observed "$tok" grading/mutated.json "$reader" "$labels" "$out/wrong-key-grade.json" "$out/wrong-key-independent.json"
+jq -ens --slurpfile g "$out/forced-gold-independent.json" --slurpfile m "$out/wrong-key-independent.json" '($g[0].counts.independently_exact==24 and $m[0].counts.active_label_exact==0 and $m[0].counts.independently_exact==24 and $m[0].generated_id_tape_sha256==$g[0].generated_id_tape_sha256 and $g[0].gpu_sha256==$m[0].gpu_sha256)' >/dev/null
 "$w" chain "$HOME/uor-codex" "$seed" "$blind" "$out/chain" "$out/public.json" "$out/no-read.json" "$out/requested.json"
 jq -ecs --arg arm word-start --slurpfile original "$out/requested.json" --slurpfile labels /dev/null -f driver/sources.jq "$out"/chain/level-*-chunk-*/nominees/rank-*-cont.json > "$out/word-start.json"
 force word-start
@@ -53,4 +60,7 @@ for arm in public no-read; do
     "$w" public "$chat" "$m" "$tok" "$blind" "$arm" "$out/say-$arm"
     "$w" grade "$out/$arm.json" "$out/chain" "$labels" "$out/say-$arm" "$out/$arm-grade.json"
 done
-(cd "$out" && sha256sum *-grade.json public.json no-read.json requested.json word-start.json chain/nominees/chosen.json *-cursor.json client-calibration/*.json *-run/gpu.json say-{public,no-read}/*.json > cold.sha256)
+for arm in word-start requested public no-read; do
+    "$check" observed "$tok" "$labels" "$reader" - "$out/$arm-grade.json" "$out/$arm-independent.json"
+done
+(cd "$out" && sha256sum *-independent.json independent-preflight.json *-grade.json public.json no-read.json requested.json word-start.json chain/nominees/chosen.json *-cursor.json client-calibration/*.json *-run/gpu.json say-{public,no-read}/*.json > cold.sha256)

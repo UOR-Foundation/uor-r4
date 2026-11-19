@@ -1,3 +1,4 @@
+mod observed;
 // Independent grading witnesses over original unmarked text and immutable token tapes.
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -26,6 +27,11 @@ fn valid(actual: &[u32], expected: &[u32], answer: &str, t: &ByteBpeTokenizer) -
 }
 fn main() -> Result<()> {
     let args: Vec<_> = env::args().skip(1).collect();
+    if let Some((cmd, rest)) = args.split_first() {
+        if cmd == "observed" {
+            return observed::score(rest);
+        }
+    }
     let [tokenizer, prompts, grades, readings, out] = args.as_slice() else {
         return Err("TOKENIZER BLIND GRADES INDEPENDENT_READER NEW_REPORT".into());
     };
