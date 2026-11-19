@@ -112,9 +112,21 @@ the **readout**: an address/value that survives the mix, in the same integer sta
   held-out shards 3–4 (`/tmp/opencode/donor-dev`) at 200 k tokens is **1,052 windows / 101,175
   rows**, a 21× cheaper evaluation than the full 2.13 M rows. The narrow pinned `ft/dev` is a
   different tokenizer and world and must never be used for a donor run.
-- **Speed**: the objective's whole-table scan was half the step; the cell objective now takes the
-  fused top-8 pass with identical loss (0.59 → 0.30 s/step). The remaining cost is the projection
-  backward's per-row route and sibling work (U2, codex-47).
+- **Speed, measured (18 Nov)**: the objective's whole-table scan was half the step — the cell
+  objective now takes the fused top-8 pass with identical loss (0.59 → 0.30 s/step). The projection
+  route precompute was then tried and **measured at 3 % (a wash) and reverted**: every thread of a
+  block reads the same query, so the route's table reads already hit L2. The real cost is **per layer:
+  ~63 ms at 1,024 rows**, about **200x a dense layer**, bound by per-element gather, quantise and
+  gate work. **Batch amortises it** (193 µs/token at batch 8 vs 80 µs/token at batch 24). The writer's
+  candidate inventory is now scored in column chunks (M2), which removed the 8,192-row cap and lets
+  batch 48 run.
+- **Tool hygiene**: `NativeVectorWriter`'s source hash is part of a checkpoint's saved binding, so
+  **any edit to that file requires rebuilding every checkpoint-loading tool** (`fbs-snapshot`), and a
+  checkpoint trained before the edit cannot be exported by tools built after it. Restart a run after
+  such an edit, or its checkpoint is unexportable. The served artifact is unaffected.
+- **The plan and the ledger**: [PLAN-2026-11-18](labs/one-model-end-to-end/PLAN-2026-11-18.md) (fix the
+  math before anything long runs; the capability ladder C1–C8; the 20 % cost rule) and
+  [COSTS](labs/one-model-end-to-end/COSTS.md) (measured stage costs and the layer ablation).
 
 ## 7. Assets and pins that exist now
 
