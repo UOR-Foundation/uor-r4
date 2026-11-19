@@ -385,7 +385,8 @@ mod tests {
         let path = std::env::var("UOR_PICK_TRUNK")
             .expect("set UOR_PICK_TRUNK to the seed1.d11 trunk (gate G2 runs this test)");
         let model = load_trunk(Path::new(&path)).unwrap();
-        let codes = root_codes(&model.identity_pick_inventory().unwrap().0).unwrap();
+        let (blocks, _, _) = model.identity_pick_inventory().unwrap();
+        let codes = root_codes(&blocks).unwrap();
         let mut state = 439u64;
         let mut draw = |n: usize| -> Vec<u16> {
             (0..n)

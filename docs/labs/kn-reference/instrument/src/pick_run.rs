@@ -352,7 +352,8 @@ fn run_claimed(job: PickRun, mut file: std::fs::File) -> Result<(), Failure> {
         return Err(fail("classes and query lengths differ"));
     }
     let model = load_trunk(std::path::Path::new(job.trunk_path))?;
-    let codes = root_codes(&model.identity_pick_inventory()?.0)?;
+    let (blocks, _, _) = model.identity_pick_inventory()?;
+    let codes = root_codes(&blocks)?;
     let perm = row_permutation(VOCAB, C3_SEED);
     let main = &job.query[..spans.split];
     let plus = &job.query[spans.split..];
