@@ -18,6 +18,8 @@ flock 9
 cd "$pack"
 sha256sum -c binary.sha256 > "$run/bin-verified.log"
 source_sha=$(cut -d' ' -f1 source.sha256)
+export CUDA_VISIBLE_DEVICES=GPU-7c813ad0-2151-bb1d-5efb-a3340b9a6a41
+[[ $(nvidia-smi -i 0 --query-gpu=uuid --format=csv,noheader) == "$CUDA_VISIBLE_DEVICES" ]]
 hostname > "$run/host"
 date -u > "$run/started"
 nvidia-smi --query-gpu=name,uuid,memory.total,memory.free,utilization.gpu --format=csv > "$run/device-start.csv"
