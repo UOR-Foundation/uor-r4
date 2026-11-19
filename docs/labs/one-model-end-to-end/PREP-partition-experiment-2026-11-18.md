@@ -99,3 +99,19 @@ as to the table rows, which makes it a new corpus (new hashes, a new run) — no
 shards), and one 4,096-step arm against its shuffled control ≈ **1–2 h of wall clock**, versus the
 "port a mechanism" framing above. That is cheap enough that H0 licenses it without a further decision,
 and it is still gated on H0: H1 makes it unnecessary.
+
+## Result (19 Nov): H1, by evaluation rather than by the two training arms
+
+The pre-registration assumed the A/B needed two 4,096-step training arms. It did not: `--init-from`
+accepts `--writer-address`, so both addresses can be scored on **one checkpoint** with the trunk
+fixed, which is a *stronger* instrument (any difference must come from the readout, and `nearest`
+proves it did not move).
+
+- **H1 met**: `centroids` admitted **12.01 %** and **12.11 %** on the step-4,096 and step-2,048
+  checkpoints, against the **≥ 8.0 %** gate (ports: 2.28 % and 2.47 %).
+- **Pick gate met**: **8,221 (8.1 %)** and **7,793 (7.7 %)**, against **≥ 3.0 %** (ports: 430, 240).
+- `nearest` **identical** within each pair (10,942 and 9,266), so the trunk did not change.
+- The training arms are therefore not run for the address question; only a single **feedback arm**
+  remains queued (train with `ports` at 4,096 steps, batch 48) to ask whether the broken readout also
+  damaged the trunk.
+- **H0 is not triggered**, so the permutation work below is not authorised and stays in reserve.
