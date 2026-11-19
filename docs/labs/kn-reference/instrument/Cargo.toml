@@ -20,6 +20,13 @@ path = "src/main.rs"
 [features]
 cuda = ["uor-r4-discrete/cuda"]
 
+count-replay = ["cuda", "uor-r4-discrete/count-oracle"]
+
+[[bin]]
+name = "count-replay"
+path = "src/bin/count-replay.rs"
+required-features = ["count-replay"]
+
 [dependencies]
 serde_json = "1"
 sha2 = "0.10.8"
@@ -30,3 +37,8 @@ uor-r4-integer = { path = "../../../../crates/uor-r4-integer" }
 [patch.crates-io]
 cudarc = { path = "../../../../third_party/cudarc-0.19.10" }
 arrayref = { path = "../../../../third_party/arrayref" }
+
+[[bin]]
+name = "count-score"
+path = "src/bin/count-score.rs"
+required-features = ["count-replay"]
