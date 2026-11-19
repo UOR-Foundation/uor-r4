@@ -55,25 +55,27 @@ Where each part runs:
 ## Bar (pre-registered)
 
 - **B1 (identity):** step 2 passes. The CUDA Pick, C2 and C3 equal their host versions at every target of the 1‰ slice. The lookups pass their host check.
-- **B2 (P+, the instrument can show a copy gain):** at every size, A1's bits on DEV⁺'s second copies are at most half of A0's bits on the same targets. If B2 fails, the instrument is broken and no arm's result is read (L-007).
+- **B2 (P+, the instrument can show a copy gain):** at every size, A1's bits on DEV⁺'s second copies are at most half of A0's bits on the same targets. If B2 fails, the instrument is broken and no arm's result is read (L-007). Every second copy sits at distance 0, so B2 tests the distance-0 path only; the read at distance above 0 rests on B1's equality with the host oracle.
 - **B3 (EM):**
   - each fit's last `fit_bits` is at most its first;
   - each fit's scored bits on R equal its last `fit_bits`;
-  - `gap_bound_q12` is written for every fit.
+  - `gap_bound_q12` is written for every fit; it is recorded, not tested.
   - A rise between passes is recorded but does not stop the run.
 - **The reading, at 100% only,** from paired bootstrap bands over DEV-tune's 2,670 records:
   - For two arms X and Y, d_r = bits_X(r) − bits_Y(r), in Q12, per record r.
   - 1,000 resamples of the records, with replacement, are driven by splitmix64 with seed 4390. Each resample gives the sum of its d_r.
   - The band is the 25th and the 975th of the 1,000 sorted sums.
   - "X beats Y" means the band's upper end is below 0.
-  - The bands read are A1 − A0, A1 − C1, A1 − C2 and A1 − C3, overall and over the novel class.
+  - The bands written are A1 − A0, A1 − C1, C1 − A0, A1 − C2 and A1 − C3, overall and over the novel class, each in Q12 sums and in micro-BPB.
+  - The overall bands decide the reading. The novel bands are recorded beside it.
 
-**Reading map** (fixed before the run):
-- **Geometric gain:** A1 beats A0, C1, C2 and C3. S5's Pick counts as a geometry gain on P1.
-- **Copy gain, no geometry:** A1 beats A0 and C1 but not both C2 and C3. A session copy helps, and these codes add nothing that token identity or any code map does not. The deployable P1 path takes the cheaper of the arms that tie.
-- **Bucket split only:** C1 beats A0 and A1 does not beat C1. The gain comes from splitting buckets, not from copying.
-- **No gain:** A1 does not beat A0. This configuration is closed; the mechanism is not.
-- **I (instrument):** B1, B2 or B3 fails, step 1 fails, or the stream check fails. The repair is made under this sheet, and no number from that build is reported.
+**Reading map** (fixed before the run). The rows are tried in this order and the first that holds is the reading. The code writes the label as `reading` in the run's JSON; B1, step 1 and the stream check are read beside it.
+- **I (instrument):** B1, B2 or B3 fails, step 1 fails, or the stream check fails. The JSON writes `instrument` when B2 or a B3 fails. The repair is made under this sheet, and no number from that build is reported.
+- **No gain** (`no_gain`): A1 does not beat A0. This configuration is closed; the mechanism is not.
+- **Bucket split only** (`bucket_split_only`): A1 beats A0, A1 does not beat C1, and C1 beats A0. The gain comes from splitting buckets, not from copying.
+- **Not separable from the bucket split** (`not_separable_from_the_bucket_split`): A1 beats A0, A1 does not beat C1, and C1 does not beat A0. No geometry claim is made.
+- **Geometric gain** (`geometric_gain`): A1 beats A0, C1, C2 and C3. S5's Pick counts as a geometry gain on P1.
+- **Copy gain, no geometry** (`copy_gain_no_geometry`): A1 beats A0 and C1 but not both C2 and C3. A session copy helps, and these codes add nothing that token identity or any code map does not. The deployable P1 path takes the cheaper of the arms that tie.
 
 **Recorded, with no bar:**
 - each arm's DEV-tune micro-BPB, overall and novel;
@@ -87,7 +89,7 @@ Where each part runs:
 ## Base artifact
 
 - **Code:** `claude/pick-expert-439` at the head the FIT names. The job writes the tarball's commit to `head.txt`.
-- **Trunk:** `local/codex/public-m1-predictor/seed1.d11`, sha256 `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d`.
+- **Trunk:** `seed1.d11`, sha256 `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d`. The job reads the same bytes from the HF store `caseyallard/uor-r4-store`, file `results/antigravity/m1-close-saved-model-2026-10-26/outputs/build-a/t16-frozen-zero-seed1-trunk.d11`, copied to wick without any token. `load_trunk` refuses any file with another sha256.
   - It is the trunk the count work already binds (`BASE` in `count-replay.rs` and `count-score.rs`; `TRUNK` in codex's `pick-reachability.rs`).
   - Its tokenizer gives the same ids as D87's (STEP0 §1).
   - No saved D11 artifact is in Pick mode. A1 reads this trunk's token blocks with Identity transport, through the same device path as `pick-reachability.rs` (`identity_pick_inventory`, `ReadSpec::Pick`, position word 3).
@@ -107,7 +109,9 @@ Where each part runs:
 
 - The bits are exact integer sums. The only sampling is the bootstrap over records, which is the unit the bar reads.
 - The 1% and 10% runs give each band's width before 100% is read. Nothing is changed after seeing them: N, R, the bucket rule, the passes, the start, the seeds and the chunk length are all fixed here.
+- Every band is written in micro-BPB beside its Q12 sums.
 - If the 100% A1 − A0 band holds 0, the REPORT gives its width in micro-BPB, as the smallest gain this run could have shown.
+- The REPORT calls a reading small when the band that decides it clears 0 by less than the width of the same band at 10%.
 - B2's margin is wide on purpose: in P+ every second copy's source is in the window, so a working read cuts those bits far below half.
 
 ## Cost
@@ -127,8 +131,8 @@ Where each part runs:
   - **Memory rule:**
     - Claude's wick container is capped at 16 GB.
     - Each run writes its peak RSS. Before the 100% run, that peak is extrapolated linearly from the 1% and 10% runs.
-    - If the estimate is above 14 GB, the container's cap is raised for the 100% run only. The new cap is the estimate plus 4 GB, and only while wick shows that much memory available beside the other jobs. The cap goes back to 16 GB afterwards.
-    - Otherwise the job waits for the memory, under the six-hour rule below.
+    - If the estimate is 14 GB or less, the 100% run goes under the 16 GB cap.
+    - If it is above 14 GB, the cap is raised to the estimate plus 4 GB for the 100% run only, when wick shows that much memory available beside the other jobs. Otherwise the job waits for that memory, under the six-hour rule below. The cap goes back to 16 GB afterwards.
     - No parameter of the run changes for memory.
 
 ## Stop rule
@@ -140,6 +144,7 @@ Where each part runs:
 - No DEV-tune number feeds back into any parameter this sheet fixes.
 - If wick is unreachable, or its GPU or the memory a size needs stays unavailable for more than six hours, the unit asks for a rented 4090 or 5090 in the caps (§3.6) under a new sheet line. It does not wait.
 
-FIT history: none yet.
+FIT history:
+- Round 1, 19 Nov, a fresh-context non-author reviewer at `83fd3737e14f6ade8bdefa5446659812d010c968`: FIT WITH CHANGES. Made at the next head: the code writes the reading label; C1 − A0 joins the bands, with the "not separable" row; the overall bands decide; each band is also in micro-BPB; B2's and B3's scope notes; the memory rule's two branches; the trunk is read from the HF store.
 
-TEST FITNESS: PENDING - written 19 Nov at the sheet's first commit; a fresh-context non-author FIT reviews it at the code head.
+TEST FITNESS: PENDING - round 1 asked for changes, now made; round 2, a fresh-context non-author FIT, reviews the sheet at the head that carries them.

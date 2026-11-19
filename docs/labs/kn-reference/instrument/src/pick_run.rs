@@ -492,7 +492,7 @@ fn run_claimed(job: PickRun, mut file: std::fs::File) -> Result<(), Failure> {
     let at = Instant::now();
     let plus_result = run_plus(&plus_inputs, &plus_a1)?;
     phase(&mut phases, "plus_arms", at);
-    let arms = combine(main_result, plus_result);
+    let arms = combine(main_result, plus_result)?;
 
     // 6. The record, never over an existing file.
     let mut summary = job.header;

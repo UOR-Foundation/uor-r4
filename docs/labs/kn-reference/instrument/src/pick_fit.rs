@@ -245,6 +245,9 @@ struct MainArm {
     all: Vec<u128>,
     novel: Vec<u128>,
     b3_ok: bool,
+    /// DEV-tune's bytes, overall and over the novel class: the bands' micro-BPB scale.
+    bytes_all: u64,
+    bytes_novel: u64,
 }
 
 fn main_arm(
@@ -277,11 +280,21 @@ fn main_arm(
         1,
         true,
     )?;
+    let (dev_all, dev_novel) = segment_tally(
+        span.query,
+        span.segments,
+        span.classes,
+        span.id_bytes,
+        &score.bits,
+        &[1],
+    )?;
     Ok(MainArm {
         json: Value::Object(out),
         all,
         novel,
         b3_ok,
+        bytes_all: dev_all.bytes,
+        bytes_novel: dev_novel.bytes,
     })
 }
 
@@ -304,15 +317,46 @@ fn plus_arm(span: &SpanInputs, pick: ArmPick) -> Result<(Value, u128, bool), Fai
     Ok((Value::Object(out), second.bits_q12, b3_ok))
 }
 
-fn band_side(x: &[u128], y: &[u128]) -> Result<Value, Failure> {
-    let (low, high) = paired_band(x, y, BAND_RESAMPLES, BAND_SEED)?;
-    Ok(json!({"low": low.to_string(), "high": high.to_string(), "beats": high < 0}))
+/// A Q12 bit difference over `bytes` bytes in micro-BPB, truncated toward zero.
+fn micro_bpb(diff_q12: i128, bytes: u64) -> Option<String> {
+    let denominator = i128::from(crate::LOG2_SCALE) * i128::from(bytes);
+    (denominator > 0).then(|| (diff_q12 * 1_000_000 / denominator).to_string())
 }
 
-fn band(a1: &MainArm, other: &MainArm) -> Result<Value, Failure> {
+fn band_side(x: &[u128], y: &[u128], bytes: u64) -> Result<Value, Failure> {
+    let (low, high) = paired_band(x, y, BAND_RESAMPLES, BAND_SEED)?;
     Ok(
-        json!({"all": band_side(&a1.all, &other.all)?, "novel": band_side(&a1.novel, &other.novel)?}),
+        json!({"low": low.to_string(), "high": high.to_string(), "beats": high < 0,
+              "low_micro_bpb": micro_bpb(low, bytes), "high_micro_bpb": micro_bpb(high, bytes)}),
     )
+}
+
+/// The band of `x − y`, overall and over the novel class.
+fn band(x: &MainArm, y: &MainArm) -> Result<Value, Failure> {
+    Ok(json!({"all": band_side(&x.all, &y.all, x.bytes_all)?,
+              "novel": band_side(&x.novel, &y.novel, x.bytes_novel)?}))
+}
+
+/// The sheet's reading map, decided by the overall bands only, rows tried in order.
+pub fn reading(bands: &Value) -> Result<&'static str, Failure> {
+    let beats = |name: &str| {
+        bands[name]["all"]["beats"]
+            .as_bool()
+            .ok_or_else(|| fail(format!("reading: no overall band {name}")))
+    };
+    Ok(if !beats("a1_minus_a0")? {
+        "no_gain"
+    } else if !beats("a1_minus_c1")? {
+        if beats("c1_minus_a0")? {
+            "bucket_split_only"
+        } else {
+            "not_separable_from_the_bucket_split"
+        }
+    } else if beats("a1_minus_c2")? && beats("a1_minus_c3")? {
+        "geometric_gain"
+    } else {
+        "copy_gain_no_geometry"
+    })
 }
 
 /// The main span's five arms and the bands between them.
@@ -351,6 +395,7 @@ pub fn run_main(
         "a1_minus_c1": band(&arm_a1, &arm_c1)?,
         "a1_minus_c2": band(&arm_a1, &arm_c2)?,
         "a1_minus_c3": band(&arm_a1, &arm_c3)?,
+        "c1_minus_a0": band(&arm_c1, &arm_a0)?,
     });
     let b3_ok = [&arm_a0, &arm_a1, &arm_c1, &arm_c2, &arm_c3]
         .iter()
@@ -381,14 +426,23 @@ pub fn run_plus(plus: &SpanInputs, plus_a1: &[PickTarget]) -> Result<PlusResult,
 }
 
 /// The run's JSON: no arm is read unless B2 and every B3 hold.
-pub fn combine(main: MainResult, plus: PlusResult) -> Value {
-    json!({
+/// `reading` is the map's row from the overall bands, or "instrument" when B2 or a B3
+/// fails. B1, the stream check and the size (100% only) are read beside it in the REPORT.
+pub fn combine(main: MainResult, plus: PlusResult) -> Result<Value, Failure> {
+    let allowed = plus.b2_pass && main.b3_ok && plus.b3_ok;
+    let row = if allowed {
+        reading(&main.bands)?
+    } else {
+        "instrument"
+    };
+    Ok(json!({
         "main": main.arms,
         "plus": plus.arms,
         "b2": plus.b2,
         "bands": main.bands,
-        "reading_allowed": plus.b2_pass && main.b3_ok && plus.b3_ok,
-    })
+        "reading_allowed": allowed,
+        "reading": row,
+    }))
 }
 
 pub fn run_arms(
@@ -399,10 +453,7 @@ pub fn run_arms(
     plus: &SpanInputs,
     plus_a1: &[PickTarget],
 ) -> Result<Value, Failure> {
-    Ok(combine(
-        run_main(main, a1, c2, c3)?,
-        run_plus(plus, plus_a1)?,
-    ))
+    combine(run_main(main, a1, c2, c3)?, run_plus(plus, plus_a1)?)
 }
 
 #[cfg(test)]
@@ -548,8 +599,17 @@ mod tests {
             &plus.pick,
         )
         .unwrap();
-        for key in ["bands", "b2", "reading_allowed"] {
+        for key in ["bands", "b2", "reading_allowed", "reading"] {
             assert!(out.get(key).is_some(), "missing {key}");
+        }
+        for band in [
+            "a1_minus_a0",
+            "a1_minus_c1",
+            "c1_minus_a0",
+            "a1_minus_c2",
+            "a1_minus_c3",
+        ] {
+            assert!(out["bands"].get(band).is_some(), "missing band {band}");
         }
         for arm in ["a0", "a1", "c1", "c2", "c3"] {
             assert!(out["main"].get(arm).is_some(), "missing arm {arm}");
@@ -567,10 +627,14 @@ mod tests {
     fn a_band_beats_only_when_a1_is_lower() {
         let y: Vec<u128> = (0..30).map(|r| 500 + r).collect();
         let x: Vec<u128> = y.iter().map(|v| v - 7).collect();
-        let lower = band_side(&x, &y).unwrap();
+        let lower = band_side(&x, &y, 30).unwrap();
         assert_eq!(lower["beats"], json!(true));
         assert_eq!(lower["high"], json!("-210"));
-        let higher = band_side(&y, &x).unwrap();
+        let scale = i128::from(crate::LOG2_SCALE);
+        let micro = (-210 * 1_000_000 / (scale * 30)).to_string();
+        assert_eq!(lower["high_micro_bpb"], json!(micro));
+        assert_eq!(band_side(&x, &y, 0).unwrap()["high_micro_bpb"], json!(null));
+        let higher = band_side(&y, &x, 30).unwrap();
         assert_eq!(higher["beats"], json!(false));
         assert_eq!(higher["low"], json!("210"));
         // A band across zero never beats, whatever its low end.
@@ -579,7 +643,7 @@ mod tests {
             .enumerate()
             .map(|(r, v)| if r % 2 == 0 { v - 9 } else { v + 9 })
             .collect();
-        let across = band_side(&mixed, &y).unwrap();
+        let across = band_side(&mixed, &y, 30).unwrap();
         let low: i128 = across["low"].as_str().unwrap().parse().unwrap();
         assert!(low < 0);
         assert_eq!(across["beats"], json!(false));
@@ -602,7 +666,7 @@ mod tests {
         let read = |b2_pass: bool, main_b3: bool, plus_b3: bool| {
             let main = MainResult {
                 arms: json!({}),
-                bands: json!({}),
+                bands: json!({"a1_minus_a0": {"all": {"beats": false}}}),
                 b3_ok: main_b3,
             };
             let plus = PlusResult {
@@ -611,12 +675,46 @@ mod tests {
                 b2_pass,
                 b3_ok: plus_b3,
             };
-            combine(main, plus)["reading_allowed"].clone()
+            let out = combine(main, plus).unwrap();
+            assert_eq!(
+                out["reading_allowed"] == json!(false),
+                out["reading"] == json!("instrument")
+            );
+            out["reading_allowed"].clone()
         };
         assert_eq!(read(true, true, true), json!(true));
         assert_eq!(read(false, true, true), json!(false));
         assert_eq!(read(true, false, true), json!(false));
         assert_eq!(read(true, true, false), json!(false));
+    }
+
+    #[test]
+    fn the_reading_map_takes_each_row_in_order() {
+        let bands = |a0: bool, c1: bool, c1a0: bool, c2: bool, c3: bool| {
+            let side = |beats: bool| json!({"all": {"beats": beats}, "novel": {"beats": !beats}});
+            json!({"a1_minus_a0": side(a0), "a1_minus_c1": side(c1), "c1_minus_a0": side(c1a0),
+                   "a1_minus_c2": side(c2), "a1_minus_c3": side(c3)})
+        };
+        let row = |b: Value| reading(&b).unwrap();
+        assert_eq!(row(bands(false, true, true, true, true)), "no_gain");
+        assert_eq!(
+            row(bands(true, false, true, true, true)),
+            "bucket_split_only"
+        );
+        assert_eq!(
+            row(bands(true, false, false, true, true)),
+            "not_separable_from_the_bucket_split"
+        );
+        assert_eq!(row(bands(true, true, false, true, true)), "geometric_gain");
+        assert_eq!(
+            row(bands(true, true, true, false, true)),
+            "copy_gain_no_geometry"
+        );
+        assert_eq!(
+            row(bands(true, true, true, true, false)),
+            "copy_gain_no_geometry"
+        );
+        assert!(reading(&json!({})).is_err());
     }
 
     #[test]
