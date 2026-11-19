@@ -89,7 +89,7 @@ pub fn row_from_words(w: &[u16], target: u16, block0: &[u32; 5]) -> Result<PickR
 }
 
 /// (T, window) for each non-BOS position T of `stream`, by kn_pick's window rule.
-fn windows(stream: &[u16], context: usize) -> Result<Vec<(usize, &[u16])>, Failure> {
+pub fn windows(stream: &[u16], context: usize) -> Result<Vec<(usize, &[u16])>, Failure> {
     if stream.first() != Some(&0) {
         return Err(fail("the stream must start with BOS"));
     }
