@@ -505,6 +505,20 @@ fn run() -> Result<()> {
     };
     let t = ByteBpeTokenizer::from_tokenizer_json_bytes(&fs::read(tok)?)
         .ok_or("invalid public tokenizer")?;
+    if previous == "--decode-action" {
+        let rows: Vec<Value> = serde_json::from_slice(&fs::read(out)?)?;
+        for row in rows {
+            let decoded = |key: &str| -> Result<String> {
+                let ids: Vec<u32> = serde_json::from_value(row[key].clone())?;
+                Ok(t.decode(&ids))
+            };
+            println!(
+                "{}",
+                json!({"id":row["id"],"prompt":row["prompt"],"expected":decoded("expected")?,"emitted":decoded("generated")?,"issued":row["issued"]})
+            );
+        }
+        return Ok(());
+    }
     let protocol = DialogueProtocol::literal_roles_v2(&t)?;
     let encoder = protocol.bind(&t)?;
     let root = Path::new(out);
