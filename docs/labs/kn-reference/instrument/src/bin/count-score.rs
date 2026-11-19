@@ -393,17 +393,21 @@ fn run() -> Result<()> {
                     return Err("lack of conservation/support".into());
                 }
             }
-            if m.expert_masses(4095, 3).0 != m.expert_masses(4095, 3).1 {
+            let (fallback_unigram, fallback_conditional) = m.expert_masses(4095, 3);
+            if fallback_unigram != fallback_conditional {
                 return Err("missing-context fallback".into());
             }
-            let tie4 = m.expert_masses(3, 7).1;
-            let tie5 = m.expert_masses(3, 8).1;
-            if dose == "pruned" && (tie4 == 0 || tie5 != 0) {
+            let (_, retained_conditional) = m.expert_masses(3, 7);
+            let (_, discarded_conditional) = m.expert_masses(3, 8);
+            if dose == "pruned" && (retained_conditional == 0 || discarded_conditional != 0) {
                 return Err("prune tie failure".into());
             }
         }
         let min_uni = (1..VOCAB as u16)
-            .map(|t| m.expert_masses(0, t).0)
+            .map(|t| {
+                let (unigram, _) = m.expert_masses(0, t);
+                unigram
+            })
             .min()
             .unwrap();
         doses.push(json!({"dose":dose,"bytes":packed.len(),"state_bytes":words.len(),"rows":(words.len()-(VOCAB+1)*4)/8,"d11_sha256":sha(&packed),"words_sha256":sha(&words),"em":em,"min_unigram_q24":min_uni,"guaranteed_floor_q32":u64::from(min_uni)*u64::from(256-weight)}));

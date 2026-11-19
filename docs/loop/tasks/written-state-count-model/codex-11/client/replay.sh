@@ -42,3 +42,7 @@ if "$BIN" --discrete "$DATA/full.d11" --tokenizer "$OUT/altered-tokenizer.json" 
   exit 1
 fi
 grep -F 'does not bind this tokenizer SHA-256' "$OUT/bad-tokenizer.log"
+for a in full pruned restored; do
+  jq -s --rawfile tsv "$ROOT/client/$a.tsv" -f "$ROOT/client/confirm-winners.jq" "$OUT/$a-raw.jsonl" > "$OUT/$a-device.json"
+  cmp "$ROOT/client/$a-device.json" "$OUT/$a-device.json"
+done
