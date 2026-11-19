@@ -23,8 +23,8 @@ present two mutually exclusive accounts, or omit the requested person.
 
 The D18 anonymous shape audit against the frozen base and supplemental FIT
 records returns 28 of 32 covered supported rows on both tokenizers. The four
-remaining rows have the longer inventory connector and `small glass jars`
-as the target fact. A competing offset-one candidate of shape
+remaining rows have the shorter inventory connector `took` and `brushes`
+as the target fact. Their offset-one candidate of shape
 `[1,3,[1,1,2,2]]` lacks the required frozen shape support. Both original
 literals on those rows still have legal writer starts. Keep all rows and
 treat geometric nomination and actual device writing as separate checks.
