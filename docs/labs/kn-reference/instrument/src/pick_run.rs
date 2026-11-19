@@ -292,8 +292,27 @@ fn check_oracle(
     Ok(tape.words.len())
 }
 
+/// The record's file is claimed first: an existing path stops the run before any work.
+/// A run that fails removes the empty file it claimed, so no 0-byte file sits at a
+/// record's name beside a crashed run.
 #[cfg(feature = "cuda")]
 pub fn run(job: PickRun) -> Result<(), Failure> {
+    let out = job.out;
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(out)?;
+    let result = run_claimed(job, file);
+    if result.is_err() {
+        if let Err(e) = std::fs::remove_file(out) {
+            eprintln!("pick-arms: could not remove the claimed {out}: {e}");
+        }
+    }
+    result
+}
+
+#[cfg(feature = "cuda")]
+fn run_claimed(job: PickRun, mut file: std::fs::File) -> Result<(), Failure> {
     use crate::pick_device::{load_trunk, root_codes, PickDevice, C3_SEED, TRUNK_SHA256};
     use crate::pick_fit::{combine, run_main, run_plus, SpanInputs};
     use serde_json::{json, Map, Value};
@@ -304,11 +323,6 @@ pub fn run(job: PickRun) -> Result<(), Failure> {
     };
 
     let started = Instant::now();
-    // The record's file is claimed first: an existing path stops the run before any work.
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(job.out)?;
     let mut phases = Map::new();
     fn phase(phases: &mut Map<String, Value>, name: &str, at: Instant) -> u128 {
         let ms = at.elapsed().as_millis();
@@ -521,6 +535,12 @@ mod tests {
         assert!(c2.iter().any(|row| row.class == 1 && row.hit));
         assert!(c2.iter().any(|row| row.class == 0));
         assert_eq!(check_c2(&stream, &c2, CONTEXT).unwrap(), c2.len());
+        // Latest tie: (5 6) occurs twice before the last target, followed by 7 then 8.
+        let tied = [B, 5, 6, 7, 5, 6, 8, 5, 6, 8, 1];
+        let rows = exact_pair_rows(&tied, VOCAB, CONTEXT).unwrap();
+        // Target 8 at q 9 is non-BOS row 8; its window's latest pair is at p = 5.
+        assert_eq!((rows[8].pick, rows[8].hit), (Some(5), true));
+        assert_eq!(check_c2(&tied, &rows, CONTEXT).unwrap(), rows.len());
         let mut wrong = c2.clone();
         let fired = wrong.iter().position(|row| row.class == 1).unwrap();
         wrong[fired].pick = wrong[fired].pick.map(|p| p - 1);

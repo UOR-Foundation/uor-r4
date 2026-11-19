@@ -779,6 +779,39 @@ mod tests {
         (counts, totals)
     }
 
+    /// claude-439: lookups never cross a BOS, so a BOS-framed stream looked up in
+    /// BOS-aligned pieces gives the whole stream's lookups. The Pick arms' host check
+    /// compares one such piece at a time and relies on this.
+    #[test]
+    fn lookups_in_bos_aligned_pieces_equal_the_whole() {
+        let train: Vec<u16> = vec![
+            0, 5, 6, 7, 5, 6, 8, 1, 0, 5, 6, 7, 9, 1, 0, 6, 7, 5, 6, 7, 1, 0, 9, 9, 9, 1,
+        ];
+        let query: Vec<u16> = vec![
+            0, 5, 6, 7, 1, 0, 6, 7, 5, 6, 8, 1, 0, 9, 9, 9, 6, 1, 0, 7, 5, 6, 7, 1,
+        ];
+        let starts: Vec<usize> = (0..query.len()).filter(|&i| query[i] == 0).collect();
+        for highest in [2u32, 3] {
+            let tables = raw_tables(&train, highest);
+            let whole = tables.lookups(&query).unwrap();
+            for cut in 1..starts.len() {
+                let (a, b) = query.split_at(starts[cut]);
+                let (mut counts, mut totals) = tables.lookups(a).unwrap();
+                let (c, t) = tables.lookups(b).unwrap();
+                counts.extend(c);
+                totals.extend(t);
+                assert_eq!((counts, totals), whole, "highest {highest}, cut {cut}");
+            }
+            // A cut inside a record is not the same: the pieces must start at a BOS.
+            let (a, b) = query.split_at(starts[1] + 3);
+            let (mut counts, mut totals) = tables.lookups(a).unwrap();
+            let (c, t) = tables.lookups(b).unwrap();
+            counts.extend(c);
+            totals.extend(t);
+            assert_ne!((counts, totals), whole, "highest {highest}, mid-record cut");
+        }
+    }
+
     #[test]
     fn lookups_match_brute_force() {
         let train: Vec<u16> = vec![
