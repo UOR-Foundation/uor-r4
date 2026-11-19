@@ -7,7 +7,11 @@
 //!
 //! Usage (needs `--features cuda`):
 //! `kn-reference TRAIN.u16 QUERY.u16 ID-BYTES.u8 CLASSES.u8 N BUDGET OUT.json
-//!  [--per-mille P] [--check-host] [--profile-phases] [--extension-census] [--count-only]`
+//!  [--per-mille P] [--check-host] [--profile-phases] [--extension-census] [--count-only]
+//!  [--ceiling]`
+//! `--ceiling` (claude-433) also counts raw orders 0..N, looks the query up in them and
+//! scores the expert-mixture ceiling modes; it refuses `--count-only`, `--extension-census`
+//! and `--sealed-run`.
 //! claude-425: every order is counted once, by `NgramCounter::count_adjusted_sweep`.
 //! `--count-only` writes each order's records and discounts to OUT.json and stops before the
 //! scorer; it refuses `--check-host` and `--sealed-run`. `--extension-census` implies it.
@@ -207,10 +211,11 @@ struct Args {
     sealed_run: bool,
     extension_census: bool,
     count_only: bool,
+    ceiling: bool,
 }
 
 fn parse(args: &[String]) -> Result<Args, Failure> {
-    let usage = "usage: kn-reference TRAIN.u16 QUERY.u16 ID-BYTES.u8 CLASSES.u8 N BUDGET OUT.json [--per-mille P] [--check-host] [--sealed-run] [--profile-phases] [--extension-census] [--count-only]";
+    let usage = "usage: kn-reference TRAIN.u16 QUERY.u16 ID-BYTES.u8 CLASSES.u8 N BUDGET OUT.json [--per-mille P] [--check-host] [--sealed-run] [--profile-phases] [--extension-census] [--count-only] [--ceiling]";
     let mut positional = Vec::new();
     let mut per_mille = 1000;
     let mut check_host = false;
@@ -218,6 +223,7 @@ fn parse(args: &[String]) -> Result<Args, Failure> {
     let mut sealed_run = false;
     let mut extension_census = false;
     let mut count_only = false;
+    let mut ceiling = false;
     let mut at = 0;
     while at < args.len() {
         match args[at].as_str() {
@@ -230,6 +236,7 @@ fn parse(args: &[String]) -> Result<Args, Failure> {
             "--sealed-run" => sealed_run = true,
             "--extension-census" => extension_census = true,
             "--count-only" => count_only = true,
+            "--ceiling" => ceiling = true,
             other => positional.push(other.to_string()),
         }
         at += 1;
@@ -239,6 +246,12 @@ fn parse(args: &[String]) -> Result<Args, Failure> {
     if count_only && (check_host || sealed_run) {
         return Err(fail(
             "--count-only and --extension-census score nothing: they refuse --check-host and --sealed-run",
+        ));
+    }
+    // claude-433: the ceiling scores DEV only; the sealed DEV-test stays sealed.
+    if ceiling && (count_only || sealed_run) {
+        return Err(fail(
+            "--ceiling scores every mode: it refuses --count-only, --extension-census and --sealed-run",
         ));
     }
     let [train, query, id_bytes, classes, highest, budget, out]: [String; 7] =
@@ -254,6 +267,7 @@ fn parse(args: &[String]) -> Result<Args, Failure> {
         sealed_run,
         extension_census,
         count_only,
+        ceiling,
     })
 }
 
@@ -593,9 +607,91 @@ fn run(args: &[String]) -> Result<(), Failure> {
     Ok(())
 }
 
+/// claude-433: the record parity of each non-BOS target, in stream order. A
+/// target's record index is the number of BOS tokens before it; true is odd.
+fn record_parity(query: &[u16]) -> Vec<bool> {
+    let mut odd = false;
+    let mut parity = Vec::new();
+    for &token in query {
+        if token == NGRAM_BOS {
+            odd = !odd;
+        } else {
+            parity.push(odd);
+        }
+    }
+    parity
+}
+
+/// claude-433: the split mode's masses in stream order: an odd target takes
+/// the mass of the fit on the even records, an even target that of the fit
+/// on the odd records.
+fn combine_by_parity(
+    parity: &[bool],
+    from_even_fit: &[u64],
+    from_odd_fit: &[u64],
+) -> Result<Vec<u64>, Failure> {
+    if from_even_fit.len() != parity.len() || from_odd_fit.len() != parity.len() {
+        return Err(fail(format!(
+            "{} targets, but the even fit mixed {} masses and the odd fit {}",
+            parity.len(),
+            from_even_fit.len(),
+            from_odd_fit.len()
+        )));
+    }
+    Ok(parity
+        .iter()
+        .zip(from_even_fit.iter().zip(from_odd_fit))
+        .map(|(&odd, (&even_mass, &odd_mass))| if odd { even_mass } else { odd_mass })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_ceiling_refuses_count_only_census_and_sealed_runs() {
+        let base: Vec<String> = ["train", "query", "bytes", "classes", "4", "64", "out"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        let with = |flags: &[&str]| {
+            let mut args = base.clone();
+            args.extend(flags.iter().map(|f| f.to_string()));
+            parse(&args)
+        };
+        assert!(!with(&[]).unwrap().ceiling);
+        let ceiling = with(&["--ceiling", "--check-host", "--profile-phases"]).unwrap();
+        assert!(ceiling.ceiling && ceiling.check_host && !ceiling.count_only);
+        for flag in ["--count-only", "--extension-census", "--sealed-run"] {
+            assert!(with(&["--ceiling", flag]).is_err(), "{flag}");
+            assert!(with(&[flag, "--ceiling"]).is_err(), "{flag}");
+        }
+        assert!(with(&["--sealed-run"]).is_ok());
+    }
+
+    #[test]
+    fn a_record_parity_counts_the_bos_tokens_before_each_target() {
+        let b = NGRAM_BOS;
+        assert!(![5u16, 6, 7, 8, 9].contains(&b));
+        // A target before any BOS, then records of length 0, 1 and 3.
+        let stream = [9, b, b, 5, b, 6, 7, 8];
+        assert_eq!(record_parity(&stream), [false, false, true, true, true]);
+        assert!(record_parity(&[b, b]).is_empty());
+    }
+
+    #[test]
+    fn the_split_fits_combine_back_in_stream_order() {
+        let parity = [false, true, true, false, true];
+        let from_even_fit = [10, 11, 12, 13, 14];
+        let from_odd_fit = [20, 21, 22, 23, 24];
+        assert_eq!(
+            combine_by_parity(&parity, &from_even_fit, &from_odd_fit).unwrap(),
+            [20, 11, 12, 23, 14]
+        );
+        assert!(combine_by_parity(&parity, &from_even_fit[..4], &from_odd_fit).is_err());
+        assert!(combine_by_parity(&parity, &from_even_fit, &from_odd_fit[..4]).is_err());
+    }
 
     #[test]
     fn synchronized_phase_profiling_requires_its_flag() {
