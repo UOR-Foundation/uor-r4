@@ -21,9 +21,10 @@ documents only). Release: Casey, 19 Nov, "Yes, rent it", for one RTX 5090. The b
   0.8965 × KN, where codex-14's lower end is 0.9894 × KN.
 - **The KN start barely left KN** [claude]. After 96 passes at 100%, U_count is 393 micro-BPB
   (8,609 bits) below KN-only and still falling 9.5 bits a pass. KN holds 997‰ of the
-  target-weighted weight (claude-433's uniform start ended at 600‰ after 24 passes). On average
-  7.1 of the 12 other experts sit at exactly weight 1 of 2^32, and about one other than KN rises
-  above 2^20. At every cut size the KN start ended above claude-433's 24 passes from uniform
+  target-weighted weight (claude-433's uniform start ended at 600‰ after 24 passes). Weighted by
+  each bucket's targets, on average 7.1 of the 12 other experts sit at exactly weight 1 of 2^32,
+  and about one other than KN rises above 2^20 (the plain means over the 154 buckets are 6.4 and
+  0.84). At every cut size the KN start ended above claude-433's 24 passes from uniform
   (U_count 2,293,695 against 2,283,303 at 1‰, 2,138,432 against 2,132,625 at 1%, 1,691,107
   against 1,690,355 at 10%).
 - **The ORDER's reason for the start was wrong for this integer EM** [claude]. It said every
@@ -167,6 +168,18 @@ R\*, so that row is also the ratio to R\*. Ratios to R\* at the cut sizes are no
   `--fit-frame` export), at `d83b21e18`, laptop:** host `kn_` tests 24/24; the instrument's
   targets 13, 2 and 1 passed; stub-nvcc `cargo check`s of the crate and the instrument clean. No
   run was repeated at the merged head; every number above is from `6c66a76d5`.
+- **Fresh review at `1fcb1f079`**, two reviewers, each with the spec and one part:
+  - **the code** (`kn_ceiling.rs`, the instrument) against the ORDER: APPROVE. The bound
+    rounds up at every step (`bits_q12` never falls below the exact value, `floor(2^80 / G)`
+    pushes up, `+ 1` per target covers G's truncation, the floor slack covers the mass floors).
+    The KN start is safe for L = 1 and refuses a mask without KN. L uses U_count's target set
+    and tally. The merge with codex-14's refactor keeps the input checks, and no D32 or §3
+    pattern appears. Three low findings are under Still open.
+  - **this REPORT's numbers** against the packets and codex-14's REPORT: REQUEST CHANGES, on two
+    points, both fixed. The summary stated the floor trap as a finding, and is now worded as
+    untested. The census figure 7.1 is target-weighted, which it now says, with the plain means
+    (6.4 and 0.84) beside it. Every other number it checked matched, including both tables, the
+    fit bits at passes 0, 24 and 96, the bounds, the codex-14 comparisons and job 1 = job 2.
 
 ## Skills used
 
@@ -186,6 +199,15 @@ model state, operator or artifact.
 - **R2 (claude-434, Pick) is not held by gate (c).** Codex-14's DECISION keeps P1(a, b) as
   prerequisites for P2 and leaves P3 to P5 on their existing dependencies.
 - **Check an item's open PRs before an ORDER** (the duplication above).
+- **The code review's three low findings, left for the next unit that touches `kn_ceiling.rs`:**
+  - the `+ 1` per target in `gap_bound_q12` is not pinned by a test: the floor slack alone meets
+    `gap >= 3 * fitted`. Tighten that assertion, or assert the exact sum on a fixture with
+    G ≤ 2^32;
+  - `the_gap_bound_covers_what_em_still_saves` checks the bound against 400 more EM passes, not
+    against the real-valued optimum. That is necessary, not sufficient; validity rests on the
+    Jensen argument;
+  - the doc comment's "Any weights' scored bits are at least that best" holds for real-valued
+    scoring; for a target whose mix falls below one Q48 unit, the integer floor scores fewer bits.
 - **The device peak sampler** should poll faster than once a second, or read the CUDA driver's
   own high-water mark, before device peaks are compared at small sizes.
 - Carried from claude-433: the device lookup's 32-bit row index, the raw-order log line's `ms`
@@ -199,8 +221,8 @@ finished first: the best blend is at most about 1% better than R\*, so the proje
 has to come from the geometric parts. This unit's own proven floor was too loose to say that much
 (it only ruled out the "counts carry the project" line), but its numbers match Codex's exactly
 where they overlap, on a different machine and different code, and its longer fit narrows Codex's
-range slightly from above. It also found why the blend hardly moves from R\*: with whole-number
-weights, a model holding the smallest possible share cannot grow unless it is at least twice as
-useful as the blend. That matters for the deployable count model, which fits the same kind of
-weights. The duplicated work cost about $0.74 of rented GPU and should have been caught by
+range slightly from above. It also suggests a likely reason, not yet tested, why the blend hardly
+moves from R\*: with whole-number weights, a model holding the smallest possible share may not
+grow unless it is at least twice as useful as the blend. If that holds, it matters for the
+deployable count model, should it fit the same kind of weights. The duplicated work cost about $0.74 of rented GPU and should have been caught by
 checking the item's open pull requests first.
