@@ -134,9 +134,6 @@ impl SourceBank {
             nearest_negative: None,
             margin: None,
         };
-        if !result.eligible {
-            return result;
-        }
         for row in &self.0 {
             let mut distance = row
                 .local
@@ -178,6 +175,9 @@ impl SourceBank {
             let candidate = candidate?;
             let score = self.score(arm, &candidate);
             observe(candidate, score);
+            if !score.eligible {
+                continue;
+            }
             let Some(margin) = score.margin else { continue };
             if margin <= 0 {
                 if outcome == SourceOutcome::Empty {
@@ -206,6 +206,14 @@ impl SourceBank {
 pub(super) struct SourcePolicy {
     arm: SourceArm,
     bank: SourceBank,
+    bindings: SourceCarrierBindings,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct SourceCarrierBindings {
+    pub parent_sha256: String,
+    pub bank_sha256: String,
+    pub train_sha256: String,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -334,6 +342,11 @@ pub(super) fn read_carrier(
     model.contextual_source = Some(SourcePolicy {
         arm: envelope.arm,
         bank: SourceBank::from_bytes(bank)?,
+        bindings: SourceCarrierBindings {
+            parent_sha256: envelope.parent_sha256,
+            bank_sha256: envelope.bank_sha256,
+            train_sha256: envelope.train_sha256,
+        },
     });
     model.artifact_sha256 = hex::encode(Sha256::digest(bytes));
     Ok(model)
@@ -342,6 +355,10 @@ pub(super) fn read_carrier(
 impl IntegerDiscreteModel {
     pub fn contextual_source_arm(&self) -> Option<SourceArm> {
         Some(self.contextual_source.as_ref()?.arm)
+    }
+
+    pub fn contextual_source_bindings(&self) -> Option<&SourceCarrierBindings> {
+        Some(&self.contextual_source.as_ref()?.bindings)
     }
 
     /// Diagnostic extraction on a factual occurrence already admitted by the
@@ -539,6 +556,11 @@ mod tests {
         let bank = SourceBank::from_bytes(&raw)?;
         let first = [candidate(8, true, 0, 0), candidate(11, false, 20, 0)];
         let second = [candidate(8, true, 0, 30), candidate(11, false, 20, 30)];
+        let masked = bank.score(SourceArm::NarrowContextual, &second[1]);
+        assert!(!masked.eligible);
+        assert_eq!(masked.nearest_positive, Some(0));
+        assert_eq!(masked.nearest_negative, Some(20));
+        assert_eq!(masked.margin, Some(20));
         for rows in [first.clone(), second.clone()] {
             for arm in [SourceArm::WideLocal, SourceArm::NarrowLocal] {
                 assert_eq!(
