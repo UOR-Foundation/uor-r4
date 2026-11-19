@@ -18,6 +18,7 @@ out=$PWD/$stage-seed$seed
 mkdir "$out" "$out/blind"
 cp panel/held-blind.json "$out/blind/held-blind.json"
 blind=$out/blind/held-blind.json
+bash driver/finite-client.sh "$out/client-calibration" > "$out/finite-calibration-pass.txt"
 # This sibling is absent in primary and intentionally wrong in repeat. The
 # public and no-read processes see the same complete unmarked prompts.
 if [[ $stage == repeat ]]; then cp grading/mutated.json "$out/blind/held-grades.json"; fi
@@ -38,6 +39,7 @@ force() {
 for arm in forced-gold forced-rival; do
     jq -ecn --arg arm "$arm" --slurpfile original "$out/requested.json" --slurpfile labels "$labels" -f driver/sources.jq > "$out/$arm.json"
     force "$arm"
+    jq -en --arg arm "$arm" --slurpfile labels "$labels" --slurpfile grade "$out/$arm-grade.json" --slurpfile trajectory "$out/$arm-run/gpu.json" -f driver/writer-validity.jq >"$out/$arm-cursor.json"
 done
 jq -e '(.rows|length)==24 and all(.rows[];.exact==true and .terminal_eos and .source_matches_requested_value)' "$out/forced-gold-grade.json" >/dev/null
 jq -e '(.rows|length)==24 and all(.rows[];.exact==false)' "$out/forced-rival-grade.json" >/dev/null
@@ -51,4 +53,4 @@ for arm in public no-read; do
     "$w" public "$chat" "$m" "$tok" "$blind" "$arm" "$out/say-$arm"
     "$w" grade "$out/$arm.json" "$out/chain" "$labels" "$out/say-$arm" "$out/$arm-grade.json"
 done
-(cd "$out" && sha256sum *-grade.json public.json no-read.json requested.json word-start.json chain/nominees/chosen.json *-run/gpu.json say-{public,no-read}/*.json > cold.sha256)
+(cd "$out" && sha256sum *-grade.json public.json no-read.json requested.json word-start.json chain/nominees/chosen.json *-cursor.json client-calibration/*.json *-run/gpu.json say-{public,no-read}/*.json > cold.sha256)

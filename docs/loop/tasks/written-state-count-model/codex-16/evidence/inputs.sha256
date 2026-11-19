@@ -1,6 +1,8 @@
-7a4f76a2dc6abf8cb73e8066c157f3585af2609eabee2b5442e566dd1f84295c  driver/run-wick.sh
+373bdecb8662b946b38fc6add04eb8c2260a09c34351ecc41ed268e28f47c4eb  driver/run-wick.sh
 5c8da9d4bff79b3daf4cdce09fd616a0e00e76dddf708e385e451759bc60a516  driver/sources.jq
 2bb9a880985b5391cb466103f60df09785adf2b54cff1473c1479c76e301556e  driver/mutated.jq
+84cb1a5fe168f02a3382017474c0367986b2e992eaf87925fec5f1b72fd80e5a  driver/finite-client.sh
+6b464e713cf9c9520f8ee1062ad32fcd30c5725f7a42b5cc2ef8f06fcf469498  driver/writer-validity.jq
 b9c80bcb5e4b88cb29cc20279ab530f6063397c416d57aea558c2a9d42bbee41  panel/held-blind.json
 f862e9d1f4d2ad18e0ef7c0ae0a7f78d33912d6eedd3152c489bdcf66feb35dc  grading/blind-semantic-v2.json
 e47e0e8a6eabb77c8be016a5f9dbf3529f612965fcffbee9bcf48a76d37ac26d  grading/held-census.json
@@ -17,3 +19,5 @@ a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377  ../20261118-or
 f804ecbee34e3c4e0001a737d003e3d620ba2c40722d416e7f3dd64843e2b30e  ../20261118-ordered-role-transfer/assets/tokenizer-seed2.json
 e0c074b58fe90904cbe644d23a86be2b38718fe38323adccdeaad98ae76486a5  ../20261118-ordered-role-transfer/bins/writer-c
 b8d31a0b42f39525a2c7587b5a58ee00d3e8b07eb32c5ac4434bb29b7b07a937  ../20261118-ordered-role-transfer/native-finite/source/target/release/uor-chat
+fb9ae3a7c48d8c1e60a23bbe7c0805259e3815195e4b88cd271ef3efc9cd1874  ../20261118-ordered-role-transfer/native-finite/positive/positive-s1-1.d11
+810c74429276d7d2b83d8a3f967e221eaf319f3291fbaaca42911f4206d16de2  ../20261118-ordered-role-transfer/native-finite/positive/positive-s2-1.d11
