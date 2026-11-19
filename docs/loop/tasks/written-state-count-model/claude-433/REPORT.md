@@ -145,6 +145,22 @@ Ratios to R\* at the cut sizes are not comparable (another TRAIN, other targets)
 - **G4, wick** (job `c433r`, at `5a7bbd032`): steps 2–3 above, all rc 0, B1 at 1‰, 1% and 10%.
 - **G5, Vast 5090** (`vast-61348591`, job `20261119T013555Z-claude-433-gpu0`, at `5a7bbd032`,
   stream sha256s checked on the pod against wick's): rc 0, B1 at 100%.
+- **Fresh review at `d9b084155`**, three reviewers, each with the ORDER and one part of the diff:
+  - the EM fitter and bucket rule: APPROVE. Its open question, whether the lift of present
+    experts to weight 1 is pinned, was run: with that loop set aside, `weights_sum_to_one`,
+    `dominant_expert_takes_the_bucket` and `an_expert_mask_keeps_dropped_experts_at_zero` fail,
+    and restored they pass (9/9). Its other question, whether the raw lookup builds contexts as
+    KN's scorer does, is settled by reading: both take order k's context as `tokens[j-k..j]` for
+    `k ≤ min(N, j)` (`kn_score.rs` `mass`, `kn_ceiling.rs` `lookups`).
+  - the device lookup: REQUEST CHANGES. The tests used N ≤ 4, where every context key sits in the
+    high word, so the low word and the split at bit 60 were untested by them (step 2's host check
+    at N = 10 did compare every target). `917a6cb0c` raises the counted-tables test to N = 10.
+    On wick (job `c433n`): 3/3 at the head; with `key_less` comparing the low word first, the
+    counted-tables test fails; restored, 3/3.
+  - the instrument and this REPORT's numbers: REQUEST CHANGES, for wording only: the bit
+    distances to 0.85 and 0.90 beside the fit's gap read as a gate reading, and the cause of the
+    non-convergence was stated as fact. Both are reworded (`ae2b40a40`); every number it checked
+    matched the packets.
 
 ## Skills used
 
@@ -162,6 +178,10 @@ model state, operator or artifact.
 - **Stream transfer:** copying TRAIN through the laptop cost 37 minutes of pod time. A pod-side
   fetch of claude-420's split (or the next run on wick, if its memory is free) would remove it.
 - **`uor-pod up` defaults to two GPUs:** pass `--count 1` when a sheet names one.
+- **The device lookup indexes rows in 32 bits** (`2u * mid + 1u`), which wraps above 2^31 rows
+  while the loader admits up to 2^32 − 1. 2^31 contexts would need 48 GiB of device memory, so it
+  cannot happen on these cards; cap the loader at 2^31 or index in 64 bits when the file is next
+  touched.
 - **The raw-order log line's `ms`** is the time since the run began, not that order's time (as in
   the adjusted sweep's lines); relabel it in the next unit that touches the instrument.
 - **Deployable P1 (claude-434 Pick, 435, 436)** waits on the gate's reading as the roadmap
