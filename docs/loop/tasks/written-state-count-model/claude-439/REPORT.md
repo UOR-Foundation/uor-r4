@@ -35,7 +35,7 @@ that: the D11 codes beat it by only 24 to 232 micro-BPB.
   21:01Z, during the 1% run (`pick-p10`), I raised wick's container cap from 16 GiB to 24 GiB: the 1‰
   run had peaked at 15,936,280 KiB under the 16 GiB cap, and the 1% run was 512 MiB to 1 GiB higher at the same phase. It was
   a cap change only: no input, flag or row changed, and it is logged in `run2/head.txt`.
-- **The memory rule's estimate was nearly double the real peak.** The linear extrapolation from the
+- **The memory rule's estimate was about 1¾ times the real peak.** The linear extrapolation from the
   1% and 10% sampled peaks gave 35,610,484 KiB. The cap went to 38 GiB, and the 100% run peaked at
   20,076,956 KiB (self-reported; 19,169,856 sampled). The growth between sizes is not linear in C.
 - **Run1 was stopped by its pid** before any fit, 2 h 11 min into A1's read at 256 windows per call.
@@ -166,8 +166,8 @@ changes no model state, operator or artifact.
 - **A decision card for P1's copy path:** C2 (exact pairs, host, cheap) against A1 (D11 codes, device
   read, 4,318 to 5,232 micro-BPB better). C3 shows that the codes themselves add little over any code
   map, so a cheaper nearest-pair fallback may hold most of A1's lead. That is an untested hypothesis.
-- **Whether the geometry edge closes at larger C.** A1 − C3 narrowed at every size. C cannot grow past D87's TRAIN, so the trend can only be read from these four sizes or another
-  corpus.
+- **Whether the geometry edge closes at larger C.** A1 − C3 narrowed at every size. C cannot grow
+  past D87's TRAIN, so the trend can only be read from these four sizes or another corpus.
 - **The distance > 0 class gets 10‰ of weight.** A per-distance bucket split (distance 1, 2, 3+)
   would show whether near codes carry more than far ones. It is not in this sheet.
 - **The memory rule's linear estimate** should not be reused as is: it was about 1¾ times the real peak here.
