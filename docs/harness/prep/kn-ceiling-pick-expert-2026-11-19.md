@@ -55,14 +55,14 @@ Where each part runs:
 ## Bar (pre-registered)
 
 - **B1 (identity):** step 2 passes. The CUDA Pick, C2 and C3 equal their host versions at every target of the 1‰ slice. The lookups pass their host check.
-- **B2 (P+, the instrument can show a copy gain):** at every size, A1's bits on DEV⁺'s second copies are at most half of A0's bits on the same targets. If B2 fails, the instrument is broken and no arm's result is read (L-007). Every second copy sits at distance 0, so B2 tests the distance-0 path only; the read at distance above 0 rests on B1's equality with the host oracle.
+- **B2 (P+, the instrument can show a copy gain):** at every size, A1's bits on DEV⁺'s second copies are at most half of A0's bits on the same targets. If B2 fails, the instrument is broken and no arm's result is read (L-007). A plus span with no second-copy target, or A0 bits of 0 there, fails the run: B2 never passes on nothing compared. Every second copy sits at distance 0, so B2 tests the distance-0 path only; the read at distance above 0 rests on B1's equality with the host oracle.
 - **B3 (EM):**
   - each fit's last `fit_bits` is at most its first;
   - each fit's scored bits on R equal its last `fit_bits`;
   - `gap_bound_q12` is written for every fit; it is recorded, not tested.
   - A rise between passes is recorded but does not stop the run.
 - **The reading, at 100% only,** from paired bootstrap bands over DEV-tune's 2,670 records:
-  - For two arms X and Y, d_r = bits_X(r) − bits_Y(r), in Q12, per record r.
+  - For two arms X and Y, d_r = bits_X(r) − bits_Y(r), in Q12, per record r. The run fails unless the bands resample exactly 2,670 records; the JSON writes the count as `band_records`.
   - 1,000 resamples of the records, with replacement, are driven by splitmix64 with seed 4390. Each resample gives the sum of its d_r.
   - The band is the 25th and the 975th of the 1,000 sorted sums.
   - "X beats Y" means the band's upper end is below 0.
@@ -146,5 +146,7 @@ Where each part runs:
 
 FIT history:
 - Round 1, 19 Nov, a fresh-context non-author reviewer at `83fd3737e14f6ade8bdefa5446659812d010c968`: FIT WITH CHANGES. Made at the next head: the code writes the reading label; C1 − A0 joins the bands, with the "not separable" row; the overall bands decide; each band is also in micro-BPB; B2's and B3's scope notes; the memory rule's two branches; the trunk is read from the HF store.
+- Round 2, 19 Nov, a fresh-context non-author reviewer at `42872c98df2276d8197e7131ee035e24212689f9`: FIT WITH CHANGES. Every round-1 change was present, and the sheet and code agreed. It asked for B2 to fail on an empty second-copy set and for the bands' record count to be checked. Both are in the next head, each with a test that fails without it. Round 2 did not read `kn_pick.rs` or `pick_device.rs`; round 3 reads them.
+- Note from round 2: every size writes a `reading` label, but the reading is taken at 100% only. The REPORT never quotes a 1% or 10% label as the reading.
 
-TEST FITNESS: PENDING - round 1 asked for changes, now made; round 2, a fresh-context non-author FIT, reviews the sheet at the head that carries them.
+TEST FITNESS: PENDING - round 2's changes are made; round 3, a fresh-context non-author FIT, reads the guards and the two files round 2 did not read.

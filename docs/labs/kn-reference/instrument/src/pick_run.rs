@@ -15,6 +15,18 @@ pub const LOOKUP_CHUNK: usize = 1 << 24;
 pub const CONTEXT: usize = 192;
 /// The trunk's vocabulary.
 pub const VOCAB: usize = 4096;
+/// DEV-tune's records (claude-420 split v1); the bands resample exactly these.
+pub const DEV_TUNE_RECORDS: usize = 2_670;
+
+/// The bands' unit is DEV-tune's records: a segments file that cut or merged one fails.
+pub fn check_band_records(records: usize) -> Result<(), Failure> {
+    if records != DEV_TUNE_RECORDS {
+        return Err(fail(format!(
+            "the bands resample {records} records, not DEV-tune's {DEV_TUNE_RECORDS}"
+        )));
+    }
+    Ok(())
+}
 
 /// Where the plus span starts and how many targets the main span holds.
 #[derive(Debug, PartialEq, Eq)]
@@ -443,6 +455,7 @@ fn run_claimed(job: PickRun, mut file: std::fs::File) -> Result<(), Failure> {
     // plus span is looked up: the two spans' lookups never coexist.
     let at = Instant::now();
     let main_result = run_main(&main_inputs, &a1, &c2, &c3)?;
+    check_band_records(main_result.records)?;
     phase(&mut phases, "main_arms", at);
     drop(main_inputs);
     drop((main_counts, main_totals, a1, c2, c3));
@@ -525,6 +538,13 @@ mod tests {
     use super::*;
 
     const B: u16 = NGRAM_BOS;
+
+    #[test]
+    fn the_bands_resample_dev_tune_records_only() {
+        assert!(check_band_records(DEV_TUNE_RECORDS).is_ok());
+        assert!(check_band_records(DEV_TUNE_RECORDS - 1).is_err());
+        assert!(check_band_records(DEV_TUNE_RECORDS + 1).is_err());
+    }
 
     #[test]
     fn c2_equals_the_identity_code_read() {

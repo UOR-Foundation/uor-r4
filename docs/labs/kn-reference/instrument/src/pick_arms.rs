@@ -136,11 +136,13 @@ pub fn paired_band(
     Ok((sums[k - 1], sums[resamples as usize - k - 1]))
 }
 
-/// B2: the first arm's second-copy bits at most half the baseline's.
+/// B2: the first arm's second-copy bits at most half the baseline's. A baseline of 0
+/// bits means nothing was compared, and never passes.
 pub fn b2_pass(a1_second_copy_bits: u128, a0_second_copy_bits: u128) -> bool {
-    a1_second_copy_bits
-        .checked_mul(2)
-        .is_some_and(|twice| twice <= a0_second_copy_bits)
+    a0_second_copy_bits > 0
+        && a1_second_copy_bits
+            .checked_mul(2)
+            .is_some_and(|twice| twice <= a0_second_copy_bits)
 }
 
 #[cfg(test)]
@@ -208,7 +210,8 @@ mod tests {
     fn b2_reads_second_copies_only() {
         assert!(b2_pass(5, 10));
         assert!(!b2_pass(6, 10));
-        assert!(b2_pass(0, 0));
+        assert!(!b2_pass(0, 0));
+        assert!(b2_pass(0, 1));
         assert!(!b2_pass(u128::MAX, u128::MAX));
     }
 }

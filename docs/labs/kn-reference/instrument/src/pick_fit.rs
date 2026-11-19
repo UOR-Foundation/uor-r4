@@ -310,6 +310,9 @@ fn plus_arm(span: &SpanInputs, pick: ArmPick) -> Result<(Value, u128, bool), Fai
         &score.bits,
         &[4],
     )?;
+    if second.targets == 0 {
+        return Err(fail("B2: the plus span holds no second-copy target"));
+    }
     out.insert(
         "second_copies".into(),
         json!({"all": second.json(), "novel": second_novel.json()}),
@@ -364,6 +367,8 @@ pub struct MainResult {
     pub arms: Value,
     pub bands: Value,
     pub b3_ok: bool,
+    /// DEV-tune records the bands resample.
+    pub records: usize,
 }
 
 /// The plus span's two arms and B2.
@@ -405,6 +410,7 @@ pub fn run_main(
                      "c2": arm_c2.json, "c3": arm_c3.json}),
         bands,
         b3_ok,
+        records: arm_a0.all.len(),
     })
 }
 
@@ -440,6 +446,7 @@ pub fn combine(main: MainResult, plus: PlusResult) -> Result<Value, Failure> {
         "plus": plus.arms,
         "b2": plus.b2,
         "bands": main.bands,
+        "band_records": main.records,
         "reading_allowed": allowed,
         "reading": row,
     }))
@@ -668,6 +675,7 @@ mod tests {
                 arms: json!({}),
                 bands: json!({"a1_minus_a0": {"all": {"beats": false}}}),
                 b3_ok: main_b3,
+                records: 1,
             };
             let plus = PlusResult {
                 arms: json!({}),
@@ -723,6 +731,15 @@ mod tests {
         assert!(run_main(&data.span(1), &data.pick, &data.pick, &data.pick).is_err());
         let plus = synthetic(&[2, 2, 2, 3, 3, 4, 4]);
         assert!(run_plus(&plus.span(3), &plus.pick).is_err());
+    }
+
+    #[test]
+    fn b2_refuses_a_plus_span_with_no_second_copy() {
+        let plus = synthetic(&[2, 2, 2, 3, 3, 4, 4]);
+        assert!(run_plus(&plus.span(2), &plus.pick).is_ok());
+        let none = synthetic(&[2, 2, 2, 3, 3, 3, 3]);
+        let err = run_plus(&none.span(2), &none.pick).err().unwrap();
+        assert!(err.to_string().contains("no second-copy target"), "{err}");
     }
 
     #[test]
