@@ -34,7 +34,8 @@ for name in rebuilt-assertion-agreement user-text-only; do
     ) 8>>"$root/20261118-diagnostics/wick-codex-gpu.lock"
     jq -en --slurpfile c "$out/$name.json" --slurpfile d "$out/$name-role.json" '($c[0].paired.role_words|length)==8 and $c[0].paired.role_words==$d[0].rows[0].role_words and ($c[0].generated_ids|length)>0' >/dev/null
 done
-cmp "$out/rebuilt-assertion-agreement.json" "$out/upstream/treatment.json"
+# The same pinned artifact lives at different paths in the two study roots.
+jq -en --slurpfile rebuilt "$out/rebuilt-assertion-agreement.json" --slurpfile original "$out/upstream/treatment.json" '($rebuilt[0]|del(.artifact))==($original[0]|del(.artifact))' >/dev/null
 # A D19 reader must reject the new artifact instead of silently serving the earlier policy.
 if "$prior/bin/uor-chat" --discrete "$stage/artifacts/seed1/user-text-only.d11" --tokenizer "$tokenizer" --protocol 2 --temperature 0 --max-tokens 16 --read-mode enabled --say "$text" > "$out/old-reader.log" 2>&1; then
     exit 1
