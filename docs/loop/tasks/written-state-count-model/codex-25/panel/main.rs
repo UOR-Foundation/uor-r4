@@ -3,8 +3,11 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::{env, error::Error, fs, io::Write, path::Path};
 use uor_r4_integer::{
-    discrete_d11::{ExactCopyState, IntegerDiscreteModel, ROLE_COPY_STOPS},
-    paired_role::RoleSpan,
+    discrete_d11::{
+        spiralcore_orbit_roots, spiralcore_signed_axes, ExactCopyState, IntegerDiscreteModel,
+        ROLE_COPY_STOPS,
+    },
+    paired_role::{PairedRoleDecision, RoleSpan},
 };
 use uor_r4_tokenizer::{
     dialogue::{DialogueProtocol, Message},
@@ -78,12 +81,22 @@ fn prepare(model_path: &str, model_hash: &str, tokenizer_path: &str, out: &Path)
         let mut packet = b"D25ROWS1\n".to_vec();
         let mut ordinary = Vec::new();
         let mut grading = Vec::new();
+        let mut context_input = Vec::new();
+        let mut context_expected = Vec::new();
+        let mut local_input = Vec::new();
+        let mut local_expected = Vec::new();
+        let mut row_context = BTreeMap::new();
+        let mut previous_row = 0;
         for line in fixture.lines() {
             let fields: Vec<_> = line.split('\t').collect();
             let [row, context, sentence, tail, question] = fields.as_slice() else {
                 return Err("bad panel row".into());
             };
             let row: u32 = row.parse()?;
+            if row <= previous_row {
+                return Err("panel rows must be strictly ascending".into());
+            }
+            previous_row = row;
             let [early, late, reading] = key.remove(&row).ok_or("missing panel key row")?;
             let mut text = context.to_string();
             let target_byte = "<|bos|>User: ".len() + text.len();
@@ -114,6 +127,7 @@ fn prepare(model_path: &str, model_hash: &str, tokenizer_path: &str, out: &Path)
             let mut fact_and_query = None;
             let mut fence = None;
             let mut writer_witnesses = BTreeMap::new();
+            let mut legacy = None;
             // The supplied-assertion diagnostic receives no anchor when the
             // requested assertion is missing, even when another one is present.
             if !matches!(reading, "missing" | "irrelevant") {
@@ -161,6 +175,35 @@ fn prepare(model_path: &str, model_hash: &str, tokenizer_path: &str, out: &Path)
                 }
                 fact_and_query = Some([[fact.start, fact.end], [query.start, query.end]]);
                 fence = Some(end);
+                let roles = PairedRoleDecision {
+                    requested: None,
+                    excluded: None,
+                    requested_score: 0,
+                    excluded_score: 0,
+                    requested_runner_up: 0,
+                    excluded_runner_up: 0,
+                };
+                let (legacy_decision, legacy_facts) =
+                    model.paired_copy_witness(&ids, roles, Some(query))?;
+                legacy = Some(json!({
+                    "binder": legacy_decision,
+                    "facts": legacy_facts,
+                }));
+                let context_coordinates = candidates
+                    .first()
+                    .ok_or("missing context for nonempty candidates")?
+                    .contextual;
+                if candidates
+                    .iter()
+                    .any(|candidate| candidate.contextual != context_coordinates)
+                {
+                    return Err(format!("row {row} has more than one assertion context").into());
+                }
+                write!(context_input, "{row}")?;
+                write_fields(&mut context_input, &ids[..fact.start])?;
+                write!(context_expected, "{row}")?;
+                write_fields(&mut context_expected, &context_coordinates)?;
+                row_context.insert(row, context_coordinates);
             }
             let gold = match reading {
                 "early" => exact[0],
@@ -202,6 +245,20 @@ fn prepare(model_path: &str, model_hash: &str, tokenizer_path: &str, out: &Path)
                 if masks.insert(address, candidate.narrow).is_some() {
                     return Err(format!("row {row} repeats a candidate address").into());
                 }
+                let [[fact_start, _], _] = fact_and_query.ok_or("candidate missing assertion")?;
+                let end = fence.ok_or("candidate missing fence")?;
+                write!(
+                    local_input,
+                    "{address} {} {fact_start} {end}",
+                    candidate.span.end
+                )?;
+                write_fields(&mut local_input, &ids)?;
+                let (first, rest) = candidate
+                    .local
+                    .split_first()
+                    .ok_or("missing local coordinates")?;
+                write!(local_expected, "{first}")?;
+                write_fields(&mut local_expected, rest)?;
                 writeln_packet(
                     &mut packet,
                     row,
@@ -215,11 +272,45 @@ fn prepare(model_path: &str, model_hash: &str, tokenizer_path: &str, out: &Path)
             grading.push(json!({
                 "row": row, "reading": reading, "gold": gold, "onsets": exact, "fact_and_query": fact_and_query,
                 "fence": fence, "candidates": masks, "original_ids": ids, "plausible_writer_ids": writer_witnesses,
+                "legacy": legacy,
                 "expected_reply": match reading { "early" => early, "late" => late, _ => "I don't know." },
             }));
             ordinary.push(json!({"row": row, "messages": [{"role": "user", "content": text}]}));
         }
+        if split == "held" {
+            let mut swapped = b"D25ROWS1\n".to_vec();
+            for line in std::str::from_utf8(&packet)?.lines().skip(1) {
+                let fields: Vec<_> = line.split(' ').collect();
+                let row: u32 = fields[0].parse()?;
+                let partner = match row {
+                    201 | 203 | 205 | 207 => Some(row + 1),
+                    202 | 204 | 206 | 208 => Some(row - 1),
+                    _ => None,
+                };
+                if let Some(partner) = partner {
+                    if fields.len() != 69 {
+                        return Err("malformed candidate row packet".into());
+                    }
+                    write!(swapped, "{}", fields[..37].join(" "))?;
+                    write_fields(
+                        &mut swapped,
+                        row_context.get(&partner).ok_or("missing swap partner")?,
+                    )?;
+                } else {
+                    writeln!(swapped, "{line}")?;
+                }
+            }
+            fs::write(out.join("held-swapped-context.rows"), swapped)?;
+        }
         fs::write(out.join(format!("{split}.rows")), packet)?;
+        for (kind, bytes) in [
+            ("context-input", context_input),
+            ("context-expected", context_expected),
+            ("local-input", local_input),
+            ("local-expected", local_expected),
+        ] {
+            fs::write(out.join(format!("{split}.{kind}.txt")), bytes)?;
+        }
         fs::write(
             out.join(format!("{split}.grade.json")),
             serde_json::to_vec_pretty(&grading)?,
@@ -232,6 +323,38 @@ fn prepare(model_path: &str, model_hash: &str, tokenizer_path: &str, out: &Path)
     if !key.is_empty() {
         return Err("unused panel key rows".into());
     }
+    write_local_tables(&model, &out.join("tables.bin"))?;
+    Ok(())
+}
+
+fn write_local_tables(model: &IntegerDiscreteModel, path: &Path) -> Result<()> {
+    let classes = model.frozen_role_replay()?.assertion_classes;
+    let roots: Vec<_> = model.ordered_role_sites()?.packed_roots().collect();
+    if classes.len() != roots.len() {
+        return Err("D25 assertion class count differs from the root count".into());
+    }
+    let mut out = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)?;
+    for (root, class) in roots.into_iter().zip(classes) {
+        out.write_all(&root.to_le_bytes())?;
+        out.write_all(&class.to_le_bytes())?;
+    }
+    out.write_all(
+        &spiralcore_orbit_roots()
+            .map(|root| root.map(|value| value as u8))
+            .concat(),
+    )?;
+    out.write_all(spiralcore_signed_axes())?;
+    Ok(())
+}
+
+fn write_fields(out: &mut Vec<u8>, fields: &[impl std::fmt::Display]) -> Result<()> {
+    for field in fields {
+        write!(out, " {field}")?;
+    }
+    writeln!(out)?;
     Ok(())
 }
 
@@ -322,6 +445,13 @@ fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&grade(key, results)?)?);
             Ok(())
         }
-        _ => Err("usage: d25-contextual-source-panel prepare MODEL MODEL_SHA256 TOKENIZER NEW_OUT | grade GRADE_KEY RESULTS".into()),
+        [command, model, hash, out] if command == "tables" => {
+            let model = IntegerDiscreteModel::load(Path::new(model))?;
+            if model.artifact_sha256() != hash {
+                return Err("model pin mismatch".into());
+            }
+            write_local_tables(&model, Path::new(out))
+        }
+        _ => Err("usage: d25-contextual-source-panel prepare MODEL MODEL_SHA256 TOKENIZER NEW_OUT | grade GRADE_KEY RESULTS | tables MODEL MODEL_SHA256 NEW_OUTPUT_FILE".into()),
     }
 }
