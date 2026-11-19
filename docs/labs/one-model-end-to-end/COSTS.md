@@ -70,3 +70,10 @@ now runs**, which the old cap refused.
 **The timing is not yet a reading**: while the long run holds the card, every measurement is
 time-sliced — batch 24 and batch 48 both show 1.81 s/step, which a compute-bound step cannot do. The
 batch sweep waits for a free card.
+
+**Tool hygiene, again.** `NativeVectorWriter`'s source hash is part of a checkpoint's saved binding,
+so every tool that loads a checkpoint must be rebuilt after any edit to `native_vector_writer.rs`.
+M2 changed that file, so `fbs-snapshot` was rebuilt immediately; a checkpoint trained before the
+change cannot be exported by tools built after it, and one trained after cannot be read by tools
+built before. The artifact itself is unaffected — it carries the shape and the table, not the
+writer's source hash.
