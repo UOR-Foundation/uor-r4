@@ -1,4 +1,32 @@
 {
+  "codex/active-s2-onset-contrast": {
+    "branch": "codex/active-s2-onset-contrast",
+    "claimed_at": "2026-11-19T17:17:22-05:00",
+    "head": "4795bdeb8",
+    "lab": "codex",
+    "note": ""
+  },
+  "codex/clause-coordinate-discrimination": {
+    "branch": "codex/clause-coordinate-discrimination",
+    "claimed_at": "2026-11-19T17:03:08-05:00",
+    "head": "c86f6cbf6",
+    "lab": "codex",
+    "note": ""
+  },
+  "codex/clause-entity-earlier-veto": {
+    "branch": "codex/clause-entity-earlier-veto",
+    "claimed_at": "2026-11-19T16:16:57-05:00",
+    "head": "0da98400a",
+    "lab": "codex",
+    "note": ""
+  },
+  "codex/clause-role-fit": {
+    "branch": "codex/clause-role-fit",
+    "claimed_at": "2026-11-19T17:41:31-05:00",
+    "head": "a799ed5c9",
+    "lab": "codex",
+    "note": ""
+  },
   "codex/fresh-boundary-validity": {
     "branch": "codex/fresh-boundary-validity",
     "claimed_at": "2026-11-19T00:00:33-05:00",
@@ -6,10 +34,38 @@
     "lab": "codex",
     "note": "Fresh validity and source-start retest; prospective input seals; no training"
   },
+  "codex/geometric-value-ranking": {
+    "branch": "codex/geometric-value-ranking",
+    "claimed_at": "2026-11-19T00:31:01-05:00",
+    "head": "c667cdbda",
+    "lab": "codex",
+    "note": "Fresh geometric value ranking; retain all original eligible word starts and compare independent address decisions"
+  },
   "codex/native-space-cycle": {
     "branch": "codex/native-space-cycle",
     "claimed_at": "2026-11-13T22:17:35-05:00",
     "head": "6e7fc4d41",
+    "lab": "codex",
+    "note": ""
+  },
+  "codex/requested-occurrence-ranking": {
+    "branch": "codex/requested-occurrence-ranking",
+    "claimed_at": "2026-11-19T14:05:18-05:00",
+    "head": "50c9125ba",
+    "lab": "codex",
+    "note": ""
+  },
+  "codex/user-text-role-swaps": {
+    "branch": "codex/user-text-role-swaps",
+    "claimed_at": "2026-11-19T15:28:30-05:00",
+    "head": "dcea93de7",
+    "lab": "codex",
+    "note": ""
+  },
+  "codex/value-start-factorial": {
+    "branch": "codex/value-start-factorial",
+    "claimed_at": "2026-11-19T11:14:29-05:00",
+    "head": "2b0901008",
     "lab": "codex",
     "note": ""
   },

@@ -1,0 +1,238 @@
+// D11 sparse role cells, assertion agreement and clause evidence on the original token tape.
+#include <cuda_runtime.h>
+#include <climits>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <vector>
+
+using Word = uint32_t;
+constexpr Word Vocab = 4096, Width = 192, Offsets = 6, Roots = 65537;
+constexpr Word Nil = UINT32_MAX, Abi = 0x3141524f;
+constexpr Word SentenceFence = 1, ClauseFence = 2;
+struct Site { Word root, cls, assertion_cls, fences; };
+struct Cell { Word key, counts[3]; };
+struct Span { Word start, end; };
+struct Row { Word ids[Width], size; Span content; };
+struct Rank {
+    Span span{Nil, Nil};
+    int best = INT_MIN, next = INT_MIN;
+    __device__ void add(Span candidate, int score) {
+        if (score > best) {
+            next = best;
+            best = score;
+            span = candidate;
+        } else if (score > next) {
+            next = score;
+        }
+    }
+};
+static_assert(sizeof(Row) == (Width + 3) * sizeof(Word));
+
+__device__ const Cell* lookup(const Cell* cells, Word count, Word key) {
+    Word first = 0, end = count;
+    while (first < end) {
+        Word middle = (first + end) / 2;
+        if (cells[middle].key < key) first = middle + 1;
+        else end = middle;
+    }
+    return first < count && cells[first].key == key ? cells + first : nullptr;
+}
+
+// Signed cell evidence has magnitude at most 13*total. Its quotient by
+// total+2 therefore fits four bits. Match Rust's truncation toward zero.
+__device__ int cell_quotient(int evidence, int denominator) {
+    int magnitude = evidence < 0 ? -evidence : evidence;
+    int quotient = 0;
+    for (int bit = 3; bit >= 0; --bit) {
+        int threshold = denominator << bit;
+        if (magnitude >= threshold) {
+            magnitude -= threshold;
+            quotient |= 1 << bit;
+        }
+    }
+    return evidence < 0 ? -quotient : quotient;
+}
+
+__device__ void add_root(const Cell* cells, Word count, Word offset, Word root, int (&result)[2]) {
+    const int weights[Offsets] = {1, 2, 4, 4, 2, 1};
+    const Cell* cell = lookup(cells, count, offset * Roots + root);
+    if (cell == nullptr) return;
+    const int total = cell->counts[0] + cell->counts[1] + cell->counts[2];
+    for (Word role = 0; role < 2; ++role) {
+        const int signed_evidence = 16 * static_cast<int>(cell->counts[role + 1]) - 3 * total;
+        result[role] += weights[offset] * cell_quotient(signed_evidence, total + 2);
+    }
+}
+
+__device__ void scores(const Site* sites, const Cell* cells, Word count,
+                       const Row& row, Span span, Span context, int (&result)[2]) {
+    const Word at[Offsets] = {span.start - 3, span.start - 2, span.start - 1,
+                             span.end, span.end + 1, span.end + 2};
+    for (Word i = 0; i < Offsets; ++i) {
+        const Word root = at[i] >= context.start && at[i] < context.end
+                              ? sites[row.ids[at[i]]].root : Roots - 1;
+        add_root(cells, count, i, root, result);
+    }
+}
+
+__device__ Word boundary(const Site* sites, const Row& row) {
+    bool word_after = false;
+    for (Word p = row.content.end; p > row.content.start;) {
+        const Site site = sites[row.ids[--p]];
+        if (word_after && (site.fences & SentenceFence) != 0) return p;
+        word_after |= site.cls == 1;
+    }
+    return Nil;
+}
+
+__device__ bool supported(const Site* sites, const Row& row, Span span, Word split) {
+    if (split == Nil || span.start <= split || span.end > row.content.end) return false;
+    for (Word fact = row.content.start > 1 ? row.content.start : 1; fact < split; ++fact) {
+        if (sites[row.ids[fact]].assertion_cls != 1 ||
+            (sites[row.ids[fact - 1]].fences & SentenceFence) == 0) {
+            continue;
+        }
+        Word end = fact + 1;
+        while (end < row.size && sites[row.ids[end]].assertion_cls == 2) ++end;
+        if (end > split || end - fact != span.end - span.start) continue;
+        Word equal = 0;
+        while (fact + equal < end && row.ids[fact + equal] == row.ids[span.start + equal]) ++equal;
+        if (fact + equal == end) return true;
+    }
+    return false;
+}
+
+__device__ Word word_end(const Site* sites, const Row& row, Word start) {
+    Word end = start + 1;
+    while (end < row.size && sites[row.ids[end]].cls == 2) ++end;
+    return end;
+}
+
+__device__ void add_clause(const Site* sites, const Cell* cells, Word count, const Row& row,
+                           Span span, Word split, const bool* admitted, Rank& rank) {
+    Word first = span.start, end = span.end;
+    while (first > split + 1 && !(sites[row.ids[first - 1]].fences & ClauseFence)) --first;
+    while (end < row.content.end && !(sites[row.ids[end]].fences & ClauseFence)) ++end;
+    int evidence[2]{};
+    for (Word position = first; position < end; ++position) {
+        if (position >= span.start && position < span.end) continue;
+        if (admitted[position]) return;
+        const Site site = sites[row.ids[position]];
+        if (site.fences & SentenceFence) continue;
+        for (Word offset = 0; offset < Offsets; ++offset) {
+            add_root(cells, count, offset, site.root, evidence);
+        }
+    }
+    rank.add(span, evidence[0] - evidence[1]);
+}
+
+__global__ void predict(const Site* sites, const Cell* cells, Word count, const Row* rows,
+                        Word n, Word mode, Word* result) {
+    Word i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= n) return;
+    const Row& row = rows[i];
+    const bool treatment = mode != 0;
+    const Word split = treatment ? boundary(sites, row) : Nil;
+    Rank ranks[2];
+    bool admitted[Width]{};
+    if (mode == 3 && split != Nil) {
+        for (Word start = split + 1; start < row.content.end; ++start) {
+            if (sites[row.ids[start]].cls == 1) {
+                admitted[start] = supported(sites, row, {start, word_end(sites, row, start)}, split);
+            }
+        }
+    }
+    for (Word start = 0; start < row.size; ++start) {
+        if (sites[row.ids[start]].cls != 1) continue;
+        const Span span{start, word_end(sites, row, start)};
+        int evidence[2]{};
+        scores(sites, cells, count, row, span, {0, row.size}, evidence);
+        if (evidence[1] > evidence[0]) ranks[1].add(span, evidence[1]);
+        if (mode == 3) {
+            if (admitted[start]) add_clause(sites, cells, count, row, span, split, admitted, ranks[0]);
+        } else if (treatment) {
+            if (supported(sites, row, span, split)) {
+                if (mode == 2) {
+                    int scoped[2]{};
+                    scores(sites, cells, count, row, span, row.content, scoped);
+                    ranks[0].add(span, scoped[0] - scoped[1]);
+                } else {
+                    ranks[0].add(span, evidence[0] - evidence[1]);
+                }
+            }
+        } else if (evidence[0] > evidence[1]) {
+            ranks[0].add(span, evidence[0]);
+        }
+    }
+    Word* out = result + 8 * i;
+    for (Word role = 0; role < 2; ++role) {
+        const Rank rank = ranks[role];
+        const int floor = role == 0 && treatment ? INT_MIN : 12;
+        const bool allowed = rank.best > rank.next && rank.best >= floor;
+        out[2 * role] = allowed ? rank.span.start : Nil;
+        out[2 * role + 1] = allowed ? rank.span.end : Nil;
+        out[4 + role] = static_cast<Word>(rank.best);
+        out[6 + role] = static_cast<Word>(rank.next);
+    }
+}
+
+static void check(cudaError_t status) {
+    if (status == cudaSuccess) return;
+    std::fprintf(stderr, "%s\n", cudaGetErrorString(status));
+    std::exit(2);
+}
+template<class T> static void read(T* records, size_t n) {
+    if (std::fread(records, sizeof(T), n, stdin) != n) std::exit(2);
+}
+template<class T> static T* upload(const std::vector<T>& records) {
+    T* device;
+    check(cudaMalloc(&device, records.size() * sizeof(T)));
+    check(cudaMemcpy(device, records.data(), records.size() * sizeof(T), cudaMemcpyHostToDevice));
+    return device;
+}
+
+int main() {
+    Word header[4];
+    read(header, 4);
+    const Word mode = header[1], n = header[2], count = header[3];
+    if (header[0] != Abi || mode > 3 || n == 0 || n > 8192 || count == 0 ||
+        count > Offsets * Roots) return 2;
+    std::vector<Site> sites(Vocab);
+    read(sites.data(), sites.size());
+    for (Site site : sites) {
+        if (site.root >= Roots - 1 || site.cls > 2 || site.assertion_cls > 2 ||
+            site.fences > (mode == 3 ? ClauseFence : SentenceFence)) return 2;
+    }
+    std::vector<Cell> cells(count);
+    read(cells.data(), cells.size());
+    for (Word i = 0; i < count; ++i) {
+        const Cell cell = cells[i];
+        if (cell.key >= Offsets * Roots || (i > 0 && cell.key <= cells[i - 1].key) ||
+            (cell.counts[0] | cell.counts[1] | cell.counts[2]) == 0) return 2;
+        for (Word value : cell.counts) if (value > 8192 * Width) return 2;
+    }
+    std::vector<Row> rows(n);
+    read(rows.data(), rows.size());
+    if (std::fgetc(stdin) != EOF) return 2;
+    for (const Row& row : rows) {
+        if (row.size == 0 || row.size > Width || row.ids[0] != 0 ||
+            row.content.start > row.content.end || row.content.end > row.size) return 2;
+        for (Word p = 1; p < row.size; ++p) if (row.ids[p] < 2 || row.ids[p] >= Vocab) return 2;
+    }
+    Site* device_sites = upload(sites);
+    Cell* device_cells = upload(cells);
+    Row* device_rows = upload(rows);
+    std::vector<Word> output(8 * n);
+    Word* device_output;
+    check(cudaMalloc(&device_output, output.size() * sizeof(Word)));
+    predict<<<(n + 63) / 64, 64>>>(device_sites, device_cells, count, device_rows, n, mode,
+                                   device_output);
+    check(cudaGetLastError());
+    check(cudaMemcpy(output.data(), device_output, output.size() * sizeof(Word), cudaMemcpyDeviceToHost));
+    check(cudaFree(device_sites));
+    check(cudaFree(device_cells));
+    check(cudaFree(device_rows));
+    check(cudaFree(device_output));
+    return std::fwrite(output.data(), sizeof(Word), output.size(), stdout) == output.size() ? 0 : 2;
+}

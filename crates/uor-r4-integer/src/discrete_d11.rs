@@ -19,9 +19,12 @@ use crate::{
     ordered_role::{
         orbit_action_digest, RoleBank, RoleBindings, RoleFraming, RoleSites, ROLE_RECORD_BYTES,
     },
-    paired_role::{PairedRoleDecision, RoleSpan, ROLE_VOCAB},
+    paired_role::{PairedRoleDecision, RequestedContext, RoleSpan, ROLE_VOCAB},
     Result,
 };
+
+mod s2_expert;
+pub use s2_expert::{s2_route_key, S2ExpertPrediction, S2ExpertRead, S2RankedToken, S2_MASS_TOTAL};
 
 /// Container magic (`UORLUT01`).
 pub const MAGIC: &[u8; 8] = b"UORLUT01";
@@ -31,12 +34,19 @@ pub const DISCRETE_SCHEMA: &str = "uor-r4.lut-discrete/1";
 pub const DISCRETE_TRUNK_SCHEMA: &str = "uor-r4.lut-discrete-trunk/1";
 /// Trunk with a frozen positional-prime successor-count section for P1 read-back.
 pub const DISCRETE_S2_SCHEMA: &str = "uor-r4.lut-discrete-trunk-s2/1";
+/// Opt-in longest-suffix retained-count prediction on the identical D11 section layout.
+pub const DISCRETE_S2_EXPERT_SCHEMA: &str = "uor-r4.lut-discrete-trunk-s2/2";
 /// The S2 format binds the base artifact, TRAIN and selected token stream (three SHA-256s).
 pub const S2_SECTION: &str = "discrete.trunk.s2.top4.log2.v1";
 const S2_HEADER_BYTES: usize = 96;
 const S2_ROW_BYTES: usize = 20;
 /// Learned read-only role selection, followed by the frozen span, WordStart and continuation operators.
 pub const DISCRETE_ROLE_SCHEMA: &str = "uor-r4.lut-discrete-role-copy/1";
+/// Frozen paired carrier with an explicit learned all-starts onset bank.
+pub const DISCRETE_ALL_STARTS_SCHEMA: &str = "uor-r4.lut-discrete-all-starts/1";
+const DISCRETE_REQUESTED_OCCURRENCE_SCHEMA: &str = "uor-r4.lut-discrete-requested-occurrence/1";
+const DISCRETE_USER_TEXT_ONLY_SCHEMA: &str = "uor-r4.lut-discrete-requested-occurrence/2";
+const DISCRETE_CLAUSE_TO_ENTITY_SCHEMA: &str = "uor-r4.lut-discrete-requested-occurrence/3";
 /// A learned requested/excluded role bank, assertion-local value read and exact-copy agreement.
 pub const DISCRETE_PAIRED_SCHEMA: &str = "uor-r4.lut-discrete-paired-copy/1";
 /// Positional or identity Cl(0,6) role state with the frozen paired writer.
@@ -44,6 +54,15 @@ pub const DISCRETE_ORDERED_ROLE_SCHEMA: &str = "uor-r4.lut-discrete-paired-copy/
 #[path = "paired_copy.rs"]
 mod paired_copy;
 pub use paired_copy::{PairedAssertionWitness, PairedCopyDecision};
+
+/// Borrowed native inputs for a frozen-role backend replay.
+pub struct FrozenRoleReplay<'a> {
+    pub roles: &'a crate::paired_role::PairedRoleState,
+    pub delimiters: &'a [u32],
+    pub assertion_classes: &'a [u32],
+    pub requested_framing: Option<&'a RoleFraming>,
+    pub requested_context: Option<RequestedContext>,
+}
 /// Version 1 stops at a period, EOS, BOS or newline. A witnessed delimiter after a nonempty copy emits EOS.
 pub const ROLE_COPY_STOPS: [u32; 4] = [16, 1, 0, 201];
 
@@ -52,11 +71,91 @@ pub const ROLE_COPY_STOPS: [u32; 4] = [16, 1, 0, 201];
 struct RolePolicy {
     #[serde(skip)]
     paired: Option<paired_copy::Policy>,
+    #[serde(skip)]
+    onset: Option<OnsetPolicy>,
     occurrence: [Vec<[u32; 6]>; 3],
     span: crate::span_selector::Bank,
     exact: crate::value_selector::ExactBank,
     legacy_root: u32,
 }
+
+#[derive(Clone)]
+struct OnsetPolicy {
+    bank: crate::all_starts::Bank,
+    packed_roots: Vec<u32>,
+    requested_policy: Option<RequestedPolicy>,
+}
+
+impl RolePolicy {
+    fn requested_policy(&self) -> Option<&RequestedPolicy> {
+        self.onset.as_ref()?.requested_policy.as_ref()
+    }
+
+    fn requested_framing(&self) -> Option<&RoleFraming> {
+        Some(self.requested_policy()?.framing())
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum RequestedPolicy {
+    AssertionAgreement(RoleFraming),
+    UserTextOnly(RoleFraming),
+    ClauseToEntity {
+        framing: RoleFraming,
+        separators: [u32; 2],
+    },
+}
+
+impl RequestedPolicy {
+    fn framing(&self) -> &RoleFraming {
+        match self {
+            Self::AssertionAgreement(framing) | Self::UserTextOnly(framing) => framing,
+            Self::ClauseToEntity { framing, .. } => framing,
+        }
+    }
+
+    fn context(&self) -> RequestedContext {
+        match self {
+            Self::AssertionAgreement(_) => RequestedContext::FullPrefix,
+            Self::UserTextOnly(_) => RequestedContext::UserTextOnly,
+            Self::ClauseToEntity { separators, .. } => {
+                RequestedContext::ClauseToEntity(*separators)
+            }
+        }
+    }
+}
+
+fn onset_schema(requested: Option<&RequestedPolicy>) -> &'static str {
+    match requested {
+        Some(RequestedPolicy::AssertionAgreement(_)) => DISCRETE_REQUESTED_OCCURRENCE_SCHEMA,
+        Some(RequestedPolicy::UserTextOnly(_)) => DISCRETE_USER_TEXT_ONLY_SCHEMA,
+        Some(RequestedPolicy::ClauseToEntity { .. }) => DISCRETE_CLAUSE_TO_ENTITY_SCHEMA,
+        None => DISCRETE_ALL_STARTS_SCHEMA,
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct OnsetEnvelope {
+    schema: String,
+    parent_sha256: String,
+    span_sha256: String,
+    bank_sha256: String,
+    span_bytes: usize,
+    profile: crate::all_starts::OnsetProfile,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    requested_policy: Option<RequestedPolicy>,
+}
+
+#[derive(Deserialize)]
+struct OnsetSpanState {
+    artifact_sha256: String,
+    tokenizer_sha256: String,
+    bank: crate::span_selector::Bank,
+}
+
+const MAX_ONSET_SPAN_BYTES: usize = 1 << 20;
 
 impl std::fmt::Debug for RolePolicy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -898,6 +997,7 @@ impl FrozenS2Table {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct DiscreteTrunkTables {
     s2: Option<FrozenS2Table>,
+    active_s2: bool,
     step_candidates: [u8; 64],
     norm_candidates: [u8; 4],
     unigram_best_global: u16,
@@ -1498,6 +1598,222 @@ fn role_bindings(
     ])
 }
 
+/// Pack an explicitly bound onset bank around an exact frozen paired-copy/1 carrier.
+/// All source bytes needed to verify the frozen site profile survive cold reload.
+pub fn pack_all_starts_artifact(
+    frozen_paired: &[u8],
+    span_state: &[u8],
+    bank: &[u8],
+    profile: &crate::all_starts::OnsetProfile,
+) -> Result<Vec<u8>> {
+    let parent = read_onset_parent(frozen_paired)?;
+    pack_all_starts(&parent, frozen_paired, span_state, bank, profile, None)
+}
+
+/// Package assertion-agreement role selection over the original ordered value bank.
+#[cfg(feature = "serving-wasm")]
+pub fn pack_assertion_agreement_artifact(
+    frozen_paired: &[u8],
+    span_state: &[u8],
+    bank: &[u8],
+    profile: &crate::all_starts::OnsetProfile,
+    tokenizer: &[u8],
+) -> Result<Vec<u8>> {
+    pack_requested_occurrence_artifact(
+        frozen_paired,
+        span_state,
+        bank,
+        profile,
+        tokenizer,
+        RequestedContext::FullPrefix,
+    )
+}
+
+/// Package an explicitly scoped assertion-agreement ranker with the frozen ordered value bank.
+#[cfg(feature = "serving-wasm")]
+pub fn pack_requested_occurrence_artifact(
+    frozen_paired: &[u8],
+    span_state: &[u8],
+    bank: &[u8],
+    profile: &crate::all_starts::OnsetProfile,
+    tokenizer: &[u8],
+    context: RequestedContext,
+) -> Result<Vec<u8>> {
+    let parent = read_onset_parent(frozen_paired)?;
+    if parent.tokenizer_sha256() != Some(hex::encode(Sha256::digest(tokenizer)).as_str()) {
+        return Err(invalid(
+            "requested occurrence pack requires the original tokenizer",
+        ));
+    }
+    let tokenizer = uor_r4_tokenizer::ByteBpeTokenizer::from_tokenizer_json_bytes(tokenizer)
+        .ok_or_else(|| invalid("invalid requested occurrence tokenizer"))?;
+    if tokenizer.vocab_size() != ROLE_VOCAB {
+        return Err(invalid(
+            "requested occurrence tokenizer vocabulary mismatch",
+        ));
+    }
+    let framing = RoleFraming::from_tokenizer(&tokenizer)?;
+    let requested_policy = match context {
+        RequestedContext::FullPrefix => RequestedPolicy::AssertionAgreement(framing),
+        RequestedContext::UserTextOnly => RequestedPolicy::UserTextOnly(framing),
+        RequestedContext::ClauseToEntity(separators) => {
+            if separators.map(|id| tokenizer.decode_bytes(&[id])) != [b",".to_vec(), b";".to_vec()]
+            {
+                return Err(invalid(
+                    "clause-to-entity separators must be comma and semicolon",
+                ));
+            }
+            RequestedPolicy::ClauseToEntity {
+                framing,
+                separators,
+            }
+        }
+    };
+    pack_all_starts(
+        &parent,
+        frozen_paired,
+        span_state,
+        bank,
+        profile,
+        Some(requested_policy),
+    )
+}
+
+fn pack_all_starts(
+    parent: &IntegerDiscreteModel,
+    frozen_paired: &[u8],
+    span_state: &[u8],
+    bank: &[u8],
+    profile: &crate::all_starts::OnsetProfile,
+    requested_policy: Option<RequestedPolicy>,
+) -> Result<Vec<u8>> {
+    validate_onset_bank(parent, span_state, bank, profile, requested_policy.clone())?;
+    let header = serde_json::to_vec(&OnsetEnvelope {
+        schema: onset_schema(requested_policy.as_ref()).to_owned(),
+        parent_sha256: parent.artifact_sha256.clone(),
+        span_sha256: hex::encode(Sha256::digest(span_state)),
+        bank_sha256: hex::encode(Sha256::digest(bank)),
+        span_bytes: span_state.len(),
+        profile: profile.clone(),
+        requested_policy,
+    })?;
+    let mut bytes = MAGIC.to_vec();
+    bytes.extend_from_slice(&(header.len() as u64).to_le_bytes());
+    bytes.extend(header);
+    bytes.resize(bytes.len().next_multiple_of(ALIGN), 0);
+    bytes.extend_from_slice(bank);
+    bytes.extend_from_slice(span_state);
+    bytes.extend_from_slice(frozen_paired);
+    Ok(bytes)
+}
+
+fn read_onset_parent(bytes: &[u8]) -> Result<IntegerDiscreteModel> {
+    let prefix = bytes
+        .get(..16)
+        .ok_or_else(|| invalid("missing frozen onset carrier"))?;
+    if &prefix[..8] != MAGIC {
+        return Err(invalid("missing frozen onset carrier magic"));
+    }
+    let length = u64::from_le_bytes(
+        <[u8; 8]>::try_from(&prefix[8..])
+            .map_err(|_| invalid("invalid frozen onset carrier header"))?,
+    );
+    if length > MAX_HEADER {
+        return Err(invalid("frozen onset carrier header too large"));
+    }
+    #[derive(Deserialize)]
+    struct Schema {
+        schema: String,
+    }
+    let header = bytes
+        .get(16..16 + length as usize)
+        .ok_or_else(|| invalid("truncated frozen onset carrier header"))?;
+    if serde_json::from_slice::<Schema>(header)?.schema != DISCRETE_PAIRED_SCHEMA {
+        return Err(invalid(
+            "onset carrier requires its frozen paired-copy/1 parent",
+        ));
+    }
+    IntegerDiscreteModel::read_container(bytes, true)
+}
+
+fn validate_onset_bank(
+    parent: &IntegerDiscreteModel,
+    span_state: &[u8],
+    raw: &[u8],
+    profile: &crate::all_starts::OnsetProfile,
+    requested_policy: Option<RequestedPolicy>,
+) -> Result<OnsetPolicy> {
+    if let Some(policy) = &requested_policy {
+        if profile.mode != crate::all_starts::OnsetMode::Ordered {
+            return Err(invalid(
+                "assertion agreement requires the original ordered value policy",
+            ));
+        }
+        policy.framing().validate()?;
+    }
+    if span_state.len() > MAX_ONSET_SPAN_BYTES {
+        return Err(invalid("frozen onset span state too large"));
+    }
+    let span: OnsetSpanState = serde_json::from_slice(span_state)?;
+    let policy = parent
+        .role_policy
+        .as_ref()
+        .ok_or_else(|| invalid("missing onset parent policy"))?;
+    let Some(paired) = &policy.paired else {
+        return Err(invalid("missing onset parent paired policy"));
+    };
+    if let Some(RequestedPolicy::ClauseToEntity { separators, .. }) = &requested_policy {
+        if separators[0] == separators[1]
+            || separators
+                .iter()
+                .any(|id| !(2..ROLE_VOCAB as u32).contains(id) || paired.delimiters.contains(id))
+        {
+            return Err(invalid("invalid clause-to-entity separators"));
+        }
+    }
+    let paired_copy::Roles::Frozen(roles) = &paired.roles else {
+        return Err(invalid("onset parent must use frozen roles"));
+    };
+    let bindings = roles.bindings();
+    if read_role_digest(&span.artifact_sha256)? != bindings[0]
+        || read_role_digest(&span.tokenizer_sha256)? != bindings[1]
+        || span.bank.classes != policy.span.classes
+        || span.bank.relations != policy.span.relations
+    {
+        return Err(invalid("onset span state differs from frozen parent"));
+    }
+    let packed_roots = parent.packed_codebook_roots();
+    let mut roots = Sha256::new();
+    for &word in &packed_roots {
+        roots.update((word as u16).to_le_bytes());
+    }
+    let mut classes = Sha256::new();
+    for &class in &policy.span.classes {
+        classes.update([class as u8]);
+    }
+    let mut sites = Sha256::new();
+    sites.update(b"uor-r4/all-starts-sites/1");
+    sites.update(read_role_digest(&parent.artifact_sha256)?);
+    sites.update(roots.finalize());
+    sites.update(classes.finalize());
+    sites.update(Sha256::digest(span_state));
+    for root in spiralcore_orbit_roots() {
+        sites.update(root.map(|coordinate| coordinate as u8));
+    }
+    let bank = crate::all_starts::Bank::from_profile(
+        raw,
+        bindings[0],
+        bindings[1],
+        sites.finalize().into(),
+        profile,
+    )?;
+    Ok(OnsetPolicy {
+        bank,
+        packed_roots,
+        requested_policy,
+    })
+}
+
 /// Pack a checked bank into a versioned D11 paired-copy container. Frozen
 /// writer policy, fact delimiters, classes and the embedded trunk are reused.
 #[cfg(feature = "serving-wasm")]
@@ -1586,6 +1902,59 @@ impl IntegerDiscreteModel {
             schema: String,
         }
         let schema = serde_json::from_slice::<Schema>(encoded_header)?.schema;
+        if matches!(
+            schema.as_str(),
+            DISCRETE_ALL_STARTS_SCHEMA
+                | DISCRETE_REQUESTED_OCCURRENCE_SCHEMA
+                | DISCRETE_USER_TEXT_ONLY_SCHEMA
+                | DISCRETE_CLAUSE_TO_ENTITY_SCHEMA
+        ) {
+            if !allow_role {
+                return Err(invalid("nested onset artifact"));
+            }
+            let envelope: OnsetEnvelope = serde_json::from_slice(encoded_header)?;
+            if schema != onset_schema(envelope.requested_policy.as_ref()) {
+                return Err(invalid(
+                    "requested policy and onset artifact schema disagree",
+                ));
+            }
+            let start = end_header.next_multiple_of(ALIGN);
+            let payload = bytes
+                .get(start..)
+                .ok_or_else(|| invalid("missing onset artifact payload"))?;
+            if envelope.span_bytes > MAX_ONSET_SPAN_BYTES
+                || bytes[end_header..start].iter().any(|&byte| byte != 0)
+            {
+                return Err(invalid("invalid onset span length or padding"));
+            }
+            let (raw, attachment) = payload
+                .split_at_checked(crate::all_starts::BANK_BYTES)
+                .ok_or_else(|| invalid("truncated onset bank"))?;
+            let (span, paired) = attachment
+                .split_at_checked(envelope.span_bytes)
+                .ok_or_else(|| invalid("truncated onset span state"))?;
+            if Sha256::digest(raw).as_slice() != read_role_digest(&envelope.bank_sha256)?
+                || Sha256::digest(span).as_slice() != read_role_digest(&envelope.span_sha256)?
+                || Sha256::digest(paired).as_slice() != read_role_digest(&envelope.parent_sha256)?
+            {
+                return Err(invalid("onset artifact attachment checksum mismatch"));
+            }
+            let mut parent = read_onset_parent(paired)?;
+            let onset = validate_onset_bank(
+                &parent,
+                span,
+                raw,
+                &envelope.profile,
+                envelope.requested_policy,
+            )?;
+            parent
+                .role_policy
+                .as_mut()
+                .ok_or_else(|| invalid("missing onset role policy"))?
+                .onset = Some(onset);
+            parent.artifact_sha256 = hex::encode(Sha256::digest(bytes));
+            return Ok(parent);
+        }
         if schema == crate::count_mixer::SCHEMA || schema == crate::count_mixer::CONTEXT_SCHEMA {
             if !allow_role {
                 return Err(invalid("nested count mixer"));
@@ -1728,7 +2097,7 @@ impl IntegerDiscreteModel {
         let header: DiscreteLutHeader = serde_json::from_slice(encoded_header)?;
         let is_trunk = match header.schema.as_str() {
             DISCRETE_SCHEMA => false,
-            DISCRETE_TRUNK_SCHEMA | DISCRETE_S2_SCHEMA => true,
+            DISCRETE_TRUNK_SCHEMA | DISCRETE_S2_SCHEMA | DISCRETE_S2_EXPERT_SCHEMA => true,
             _ => {
                 return Err(invalid(
                     "discrete UORLUT01 artifact requires schema uor-r4.lut-discrete/1 or uor-r4.lut-discrete-trunk/1",
@@ -1812,7 +2181,13 @@ impl IntegerDiscreteModel {
         } else {
             4
         };
-        let has_s2 = header.schema == DISCRETE_S2_SCHEMA;
+        let active_s2 = header.schema == DISCRETE_S2_EXPERT_SCHEMA;
+        let has_s2 = active_s2 || header.schema == DISCRETE_S2_SCHEMA;
+        if active_s2 && (!allow_role || s.vocabulary != 4096) {
+            return Err(invalid(
+                "active S2 expert requires a standalone 4096-token trunk",
+            ));
+        }
         let trunk_tables = if has_s2 { 20 } else { 19 };
         if (!is_trunk && header.tables.len() != plain_tables)
             || (is_trunk && (header.tables.len() != trunk_tables || s.blocks != 4))
@@ -2075,6 +2450,7 @@ impl IntegerDiscreteModel {
             };
             Some(DiscreteTrunkTables {
                 s2,
+                active_s2,
                 step_candidates,
                 norm_candidates,
                 unigram_best_global,
@@ -2123,6 +2499,15 @@ impl IntegerDiscreteModel {
         self.trunk.as_ref()?.s2.as_ref()
     }
 
+    /// Returns the retained counts only when their artifact selects active prediction.
+    pub fn active_s2(&self) -> Option<&FrozenS2Table> {
+        self.trunk
+            .as_ref()
+            .filter(|trunk| trunk.active_s2)?
+            .s2
+            .as_ref()
+    }
+
     /// Returns `true` when this model was loaded from a 19-table `uor-r4.lut-discrete-trunk/1` container.
     pub fn is_trunk_d11(&self) -> bool {
         self.trunk.is_some()
@@ -2168,11 +2553,16 @@ impl IntegerDiscreteModel {
         if let Some(mixer) = &self.count_mixer {
             mixer.schema()
         } else if let Some(policy) = &self.role_policy {
+            if let Some(onset) = &policy.onset {
+                return onset_schema(onset.requested_policy.as_ref());
+            }
             match policy.paired.as_ref().map(|paired| &paired.roles) {
                 Some(paired_copy::Roles::Frozen(_)) => DISCRETE_PAIRED_SCHEMA,
                 Some(paired_copy::Roles::Ordered { .. }) => DISCRETE_ORDERED_ROLE_SCHEMA,
                 None => DISCRETE_ROLE_SCHEMA,
             }
+        } else if self.active_s2().is_some() {
+            DISCRETE_S2_EXPERT_SCHEMA
         } else if self.frozen_s2().is_some() {
             DISCRETE_S2_SCHEMA
         } else if self.is_trunk_d11() {
@@ -2180,6 +2570,10 @@ impl IntegerDiscreteModel {
         } else {
             DISCRETE_SCHEMA
         }
+    }
+
+    pub fn onset_mode(&self) -> Option<crate::all_starts::OnsetMode> {
+        Some(self.role_policy.as_ref()?.onset.as_ref()?.bank.mode())
     }
 
     /// A loaded role-copy schema uses the exact-copy cursor.
@@ -2223,7 +2617,9 @@ impl IntegerDiscreteModel {
         }
         paired_copy::Policy::validate_ids(prompt)?;
         let roles = match &paired.roles {
-            paired_copy::Roles::Frozen(roles) => roles.predict(prompt)?,
+            paired_copy::Roles::Frozen(_) => {
+                self.paired_roles_diagnostic(prompt, 0..prompt.len(), false)?
+            }
             paired_copy::Roles::Ordered { bank, framing, .. } => self
                 .ordered_role_sites()?
                 .prompt(prompt, framing.content(prompt)?)?
@@ -2316,13 +2712,27 @@ impl IntegerDiscreteModel {
             .ok_or_else(|| invalid("paired role diagnostic requires a paired artifact"))?;
         paired_copy::Policy::validate_ids(prompt)?;
         match &paired.roles {
-            paired_copy::Roles::Frozen(roles) => roles.predict_where(prompt, region, |span| {
-                !lexical_only
-                    || paired
-                        .assertion_sites(policy, prompt, span)
-                        .next()
-                        .is_some()
-            }),
+            paired_copy::Roles::Frozen(roles) => {
+                if !lexical_only {
+                    if let Some(requested) = policy.requested_policy() {
+                        return roles.predict_requested_occurrence(
+                            prompt,
+                            requested.framing().content(prompt)?,
+                            region,
+                            &paired.delimiters,
+                            &policy.span.classes,
+                            requested.context(),
+                        );
+                    }
+                }
+                roles.predict_where(prompt, region, |span| {
+                    !lexical_only
+                        || paired
+                            .assertion_sites(policy, prompt, span)
+                            .next()
+                            .is_some()
+                })
+            }
             paired_copy::Roles::Ordered { bank, framing, .. } => {
                 if lexical_only {
                     return Err(invalid("lexical eligibility is a frozen-role diagnostic"));
@@ -2332,6 +2742,26 @@ impl IntegerDiscreteModel {
                     .predict(bank.mode, &bank.prototypes, region)
             }
         }
+    }
+
+    pub fn requested_role_framing(&self) -> Option<&RoleFraming> {
+        self.role_policy.as_ref()?.requested_framing()
+    }
+
+    pub fn frozen_role_replay(&self) -> Result<FrozenRoleReplay<'_>> {
+        let (policy, paired) = self
+            .paired_policy()
+            .ok_or_else(|| invalid("frozen role replay requires a paired artifact"))?;
+        let paired_copy::Roles::Frozen(roles) = &paired.roles else {
+            return Err(invalid("frozen role replay requires frozen roles"));
+        };
+        Ok(FrozenRoleReplay {
+            roles,
+            delimiters: &paired.delimiters,
+            assertion_classes: &policy.span.classes,
+            requested_framing: policy.requested_framing(),
+            requested_context: policy.requested_policy().map(RequestedPolicy::context),
+        })
     }
 
     pub fn frozen_role_trace(
@@ -2347,7 +2777,11 @@ impl IntegerDiscreteModel {
             return Err(invalid("frozen role trace requires its paired artifact"));
         };
         roles.trace_where(prompt, region, |span| {
-            !lexical_only || paired.assertion_sites(policy, prompt, span).next().is_some()
+            !lexical_only
+                || paired
+                    .assertion_sites(policy, prompt, span)
+                    .next()
+                    .is_some()
         })
     }
 
@@ -2386,9 +2820,10 @@ impl IntegerDiscreteModel {
         requested_override: Option<RoleSpan>,
     ) -> Result<(PairedCopyDecision, Vec<PairedAssertionWitness>)> {
         let mut witnesses = Vec::new();
-        let decision = self.paired_copy_diagnostic_inner(prompt, roles, requested_override, |item| {
-            witnesses.push(item);
-        })?;
+        let decision =
+            self.paired_copy_diagnostic_inner(prompt, roles, requested_override, |item| {
+                witnesses.push(item);
+            })?;
         Ok((decision, witnesses))
     }
 
@@ -2429,10 +2864,17 @@ impl IntegerDiscreteModel {
         roles: PairedRoleDecision,
         visit: impl FnMut(PairedAssertionWitness),
     ) -> Result<PairedCopyDecision> {
+        if let Some(onset) = &policy.onset {
+            return paired.choose_with_roles(policy, prompt, &onset.packed_roots, roles, visit);
+        }
         match &paired.roles {
-            paired_copy::Roles::Frozen(_) => {
-                paired.choose_with_roles(policy, prompt, &self.packed_codebook_roots(), roles, visit)
-            }
+            paired_copy::Roles::Frozen(_) => paired.choose_with_roles(
+                policy,
+                prompt,
+                &self.packed_codebook_roots(),
+                roles,
+                visit,
+            ),
             paired_copy::Roles::Ordered { packed_roots, .. } => {
                 paired.choose_with_roles(policy, prompt, packed_roots, roles, visit)
             }
@@ -3015,6 +3457,40 @@ impl IntegerDiscreteModel {
         if prefix.iter().any(|&tok| tok >= vocab) {
             return Err(invalid("prefix token ID outside vocabulary"));
         }
+        if let Some(table) = self.active_s2() {
+            let read = table.predict_expert(prefix)?;
+            let best = read.top8[0];
+            let mut trace_words = Vec::new();
+            if retain_trace {
+                let key = read.matched_key.unwrap_or(0);
+                trace_words.extend([u32::from(read.matched_key.is_some()), u32::from(read.order)]);
+                trace_words.extend((0..4).map(|i| (key >> (i * 32)) as u32));
+                trace_words.push(read.reads().len() as u32);
+                for entry in read.reads() {
+                    trace_words.extend([u32::from(entry.token), entry.count]);
+                }
+                trace_words.extend([
+                    u32::from(best.token),
+                    best.mass as u32,
+                    (best.mass >> 32) as u32,
+                ]);
+            }
+            return Ok(DiscreteTracedPrefixEvaluation {
+                evaluation: DiscretePrefixEvaluation {
+                    prediction: u32::from(best.token),
+                    top8: read
+                        .top8
+                        .iter()
+                        .map(|entry| u32::from(entry.token))
+                        .collect(),
+                    read_vector: Vec::new(),
+                    admitted_cells: Vec::new(),
+                    relation_scores: None,
+                },
+                trace_words,
+                relation_trace_words: None,
+            });
+        }
         if let Some(mixer) = self.count_mixer() {
             let previous = prefix[prefix.len() - 1] as u16;
             let ranked = mixer.top8_for_prefix(prefix);
@@ -3159,9 +3635,9 @@ impl IntegerDiscreteModel {
     /// Evaluate a causal token prefix and compute the exact writer loss numerators
     /// and rival counts against `target` (`0..vocabulary`).
     pub fn observe_target(&self, prefix: &[u32], target: u32) -> Result<DiscreteTargetObservation> {
-        if self.count_mixer().is_some() {
+        if self.count_mixer().is_some() || self.active_s2().is_some() {
             return Err(invalid(
-                "the count mixer uses target mass instead of trunk hinge loss",
+                "count experts use target mass instead of trunk hinge loss",
             ));
         }
         if target >= self.shape.vocabulary {
