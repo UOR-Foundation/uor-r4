@@ -2,7 +2,7 @@
 
 On the completed Wick study, the ordinary client was exact through EOS on 4/36 held questions with ordered geometry, 10/36 with order-neutral geometry and 13/36 with position alone. On the matched 24 the same arms solved 0, 8 and 8. Every remaining miss began at the first token. [Full report and row-by-row results](REPORT.md)
 
-In the [earlier fresh Wick retest](../codex-16/REPORT.md) the correct original address was present on every one of the 11 failures that persisted after supplying the requested name. All existing value policies discarded that address. This study retains the complete candidate set and tests whether a trained integer bank can rank the candidates on new wording. The [pre-registered comparison](SHEET.md) distinguishes the conditional source-selection experiment from the normal text client.
+In the [earlier fresh Wick retest](../codex-16/REPORT.md) the correct original address was present on every one of the 11 failures that persisted after supplying the requested name. All existing value policies discarded that address. This study retains every candidate admitted by the frozen three-slot word-start mask and tests whether a trained integer bank can rank the candidates on new wording. The [pre-registered comparison](SHEET.md) distinguishes the conditional source-selection experiment from the normal text client.
 
 | Question | Verified result | Evidence |
 |---|---|---|

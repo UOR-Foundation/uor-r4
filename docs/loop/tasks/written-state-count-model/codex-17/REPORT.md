@@ -6,7 +6,7 @@ Ordered geometry chose the complete value on **0/24** matched held questions. Or
 
 ## What changed
 
-The study retained each reachable original word start up to the copy fence. From 88 supervised examples, the Wick CUDA fit produced three equal-size 200-record banks for each frozen artifact. Each bank was embedded in a D11 artifact and loaded by the ordinary Rust text client. The writer, EOS, role selection, training inputs and held prompts were fixed across the three arms. Two independent readers agreed on every supported answer and on the six control meanings before the study. [Panel](panel-v5/held-reading.json) · [FIT](study/FIT-RANK.md) · [Input release and capture receipts](study/LIVE-GO.md)
+The study scored the reachable original word starts admitted by the frozen three-slot mask. The held requested-span capture inventoried eight additional start entries per artifact outside that mask. All 36 correct held starts were inside the scored domain. Ordered used the signed D11 orbit distance. Order-neutral sorted roots within each segment and class, preserving segment order and shape. Position alone voted from the relative connector depth and the remaining length. From 88 supervised examples, the Wick CUDA fit produced three equal-size 200-record banks for each frozen artifact. Each bank was embedded in a D11 artifact and loaded by the ordinary Rust text client. The writer, EOS, role selection, training inputs and held prompts were fixed across the three arms. Two independent readers agreed on every supported answer and on the six control meanings before the study. [Panel](panel-v5/held-reading.json) · [FIT](study/FIT-RANK.md) · [Input release and capture receipts](study/LIVE-GO.md)
 
 ## Measurements
 
@@ -31,7 +31,11 @@ We verified all eight raw capture inventories and every referenced cold file. Tw
 
 Both fresh processes for each artifact reproduced all 386 registered files through the CPU client and CUDA writer. The complete grade summary was byte-identical across all four studies (SHA-256 `be991c93acd50864ede8fe4106ad71382811613de25159f1d561b9047d538dd7`). Seed one's primary and repeat took 141.30 and 145.22 seconds. Seed two took 136.51 and 135.23 seconds. The cost table separates complete process timing and peak RSS from the individual CUDA fit and score operations and the ordinary batch of 42 separately launched clients. These wall times include launch and I/O. [Bank identities and costs](evidence/runtime.tsv) · [Cold equality, wrong-key control and native/client replay](evidence/runtime-receipt.json)
 
-An independent client review ran the pinned synthetic CLI integration test. Planting the correct source wrote IDs `[924,1074,1]`; the rival wrote `[1074,1]`. The legacy library passed 200 tests, the serving-feature library passed 711 with one ignored, and all four legacy CLI tests passed. The WebAssembly serving library compiled. These are host compatibility checks. The held comparisons above use the Wick CUDA study and the ordinary Rust client.
+The 1,113,531-byte final evidence archive compared byte-for-byte on Wick and the workstation and passed an independent restore check against 2,507 regular-file hashes. The private store refused the preceding 1,121,693-byte archive at its storage quota. No private-store revision was created. Both verified copies remain available. [Custody, retained artifacts and restore conditions](evidence/storage.json)
+
+The local delivery check found missing machine-readable lab and item fields in the ORDER. We added the two identifiers already present in its heading and issue reference after the measurement. The registered inputs, arms, bars and scientific text are unchanged.
+
+An independent client review ran the pinned synthetic CLI integration test. Planting the correct source wrote IDs `[924,1074,1]` and the rival wrote `[1074,1]`. The legacy library passed 200 tests, the serving-feature library passed 711 with one ignored, and all four legacy CLI tests passed. The WebAssembly serving library compiled. These are host compatibility checks. The held comparisons above use the Wick CUDA study and the ordinary Rust client.
 
 ## Skills used
 

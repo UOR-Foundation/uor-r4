@@ -1,5 +1,7 @@
 # [codex] Preserve candidate word starts through source selection
 
+Lab: codex. Item: [written-state-count-model](../../../../roadmap/items/written-state-count-model.md) (#4063).
+
 Question for #4063. On independently answerable short facts, can a native geometric score distinguish the full value from the end of a connector or a truncated value, when all reachable original word starts are retained to decision time? Test the address picker with fixed requested endpoints first. Keep the exact writer, EOS, original tokens and integer state fixed. Evaluate the winning end-to-end artifact through unmarked protocol-2 conversation separately. Treat the 32 released questions solely as development evidence.
 
 Register separate input tapes for fit and for sealed grading. On matched reversals, hold each name and item constant across short and long connectors, and vary each item under the same connector. Independently vary whether the early, middle or late feasible start is right and withhold whole lexical groups. Include ambiguous, absent and contradictory requests and negatives where a plausible other address is writable. Two blinded readers independently recover the requested name, full item and affirmative or negative meaning before any model run. Any disagreement is retained, counted and adjudicated before a new seal. A panel must exercise all feasible choices with real GPU writes, preserve every malformed/ineligible case, and show an actually correct public route plus exact failures for incorrect sources and shuffled target keys.
