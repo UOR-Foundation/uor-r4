@@ -46,11 +46,11 @@ All eight recoveries crossed both names (Rosalind and Benedict), both query-clau
 | green glass beads / kept | 8/8 | 8/8 |
 | Other nine object–connector combinations | 0/72 | 0/72 |
 
-All 24 previously wrong source copies survived. The rule introduced zero new wrong source copies on supported prompts. On one unsupported conflict prompt it released one of two assertions. The second assertion still abstained, so the final binder withheld the source. All six unsupported prompts retained zero final factual writes. The registered value criterion passes on this panel. The ordinary role criterion fails on span recovery and exact replies.
+All 24 previously wrong source copies survived: 16 began in a connector and eight began inside the value. The rule introduced zero new wrong source copies on supported prompts. On one unsupported conflict prompt it released one of two assertions. The second assertion still abstained, so the final binder withheld the source. All six unsupported prompts retained zero final factual writes. The registered value criterion passes on this panel. The ordinary role criterion fails on span recovery and exact replies.
 
 ## Checks run at the head
 
-The D19 baseline rebuilt byte-for-byte. The new artifact preserves its paired parent, original span state and ordered value bank. Planted role tests verified all eight GPU decision words against the Rust operator and exercised ties, missing support and a surviving lone negative winner. The independent blind grades, finite GPU checks and source identities were sealed before held scoring. Forced gold value onsets wrote 96/96 exact on each supported panel. Forced opposing values wrote 0/96, and independently regrading the correct tapes against the wrong keys accepted 0/96. [Independent FIT](FIT.md) · [Pre-run review](PRE-RUN.md) · [GO](authorization.json)
+The integer-library suite with the serving feature passed 711 tests with one ignored. The D19 baseline rebuilt byte-for-byte. The new artifact preserves its paired parent, original span state and ordered value bank. Planted role tests verified all eight GPU decision words against the Rust operator and exercised ties, missing support and a surviving lone negative winner. The independent blind grades, finite GPU checks and source identities were sealed before held scoring. Forced gold value onsets wrote 96/96 exact on each supported panel. Forced opposing values wrote 0/96, and independently regrading the correct tapes against the wrong keys accepted 0/96. [Independent FIT](FIT.md) · [Pre-run review](PRE-RUN.md) · [GO](authorization.json)
 
 ## Skills used
 
@@ -62,4 +62,4 @@ Keep the ordinary reference. The original bank learned six offsets relative to e
 
 ## Plain summary
 
-Clause scoring tracked the wording across positions, but ranked exclusion above the request. Supplying the right person exposed a narrower success. Eight formerly generic replies copied the complete correct phrase. The fixed writer copied every forced correct start. Both measured bottlenecks are upstream of the writer.
+Clause scoring tracked the wording across positions, but ranked exclusion above the request. Supplying the right person exposed a narrower success. Eight formerly generic replies copied the complete correct phrase. The fixed writer copied every forced correct start. Both measured bottlenecks are upstream of the writer. [Paired cases](evidence/paired-findings.md) · [First artifact, all rows](evidence/readout-seed1.md) · [Second artifact, all rows](evidence/readout-seed2.md) · [Matched ordinals and counts](evidence/paired-summary.json)
