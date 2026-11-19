@@ -10,7 +10,7 @@ def mismatch:
     if .exact then "exact" else "n/a" end
   else .mismatch | "\(.index) \(.expected|token) → \(.actual|token)" end;
 def arm:
-  "q=\(.query // "∅") \(.endpoint); src=\(.source // "∅") \(.source_kind.classification) \(.source_token|token); \(mismatch); EOS \(.terminal_eos|boolean)";
+  "q=\(.query // "∅") \(.endpoint) \([.query_tokens[]?|token]|join(" ")); src=\(.source // "∅") \(.source_kind.classification) \(.source_token|token); \(mismatch); EOS \(.terminal_eos|boolean)";
 def counts($a;$b):
   .arms[$a] as $old | .arms[$b] as $new |
   ["\($old.span) → \($new.span)",
@@ -45,7 +45,7 @@ def cells($a;$b):
 row(["Ordinal","Prompt ID","Gold query","Gold source","Reference","Clause","Supplied ordered","Earlier connector veto"]),
 row([range(8)|"---"]),
 (.rows[] | select(.stratum=="supported") |
- row([.ordinal,.id,.gold_query,.gold_start,
+ row([.ordinal,.id,"\(.gold_query) \([.gold_query_tokens[]|token]|join(" "))",.gold_start,
       (.arms.reference|arm),(.arms.clause|arm),(.arms.supplied|arm),(.arms.veto|arm)])),
 "",
 "## Unsupported controls",

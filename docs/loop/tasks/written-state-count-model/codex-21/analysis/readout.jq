@@ -11,6 +11,8 @@ def mismatch($expected; $emitted):
   else first(range([($expected|length), ($emitted|length)]|max)
            | select($expected[.] != $emitted[.])) // null end;
 def piece($id): if $id == null then null else $pieces[0][$id] end;
+def query_tokens($tape; $span):
+  if $span == null then null else $tape[$span[0]:$span[1]] | map(piece(.)) end;
 def source($g; $start):
   if $start == null then {classification:"no_source"}
   else (first($g.facts[] | select(.name_span[0] <= $start and $start < .delimiter[0])) // null) as $f
@@ -51,7 +53,8 @@ def normalize($g; $row; $source_rows; $audit; $observed; $tape; $expect):
     ($audit == null or ($audit.consensus.source == $row.source and
       ($row.source == null or any($source_rows[]; .source == $row.source))));
     "writer, raw source trace or independent witness disagrees at \($g.id)") |
-  {query:$row.requested, endpoint:endpoint($g; $row.requested), excluded:$row.excluded,
+  {query:$row.requested, query_tokens:query_tokens($tape; $row.requested),
+   endpoint:endpoint($g; $row.requested), excluded:$row.excluded,
    source:$row.source, source_kind:source($g; $row.source),
    source_token:(if $row.source == null then null else piece($tape[$row.source]) end),
    value_status:(if $source_rows==null then null
@@ -127,6 +130,7 @@ def dataset($g; $blind; $input; $observed; $sources; $audits; $arms):
      name_b_first:$row.name_order_reversed, exclusion_first:$row.distractor_first,
      reverse_facts:$row.reversed, object_swap:$row.object_swap,connector_swap:$row.connector_swap,
      person:$row.requested_name,prompt:$blind[$i].text,gold_query:$row.requested,
+     gold_query_tokens:query_tokens($tape;$row.requested),
      excluded_query:$row.excluded, gold_start:$row.gold_start,gold_offset:$row.gold_offset,
      gold_answer:$row.answer_text,expected:$expect,
      arms:($arms|map(. as $arm |
