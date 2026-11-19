@@ -29,7 +29,9 @@ Where each part runs:
 2. **The 1‰ slice with the host checks:**
    - the lookups' host check, as `--check-host` in claude-438;
    - the CUDA Pick against the CPU oracle `observe_identity_pick` at every DEV-tune target of the slice. Each target's trace words `[pick, d(pick), ties, gate + 1, out root]` per block, and the successor, must be equal word for word.
-   - C2's exact pair and C3's permuted read are checked the same way against their host versions.
+   - C3's device read must equal the host Pick over the permuted codes row for row: class, hit, pick and distance at every target of the slice. A1 is checked the same way on both spans.
+   - C2 runs on the host only. It must equal an independent host read: the code Pick over one distinct code per token, whose distance is 0 exactly at an exact pair. C2 must equal that read's fired rows and be empty elsewhere.
+   - The lookups are checked one record-aligned chunk at a time. Every check fails the run if it compares no target.
 3. **1% and 10% of C** (`--per-mille 10`, `--per-mille 100`): A0, A1, C1, C2, C3 and P+, with `--profile-phases`.
 4. **100% of C**, the same arms, with peak host memory sampled once a second and the GPU peak read from `nvidia-smi`.
 5. **Storage.** Each run's JSON, log and memory samples are copied to the laptop under `local/claude/c439/`, and committed with the REPORT under `run1/`. No count table, stream, mask, id list or Pick tape is copied off wick or committed.

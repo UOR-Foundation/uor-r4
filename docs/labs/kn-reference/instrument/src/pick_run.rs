@@ -121,6 +121,39 @@ pub fn fire_rows_to_targets(rows: &[PickRow]) -> Vec<PickTarget> {
         .collect()
 }
 
+/// C2's B1: an independent host read of the exact pair. With one distinct code per token,
+/// the code Pick's distance is 0 exactly at an exact pair, and its latest-minimum rule is
+/// C2's latest-pair rule; so C2 must equal the code Pick's fired rows and be empty elsewhere.
+/// Returns the targets compared.
+pub fn check_c2(stream: &[u16], c2: &[PickRow], context: usize) -> Result<usize, Failure> {
+    use uor_r4_discrete::kn_pick::code_pick_rows;
+    let identity: Vec<[u16; 1]> = (0..VOCAB).map(|id| [id as u16]).collect();
+    let expected: Vec<PickRow> = code_pick_rows(stream, &identity, context)?
+        .into_iter()
+        .map(|row| {
+            if row.class == 1 {
+                row
+            } else {
+                PickRow {
+                    class: 0,
+                    hit: false,
+                    pick: None,
+                    distance: None,
+                }
+            }
+        })
+        .collect();
+    if let Some(at) = first_row_mismatch(c2, &expected) {
+        return Err(fail(format!(
+            "B1: C2 differs from the identity-code read at target {at}"
+        )));
+    }
+    if c2.is_empty() {
+        return Err(fail("B1: C2 compared no target"));
+    }
+    Ok(c2.len())
+}
+
 /// The `VmHWM:` value of a `/proc/self/status` text, in KiB.
 pub fn vm_hwm_kib(status: &str) -> Option<u64> {
     let line = status.lines().find(|line| line.starts_with("VmHWM:"))?;
@@ -153,26 +186,34 @@ fn span_lookups(
 ) -> Result<(Vec<u32>, Vec<u64>), Failure> {
     let mut counts = Vec::new();
     let mut totals = Vec::new();
+    // Each chunk starts at a BOS, so its host lookups stand alone: the host check
+    // holds one chunk twice, never the whole span.
     for range in chunk_bounds(span, LOOKUP_CHUNK)? {
-        let (c, t) = lookup.lookups(&span[range])?;
+        let (c, t) = lookup.lookups(&span[range.clone()])?;
+        if check_host {
+            let (host_c, host_t) = raw.lookups(&span[range])?;
+            let first = |a: usize, b: usize, differ: &dyn Fn(usize) -> bool| {
+                (0..a.max(b)).find(|&i| differ(i))
+            };
+            if let Some(i) = first(c.len(), host_c.len(), &|i| c.get(i) != host_c.get(i)) {
+                return Err(fail(format!(
+                    "{name} lookup counts differ from host at {}",
+                    counts.len() + i
+                )));
+            }
+            if let Some(i) = first(t.len(), host_t.len(), &|i| t.get(i) != host_t.get(i)) {
+                return Err(fail(format!(
+                    "{name} lookup totals differ from host at {}",
+                    totals.len() + i
+                )));
+            }
+        }
         counts.extend(c);
         totals.extend(t);
     }
     if check_host {
-        let (host_counts, host_totals) = raw.lookups(span)?;
-        if let Some(i) =
-            (0..host_counts.len().max(counts.len())).find(|&i| host_counts.get(i) != counts.get(i))
-        {
-            return Err(fail(format!(
-                "{name} lookup counts differ from host at {i}"
-            )));
-        }
-        if let Some(i) =
-            (0..host_totals.len().max(totals.len())).find(|&i| host_totals.get(i) != totals.get(i))
-        {
-            return Err(fail(format!(
-                "{name} lookup totals differ from host at {i}"
-            )));
+        if totals.is_empty() {
+            return Err(fail(format!("{name}: the host check compared no target")));
         }
         eprintln!("{name}: host lookups = GPU at {} targets", totals.len());
     }
@@ -263,6 +304,11 @@ pub fn run(job: PickRun) -> Result<(), Failure> {
     };
 
     let started = Instant::now();
+    // The record's file is claimed first: an existing path stops the run before any work.
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(job.out)?;
     let mut phases = Map::new();
     fn phase(phases: &mut Map<String, Value>, name: &str, at: Instant) -> u128 {
         let ms = at.elapsed().as_millis();
@@ -344,6 +390,10 @@ pub fn run(job: PickRun) -> Result<(), Failure> {
             &code_pick_rows(main, &permuted, CONTEXT)?,
             "C3 main",
         )?;
+        let c2_checked = check_c2(main, &c2_rows, CONTEXT)?;
+        if dev_tune_targets == 0 {
+            return Err(fail("B1: the segments mark no DEV-tune target"));
+        }
         if a1_main.words.len() != dev_tune_targets {
             return Err(fail(format!(
                 "B1: kept words at {} targets, expected {dev_tune_targets} DEV-tune targets",
@@ -353,6 +403,7 @@ pub fn run(job: PickRun) -> Result<(), Failure> {
         let oracle_targets = check_oracle(&model, main, &a1_main)?;
         b1.insert("a1_main_rows".into(), json!(a1_rows));
         b1.insert("c3_rows".into(), json!(c3_rows));
+        b1.insert("c2_rows".into(), json!(c2_checked));
         b1.insert("oracle_targets".into(), json!(oracle_targets));
         phase(&mut phases, "b1_main", at);
     }
@@ -442,17 +493,13 @@ pub fn run(job: PickRun) -> Result<(), Failure> {
     if job.profile_phases {
         summary["phases_ms"] = Value::Object(phases);
     }
-    if let Some(kib) = std::fs::read_to_string("/proc/self/status")
+    // The whole process's VmHWM, counting included; null where it cannot be read.
+    let peak = std::fs::read_to_string("/proc/self/status")
         .ok()
-        .and_then(|status| vm_hwm_kib(&status))
-    {
-        eprintln!("pick-arms: peak RSS {kib} KiB");
-        summary["peak_rss_kib"] = json!(kib);
-    }
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(job.out)?;
+        .and_then(|status| vm_hwm_kib(&status));
+    eprintln!("pick-arms: peak RSS {peak:?} KiB");
+    summary["peak_rss_kib"] = json!(peak);
+    summary["peak_rss_source"] = json!("VmHWM of the whole process");
     use std::io::Write;
     file.write_all((serde_json::to_string_pretty(&summary)? + "\n").as_bytes())?;
     eprintln!("wrote {}, {} ms", job.out, started.elapsed().as_millis());
@@ -464,6 +511,22 @@ mod tests {
     use super::*;
 
     const B: u16 = NGRAM_BOS;
+
+    #[test]
+    fn c2_equals_the_identity_code_read() {
+        use uor_r4_discrete::kn_pick::exact_pair_rows;
+        // Pairs (5 6) and (7 8) repeat, (5 9) does not; a second record restarts.
+        let stream = [B, 5, 6, 7, 8, 5, 6, 7, 8, 5, 9, 6, 1, B, 7, 8, 7, 8, 1];
+        let c2 = exact_pair_rows(&stream, VOCAB, CONTEXT).unwrap();
+        assert!(c2.iter().any(|row| row.class == 1 && row.hit));
+        assert!(c2.iter().any(|row| row.class == 0));
+        assert_eq!(check_c2(&stream, &c2, CONTEXT).unwrap(), c2.len());
+        let mut wrong = c2.clone();
+        let fired = wrong.iter().position(|row| row.class == 1).unwrap();
+        wrong[fired].pick = wrong[fired].pick.map(|p| p - 1);
+        assert!(check_c2(&stream, &wrong, CONTEXT).is_err());
+        assert!(check_c2(&[B], &[], CONTEXT).is_err());
+    }
 
     #[test]
     fn split_spans_finds_the_plus_span() {
