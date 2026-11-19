@@ -12,6 +12,9 @@ pub const VECTOR: usize = 32;
 pub const ABSENT: u32 = u32::MAX;
 pub const TRUNK_SHA256: &str = "04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d";
 pub const C3_SEED: u64 = 439;
+/// Windows per device call: the device's maximum. A forward call costs about 100 ms whatever
+/// it holds (claude-439 probe on wick, 19 Nov), and the tape does not depend on the batch size.
+pub const READ_BATCH: usize = 4096;
 
 /// Loads the seed-1 trunk and refuses any other artifact or shape.
 pub fn load_trunk(path: &Path) -> Result<IntegerDiscreteModel, Failure> {
@@ -219,7 +222,9 @@ mod gpu {
             context: usize,
             keep_words: &dyn Fn(usize) -> bool,
         ) -> Result<DeviceTape, Failure> {
-            Ok(self.rows_batched(stream, context, keep_words, 256)?.0)
+            Ok(self
+                .rows_batched(stream, context, keep_words, READ_BATCH)?
+                .0)
         }
 
         /// `rows` with `batch` windows per device call, and the time spent in each part
@@ -331,6 +336,11 @@ mod tests {
             root_codes(&moved).unwrap(),
             permute_code_rows(&codes, C3_SEED)
         );
+    }
+
+    #[test]
+    fn the_read_fills_each_device_call() {
+        assert_eq!(READ_BATCH, uor_r4_discrete::corpus::MAX_BATCH_ROWS as usize);
     }
 
     #[test]

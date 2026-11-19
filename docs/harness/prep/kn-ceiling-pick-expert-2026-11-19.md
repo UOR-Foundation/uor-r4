@@ -34,7 +34,7 @@ Where each part runs:
    - The lookups are checked one record-aligned chunk at a time. Every check fails the run if it compares no target.
 3. **1% and 10% of C** (`--per-mille 10`, `--per-mille 100`): A0, A1, C1, C2, C3 and P+, with `--profile-phases`.
 4. **100% of C**, the same arms, with peak host memory sampled once a second and the GPU peak read from `nvidia-smi`.
-5. **Storage.** Each run's JSON, log and memory samples are copied to the laptop under `local/claude/c439/`, and committed with the REPORT under `run1/`. No count table, stream, mask, id list or Pick tape is copied off wick or committed.
+5. **Storage.** Each run's JSON, log and memory samples are copied to the laptop under `local/claude/c439/`, and committed with the REPORT under `run2/` (run1 was stopped; see the read amendment below). No count table, stream, mask, id list or Pick tape is copied off wick or committed.
 
 **The arms, in ORDER indexing** (the target is at t, the query pair is (t − 2, t − 1), a candidate pair is (p − 1, p), and p + 1 < t):
 
@@ -121,7 +121,7 @@ Where each part runs:
   - the raw count at 100% is about 7 min on the 4090;
   - each fit on R is about 3.5 min, five fits about 17 min;
   - P+'s two fits on R⁺ (about 32.6M targets) are about 14 min;
-  - the Pick reads are minutes.
+  - the Pick reads are minutes. (Wrong at 256 windows per call: measured about 5 h per size. See the read amendment; at 4096 per call, about 1 h per size.)
   - So about 45 min at 100%, and under two hours for every size together.
 - **Host memory:** the P+ span (R⁺ and DEV⁺, about 54M targets) is the largest. Its lookups are about 7 GB, and its 14-expert table about 6 GB, so the peak is about 15 GB.
   - wick has 59 GB, about 26 GB of it free on 19 Nov beside the other jobs.
@@ -144,6 +144,14 @@ Where each part runs:
 - No DEV-tune number feeds back into any parameter this sheet fixes.
 - If wick is unreachable, or its GPU or the memory a size needs stays unavailable for more than six hours, the unit asks for a rented 4090 or 5090 in the caps (§3.6) under a new sheet line. It does not wait.
 
+## Read amendment, 19 Nov (before any band was computed)
+
+- **What happened.** Run1 at `51be0e0a8aad48b04ecc6fa63cb0b5160ae2e768` passed step 1 on wick: 60 discrete CUDA tests, the instrument suite and the trunk oracle. Step 2 (1‰ with `--check-host`) was stopped by its pid at 19:01Z, 2 h 11 min in, inside A1's read of the main span. It wrote no JSON; its claimed, empty `pick-p1.json` and its log stay in run1. No arm was fitted and no band was computed, so no DEV-tune number was seen.
+- **Why.** The read sent 256 windows per device call. A probe on wick (`device_read_is_batch_invariant`, at `8bf1ac29ef1039ba1eeb612706ceaee0536c8173`) timed 10,165 windows of the trunk: 4,390 ms at 256 per call, 1,221 ms at 1,000, 323 ms at 4,096. The forward call costs about 100 ms whatever it holds. At 256 the three reads (107M windows per size) take about 5 h at every size.
+- **The change.** The read sends `READ_BATCH` = 4,096 windows per call, the device's maximum (`MAX_BATCH_ROWS`). Each window's Identity `record` is still its ordinal in the stream, so no input to the device changes. The probe asserts the same rows and kept words at 256, 1,000 and 4,096. `the_read_fills_each_device_call` pins the constant and fails at 256.
+- **What does not change.** Every arm, control, band, bar, parameter, seed and stop rule above. B1 at step 2 still compares the device read with the host at every DEV-tune target.
+- **The rerun.** Steps 1 and 2 rerun at the new head into `run2`, then steps 3 and 4. Run1 is not a size's record: no size wrote a JSON there.
+
 FIT history:
 - Round 1, 19 Nov, a fresh-context non-author reviewer at `83fd3737e14f6ade8bdefa5446659812d010c968`: FIT WITH CHANGES. Made at the next head: the code writes the reading label; C1 − A0 joins the bands, with the "not separable" row; the overall bands decide; each band is also in micro-BPB; B2's and B3's scope notes; the memory rule's two branches; the trunk is read from the HF store.
 - Round 2, 19 Nov, a fresh-context non-author reviewer at `42872c98df2276d8197e7131ee035e24212689f9`: FIT WITH CHANGES. Every round-1 change was present, and the sheet and code agreed. It asked for B2 to fail on an empty second-copy set and for the bands' record count to be checked. Both are in the next head, each with a test that fails without it. Round 2 did not read `kn_pick.rs` or `pick_device.rs`; round 3 reads them.
@@ -151,4 +159,6 @@ FIT history:
 
 - Round 3, 19 Nov, a fresh-context non-author reviewer at `2d5ac69b01fc1e3c22a53435af7c2616f0958625`, reading the two guards, `kn_pick.rs` and `pick_device.rs`: FIT WITH CHANGES. Its one change was to reword B2's scope note, because the first two targets of each second copy are not distance-0 copies. It said the reworded note turns the verdict to FIT, and the note is reworded at the next head, a document-only change. Its open minor: no test pins the `check_band_records` call site. So step 2's job checks that `band_records` is 2,670 in the JSON.
 
-TEST FITNESS: FIT - round 3's one requested change, the B2 scope note, is made; the code is as reviewed at `2d5ac69b01fc1e3c22a53435af7c2616f0958625`.
+- Round 4, 19 Nov: pending, for the read amendment only (the batch size, the probe and the run2 rerun).
+
+TEST FITNESS: PENDING - round 4 is pending for the read amendment; round 3 found the rest FIT at `2d5ac69b01fc1e3c22a53435af7c2616f0958625`.
