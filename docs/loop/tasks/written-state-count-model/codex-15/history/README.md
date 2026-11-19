@@ -23,7 +23,7 @@ bash "$analyst/stage.sh" "$analyst" "$staged_lab" "$archives" "$custody_tar"
 bash "$analyst/reproduce.sh" "$analyst" "$staged_lab" "$checkout" "$output"
 ```
 
-The outputs are `RESULT.json`, per-seed geometry and adjudication JSON, the signed-root comparison, and complete `INPUTS.sha256` and `ANALYSIS.sha256` lists. The original per-row join files preserve original IDs/endpoint metadata. The report table and interpretation are in `RESULT.md`.
+The outputs are `RESULT.json`, per-seed geometry and adjudication JSON, the signed-root comparison, and complete `INPUTS.sha256` and `ANALYSIS.sha256` lists. The original per-row join files preserve original IDs/endpoint metadata. The report table and interpretation are in `../REPORT.md`.
 
 ## Optional D11 table recapture
 

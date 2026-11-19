@@ -1,5 +1,7 @@
 # [codex] Draft ORDER — clause order and exact requested spans
 
+Lab: codex. Item: [written-state-count-model](../../../../roadmap/items/written-state-count-model.md) (#4063). These delivery metadata identify the existing research order. The original v2 ORDER bytes reviewed before data collection remain at commit 1bcdc1baf.
+
 **Status:** Local v2 draft for independent review. Item written-state-count-model (#4063). Keep v1 as reviewed. Before claiming this work after #4102's receipt, refresh main, claims, bench and open work. Cancel a duplicate already measuring this comparison.
 
 **Question:** When two ordinary requests preserve lexical evidence and facts but reverse the requested person, does position-dependent D11 geometric transport improve exact role nomination and literal replies? Trace each failure from the original tokenizer position to the first wrong emitted ID or stop.
