@@ -20,6 +20,11 @@ Code: every run at `5a7bbd032` on `claude/kn-ceiling-433`; `10a3e2c5f` later for
   - after 24 passes only 600‰ of the target-weighted weight sits on KN, against 657‰ at 10%.
   More passes or another starting point need a new sheet (Still open). KN + U, with two experts,
   did converge (the last passes move it by about 1,000 Q12) and ends below KN-only, as expected.
+- **The pod was rented without asking Casey** [claude]. The lab's plan for the 1B goal records
+  "wick's 4090 only, no rented GPUs" among its limits, and its roadmap row for this unit said to
+  ask Casey once if the 100% run did not fit on wick. The prep sheet named a Vast 5090 as the
+  fallback, and the run followed the sheet without that question. The spend was inside the
+  project's caps ($8/h), but it went past the plan's own limit. The next 100% run asks first.
 - **The 100% run used a rented pod, as the sheet's dispatch rule required.** The 10% run's peaks
   scaled ×10 (8.2 GB resident, 6,385 MiB of device memory) exceeded wick's container and card.
   `uor-pod up` made a **2 × RTX 5090** pod (`vast-61348591`, $1.908/h), the tool's default count,
@@ -103,16 +108,15 @@ Ratios to R\* at the cut sizes are not comparable (another TRAIN, other targets)
 
 - **Gate (c) has no reading from this unit.** The sheet's I (EM not converged) row applies at
   100%, so the ratios above are records, not the gate. No branch of the roadmap moves on them.
-- **The non-convergence has a plain cause.** The fit starts at 1/13 on each expert. With less
-  TRAIN, the raw orders carry what KN smooths away, the best mix lies well inside the weights,
-  and 24 passes reach near it. At 100%, KN's own mass is better, the best mix lies close to "all
-  on KN", and the fit was still moving there: 400‰ of its weight was on raw orders when it
-  stopped.
-- **Scale, recorded and not read as the gate:** the fit stopped 18,935 bits above KN-only. A
-  ratio of 0.90 × R\* is about 3.14 M bits below KN-only on DEV-tune (0.10 × 1,432,318 micro-BPB
-  × 21,928,475 bytes), and 0.85 × R\* about 4.71 M bits. Across the cut sizes, U_count's gain over
-  KN-only fell from 0.97% to 0.09% as TRAIN grew, and KN + U's was 0.06–0.07% below 10% and
-  0.01% at 100%.
+- **A hypothesis for the non-convergence, untested here:** the fit starts at 1/13 on each expert.
+  With less TRAIN, the raw orders may carry what KN smooths away, so the best mix lies well inside
+  the weights and 24 passes come near it. At 100%, KN's own mass is better, and the best mix may lie
+  close to "all on KN", which the fit was still moving toward: 400‰ of its weight was on raw orders
+  when it stopped. Where the converged mix lies is unknown; the next sheet measures it.
+- **Recorded, not read as the gate:** the fit stopped 18,935 bits above KN-only. Across the cut
+  sizes, U_count's gain over KN-only fell from 0.97% to 0.09% as TRAIN grew; KN + U's was 0.06%
+  at 1‰, 0.07% at 1%, 0.014% at 10% and 0.009% at 100%. These bound nothing about the converged
+  ceiling at 100%.
 - **U_split stayed above U_count at every size,** by 3.0%, 0.91%, 0.09% and 0.01% of KN-only
   overall: the part of the in-sample gain that does not carry to the other half shrinks with TRAIN.
 
@@ -151,11 +155,15 @@ model state, operator or artifact.
 
 - **Gate (c) is still unread.** The next unit is a new sheet with only the start changed: the fit
   starts at KN (weight 2^32 less the other experts' floors). Each EM pass then cannot raise the fit
-  bits beyond integer floors, so U_count is at most KN-only by construction, and the passes go to
-  the ceiling. It reuses this code with a start option, on a pod.
+  bits beyond integer floors, so U_count is at most KN-only up to those floors, and the passes go to
+  the ceiling. It reuses this code with a start option. At 100% it needs about 16 GB of device
+  memory and 11 GB resident (this run's peaks): wick when that much is free there, otherwise a
+  pod only after Casey says yes.
 - **Stream transfer:** copying TRAIN through the laptop cost 37 minutes of pod time. A pod-side
   fetch of claude-420's split (or the next run on wick, if its memory is free) would remove it.
 - **`uor-pod up` defaults to two GPUs:** pass `--count 1` when a sheet names one.
+- **The raw-order log line's `ms`** is the time since the run began, not that order's time (as in
+  the adjusted sweep's lines); relabel it in the next unit that touches the instrument.
 - **Deployable P1 (claude-434 Pick, 435, 436)** waits on the gate's reading as the roadmap
   orders.
 
