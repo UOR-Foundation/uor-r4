@@ -3,6 +3,9 @@ def require($condition; $message): if $condition then . else error($message) end
 def indexed($file; $key):
   $file.rows | map({key:(.[$key]|tostring),value:.}) | from_entries
   | require(length == ($file.rows|length); "duplicate row ordinal");
+def source_trace:
+  .rows | group_by(.ordinal)
+  | map({key:(.[0].ordinal|tostring),value:.}) | from_entries;
 def mismatch($expected; $emitted):
   if $expected == null then null
   else first(range([($expected|length), ($emitted|length)]|max)
@@ -32,7 +35,7 @@ def endpoint($g; $span):
   elif $span == $g.excluded then "excluded"
   elif any($g.facts[]; .name_span == $span and .name == $g.requested_name) then "requested_fact"
   else "other" end;
-def normalize($g; $row; $source_row; $observed; $tape; $expect):
+def normalize($g; $row; $source_rows; $audit; $observed; $tape; $expect):
   if $row == null then null else
   $row.generated as $got | mismatch($expect; $got) as $first |
   ($expect != null and $got == $expect and $got[-1] == 1) as $exact |
@@ -45,12 +48,17 @@ def normalize($g; $row; $source_row; $observed; $tape; $expect):
     $observed.original_exact == $row.exact and $observed.original_first_wrong == $first and
     ($first == null or ($row.expected_wrong_id == $expect[$first] and $row.actual_wrong_id == $got[$first])) and
     all($got[]; piece(.) != null) and
-    ($source_row == null or $source_row.source == $row.source);
+    ($audit == null or ($audit.consensus.source == $row.source and
+      ($row.source == null or any($source_rows[]; .source == $row.source))));
     "writer, raw source trace or independent witness disagrees at \($g.id)") |
   {query:$row.requested, endpoint:endpoint($g; $row.requested), excluded:$row.excluded,
    source:$row.source, source_kind:source($g; $row.source),
    source_token:(if $row.source == null then null else piece($tape[$row.source]) end),
-   value_status:$source_row.status, candidates:$source_row.candidates,
+   value_status:(if $source_rows==null then null
+     elif ($source_rows|length)==1 then $source_rows[0].status
+     else "multiple_assertions" end),
+   candidates:[$source_rows[]? | .assertion_index as $assertion |
+               .candidates[] | . + {assertion_index:$assertion}],
    emitted:$got, text:$observed.decoded_text, terminal_eos:($got[-1] == 1),
    exact:(if $expect == null then null else $exact end),
    mismatch:(if $first == null then null else
@@ -78,10 +86,11 @@ def pair($a; $b):
                        $new.source_kind.classification != "correct_value"),
      new_wrong_but_both_wrong:($old.exact == false and $new.exact == false and $old.emitted != $new.emitted),
      earlier_unseen_gold: any($old.candidates[]?;
-        .source==$r.gold_start and .status=="unseen" and
-        any($old.candidates[]?; .source > $r.gold_start)),
+        . as $c | $c.source==$r.gold_start and $c.status=="unseen" and
+        any($old.candidates[]?; .assertion_index == $c.assertion_index and .source > $c.source)),
      bypassed_unseen: [($old.candidates // [])[] as $c |
-         select($c.status=="unseen" and any($new.candidates[]?; .source==$c.source and .status=="outside_radius")) |
+         select($c.status=="unseen" and any($new.candidates[]?;
+            .assertion_index==$c.assertion_index and .source==$c.source and .status=="outside_radius")) |
          $c.source]});
 def counts($key):
   group_by(.[$key]) | map({key:(.[0][$key]|tostring),value:length}) | from_entries;
@@ -103,7 +112,7 @@ def summary($rows; $arms; $old; $new):
    early_unseen_gold:([$paired[]|select(.earlier_unseen_gold)]|length),
    early_unseen_gold_wrong_releases:([$paired[]|select(.earlier_unseen_gold and .new_wrong_source and
       (.bypassed_unseen|length)>0)]|length)};
-def dataset($g; $blind; $input; $observed; $sources; $arms):
+def dataset($g; $blind; $input; $observed; $sources; $audits; $arms):
   $g | to_entries | map(.key as $i | (.key|tostring) as $k | .value as $row |
     $blind[$i].prefix as $tape |
     ($row.stratum == "supported") as $is_supported |
@@ -124,7 +133,7 @@ def dataset($g; $blind; $input; $observed; $sources; $arms):
        ($is_supported or (["reference","clause","no_read"]|index($arm))!=null) as $runs |
        require(($input[$arm][$k]!=null)==$runs and ($observed[$arm][$k]!=null)==$runs;
           "writer and observations do not cover the required ordinals") |
-       {key:$arm,value:normalize($row;$input[$arm][$k];$sources[$arm][$k];
+       {key:$arm,value:normalize($row;$input[$arm][$k];$sources[$arm][$k];$audits[$arm][$k];
                    $observed[$arm][$k];$tape;$expect)})|from_entries)});
 def transitions($rows; $a; $b):
   $rows | group_by([.family,.exclusion_first,.name_b_first])
@@ -145,14 +154,16 @@ def negatives($rows):
 ["reference","clause","supplied","veto","wrong_role","no_read"] as $arms |
 ($writers[0] | map_values(indexed(.;"index"))) as $writer_rows |
 ($observations[0] | map_values(indexed(.;"index"))) as $observed_rows |
-($traces[0] | map_values(indexed(.;"ordinal"))) as $source_rows |
-dataset($labels[0];$blind[0];$writer_rows;$observed_rows;$source_rows;$arms) as $rows |
+($traces[0] | map_values(source_trace)) as $source_rows |
+($audits[0] | map_values(indexed(.;"ordinal"))) as $audit_rows |
+dataset($labels[0];$blind[0];$writer_rows;$observed_rows;$source_rows;$audit_rows;$arms) as $rows |
 ($rows|map(select(.stratum=="supported"))) as $sup |
 require(($rows|length)==102 and ($sup|length)==96 and
    all($arms[]; . as $a | ($writer_rows[$a]|length)==
       (if (["reference","clause","no_read"]|index($a))!=null then 102 else 96 end)) and
    all(["reference","clause","supplied","veto","wrong_role"][]; . as $a |
-     ($source_rows[$a]|length)==102 and all(range(102); $source_rows[$a][tostring]!=null));
+     ($source_rows[$a]|length)==102 and ($audit_rows[$a]|length)==102 and
+     all(range(102); $source_rows[$a][tostring]!=null and $audit_rows[$a][tostring]!=null));
     "unexpected arm or candidate-trace census") |
 {schema:"uor-r4.clause-entity-veto-paired-readout/1",seed:$seed,
  totals:{rows:($rows|length),supported:($sup|length),unsupported:(($rows|length)-($sup|length))},

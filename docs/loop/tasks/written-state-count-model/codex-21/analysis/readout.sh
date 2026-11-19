@@ -20,15 +20,20 @@ mkdir "$out"
 writer_args=()
 observed_args=()
 source_args=()
+audit_args=()
 for spec in reference:reference clause:treatment supplied:supplied veto:supplied-veto wrong_role:wrong-role no_read:no-read; do
     key=${spec%:*} file=${spec#*:}
     writer_args+=(--slurpfile "$key" "$run/grades/$file-writer.json")
     observed_args+=(--slurpfile "$key" "$run/grades/$file.json")
-    [[ "$key" == no_read ]] || source_args+=(--slurpfile "$key" "$run/modes/$file/sources.json")
+    if [[ "$key" != no_read ]]; then
+        source_args+=(--slurpfile "$key" "$run/modes/$file/sources.json")
+        audit_args+=(--slurpfile "$key" "$run/arms/$file-source-audit.json")
+    fi
 done
 jq -ne "${writer_args[@]}" '$ARGS.named|map_values(.[0])' > "$out/writers.json"
 jq -ne "${observed_args[@]}" '$ARGS.named|map_values(.[0])' > "$out/observations.json"
 jq -ne "${source_args[@]}" '$ARGS.named|map_values(.[0])' > "$out/traces.json"
+jq -ne "${audit_args[@]}" '$ARGS.named|map_values(.[0])' > "$out/audits.json"
 jq -ne --slurpfile gold "$run/grades/forced-gold.json" --slurpfile wrong "$run/grades/forced-wrong.json" \
     --slurpfile key "$run/grades/wrong-key.json" --slurpfile roles "$run/capture/fixed-roles-verified.json" \
     --slurpfile passed "$run/grades/controls-verified.json" --arg raw "$(pin "$run/raw.sha256")" \
@@ -40,6 +45,7 @@ jq -ne --slurpfile gold "$run/grades/forced-gold.json" --slurpfile wrong "$run/g
 jq -ne --argjson seed "$seed" --slurpfile labels "$held/grades.json" --slurpfile blind "$held/blind.json" \
    --slurpfile pieces "$out/pieces.json" --slurpfile writers "$out/writers.json" \
    --slurpfile observations "$out/observations.json" --slurpfile traces "$out/traces.json" \
+   --slurpfile audits "$out/audits.json" \
    --slurpfile verification "$out/verification.json" -f "$src/readout.jq" > "$out/readout.json"
 jq -f "$src/readout-compact.jq" "$out/readout.json" > "$out/compact.json"
 
