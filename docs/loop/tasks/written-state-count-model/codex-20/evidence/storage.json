@@ -45,5 +45,16 @@
     "verified_against_vast": true,
     "manifest": "wick-model-pins.sha256",
     "manifest_sha256": "bd2b3a951df87f30a68709ed24e9af942f5646af6ad17f9dcb754a83b9959fdd"
+  },
+  "hf_results": {
+    "repo": "caseyallard/uor-r4-store",
+    "revision": "07fafba51b2a5adc00813f945f748308723ae032",
+    "path": "results/codex/2026-11-19-user-text-role-swaps-ffa90cf6/held-and-finite.tar.zst",
+    "bytes": 260595,
+    "sha256": "e30a55dab36398aa3aa2c69281db8d485dcaac1d40eaf45b3c0454d88cb04d03",
+    "pinned_download_sha256_verified": true,
+    "all_four_raw_and_cold_manifests_verified_after_restore": true,
+    "contents": "Held evidence from both seeds and both cold replays, finite outputs and archive checksums. Model blobs and build stage are retained in separate workstation and Wick custody.",
+    "full_stage_upload": "Private storage limit reached"
   }
 }
