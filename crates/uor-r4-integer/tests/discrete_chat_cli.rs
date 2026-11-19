@@ -283,8 +283,12 @@ fn bound_text_uses_literal_roles_and_stops_on_the_committed_eos() {
     let expected = protocol
         .bind(&tokenizer)
         .unwrap()
-        .encode_user_prefix("hi", false)
+        .encode_assistant_prefix(&[uor_r4_tokenizer::dialogue::Message {
+            role: "user",
+            content: "hi",
+        }])
         .tokens;
+    assert_eq!(expected.first(), Some(&protocol.bos_id));
     assert_eq!(record["prompt_ids"], serde_json::json!(expected));
     assert_eq!(record["generated_ids"], serde_json::json!([0]));
     assert_eq!(record["stop"], "eos");
