@@ -35,3 +35,26 @@ local RTX 4090 (24.5 GiB, **shared with other labs**), batch 24 × 512 = 12,288 
 A planned run is refused when a fix above would cut its wall clock by more than **20 %**. The 1 B,
 0.89-epoch run at the current rate is `1e9 / 20500 ≈ 13.5 h`; at a 2× step it is 6.8 h; at 4×, 3.4 h.
 That is the arithmetic the roadmap is ordered by.
+
+## The layer is the cost (ablation, 18 Nov)
+
+Same shape, batch 8 x 512 (1,024 rows a micro-batch chunk), `nearest` + fast-rivals, `--profile 16`:
+
+| model | ms/step |
+|---|---|
+| 1 layer | **95.7** |
+| 12 layers | **792.0** |
+
+So **≈ 63 ms per layer**, and the fixed part (embed, writer, objective) is ~32 ms. A layer is six
+projections plus gates over 1,024 rows; a dense 512→512 matmul of that size is ~0.3 ms, so the
+geometric layer is **~200x a dense layer** — it is bound by per-element gather, quantise and gate
+work at low arithmetic intensity, not by FLOPs.
+
+**Batch amortises it.** Batch 8: 792 ms / 4,096 tokens = **193 us/token**. Batch 24 (card free,
+same objective): 0.60 s / 12,288 tokens = **80 us/token** — 2.4x better. The queue run's 1.21 s/step
+at batch 24 is the shared card, not the model: another lab's process was resident.
+
+**What that points at.** The layer's cost is per element, so the win is (a) a larger batch while the
+writer inventory fits, and (b) fusing the per-element passes — the q16 conversion and the gate —
+into the gather, which is one pass instead of three over the same ~2 M values per projection.
+The route walk was 3 % (measured, codex-54 revert).
