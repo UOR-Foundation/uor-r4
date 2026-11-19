@@ -236,7 +236,13 @@ fn main() -> Result<()> {
     };
     let model = IntegerDiscreteModel::load(Path::new(model_file))?;
     let tokenizer_bytes = fs::read(tokenizer_file)?;
-    if model.artifact_sha256() != PARENT
+    let fitted_recurrence = model.artifact_schema() == "uor-r4.lut-discrete-contextual-source/2"
+        && model.contextual_source_bindings().is_some_and(|state| {
+            state.parent_sha256 == PARENT
+                && state.train_sha256 == "77115522738096384bbb8e4eb1213e1ea9ca0b3759a2c88bc0e41f3a5877445b"
+                && state.bank_sha256 == "019f76d5cf9dd47d50b41b43a81acdbb3d0a122f196b850802c241060f64d2e5"
+        });
+    if (model.artifact_sha256() != PARENT && !fitted_recurrence)
         || model.tokenizer_sha256() != Some(TOKENIZER)
         || format!("{:x}", Sha256::digest(&tokenizer_bytes)) != TOKENIZER
     {
@@ -356,7 +362,7 @@ fn main() -> Result<()> {
         if clients_dir != "-" {
             let client_path = Path::new(clients_dir).join(format!("{row}.json"));
             let client = serde_json::from_slice::<Value>(&fs::read(client_path)?)?;
-            if client["artifact_sha256"] != PARENT
+            if client["artifact_sha256"] != model.artifact_sha256()
                 || client["tokenizer_sha256"] != TOKENIZER
                 || client["model_schema"] != model.artifact_schema()
                 || client["prompt_ids"] != result["ids"]
@@ -388,12 +394,13 @@ fn main() -> Result<()> {
             "last_supported_reply": fallback_reply,
         }));
     }
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&json!({
-            "parent": PARENT, "tokenizer": TOKENIZER,
-            "sealed_client_compared": clients_dir != "-", "rows": rows,
-        }))?
-    );
+    let mut record = json!({
+        "parent": PARENT, "tokenizer": TOKENIZER,
+        "sealed_client_compared": clients_dir != "-", "rows": rows,
+    });
+    if fitted_recurrence {
+        record["recurrence_carrier_sha256"] = json!(model.artifact_sha256());
+    }
+    println!("{}", serde_json::to_string_pretty(&record)?);
     Ok(())
 }
