@@ -285,7 +285,8 @@ fn run(args: &[String]) -> Result<(), Failure> {
     use uor_r4_discrete::kn_score::KnTables;
     use uor_r4_discrete::kn_score_device::KnScorer;
     use uor_r4_discrete::ngram_count::{
-        read_uort_tokens, AssemblerTiming, NgramAssembler, NgramOrderDigest,
+        read_uort_tokens, AssemblerTiming, NgramAssembler, NgramContext, NgramOrderDigest,
+        NgramTriple,
     };
     use uor_r4_discrete::ngram_count_device::NgramCounter;
 
@@ -422,6 +423,34 @@ fn run(args: &[String]) -> Result<(), Failure> {
             eprintln!("order {k} sink ms: push {} keep {}", ms(push_ns[k]), ms(keep_ns[k]));
         }
     }
+    // claude-433: the ceiling's RAW counts of orders 0..N-1, kept to the
+    // query's keys, before the counter (the only copy of TRAIN) is dropped.
+    // Order N's raw table is the KN table's own and is added after the scorer.
+    let raw_started = std::time::Instant::now();
+    let mut raw_orders: Vec<(NgramOrderDigest, Vec<NgramTriple>, Vec<NgramContext>)> = Vec::new();
+    if args.ceiling {
+        for k in 0..args.highest {
+            let mut assembler = NgramAssembler::new(k, false)?;
+            let mut filter = wanted.filter(k)?;
+            for range in counter.plan(k, args.budget)? {
+                let partition = counter.count_partition(k, &range)?;
+                filter.keep(&partition)?;
+                assembler.push_owned(partition)?;
+            }
+            let (digest, _, _) = assembler.finish();
+            let (triples, contexts) = filter.finish();
+            eprintln!(
+                "raw order {k}: grams {} contexts {}, kept triples {} contexts {}, {} ms",
+                digest.grams,
+                digest.contexts,
+                triples.len(),
+                contexts.len(),
+                started.elapsed().as_millis()
+            );
+            raw_orders.push((digest, triples, contexts));
+        }
+    }
+    let raw_count_ms = raw_started.elapsed().as_millis();
     drop(counter);
     let mut census_json = Vec::new();
     for (k, census) in censuses.into_iter().enumerate() {
@@ -442,6 +471,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
     }
     let mut push_parts = AssemblerTiming::default();
     let ms = |ns: u64| ns / 1_000_000;
+    let mut top_digest: Option<NgramOrderDigest> = None;
     for (k, (assembler, filter)) in assemblers.into_iter().zip(filters).enumerate() {
         let (digest, _, _, timing) = assembler.finish_with_timing();
         if args.profile_phases {
@@ -489,6 +519,9 @@ fn run(args: &[String]) -> Result<(), Failure> {
             "kept_triples": triples.len(),
             "kept_contexts": contexts.len(),
         }));
+        if args.ceiling && k as u32 == args.highest {
+            top_digest = Some(digest.clone());
+        }
         orders.push((digest, triples, contexts));
     }
     if args.profile_phases {
@@ -581,8 +614,70 @@ fn run(args: &[String]) -> Result<(), Failure> {
     let masses_at_floor = masses.iter().filter(|&&m| m == 1).count();
     eprintln!("masses at the one-unit floor: {masses_at_floor}");
     let mass_bytes: Vec<u8> = masses.iter().flat_map(|m| m.to_le_bytes()).collect();
-    let summary = serde_json::json!({
-        "unit": "claude-421",
+    // claude-433: the ceiling modes, from order N's raw table (the KN table's
+    // own), the GPU lookups and the host EM over them.
+    let ceiling_json = if args.ceiling {
+        use uor_r4_discrete::kn_ceiling::RawTables;
+        use uor_r4_discrete::kn_lookup_device::KnLookup;
+        let digest = top_digest.ok_or_else(|| fail("no order-N digest for the ceiling"))?;
+        let (_, top_triples, top_contexts) = tables
+            .order_tables(args.highest)
+            .ok_or_else(|| fail(format!("no order-{} table", args.highest)))?;
+        raw_orders.push((digest, top_triples.to_vec(), top_contexts.to_vec()));
+        let raw = RawTables::new(args.highest, raw_orders)?;
+        let lookup_started = std::time::Instant::now();
+        let (counts, totals) = KnLookup::new(0, &raw)?.lookups(query)?;
+        let lookup_ms = lookup_started.elapsed().as_millis();
+        eprintln!(
+            "gpu looked up {} targets, {} ms",
+            masses.len(),
+            started.elapsed().as_millis()
+        );
+        if args.check_host {
+            let (host_counts, host_totals) = raw.lookups(query)?;
+            let width = args.highest as usize + 1;
+            let differs = |i: usize| {
+                host_counts.get(i) != counts.get(i) || host_totals.get(i) != totals.get(i)
+            };
+            let length = host_counts
+                .len()
+                .max(counts.len())
+                .max(host_totals.len())
+                .max(totals.len());
+            if let Some(i) = (0..length).find(|&i| differs(i)) {
+                return Err(fail(format!(
+                    "lookup of target {} order {}: GPU differs from host",
+                    i / width,
+                    i % width
+                )));
+            }
+            eprintln!("host lookups = GPU at all {} targets", masses.len());
+        }
+        let em_started = std::time::Instant::now();
+        let mut json = ceiling_modes(
+            args.highest,
+            query,
+            &masses,
+            &counts,
+            &totals,
+            &id_bytes,
+            classes,
+        )?;
+        let em_ms = em_started.elapsed().as_millis();
+        if args.profile_phases {
+            eprintln!("ceiling phases ms: raw-count {raw_count_ms} lookup {lookup_ms} em {em_ms}");
+            json["phases_ms"] = serde_json::json!({
+                "raw_count": raw_count_ms.to_string(),
+                "lookup": lookup_ms.to_string(),
+                "em": em_ms.to_string(),
+            });
+        }
+        Some(json)
+    } else {
+        None
+    };
+    let mut summary = serde_json::json!({
+        "unit": if args.ceiling { "claude-433" } else { "claude-421" },
         "highest_order": args.highest,
         "budget": args.budget,
         "per_mille": args.per_mille,
@@ -602,13 +697,109 @@ fn run(args: &[String]) -> Result<(), Failure> {
         "all": all.json(),
         "novel": novel.json(),
     });
+    if let Some(json) = ceiling_json {
+        summary["ceiling"] = json;
+    }
     std::fs::write(&args.out, serde_json::to_string_pretty(&summary)? + "\n")?;
     eprintln!("wrote {}, {} ms", args.out, started.elapsed().as_millis());
     Ok(())
 }
 
+/// claude-433: the EM passes of every ceiling mode.
+#[cfg_attr(not(feature = "cuda"), allow(dead_code))]
+const EM_ITERATIONS: u32 = 24;
+
+/// claude-433: the ceiling modes over the lookups (`RawTables::lookups`'s layout) and the
+/// KN masses, each tallied as the KN run is: `u_count` fit on every target and scored on
+/// every target; `u_split` fit on one record parity and scored on the other; `kn_u` with
+/// only the KN and uniform experts; `kn_only`, the KN masses themselves.
+#[cfg_attr(not(feature = "cuda"), allow(dead_code))]
+fn ceiling_modes(
+    highest: u32,
+    query: &[u16],
+    kn_masses: &[u64],
+    counts: &[u32],
+    totals: &[u64],
+    id_bytes: &[u8],
+    classes: &[u8],
+) -> Result<serde_json::Value, Failure> {
+    use uor_r4_discrete::kn_ceiling::{bucket_count, expert_count, CeilingFit, CeilingTable};
+
+    let table = CeilingTable::from_lookups(highest, kn_masses, counts, totals)?;
+    let experts = expert_count(highest);
+    let targets = table.targets();
+    let fit_bits =
+        |fit: &CeilingFit| -> Vec<String> { fit.fit_bits.iter().map(|b| b.to_string()).collect() };
+    let scored = |masses: &[u64]| -> Result<serde_json::Value, Failure> {
+        let (all, novel) = tally(query, masses, id_bytes, classes)?;
+        Ok(serde_json::json!({ "all": all.json(), "novel": novel.json() }))
+    };
+
+    let everyone = vec![true; targets];
+    let u_count = table.fit_em(&everyone, EM_ITERATIONS, bits_q12)?;
+    let u_count_masses = table.mixed_masses(&u_count.weights)?;
+    eprintln!("ceiling u_count fitted");
+
+    let parity = record_parity(query);
+    let even: Vec<bool> = parity.iter().map(|&odd| !odd).collect();
+    let even_fit = table.fit_em(&even, EM_ITERATIONS, bits_q12)?;
+    let odd_fit = table.fit_em(&parity, EM_ITERATIONS, bits_q12)?;
+    let split_masses = combine_by_parity(
+        &parity,
+        &table.mixed_masses(&even_fit.weights)?,
+        &table.mixed_masses(&odd_fit.weights)?,
+    )?;
+    eprintln!("ceiling u_split fitted");
+
+    let mut kn_and_uniform = vec![false; experts];
+    kn_and_uniform[0] = true;
+    kn_and_uniform[experts - 1] = true;
+    let kn_u = table.fit_em_with(&everyone, &kn_and_uniform, EM_ITERATIONS, bits_q12)?;
+    let kn_u_masses = table.mixed_masses(&kn_u.weights)?;
+    eprintln!("ceiling kn_u fitted");
+
+    let mut in_bucket = vec![0u64; bucket_count(highest)];
+    for &b in table.buckets() {
+        in_bucket[usize::from(b)] += 1;
+    }
+    let buckets: Vec<serde_json::Value> = in_bucket
+        .iter()
+        .enumerate()
+        .filter(|&(_, &n)| n > 0)
+        .map(|(b, &n)| {
+            let weights: Vec<String> = u_count.weights[b * experts..(b + 1) * experts]
+                .iter()
+                .map(|w| w.to_string())
+                .collect();
+            serde_json::json!({ "bucket": b, "targets": n, "weights_q32": weights })
+        })
+        .collect();
+
+    Ok(serde_json::json!({
+        "em_iterations": EM_ITERATIONS,
+        "experts": experts,
+        "expert_order": "KN, ML_0..ML_N, uniform",
+        "u_count": {
+            "scored": scored(&u_count_masses)?,
+            "fit_bits_q12": fit_bits(&u_count),
+            "buckets": buckets,
+        },
+        "u_split": {
+            "scored": scored(&split_masses)?,
+            "fit_bits_q12_even": fit_bits(&even_fit),
+            "fit_bits_q12_odd": fit_bits(&odd_fit),
+        },
+        "kn_u": {
+            "scored": scored(&kn_u_masses)?,
+            "fit_bits_q12": fit_bits(&kn_u),
+        },
+        "kn_only": { "scored": scored(kn_masses)? },
+    }))
+}
+
 /// claude-433: the record parity of each non-BOS target, in stream order. A
 /// target's record index is the number of BOS tokens before it; true is odd.
+#[cfg_attr(not(feature = "cuda"), allow(dead_code))]
 fn record_parity(query: &[u16]) -> Vec<bool> {
     let mut odd = false;
     let mut parity = Vec::new();
@@ -625,6 +816,7 @@ fn record_parity(query: &[u16]) -> Vec<bool> {
 /// claude-433: the split mode's masses in stream order: an odd target takes
 /// the mass of the fit on the even records, an even target that of the fit
 /// on the odd records.
+#[cfg_attr(not(feature = "cuda"), allow(dead_code))]
 fn combine_by_parity(
     parity: &[bool],
     from_even_fit: &[u64],
