@@ -255,11 +255,21 @@ impl CeilingTable {
                 pick.len()
             )));
         }
-        let plain = Self::from_lookups(highest, kn_masses, counts, totals)?;
+        let width = highest as usize + 1;
+        let targets = kn_masses.len();
+        if counts.len() != targets * width || totals.len() != targets * width {
+            return Err(invalid(format!(
+                "{targets} KN masses need {} counts and totals, got {} and {}",
+                targets * width,
+                counts.len(),
+                totals.len()
+            )));
+        }
+        // Rows are written in place, so no Pick-free copy of the table is held.
         let base = expert_count(highest);
         let stride = bucket_count(highest);
-        let mut buckets = Vec::with_capacity(pick.len());
-        let mut masses = Vec::with_capacity(pick.len() * (base + 1));
+        let mut buckets = Vec::with_capacity(targets);
+        let mut masses = vec![0u64; targets * (base + 1)];
         for (t, p) in pick.iter().enumerate() {
             if p.class >= PICK_CLASSES {
                 return Err(invalid(format!(
@@ -271,11 +281,18 @@ impl CeilingTable {
             if p.hit && p.class == PICK_NOT_FIRED {
                 return Err(invalid(format!("target {t}: a Pick hit that did not fire")));
             }
-            let bucket = usize::from(p.class) * stride + usize::from(plain.buckets[t]);
+            let row = &mut masses[t * (base + 1)..(t + 1) * (base + 1)];
+            let plain_bucket = ceiling_expert_row(
+                kn_masses[t],
+                &counts[t * width..(t + 1) * width],
+                &totals[t * width..(t + 1) * width],
+                &mut row[..base],
+            )
+            .map_err(|error| invalid(format!("target {t}: {error}")))?;
+            row[base] = if p.hit { 1 << 48 } else { 0 };
+            let bucket = usize::from(p.class) * stride + usize::from(plain_bucket);
             let bucket = u16::try_from(bucket).map_err(|_| invalid("a bucket exceeded u16"))?;
             buckets.push(bucket);
-            masses.extend_from_slice(&plain.masses[t * base..(t + 1) * base]);
-            masses.push(if p.hit { 1 << 48 } else { 0 });
         }
         Ok(Self {
             highest,
@@ -1133,6 +1150,22 @@ mod tests {
                 }
             })
             .collect()
+    }
+
+    #[test]
+    fn a_pick_table_extends_the_plain_rows() {
+        let plain = fixture();
+        let pick = pick_targets(|t| t % 7 != 0);
+        let table = pick_table(&pick);
+        let (base, stride) = (plain.experts(), bucket_count(2));
+        assert_eq!(table.experts(), base + 1);
+        for (t, p) in pick.iter().enumerate() {
+            let row = &table.masses()[t * (base + 1)..(t + 1) * (base + 1)];
+            assert_eq!(&row[..base], &plain.masses()[t * base..(t + 1) * base], "target {t}");
+            assert_eq!(row[base], if p.hit { 1 << 48 } else { 0 }, "target {t}");
+            let want = usize::from(p.class) * stride + usize::from(plain.buckets()[t]);
+            assert_eq!(usize::from(table.buckets()[t]), want, "target {t}");
+        }
     }
 
     /// Sum of every weight times its index.
