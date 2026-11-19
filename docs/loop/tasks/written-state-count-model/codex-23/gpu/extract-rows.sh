@@ -2,6 +2,8 @@
 # Extract the exact packed S2 rows from a separately pinned and validated D11.
 set -euo pipefail
 artifact=${1:?usage: extract-rows.sh model.d11}
+dd=dd
+if command -v gdd > /dev/null; then dd=gdd; fi
 [[ $(head -c 8 "$artifact") == UORLUT01 ]]
 # Decode the header length using the wire byte order, independent of the host.
 read -r -a length_bytes <<< "$(od -An -j 8 -N 8 -tu1 "$artifact")"
@@ -11,7 +13,7 @@ read -r -a length_bytes <<< "$(od -An -j 8 -N 8 -tu1 "$artifact")"
 length=$((length_bytes[0] | length_bytes[1] << 8 |
           length_bytes[2] << 16 | length_bytes[3] << 24))
 (( length > 0 && length <= 67108864 ))
-header=$(dd if="$artifact" iflag=skip_bytes,count_bytes skip=16 count="$length" status=none)
+header=$("$dd" if="$artifact" iflag=skip_bytes,count_bytes skip=16 count="$length" status=none)
 [[ ${#header} == "$length" ]]
 section=$(jq -ce '
   select(.shape.vocabulary == 4096)
@@ -27,5 +29,5 @@ bytes=$(jq -r '.bytes' <<< "$section")
 start=$(((16 + length + 63) / 64 * 64 + offset + 96))
 file_bytes=$(wc -c < "$artifact")
 (( start + bytes - 96 <= file_bytes ))
-# GNU dd on the Linux build host copies the range without byte-sized syscalls.
-dd if="$artifact" iflag=skip_bytes,count_bytes skip="$start" count="$((bytes - 96))" status=none
+# GNU dd copies this range without byte-sized syscalls.
+"$dd" if="$artifact" iflag=skip_bytes,count_bytes skip="$start" count="$((bytes - 96))" status=none
