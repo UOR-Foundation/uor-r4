@@ -24,9 +24,20 @@ nvidia-smi --query-gpu=name,uuid,memory.total,memory.free,utilization.gpu --form
 nvidia-smi --query-compute-apps=pid,name,used_gpu_memory --format=csv > "$run/other-processes-start.csv"
 free -k > "$run/host-start"
 cgroup=$(awk -F: '$1==0 {print $3}' /proc/self/cgroup)
-cat "/sys/fs/cgroup$cgroup/memory.max" > "$run/memory.max"
 gpu_free=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits -i 0 | tr -d ' ')
 ram_free=$(awk '/MemAvailable:/{print $2}' /proc/meminfo)
+node=/sys/fs/cgroup${cgroup%/}
+while [[ $node == /sys/fs/cgroup || $node == /sys/fs/cgroup/* ]]; do
+    if [[ -r $node/memory.max ]]; then
+        limit=$(cat "$node/memory.max")
+        used=$(cat "$node/memory.current")
+        echo "$node $limit $used" >> "$run/cgroup-memory"
+        if [[ $limit != max ]] && (( (limit-used)/1024 < ram_free )); then
+            ram_free=$(( (limit-used)/1024 ))
+        fi
+    fi
+    node=${node%/*}
+done
 if ((gpu_free < min_free_mib || ram_free < 13 * 1024 * 1024)); then
     echo "Insufficient available capacity at lock acquisition: GPU $gpu_free MiB, RAM $ram_free KiB" | tee "$run/stop"
     exit 3
@@ -41,10 +52,8 @@ frame=$run/frame
 if [[ -n "$recover" ]]; then
     old=$base/runs/$recover/frame
     cmp "$old/frame.bin" "$frame/frame.bin"
-    # Durations may differ. Compare the complete raw and adjusted table identities.
-    for key in raw_lookup_sha256 kn_mass_sha256 bucket_targets bucket_masks; do
-        diff <(jq -c --arg k "$key" '.[$k]' "$old/manifest.json") <(jq -c --arg k "$key" '.[$k]' "$frame/manifest.json")
-    done
+    cmp "$old/manifest.json" "$frame/manifest.json"
+    cmp "$old/seal.sha256" "$frame/seal.sha256"
     frame=$old
 fi
 "$pack/kn-reference" --verify-fit-frame "$frame" > "$run/frame-reopen.log" 2>&1
@@ -58,3 +67,4 @@ if [[ -n "$recover" ]]; then
     cmp "$base/runs/$recover/fit/result.json" "$run/fit/result.json"
 fi
 date -u > "$run/finished"
+jq -e '.reading.contains_kn_all_and_novel and .reading.converged' "$run/verified.json" > "$run/eligible"
