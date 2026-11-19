@@ -22,7 +22,7 @@ blind=$PWD/panel/held-blind.json
 labels=$PWD/grading/held-grades.json
 # Bound the source readout to independent CUDA intermediates from the same
 # original endpoint, not merely to the ordinary client's proposed value start.
-jq -ecns --slurpfile original "$f/oracle.json" '
+jq -ecs --slurpfile original "$f/oracle.json" '
   (map(.rows[])|group_by(.prefix_sha256)|map({key:.[0].prefix_sha256,value:.})|from_entries) as $index |
   [$original[0].rows[] as $r | $r.assertions[] as $a |
     if any($index[$r.prefix_sha256][]; (.frozen.query_start==$r.paired.role_words[0] and .frozen.query_end+1==$r.paired.role_words[1] and .frozen.fact_start==$a.fact_span[0] and .bounded==$a.assertion))
