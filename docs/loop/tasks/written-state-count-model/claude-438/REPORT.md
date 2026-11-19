@@ -3,15 +3,22 @@
 Lab: claude. Order: [ORDER.md](ORDER.md). Prep sheet:
 [kn-ceiling-kn-start-2026-11-19](../../../../harness/prep/kn-ceiling-kn-start-2026-11-19.md) (FIT at round 1).
 Code: every run at `6c66a76d5` on `claude/kn-start-438` (code as at `d366c829f`; later commits change
-documents only). Release: Casey, 19 Nov, "Yes, rent it", for one RTX 5090.
+documents only). Release: Casey, 19 Nov, "Yes, rent it", for one RTX 5090. The branch later merged
+`main` with codex-14 (PR 4102); the merged head is checked under Checks run at the head.
 
 ## What did not work, first
 
-- **Gate (c) is Unsettled** [claude]. At 100% of TRAIN the converged ceiling lies in
-  [L, U] = [1,284,092, 1,431,925] micro-BPB, and that band holds 0.90 × R\* = 1,289,086: L misses
-  it by 4,994 micro-BPB. The sheet's reading map fixed this case before the run: the 96 passes do
-  not decide between "Between" and "Geometry critical", and more passes or another start need a
-  new sheet. What the band does settle is in What the numbers say.
+- **This unit duplicated codex-14** [claude]. Codex opened PR 4102 on the same gate at 03:20:10Z, and
+  I opened PR 4103 at 03:27:54Z without reading item #4063's open PRs. Codex-14 ran on wick at no
+  rental cost, merged at 04:03:48Z while this job ran, and its certificate settles gate (c) as
+  **Geometry critical**. It encloses the best all-target score of the same family (order 10,
+  176 buckets, 13 experts, Q32 weights, the same mass floors) in [0.98939548, 0.99983067] × KN. The
+  work that this unit adds beyond codex-14 is in What the numbers say; most of the rest repeats it.
+- **By its own bound, gate (c) is Unsettled** [claude]. At 100% of TRAIN this unit's band is
+  [L, U] = [1,284,092, 1,431,925] micro-BPB, and it holds 0.90 × R\* = 1,289,086: L misses it by
+  4,994 micro-BPB. This bound charges each bucket N_b · log2(max_e g_e), as if all its weight could
+  move to the best expert, and it is far looser than codex-14's tangent-term certificate: L is
+  0.8965 × KN, where codex-14's lower end is 0.9894 × KN.
 - **The KN start barely left KN** [claude]. After 96 passes at 100%, U_count is 393 micro-BPB
   (8,609 bits) below KN-only and still falling 9.5 bits a pass. KN holds 997‰ of the
   target-weighted weight (claude-433's uniform start ended at 600‰ after 24 passes). On average
@@ -28,7 +35,8 @@ documents only). Release: Casey, 19 Nov, "Yes, rent it", for one RTX 5090.
   a weight at 1 is lifted back to 1 if it falls to 0. An expert whose mean ratio g lies in (1, 2)
   is held at 1, while the bound still counts what it could save. **This is a hypothesis drawn from
   the code and the weight census above; no test isolates it yet** (Still open). Real-valued EM
-  would have no such trap.
+  would have no such trap. Codex-14 saw the same thing in its CUDA fitter: 970 of 1,182 active
+  non-KN weights stayed at one throughout its near-KN fit.
 - **The first pod job stopped on a bug in my job script** [claude]. In `b1`, the loop
   `for c in all novel` overwrote the global `c` that held the ceiling run's name, so `bars` then
   read `novel.json` and the job exited 3 after B1 at 1%. Every check it reached held: step 1
@@ -116,21 +124,22 @@ R\*, so that row is also the ratio to R\*. Ratios to R\* at the cut sizes are no
 
 ## What the numbers say
 
-- **Counts carry is excluded.** L = 1,284,092 is above 0.85 × R\* by 66,622 micro-BPB. No bucketed
-  linear mix of these 13 experts, fit on DEV-tune itself, can reach 0.85 × R\*; the best one is at
-  least 0.8965 × R\*. This rests on the bound alone (Jensen at the fitted weights plus the floor
-  slack, pinned by `the_gap_bound_covers_what_em_still_saves` and its negative), not on the fit
-  having converged.
-- **The two branches left are Between and Geometry critical.** Under Between the roadmap's order
-  is unchanged; under Geometry critical P2 moves ahead of 435/436. In both, P1(a), (b) and (d) are
-  still built and claude-434 (Pick) comes next. So gate (c) no longer holds up R2; it decides only
-  where P2 stands against 435/436, and that is settled by a fit that gets closer than 96 passes
-  from this start did.
-- **The fit is the loose side, not the bound.** U moved 393 micro-BPB in 96 passes and was still
-  moving, and the census shows most experts held at weight 1. If the floor trap is the cause, a
-  sheet that removes it (responsibilities kept at higher resolution, or a start with real weight
-  on every expert) should shrink the band sharply: on the fixtures, 400 passes left a bound of
-  3 to 6 Q12 units per target, where this run's is about 1,229 per target.
+- **Gate (c) is read from codex-14: Geometry critical.** This unit's own band only excludes
+  Counts carry (L = 1,284,092 is above 0.85 × R\* by 66,622 micro-BPB), and that agrees with
+  codex-14's interval. Nothing here contradicts codex-14.
+- **Two things here add to codex-14:**
+  - **A cross-implementation replication.** This unit's 24th pass from the KN start,
+    128,627,655,182 Q12, equals codex-14's near-KN upper witness at pass 24 to the unit. Codex-14
+    fit on wick's 4090 with its own CUDA fitter, and this unit fit on a 5090 host's CPU with
+    `kn_ceiling.rs`, from TRAIN streams checked by sha256 on each machine.
+  - **A tighter upper witness.** After 96 passes the fit is 128,614,178,256 Q12, 13,476,926 Q12
+    (3,290 bits) below codex-14's witness. Combined with codex-14's lower end, the best all-target
+    score of this family lies in **[0.98939548, 0.99972592] × KN**: an optimal mix of these
+    experts can save at most 1.06% over KN, and 96 passes from KN found 0.027%.
+- **The bound is the loose side here, not the fit.** The optimum is at least 0.9894 × KN, so this
+  unit's L lies about 9.3 points under it, while U is within 1.04% of it. Charging each bucket
+  for its single best expert's ratio is far weaker than codex-14's per-expert tangent terms, so
+  the bound added here should not be reused where codex-14's certificate is available.
 - **Recorded, not read as the gate:** U_count's gain over KN-only at 100% is 0.027% overall and
   0.028% on novel targets; U_split stays above U_count at every size, by 0.0073% of KN-only at
   100%, far below the "large split gap" threshold (half of R\* − U).
@@ -154,6 +163,10 @@ R\*, so that row is also the ratio to R\*. Ratios to R\* at the cut sizes are no
   at every size; the second job's 1‰ and 1% JSONs equal the first's.
 - **Prep sheet FIT** at round 1 (fresh-context non-author), no blocker; its should-fix items are
   folded into the sheet.
+- **After merging `main` (codex-14's `kn_ceiling.rs` refactor into `ceiling_expert_row` and its
+  `--fit-frame` export), at `d83b21e18`, laptop:** host `kn_` tests 24/24; the instrument's
+  targets 13, 2 and 1 passed; stub-nvcc `cargo check`s of the crate and the instrument clean. No
+  run was repeated at the merged head; every number above is from `6c66a76d5`.
 
 ## Skills used
 
@@ -162,12 +175,17 @@ model state, operator or artifact.
 
 ## Still open
 
-- **Gate (c)'s last step (R1c, a new sheet):** remove the floor trap and read the band again at
-  100%. First a host test that isolates it (an expert at weight 1 with mean ratio in (1, 2) never
-  grows under `update_bucket`), then the M step kept at higher resolution (for example the
-  responsibilities in Q64), and a start with real weight on every expert. Everything else stays
-  claude-433's. The pass count is fixed on that sheet before any run.
-- **R2 (claude-434, Pick) is not held by gate (c)** and can go ahead.
+- **No further gate (c) unit is needed:** codex-14 settled it, and its DECISION stops
+  optimizer-start tuning within these buckets and experts. It names what PR 4103 could still add,
+  a tighter reference bound and a cross-check of the fixed-point trajectory's prefix, and this
+  unit delivers both above.
+- **The floor trap matters if P1(b) (claude-436) fits its lawful EM weights with this M step.**
+  Before such a fit, a host test should isolate the trap (an expert at weight 1 with mean ratio
+  in (1, 2) never grows under `update_bucket`), and the M step should keep responsibilities at
+  higher resolution or start with real weight on every expert.
+- **R2 (claude-434, Pick) is not held by gate (c).** Codex-14's DECISION keeps P1(a, b) as
+  prerequisites for P2 and leaves P3 to P5 on their existing dependencies.
+- **Check an item's open PRs before an ORDER** (the duplication above).
 - **The device peak sampler** should poll faster than once a second, or read the CUDA driver's
   own high-water mark, before device peaks are compared at small sizes.
 - Carried from claude-433: the device lookup's 32-bit row index, the raw-order log line's `ms`
@@ -176,11 +194,13 @@ model state, operator or artifact.
 ## Plain summary
 
 This unit asked again how much better than our reference model (R\*) the best blend of simple
-counting models can do on the tuning set. It started the blend at R\* itself and computed a proven
-floor under the best possible blend. The floor answers part of the question: no such blend gets
-within reach of the "counts carry the project" line (85% of R\*); the best one is at least 89.65%
-of R\*. Whether it reaches the 90% line, which decides whether the geometric work jumps the queue,
-is not settled, because the blend barely moved away from R\* in 96 rounds. Reading the code
-suggests why: with whole-number weights, a model holding the smallest possible share cannot grow
-unless it is at least twice as useful as the blend, so most of them never moved. The next sheet
-fixes that and reads the 90% line. The rented GPU cost about $0.74.
+counting models can do on the tuning set. Codex's lab answered the same question in parallel and
+finished first: the best blend is at most about 1% better than R\*, so the project's quality gain
+has to come from the geometric parts. This unit's own proven floor was too loose to say that much
+(it only ruled out the "counts carry the project" line), but its numbers match Codex's exactly
+where they overlap, on a different machine and different code, and its longer fit narrows Codex's
+range slightly from above. It also found why the blend hardly moves from R\*: with whole-number
+weights, a model holding the smallest possible share cannot grow unless it is at least twice as
+useful as the blend. That matters for the deployable count model, which fits the same kind of
+weights. The duplicated work cost about $0.74 of rented GPU and should have been caught by
+checking the item's open pull requests first.
