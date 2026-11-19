@@ -30,6 +30,7 @@
 #![cfg_attr(not(feature = "cuda"), allow(dead_code))]
 
 mod fit_frame;
+mod pick_arms;
 
 use sha2::{Digest, Sha256};
 use uor_r4_discrete::kn_score::PROBABILITY_ONE as KN_ONE;
