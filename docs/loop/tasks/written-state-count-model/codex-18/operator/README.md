@@ -57,3 +57,13 @@ for mode in ordered ranked veto both; do
   cmp "$out.witness.json" "finite/public/$mode.witness.json"
 done
 ```
+
+## GPU compatibility and post-transfer replay
+
+The exact executable set needs an x86-64 Linux userspace with glibc 2.39 or later, a usable host `libcuda.so.1`, and an NVIDIA compute capability 8.9 GPU. The staged `native-sm89` executable has two SM89 cubins and no PTX. The frozen `chain` and `action-writer` Rust hosts embed SM89 cubins directly in their host data sections, outside the CUDA fatbin format. The standalone agreement and fence devices contain SM89 cubins and PTX. The post-transfer replay disables PTX JIT for every process.
+
+An RTX 4090, RTX 4080, RTX 6000 Ada, L4, L40 or L40S has the required instruction set. Match the actual GPU identity and free memory before replay. An RTX 5090, H100, RTX 3090 or A100 has a different compute capability from the required target. Moving to one of those GPUs would require ahead-of-time recompilation of the selector and the writer and chain cubins, target-native code for the agreement and fence devices, new executable and embedded-cubin pins, and a fresh finite qualification and dispatch review. [NVIDIA CUDA compatibility guide](https://docs.nvidia.com/cuda/ada-compatibility-guide/) · [NVIDIA compute capability table](https://developer.nvidia.com/cuda/gpus)
+
+Transfer the files in [VAST-FINITE-INPUTS.sha256](VAST-FINITE-INPUTS.sha256) into a separate root with the same relative layout. Pass its absolute path and a fresh absolute output path to [vast-finite.sh](vast-finite.sh) on the leased GPU. The script verifies the exact endpoint, selector, writer and client inputs before running. It replays the synthetic selector rows, tests the frozen chain and direct action writer on one previously exposed prompt with two continuations, and compares four packed artifacts and ordinary client witnesses. The transferred fixture set uses no Codex 18 held text or grading data.
+
+The Vast run passed in 37.62 seconds on RTX 4090 `GPU-f9afc849-5fb5-d7c6-c8d5-3154e9a2bd25`, driver 580.95.05 and glibc 2.39. The 84 selector decisions matched Wick bit-for-bit. The full chain reproduced the archived receipt and 11 raw writer transitions. Direct action-writer replay matched both chain rows, including source 7 emitting `[1481,1]`. The four packed D11 hashes and ordinary client witnesses matched Wick. The pod receipt at `/workspace/vast-finite-extra/run-01/qualification.sha256` verified with SHA-256 `d7bf151b290324cfd336de544ee899193df0b969c1637e099c409ea3ce8fce7e`. Its output manifest has SHA-256 `6aba0a071a02cf6f59886322cf7adfff97e4d0fbe122571456a064166e855cf4`.
