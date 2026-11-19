@@ -33,6 +33,7 @@ mod pick_device;
 mod fit_frame;
 mod pick_arms;
 mod pick_fit;
+mod pick_run;
 
 use sha2::{Digest, Sha256};
 use uor_r4_discrete::kn_score::PROBABILITY_ONE as KN_ONE;
@@ -234,16 +235,17 @@ struct Args {
     ceiling: bool,
     frame_source: Option<String>,
     synthetic_fixture: bool,
+    pick_arms: Option<[String; 2]>,
 }
 
 impl Args {
     fn needs_raw_counts(&self) -> bool {
-        self.ceiling || self.frame_source.is_some()
+        self.ceiling || self.frame_source.is_some() || self.pick_arms.is_some()
     }
 }
 
 fn parse(args: &[String]) -> Result<Args, Failure> {
-    let usage = "usage: kn-reference TRAIN.u16 QUERY.u16 ID-BYTES.u8 CLASSES.u8 N BUDGET OUT.json [--per-mille P] [--check-host] [--sealed-run] [--profile-phases] [--extension-census] [--count-only] [--ceiling | --fit-frame --source-sha256 HASH [--synthetic-fixture]]";
+    let usage = "usage: kn-reference TRAIN.u16 QUERY.u16 ID-BYTES.u8 CLASSES.u8 N BUDGET OUT.json [--per-mille P] [--check-host] [--sealed-run] [--profile-phases] [--extension-census] [--count-only] [--ceiling | --fit-frame --source-sha256 HASH [--synthetic-fixture] | --pick-arms SEGMENTS.u8 TRUNK.d11]";
     let mut positional = Vec::new();
     let mut per_mille = 1000;
     let mut check_host = false;
@@ -255,6 +257,7 @@ fn parse(args: &[String]) -> Result<Args, Failure> {
     let mut frame = false;
     let mut frame_source: Option<String> = None;
     let mut synthetic_fixture = false;
+    let mut pick_arms: Option<[String; 2]> = None;
     let mut at = 0;
     while at < args.len() {
         match args[at].as_str() {
@@ -270,6 +273,13 @@ fn parse(args: &[String]) -> Result<Args, Failure> {
             "--ceiling" => ceiling = true,
             "--fit-frame" => frame = true,
             "--synthetic-fixture" => synthetic_fixture = true,
+            "--pick-arms" => {
+                let (Some(segments), Some(trunk)) = (args.get(at + 1), args.get(at + 2)) else {
+                    return Err(fail(usage));
+                };
+                pick_arms = Some([segments.clone(), trunk.clone()]);
+                at += 2;
+            }
             "--source-sha256" => {
                 at += 1;
                 let hash = args.get(at).ok_or_else(|| fail(usage))?;
@@ -292,6 +302,12 @@ fn parse(args: &[String]) -> Result<Args, Failure> {
     if ceiling && (count_only || sealed_run) {
         return Err(fail(
             "--ceiling scores every mode: it refuses --count-only, --extension-census and --sealed-run",
+        ));
+    }
+    // claude-439: the Pick arms are their own mode.
+    if pick_arms.is_some() && (ceiling || count_only || sealed_run || frame) {
+        return Err(fail(
+            "--pick-arms refuses --ceiling, --count-only, --extension-census, --sealed-run and --fit-frame",
         ));
     }
     let [train, query, id_bytes, classes, highest, budget, out]: [String; 7] =
@@ -333,6 +349,7 @@ fn parse(args: &[String]) -> Result<Args, Failure> {
         ceiling,
         frame_source,
         synthetic_fixture,
+        pick_arms,
     })
 }
 
@@ -394,7 +411,12 @@ fn run(args: &[String]) -> Result<(), Failure> {
     drop(train_bytes);
     let query_all = read_uort_tokens(&query_bytes)?;
     let train = &train_all[..record_prefix(&train_all, args.per_mille)?];
-    let query_len = record_prefix(&query_all, args.per_mille)?;
+    // claude-439: the Pick arms read R, DEV and both plus parts whole.
+    let query_len = if args.pick_arms.is_some() {
+        query_all.len()
+    } else {
+        record_prefix(&query_all, args.per_mille)?
+    };
     let query = &query_all[..query_len];
     let classes = classes_prefix(&classes_bytes, query_all.len(), query_len)?;
     eprintln!(
@@ -715,6 +737,32 @@ fn run(args: &[String]) -> Result<(), Failure> {
             })
             .collect();
         let raw = RawTables::new(args.highest, raw_orders)?;
+        if let Some([segments_path, trunk_path]) = &args.pick_arms {
+            // claude-439: free what the Pick arms never read (TRAIN and the
+            // counter are already gone); `raw` holds its own copies.
+            drop(tables);
+            drop(wanted);
+            drop(shared);
+            drop(query_bytes);
+            return pick_run::run(pick_run::PickRun {
+                highest: args.highest,
+                query,
+                classes,
+                id_bytes: &id_bytes,
+                masses: &masses,
+                raw: &raw,
+                segments_path,
+                trunk_path,
+                check_host: args.check_host,
+                profile_phases: args.profile_phases,
+                out: &args.out,
+                header: serde_json::json!({
+                    "unit": "claude-439", "highest_order": args.highest, "budget": args.budget,
+                    "per_mille": args.per_mille, "check_host": args.check_host, "inputs": inputs,
+                    "orders": order_json, "raw_orders": raw_order_json,
+                }),
+            });
+        }
         let lookup_started = std::time::Instant::now();
         let (counts, totals) = KnLookup::new(0, &raw)?.lookups(query)?;
         let lookup_ms = lookup_started.elapsed().as_millis();
@@ -1019,6 +1067,33 @@ mod tests {
             assert!(with(&[flag, "--ceiling"]).is_err(), "{flag}");
         }
         assert!(with(&["--sealed-run"]).is_ok());
+    }
+
+    #[test]
+    fn the_pick_arms_refuse_other_modes() {
+        let base: Vec<String> = ["train", "query", "bytes", "classes", "10", "16777216", "out"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        let with = |flags: &[&str]| {
+            let mut args = base.clone();
+            args.extend(["--pick-arms", "s", "t"].map(str::to_owned));
+            args.extend(flags.iter().map(|f| f.to_string()));
+            parse(&args)
+        };
+        let hash = "a".repeat(64);
+        for flags in [
+            &["--ceiling"][..],
+            &["--count-only"],
+            &["--extension-census"],
+            &["--sealed-run"],
+            &["--fit-frame", "--source-sha256", &hash],
+        ] {
+            assert!(with(flags).is_err(), "{flags:?}");
+        }
+        let alone = with(&["--check-host"]).unwrap();
+        assert_eq!(alone.pick_arms, Some(["s".to_string(), "t".to_string()]));
+        assert!(alone.needs_raw_counts() && !alone.ceiling);
     }
 
     #[test]
