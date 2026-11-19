@@ -112,3 +112,31 @@ log line when an attempt writes no checkpoint.
 
 **Cost of this lesson: ~1.5 h of training plus one hour of forensics.** The check it teaches is the
 cheap one: a resilience path that has never been executed is not a resilience path.
+
+## The instrument exists: bits per token (19 Nov, codex-57)
+
+The plan's decisive rung, C5, compares against published dense curves, which are in bits per token.
+This line had no comparable axis because it has no likelihood. It now has one:
+
+    bits = mean over rows of log2(rank(target) + 1)
+
+computed in the dev eval from the scores it already has, so it costs nothing extra. It is an
+**optimistic bound** — a rank code ignores the probability mass between rank 1 and rank 2 — and that
+optimism is the point: a bound that is already worse than another model's *true* bits settles the
+comparison.
+
+**Instrument check, and it passes exactly.** On the ports checkpoint at step 4,096 the new line
+reproduces the recorded one field for field — `top-1 430/101175 nearest 10942 admitted 2309 dev_loss
+2.99537` — and adds `bits 7.2223`. `nearest` is derived from the same scores, so agreement is not a
+tautology: it is the same computation under two different code paths. 445 lib tests pass.
+
+**The first reading: 7.2223 bits per token** at 42 M tokens seen (4,096 steps x 24 x 512), on the
+donor dev. For orientation, a 30 M-parameter dense model on web text sits near **5.3 bits**
+(perplexity ~40), and GPT-2 small near 4.9. So the *optimistic* bound is ~2 bits worse than published
+models of comparable size on a different, harder corpus.
+
+**What that does and does not settle.** It does not settle C5, because the corpora differ and bits per
+token is corpus-dependent. It does say that until a **same-corpus count baseline** is measured on the
+**same rows**, we cannot distinguish "2 bits behind because the transport is weak" from "2 bits behind
+because this dev is harder per token". That baseline is the next unit, and it must be computed inside
+the eval so the row set is bit-identical rather than approximately equal.

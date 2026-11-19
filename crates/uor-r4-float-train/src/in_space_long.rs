@@ -2959,6 +2959,15 @@ pub struct NearestReading {
     /// averaged over dimensions: whether the prompt moves the opening point at all.
     pub opening_query_spread: f64,
     pub query_spread: f64,
+    /// The target's rank under the same metric as [`Self::hits`], expressed as a rank-code
+    /// length: `mean log2(rank + 1)` over the rows. A rank code ignores how much probability the
+    /// model puts on rank 1 rather than rank 2, so this is an **optimistic bound** on the model's
+    /// bits per token. That optimism is the point: it is an axis on which this line, which has no
+    /// likelihood, can be compared against a published dense model's *true* bits per token, and a
+    /// bound that is already worse than another model's truth settles the comparison (codex-57).
+    pub rank_bits: f64,
+    /// The rows the rank sum covers.
+    pub rank_rows: usize,
     /// Reply rows that copy the prompt ([`copies_prompt`]): the reply's previous token and its
     /// target stand side by side in the window's prompt, as in a code word or a number the user
     /// gave. Only a model that reads the prompt names these above chance (claude-152).
@@ -3028,6 +3037,12 @@ struct RowPick {
 
 /// [`NearestReading`] over the DEV windows, and the writer's [`WriterReading`] of the same rows
 /// from the same points; `mask` is DEV's response mask, by corpus position.
+thread_local! {
+    /// `(sum, rows)` of `log2(rank + 1)` accumulated by [`row_picks`] for the reading that started
+    /// it: `nearest_reading` resets it before the pass and reads it back after.
+    static RANK_BITS: std::cell::Cell<(f64, usize)> = const { std::cell::Cell::new((0.0, 0)) };
+}
+
 fn nearest_reading(
     model: &StackModel,
     dev: &[CausalWindow],
@@ -3036,6 +3051,7 @@ fn nearest_reading(
     step: usize,
     served: bool,
 ) -> Result<(NearestReading, WriterReading)> {
+    RANK_BITS.set((0.0, 0));
     let (mut all_queries, mut opening_queries) = (Vec::new(), Vec::new());
     let picks = row_picks(
         model,
@@ -3058,6 +3074,11 @@ fn nearest_reading(
         },
     )?;
     let (mut reading, written) = fold_picks(&picks);
+    let (bits_sum, bits_rows) = RANK_BITS.get();
+    if bits_rows > 0 {
+        reading.rank_bits = bits_sum / bits_rows as f64;
+        reading.rank_rows = bits_rows;
+    }
     if !opening_queries.is_empty() {
         reading.opening_query_spread = spread(&Tensor::cat(&opening_queries, 0)?)?;
     }
@@ -3217,6 +3238,25 @@ fn row_picks(
             };
             let scores = nearest_scores(&query, &table)?;
             let best = scores.argmax(1)?.to_vec1::<u32>()?;
+            // The target's rank under the same metric as `nearest`, as a rank-code length
+            // (codex-57): one pass over the scores this eval already computed, so bits per token
+            // costs nothing extra, and reproducing `nearest` from it is the instrument's check.
+            {
+                let target_idx = Tensor::from_vec(targets.clone(), targets.len(), model.device())?;
+                let target_score = scores.gather(&target_idx.unsqueeze(1)?, 1)?.squeeze(1)?;
+                let above = scores
+                    .broadcast_sub(&target_score.unsqueeze(1)?)?
+                    .gt(0.0)?
+                    .to_dtype(DType::F32)?
+                    .sum(1)?
+                    .to_vec1::<f32>()?;
+                let (mut sum, mut rows) = RANK_BITS.get();
+                for count in &above {
+                    sum += ((*count as f64) + 2.0).log2();
+                }
+                rows += above.len();
+                RANK_BITS.set((sum, rows));
+            }
             if let (Some(sink), Some((rows, reply)), Some((hamming, rates))) =
                 (trace.as_deref_mut(), named, captured)
             {
@@ -16796,7 +16836,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
         };
         append_line(&progress, &serde_json::to_string(&point)?)?;
         println!(
-            "[in-space] step {} epoch {:.2} train_loss {} dev top-1 {}/{} nearest {} (openings {}/{}, commonest {}) top-8 {} admitted {} dev_loss {:.5} (token {:.5} address {:.5}) train {:.0}s",
+            "[in-space] step {} epoch {:.2} train_loss {} dev top-1 {}/{} nearest {} (openings {}/{}, commonest {}) top-8 {} admitted {} bits {:.4} dev_loss {:.5} (token {:.5} address {:.5}) train {:.0}s",
             step,
             point.epoch,
             train_loss_mean.map_or("-".to_owned(), |v| format!("{v:.5}")),
@@ -16808,6 +16848,7 @@ pub fn run_long(data_root: &Path, out: &Path, config: &LongConfig, device: &Devi
             nearest.commonest_opening_rows,
             dev.top8_hits,
             dev.admitted_target_hits,
+            nearest.rank_bits,
             dev_loss,
             dev.token_margin,
             dev.address_margin,
