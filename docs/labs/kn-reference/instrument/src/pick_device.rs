@@ -132,6 +132,7 @@ pub use gpu::*;
 #[cfg(feature = "cuda")]
 mod gpu {
     use super::*;
+    use std::time::Instant;
     use uor_r4_discrete::{
         device::{Device, FLOCK_TRACE_HEADER_WORDS, FLOCK_TRACE_LEVEL_WORDS},
         normalization_mechanism::NormalizationMode,
@@ -218,12 +219,26 @@ mod gpu {
             context: usize,
             keep_words: &dyn Fn(usize) -> bool,
         ) -> Result<DeviceTape, Failure> {
+            Ok(self.rows_batched(stream, context, keep_words, 256)?.0)
+        }
+
+        /// `rows` with `batch` windows per device call, and the time spent in each part
+        /// (microseconds: identities, carry, forward, trace readback, row parse).
+        pub fn rows_batched(
+            &self,
+            stream: &[u16],
+            context: usize,
+            keep_words: &dyn Fn(usize) -> bool,
+            batch_rows: usize,
+        ) -> Result<(DeviceTape, [u128; 5]), Failure> {
             let all = windows(stream, context)?;
             let mut tape = DeviceTape {
                 rows: Vec::with_capacity(all.len()),
                 words: Vec::new(),
             };
-            for (chunk, batch) in all.chunks(256).enumerate() {
+            let mut times = [0u128; 5];
+            for (chunk, batch) in all.chunks(batch_rows).enumerate() {
+                let at = Instant::now();
                 let identities: Vec<Vec<_>> = batch
                     .iter()
                     .enumerate()
@@ -233,7 +248,7 @@ mod gpu {
                             .map(|(pos, &token)| Identity {
                                 token: token as u32,
                                 occurrence: pos as u64,
-                                record: (chunk * 256 + row) as u64,
+                                record: (chunk * batch_rows + row) as u64,
                                 version: 0,
                             })
                             .collect()
@@ -241,11 +256,19 @@ mod gpu {
                     .collect();
                 let placeholder: Vec<u32> =
                     batch.iter().map(|(_, w)| w[w.len() - 1] as u32).collect();
+                times[0] += at.elapsed().as_micros();
+                let at = Instant::now();
                 let carried = self.device.carry_windows(&identities)?;
+                times[1] += at.elapsed().as_micros();
+                let at = Instant::now();
                 let forward = self.device.forward_traced(&carried, &placeholder)?;
+                times[2] += at.elapsed().as_micros();
+                let at = Instant::now();
                 let trace = forward
                     .flock_trace()?
                     .ok_or_else(|| fail("missing Pick device trace"))?;
+                times[3] += at.elapsed().as_micros();
+                let at = Instant::now();
                 if trace.len() != batch.len() * BLOCKS * self.stride {
                     return Err(fail("unexpected Pick trace shape"));
                 }
@@ -258,14 +281,15 @@ mod gpu {
                         }
                         words.copy_from_slice(&rec[..5]);
                     }
-                    let ordinal = chunk * 256 + row;
+                    let ordinal = chunk * batch_rows + row;
                     tape.rows.push(row_from_words(w, stream[t], &blocks[0])?);
                     if keep_words(ordinal) {
                         tape.words.push(KeptWords { ordinal, blocks });
                     }
                 }
+                times[4] += at.elapsed().as_micros();
             }
-            Ok(tape)
+            Ok((tape, times))
         }
     }
 }
@@ -388,5 +412,52 @@ mod tests {
             exact += usize::from(want.distance == Some(0));
         }
         assert!(exact >= 50, "only {exact} exact picks");
+    }
+
+    /// The device read gives the same tape at every batch size, and prints where it spends time.
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore]
+    fn device_read_is_batch_invariant() {
+        let path = std::env::var("UOR_PICK_TRUNK").expect("set UOR_PICK_TRUNK");
+        let model = load_trunk(Path::new(&path)).unwrap();
+        let mut state = 4391u64;
+        let mut stream = Vec::new();
+        for r in 0..24 {
+            stream.push(0u16);
+            let len = 100 + (r * 37) % 500;
+            let body: Vec<u16> = (0..len)
+                .map(|_| (2 + splitmix(&mut state) % 4094) as u16)
+                .collect();
+            stream.extend(&body);
+            stream.extend(&body[..len / 3]);
+            stream.push(1);
+        }
+        let device = PickDevice::new(&model, None).unwrap();
+        let keep = |k: usize| k % 3 == 0;
+        let mut tapes = Vec::new();
+        for batch in [256, 4096, 1000] {
+            let at = std::time::Instant::now();
+            let (tape, times) = device.rows_batched(&stream, 192, &keep, batch).unwrap();
+            eprintln!(
+                "batch {batch}: {} rows in {} ms; us identities {} carry {} forward {} trace {} parse {}",
+                tape.rows.len(),
+                at.elapsed().as_millis(),
+                times[0],
+                times[1],
+                times[2],
+                times[3],
+                times[4]
+            );
+            tapes.push(tape);
+        }
+        for tape in &tapes[1..] {
+            assert_eq!(tape.rows, tapes[0].rows);
+            assert_eq!(tape.words.len(), tapes[0].words.len());
+            for (a, b) in tape.words.iter().zip(&tapes[0].words) {
+                assert_eq!((a.ordinal, a.blocks), (b.ordinal, b.blocks));
+            }
+        }
+        assert!(tapes[0].rows.iter().any(|r| r.distance == Some(0)));
     }
 }
