@@ -30,7 +30,7 @@ On matched row 22, “Oswin took large pink rings. Linnea took old gold coins. W
 
 ## Checks run at the head
 
-The live gates found all 88 frozen FIT sources, all 36 held gold writes and three distinct writable alternatives per matched row. Forcing the gold source gave 36/36, including 24/24 matched. Forcing either rival gave 0/24 exact on matched rows although every such write reached EOS. Mutating the key made the forced-gold output score zero against the false key while preserving 36/36 against the independent reference, identical writer output and identical generated IDs.
+The live gates found all 88 frozen FIT sources, all 36 held gold writes and the gold start and two distinct writable rival starts per matched row. Forcing the gold source gave 36/36, including 24/24 matched. Forcing either rival gave 0/24 exact on matched rows although every such write reached EOS. Mutating the key made the forced-gold output score zero against the false key while preserving 36/36 against the independent reference, identical writer output and identical generated IDs.
 
 Wick's waiting dispatcher was suspended before it started a seed. The dedicated Vast RTX 4090 ran the held study. Beforehand, its 84 planted selector decisions matched across all 68 trace words, 11 original writer-chain transitions matched, and all four ordinary-client controls matched their packed artifacts. The host serving library passed 711 tests with one ignored. The independent ordinary-client integration and targeted Rust formatting checks passed. A crate-wide formatting check reported pre-existing differences outside the changed files. [Compute amendment](VAST.md) · [Actual device qualification](operator/vast/qualification.sha256) · [Authorization](operator/vast/authorization.json)
 
