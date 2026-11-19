@@ -19,7 +19,7 @@ Separate order ranges preserve the order digit and restore the discarded zero pa
 
 After file closure, the audit reconstructed every original ordered tuple, with 217,676 additional predecessor/exact queries against streamed boundaries or binary search in the original flat rows. The latter included 1,024 order-ten pairs sharing the nine most recent tokens. All 1,024 original contexts hit, and changing the oldest token alone produced 1,024 exact misses. The malformed checks rejected a short header, a truncated last page, a nonzero restart delta, a zero rank and an invalid initial page offset. These are byte and query checks. Runtime throughput, device parity and client loading are unmeasured. Two release builds with the same encoder independently produced byte-identical output. [Per-order audit log](audit.txt)
 
-This page tests one layout, with no pruning or held-key selection. The cap leaves 39,462,576 bytes above the base. The 17-bit successor words alone require at least 31,097,013 bytes before page padding, so this representation leaves less than 8.4 MB for all context keys, indexes, provenance and any further predictor state even if the per-page padding were zero. The full sidecar remains above cap even before adding any S5 or S6 state.
+This page tests one layout, with no pruning or held-key selection. The cap leaves 39,462,576 bytes above the base. The 17-bit successor words alone require at least 31,098,013 bytes before page padding, leaving at most 8,364,563 bytes for all context keys, indexes, provenance and any further predictor state. The full sidecar remains above cap before adding any S5 or S6 state.
 
 ## Live #4107 evidence and prerequisites
 
@@ -29,7 +29,17 @@ P1 still needs the frozen deployed order-ten mixture and registered same-target 
 
 ## Reproduction and custody
 
-Built on arm64 with `rustc 1.97.1 (8bab26f4f 2026-07-14)`, `rustc --edition 2021 -O -D warnings main.rs -o "$Q/s2-pack-audit"`. Use a fresh output path under `Q=/Users/casey.allard/uor-r4/local/codex/pre-gate-source-26/count` and verify the source SHA-256 before running `"$Q/s2-pack-audit" "$SOURCE" "$Q/new.s2p"`. The tool accepts the exact layout of this pinned source fixture. It is not a general D11 parser. The binary files remain in local custody.
+Built on arm64 with `rustc 1.97.1 (8bab26f4f 2026-07-14)`. From this directory, verify the source SHA-256 and use a fresh output path.
+
+```sh
+Q=/Users/casey.allard/uor-r4/local/codex/pre-gate-source-26/count
+SOURCE=/Users/casey.allard/uor-r4/local/codex/active-s2-23/real/active.d11
+shasum -a 256 "$SOURCE"
+rustc --edition 2021 -O -D warnings main.rs -o "$Q/s2-pack-audit"
+"$Q/s2-pack-audit" "$SOURCE" "$Q/new.s2p"
+```
+
+The tool expects the pinned source fixture at the offsets listed above. The binary files remain in local custody.
 
 | Object | SHA-256 |
 |---|---|
