@@ -142,7 +142,9 @@ fn kn_lookup_cuda_matches_host_on_hand_built_tables() {
 
 #[test]
 fn kn_lookup_cuda_matches_host_on_counted_tables() {
-    let highest = 4u32;
+    // Orders above 4 put context tokens in the key's low word (bits below
+    // 72), so N = 10 covers the word split and the low-word comparisons.
+    let highest = 10u32;
     let train = stream(0x433a, 4_000);
     let other = stream(0x433b, 3_000);
     let counter = NgramCounter::new(0, &train).expect("counter");
@@ -158,11 +160,11 @@ fn kn_lookup_cuda_matches_host_on_counted_tables() {
     let device = KnLookup::new(0, &tables).expect("device");
     for query in [&train, &other] {
         let (counts, totals) = assert_device_equals_host(&device, &tables, query);
-        let width = highest as usize;
+        let width = highest as usize + 1;
         // Every order is reached with a nonzero count somewhere.
-        for k in 0..=width {
+        for k in 0..width {
             assert!(
-                counts.iter().skip(k).step_by(width + 1).any(|&a| a > 0),
+                counts.iter().skip(k).step_by(width).any(|&a| a > 0),
                 "order {k} has no hit"
             );
         }
