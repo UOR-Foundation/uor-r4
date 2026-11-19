@@ -74,3 +74,28 @@ So the A/B is a test of the *address*, and a negative result is what licenses th
 
 4,096 steps at batch 48 on a free card ≈ 2 × 50 min ≈ **1.7 h**, already queued behind the long run.
 The next unit (partition codebook) is **not** authorised by this document; only H1 is.
+
+## Correction (19 Nov): the partition is cheaper than this document first said
+
+The section above says a geometric partition needs "a vocabulary → row codebook ... ported to this
+line". That overstates the work. Verified in the source and the checkpoint:
+
+- The writer's table **is** `embedding.weight`: `geometric_stack_native.rs:1496` builds the writer
+  from `self.get("embedding.weight")`, and the checkpoint carries it as exactly one tensor,
+  `embedding.weight [8192, 512] F32`.
+- A token's cell is its **row index mod 256**, so changing the partition is changing **which row a
+  token occupies** — a permutation `sigma` on 8,192 ids. No model code changes.
+
+So the unit is: produce `sigma` on the host (the `address_cells` placement algorithm, run once, with
+its seeded shuffled control), write it into a checkpoint, and train from it with `--init-from`.
+
+**The trap, and it is a silent one.** `fn head()` also returns `embedding.weight`, so the tensor is
+the tied output projection as well as the input table. Permuting rows alone makes the model read and
+score the *permuted* label: it would be trained to predict `sigma(t)` when the target is `t`, with no
+error anywhere. The permutation must therefore be applied to the **corpus and dev token ids** as well
+as to the table rows, which makes it a new corpus (new hashes, a new run) — not a drop-in table swap.
+
+**Revised cost:** a permutation (seconds), a corpus remap over 385 M tokens (minutes, ~1.5 GB of new
+shards), and one 4,096-step arm against its shuffled control ≈ **1–2 h of wall clock**, versus the
+"port a mechanism" framing above. That is cheap enough that H0 licenses it without a further decision,
+and it is still gated on H0: H1 makes it unnecessary.
