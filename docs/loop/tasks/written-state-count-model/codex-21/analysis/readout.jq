@@ -81,6 +81,9 @@ def pair($a; $b):
                      ($new.source_kind.classification=="correct_value")),
      exact: compare($old.exact; $new.exact),
      old_source: $old.source_kind.classification, new_source: $new.source_kind.classification,
+     old_source_offset:$old.source,new_source_offset:$new.source,
+     old_source_token:$old.source_token,new_source_token:$new.source_token,
+     old_query:$old.query,new_query:$new.query,
      old_status:$old.value_status,new_status:$new.value_status,
      old_mismatch:$old.mismatch,new_mismatch:$new.mismatch,
      changed_ids:($old.emitted != $new.emitted),
@@ -113,6 +116,8 @@ def summary($rows; $arms; $old; $new):
    old_new_source:([$paired[]|{class:(.old_source+" → "+.new_source)}]|counts("class")),
    new_wrong_sources:([$paired[]|select(.new_wrong_source)]|length),
    early_unseen_gold:([$paired[]|select(.earlier_unseen_gold)]|length),
+   retained_unseen:([$paired[]|select(.old_status=="unseen" and .new_status=="unseen")]|length),
+   retained_ties:([$paired[]|select(.old_status=="tie" and .new_status=="tie")]|length),
    early_unseen_gold_wrong_releases:([$paired[]|select(.earlier_unseen_gold and .new_wrong_source and
       (.bypassed_unseen|length)>0)]|length)};
 def dataset($g; $blind; $input; $observed; $sources; $audits; $arms):
