@@ -12,7 +12,9 @@ if length!=2 or .[0].seed!=1 or .[1].seed!=2 or ids(.[0].rows)!=ids(.[1].rows)
 .[0] as $one | .[1] as $two |
 {schema:"uor-r4.clause-entity-veto-cross-seed/1",
  denominators_per_seed:$one.totals,
- seed_summaries:map({seed,supported,unsupported,verification}),
+ seed_summaries:map({seed,supported,unsupported,verification,
+   role_margins:(.role_margins | group_by([.family,.exclusion_first,.reference,.clause]) |
+     map((.[0]|del(.ordinal,.clause_bounds)) + {rows:length}))}),
  matched_prompt_outcomes:{
    role_span:cells($one;$two;"role_pairs";"span"),
    role_exact:cells($one;$two;"role_pairs";"exact"),

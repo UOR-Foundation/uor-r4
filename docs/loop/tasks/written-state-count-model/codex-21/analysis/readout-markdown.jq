@@ -11,6 +11,8 @@ def mismatch:
   else .mismatch | "\(.index) \(.expected|token) → \(.actual|token)" end;
 def arm:
   "q=\(.query // "∅") \(.endpoint) \([.query_tokens[]?|token]|join(" ")); src=\(.source // "∅") \(.source_kind.classification) \(.source_token|token); \(mismatch); EOS \(.terminal_eos|boolean)";
+def negative_arm:
+  "q=\(.query // "∅") \(.endpoint); src=\(.source // "∅"); \(.negative.classification); \(.emitted|length) IDs, EOS \(.terminal_eos|boolean); \(.text)";
 def counts($a;$b):
   .arms[$a] as $old | .arms[$b] as $new |
   ["\($old.span) → \($new.span)",
@@ -40,6 +42,16 @@ def cells($a;$b):
 ([.supported.value + {family:"Total",exclusion_first:"—",name_b_first:"—"}] + .values_by_cell
  | cells("supplied";"veto")),
 "",
+"## Completion and control scope",
+"",
+row(["Arm","Supported rows","Supported terminal EOS","Supported 16 IDs without EOS",
+     "Unsupported rows","Unsupported terminal EOS","Unsupported 16 IDs without EOS"]),
+row([range(7)|"---"]),
+(. as $r | ($r.supported.role.arms + $r.supported.value.arms + $r.supported.other_controls)
+ | to_entries[] | .key as $arm | $r.unsupported.arms[$arm] as $negative |
+ row([$arm,96,.value.eos,.value.cap_without_eos,
+      (if $negative==null then 0 else 6 end),($negative.eos // "—"),($negative.cap_without_eos // "—")])),
+"",
 "## Supported prompt evidence",
 "",
 row(["Ordinal","Prompt ID","Gold query","Gold source","Reference","Clause","Supplied ordered","Earlier connector veto"]),
@@ -53,6 +65,5 @@ row([range(8)|"---"]),
 row(["Ordinal","Prompt ID","Reference","Clause","No read"]),
 row([range(5)|"---"]),
 (.rows[] | select(.stratum!="supported") |
- row([.ordinal,.id, (.arms.reference|[.endpoint,.source,.negative.classification,.text]),
-    (.arms.clause|[.endpoint,.source,.negative.classification,.text]),
-    (.arms.no_read|[.endpoint,.source,.negative.classification,.text])]))
+ row([.ordinal,.id, (.arms.reference|negative_arm),
+    (.arms.clause|negative_arm),(.arms.no_read|negative_arm)]))

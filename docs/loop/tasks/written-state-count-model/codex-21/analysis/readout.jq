@@ -119,6 +119,7 @@ def arm_counts($arm):
   map(.arms[$arm]) | {span:(map(select(.endpoint=="requested"))|length),
     endpoints:counts("endpoint"),sources:(map(.source_kind)|counts("classification")),
     exact:(map(select(.exact))|length), eos:(map(select(.terminal_eos))|length),
+    cap_without_eos:(map(select((.terminal_eos|not) and (.emitted|length)==16))|length),
     first_mismatches:(map(.mismatch.index)|map({index:.})|counts("index"))};
 def summary($rows; $arms; $old; $new):
   ($rows | pair($old; $new)) as $paired |
@@ -168,6 +169,8 @@ def negatives($rows):
   {count:($unsupported|length),
    arms:(["reference","clause","no_read"]|map(. as $arm |
      {key:$arm,value:{source:([$unsupported[].arms[$arm]|select(.source!=null)]|length),
+       eos:([$unsupported[].arms[$arm]|select(.terminal_eos)]|length),
+       cap_without_eos:([$unsupported[].arms[$arm]|select((.terminal_eos|not) and (.emitted|length)==16)]|length),
        exact_literal:([$unsupported[].arms[$arm]|select(.negative.matches_recorded_literal==true)]|length),
        no_without_copy:([$unsupported[].arms[$arm]|select(.negative.no_without_copy==true)]|length),
        classifications:([$unsupported[].arms[$arm].negative]|counts("classification"))}})|from_entries),
