@@ -63,7 +63,11 @@ phase=blind-role
 gpu capture/role-reference "$role" "$reference" "$blind" "$role_device" capture/role-reference.json
 gpu capture/role-treatment "$role" "$treatment" "$blind" "$role_device" capture/role-treatment.json
 "$project" "$paired" "$(sum "$reference")" "$blind" capture/legacy.json capture/role-reference.json capture/reference.json
-"$project" "$paired" "$(sum "$treatment")" "$blind" capture/legacy.json capture/role-treatment.json capture/treatment.json user_text_only
+"$project" "$paired" "$(sum "$treatment")" "$blind" capture/legacy.json capture/role-treatment.json capture/projected-treatment.json user_text_only
+# The frozen chain requires one receipt per selection digest, even when the intervention ties byte for byte.
+jq -c --arg role_receipt "$(sum capture/role-treatment.json)" '
+    .role_projection_receipt_sha256=$role_receipt
+' capture/projected-treatment.json > capture/treatment.json
 "$project" --render "$tokenizer" "$blind" capture/role-reference.json capture/role-treatment.json capture/rendered-roles.json
 jq -en --slurpfile r capture/role-treatment.json --slurpfile p capture/role-reference.json '
     ($r[0].rows|map([.role_words[2:4],.role_words[5],.role_words[7]]))
@@ -209,7 +213,7 @@ jq -en --argjson seed "$seed" --slurpfile labels "$labels" \
     --slurpfile blind "$blind" \
     -f "$reducer" > summary.json
 {
-    sha256sum blind-selections.sha256 summary.json capture/{reference,treatment,supplied,wrong-role,no-read,role-reference,role-treatment,rendered-roles,fixed-roles-verified,wrong-role-endpoints}.json \
+    sha256sum blind-selections.sha256 summary.json capture/{reference,treatment,projected-treatment,supplied,wrong-role,no-read,role-reference,role-treatment,rendered-roles,fixed-roles-verified,wrong-role-endpoints}.json \
         capture/{reference,treatment,supplied,wrong-role}/candidates.json
     find arms modes grades clients writer control-writer -type f \( -name '*.json' -o -name '*.trace' -o -name '*.packet' -o -name '*.raw' \) \
         ! -path 'clients/*/shards/*' -print0 | LC_ALL=C sort -z | xargs -0 sha256sum
