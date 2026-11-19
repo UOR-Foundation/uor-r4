@@ -121,6 +121,13 @@ Where each part runs:
   - wick has 59 GB, about 26 GB of it free on 19 Nov beside the other jobs.
   - The arms are built one at a time, and the main span is finished and freed before the P+ span is looked up.
   - The lookups go to the GPU in record-aligned chunks of at most 2^24 targets.
+  - Before the arms, the job frees TRAIN, the counter and the KN tables. claude-438's 100% run, which held only DEV-tune, peaked at 10.3 GB.
+  - **Memory rule:**
+    - Claude's wick container is capped at 16 GB.
+    - Each run writes its peak RSS. Before the 100% run, that peak is extrapolated linearly from the 1% and 10% runs.
+    - If the estimate is above 14 GB, the container's cap is raised for the 100% run only. The new cap is the estimate plus 4 GB, and only while wick shows that much memory available beside the other jobs. The cap goes back to 16 GB afterwards.
+    - Otherwise the job waits for the memory, under the six-hour rule below.
+    - No parameter of the run changes for memory.
 
 ## Stop rule
 
@@ -129,7 +136,7 @@ Where each part runs:
 - A B1, B2 or B3 failure stops the reading. It is an instrument fault, and no band from that build is reported.
 - Each size is run once. The first JSON written at a size is its record.
 - No DEV-tune number feeds back into any parameter this sheet fixes.
-- If wick is unreachable, or its GPU stays busy for more than six hours, the unit asks for a rented 4090 or 5090 in the caps (§3.6) under a new sheet line. It does not wait.
+- If wick is unreachable, or its GPU or the memory a size needs stays unavailable for more than six hours, the unit asks for a rented 4090 or 5090 in the caps (§3.6) under a new sheet line. It does not wait.
 
 FIT history: none yet.
 
