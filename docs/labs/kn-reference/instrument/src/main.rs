@@ -29,6 +29,7 @@
 // Without `cuda` only the argument parser runs; the tally is still built and tested.
 #![cfg_attr(not(feature = "cuda"), allow(dead_code))]
 
+mod pick_device;
 mod fit_frame;
 mod pick_arms;
 
