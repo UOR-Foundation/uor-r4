@@ -162,7 +162,7 @@ __global__ void greedy_witness(Index index, const ID *tokens, size_t n, const U3
     unsigned j = blockIdx.x * blockDim.x + threadIdx.x;
     if (j >= witnesses) return;
     size_t i = size_t(j) * stride;
-    U64 *out = records + j * (DEPTH + 2);
+    U64 *out = records + size_t(j) * (DEPTH + 2);
     if (i >= n || !tokens[i]) {
         for (unsigned k = 0; k < DEPTH + 2; ++k) out[k] = 0;
         return;
@@ -192,37 +192,80 @@ template<class T> T word(const uint8_t *raw) {
     return value;
 }
 
+bool canonical_context(U64 key, unsigned order) {
+    // The oldest slot may hold BOS. EOS and interior BOS cannot index a row.
+    for (unsigned slot = 0; slot < DEPTH; ++slot) {
+        unsigned id = (key >> (36 - slot * 12)) & 0xfff;
+        if (slot >= order ? id != 0 : (id == 1 || (id == 0 && slot + 1 < order))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 int main(int argc, char **argv) try {
     if (argc != 6) throw std::runtime_error("expected fit|score STATE IDS OUTPUT STRIDE");
     std::string mode = argv[1];
     if (mode != "fit" && mode != "score") throw std::runtime_error("unknown context-score mode");
     auto words = read<uint8_t>(argv[2]);
     auto ids = read<ID>(argv[3]);
-    size_t stride = std::stoul(argv[5]);
+    std::string stride_arg = argv[5];
+    if (stride_arg.empty() || stride_arg.find_first_not_of("0123456789") != std::string::npos)
+        throw std::runtime_error("invalid context-score stride");
+    size_t stride = std::stoul(stride_arg);
     if (!stride || words.size() <= HEADER || (words.size() - HEADER) % ROW_BYTES ||
+        (words.size() - HEADER) / ROW_BYTES > UINT32_MAX || ids.size() > UINT32_MAX ||
         ids.front() != 0 || ids.back() != 1)
         throw std::runtime_error("invalid context-score shape");
+    if (std::any_of(ids.begin(), ids.end(), [](ID id) { return id >= V; }))
+        throw std::runtime_error("token ID outside context-score vocabulary");
     std::vector<U32> raw_weights(COMPONENTS), raw_uni(V);
     unsigned depth = 0;
+    U64 weight_total = 0;
     for (unsigned k = 0; k < COMPONENTS; ++k) {
         raw_weights[k] = word<U32>(words.data() + 4 * k);
+        if (k && raw_weights[k] && !raw_weights[k-1])
+            throw std::runtime_error("discontinuous context-score weights");
         if (raw_weights[k]) depth = k;
+        weight_total += raw_weights[k];
     }
-    if (!depth || raw_weights[0] != FLOOR) throw std::runtime_error("bad context-score weights");
-    for (unsigned t = 0; t < V; ++t)
+    if (!depth || raw_weights[0] != FLOOR || weight_total != 256)
+        throw std::runtime_error("bad context-score weights");
+    U64 uni_total = 0;
+    for (unsigned t = 0; t < V; ++t) {
         raw_uni[t] = word<U32>(words.data() + (COMPONENTS + t) * 4);
+        uni_total += raw_uni[t];
+    }
+    if (raw_uni[0] || !uni_total || uni_total > UINT32_MAX)
+        throw std::runtime_error("invalid context-score unigram");
     std::vector<U64> keys;
     std::vector<U32> starts, counts;
     std::vector<ID> followers;
+    U64 previous = 0, row_total = 0;
+    unsigned occupied_orders = 0;
     for (size_t pos = HEADER; pos < words.size(); pos += ROW_BYTES) {
         U64 value = word<U64>(words.data() + pos), key = value >> 12;
+        U32 count = word<U32>(words.data() + pos + 8);
+        ID follower = static_cast<ID>(value & 0xfff);
+        if (value <= previous || !count || !follower)
+            throw std::runtime_error("invalid or unordered context-score row");
+        previous = value;
         if (keys.empty() || keys.back() != key) {
+            unsigned order = key >> 48;
+            if (!order || order > depth || !canonical_context(key, order))
+                throw std::runtime_error("invalid context-score context key");
+            occupied_orders |= 1U << (order - 1);
+            row_total = 0;
             keys.push_back(key);
             starts.push_back(counts.size());
         }
-        counts.push_back(word<U32>(words.data() + pos + 8));
-        followers.push_back(static_cast<ID>(value & 0xfff));
+        row_total += count;
+        if (row_total > UINT32_MAX) throw std::runtime_error("context-score row total overflows");
+        counts.push_back(count);
+        followers.push_back(follower);
     }
+    if (occupied_orders != (1U << depth) - 1)
+        throw std::runtime_error("missing configured context-score order");
     starts.push_back(counts.size());
     Device<U64> d_keys(keys.size());
     Device<U32> d_starts(starts.size()), d_counts(counts.size()), d_uni(V), d_weights(COMPONENTS);
@@ -236,7 +279,7 @@ int main(int argc, char **argv) try {
     upload(tokens.p, ids);
     Index index{d_keys.p, d_starts.p, d_followers.p, d_counts.p, d_uni.p,
                 static_cast<unsigned>(keys.size()), depth};
-    normalize_rows<<<(index.rows+255)/256,256>>>(d_starts.p,d_counts.p,index.rows);
+    normalize_rows<<<1+(index.rows-1)/256,256>>>(d_starts.p,d_counts.p,index.rows);
     normalize_floor<<<1,1>>>(d_uni.p);
     auto blocks = static_cast<unsigned>((ids.size() + 255) / 256);
     std::ofstream out(argv[4], std::ios::binary);
@@ -254,11 +297,11 @@ int main(int argc, char **argv) try {
         Device<U64> masses(ids.size());
         Device<U32> bits(ids.size());
         Device<uint8_t> hits(ids.size());
-        unsigned probes = (ids.size() + stride - 1) / stride;
-        Device<U64> witnesses(probes * (DEPTH + 2));
+        unsigned probes = 1 + (ids.size() - 1) / stride;
+        Device<U64> witnesses(size_t(probes) * (DEPTH + 2));
         target_mass<<<blocks,256>>>(index, tokens.p, ids.size(), d_weights.p, masses.p, hits.p);
         account<<<blocks,256>>>(masses.p, ids.size(), bits.p);
-        greedy_witness<<<(probes+127)/128,128>>>(index, tokens.p, ids.size(), d_weights.p, stride,
+        greedy_witness<<<1+(probes-1)/128,128>>>(index, tokens.p, ids.size(), d_weights.p, stride,
                                                  probes, witnesses.p);
         save(out, ids.size(), masses.p);
         save(out, ids.size(), bits.p);
