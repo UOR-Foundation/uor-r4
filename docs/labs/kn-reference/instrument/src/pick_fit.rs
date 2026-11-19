@@ -315,6 +315,76 @@ fn band(a1: &MainArm, other: &MainArm) -> Result<Value, Failure> {
     )
 }
 
+/// The main span's five arms and the bands between them.
+pub struct MainResult {
+    pub arms: Value,
+    pub bands: Value,
+    pub b3_ok: bool,
+}
+
+/// The plus span's two arms and B2.
+pub struct PlusResult {
+    pub arms: Value,
+    pub b2: Value,
+    pub b2_pass: bool,
+    pub b3_ok: bool,
+}
+
+/// A0, A1, C1, C2 and C3 on the main span, one at a time: each table and
+/// score drops inside its own call. Only the per-record sums are kept.
+pub fn run_main(
+    main: &SpanInputs,
+    a1: &[PickTarget],
+    c2: &[PickTarget],
+    c3: &[PickTarget],
+) -> Result<MainResult, Failure> {
+    let arm_a0 = main_arm(main, ArmPick::Absent, None)?;
+    let arm_a1 = main_arm(main, ArmPick::Read(a1), Some(a1))?;
+    let arm_c1 = main_arm(main, ArmPick::Masked(a1), None)?;
+    let arm_c2 = main_arm(main, ArmPick::Read(c2), Some(c2))?;
+    let arm_c3 = main_arm(main, ArmPick::Read(c3), Some(c3))?;
+    let bands = json!({
+        "a1_minus_a0": band(&arm_a1, &arm_a0)?,
+        "a1_minus_c1": band(&arm_a1, &arm_c1)?,
+        "a1_minus_c2": band(&arm_a1, &arm_c2)?,
+        "a1_minus_c3": band(&arm_a1, &arm_c3)?,
+    });
+    let b3_ok = [&arm_a0, &arm_a1, &arm_c1, &arm_c2, &arm_c3]
+        .iter()
+        .all(|arm| arm.b3_ok);
+    Ok(MainResult {
+        arms: json!({"a0": arm_a0.json, "a1": arm_a1.json, "c1": arm_c1.json,
+                     "c2": arm_c2.json, "c3": arm_c3.json}),
+        bands,
+        b3_ok,
+    })
+}
+
+/// A0 and A1 on the plus span, and B2 over its second copies.
+pub fn run_plus(plus: &SpanInputs, plus_a1: &[PickTarget]) -> Result<PlusResult, Failure> {
+    let (a0_json, a0_second, a0_ok) = plus_arm(plus, ArmPick::Absent)?;
+    let (a1_json, a1_second, a1_ok) = plus_arm(plus, ArmPick::Read(plus_a1))?;
+    let pass = b2_pass(a1_second, a0_second);
+    Ok(PlusResult {
+        arms: json!({"a0": a0_json, "a1": a1_json}),
+        b2: json!({"a1_bits_q12": a1_second.to_string(),
+                   "a0_bits_q12": a0_second.to_string(), "pass": pass}),
+        b2_pass: pass,
+        b3_ok: a0_ok && a1_ok,
+    })
+}
+
+/// The run's JSON: no arm is read unless B2 and every B3 hold.
+pub fn combine(main: MainResult, plus: PlusResult) -> Value {
+    json!({
+        "main": main.arms,
+        "plus": plus.arms,
+        "b2": plus.b2,
+        "bands": main.bands,
+        "reading_allowed": plus.b2_pass && main.b3_ok && plus.b3_ok,
+    })
+}
+
 pub fn run_arms(
     main: &SpanInputs,
     a1: &[PickTarget],
@@ -323,35 +393,10 @@ pub fn run_arms(
     plus: &SpanInputs,
     plus_a1: &[PickTarget],
 ) -> Result<Value, Failure> {
-    // One arm at a time: each table and score drops inside its own call.
-    let arm_a0 = main_arm(main, ArmPick::Absent, None)?;
-    let arm_a1 = main_arm(main, ArmPick::Read(a1), Some(a1))?;
-    let arm_c1 = main_arm(main, ArmPick::Masked(a1), None)?;
-    let arm_c2 = main_arm(main, ArmPick::Read(c2), Some(c2))?;
-    let arm_c3 = main_arm(main, ArmPick::Read(c3), Some(c3))?;
-    let (plus_a0_json, plus_a0_second, plus_a0_ok) = plus_arm(plus, ArmPick::Absent)?;
-    let (plus_a1_json, plus_a1_second, plus_a1_ok) = plus_arm(plus, ArmPick::Read(plus_a1))?;
-    let b2 = b2_pass(plus_a1_second, plus_a0_second);
-    let bands = json!({
-        "a1_minus_a0": band(&arm_a1, &arm_a0)?,
-        "a1_minus_c1": band(&arm_a1, &arm_c1)?,
-        "a1_minus_c2": band(&arm_a1, &arm_c2)?,
-        "a1_minus_c3": band(&arm_a1, &arm_c3)?,
-    });
-    let b3_all = [&arm_a0, &arm_a1, &arm_c1, &arm_c2, &arm_c3]
-        .iter()
-        .all(|arm| arm.b3_ok)
-        && plus_a0_ok
-        && plus_a1_ok;
-    Ok(json!({
-        "main": {"a0": arm_a0.json, "a1": arm_a1.json, "c1": arm_c1.json,
-                 "c2": arm_c2.json, "c3": arm_c3.json},
-        "plus": {"a0": plus_a0_json, "a1": plus_a1_json},
-        "b2": {"a1_bits_q12": plus_a1_second.to_string(),
-               "a0_bits_q12": plus_a0_second.to_string(), "pass": b2},
-        "bands": bands,
-        "reading_allowed": b2 && b3_all,
-    }))
+    Ok(combine(
+        run_main(main, a1, c2, c3)?,
+        run_plus(plus, plus_a1)?,
+    ))
 }
 
 #[cfg(test)]

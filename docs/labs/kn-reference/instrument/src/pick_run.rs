@@ -254,7 +254,7 @@ fn check_oracle(
 #[cfg(feature = "cuda")]
 pub fn run(job: PickRun) -> Result<(), Failure> {
     use crate::pick_device::{load_trunk, root_codes, PickDevice, C3_SEED, TRUNK_SHA256};
-    use crate::pick_fit::{run_arms, SpanInputs};
+    use crate::pick_fit::{combine, run_main, run_plus, SpanInputs};
     use serde_json::{json, Map, Value};
     use std::time::Instant;
     use uor_r4_discrete::kn_lookup_device::KnLookup;
@@ -374,6 +374,13 @@ pub fn run(job: PickRun) -> Result<(), Failure> {
         totals: &main_totals,
         fit_segment: 0,
     };
+    // The main arms run, and the main span's lookups are freed, before the
+    // plus span is looked up: the two spans' lookups never coexist.
+    let at = Instant::now();
+    let main_result = run_main(&main_inputs, &a1, &c2, &c3)?;
+    phase(&mut phases, "main_arms", at);
+    drop(main_inputs);
+    drop((main_counts, main_totals, a1, c2, c3));
 
     // The plus span: lookups, A1 and B1.
     let at = Instant::now();
@@ -416,10 +423,11 @@ pub fn run(job: PickRun) -> Result<(), Failure> {
         fit_segment: 2,
     };
 
-    // 5. The arms.
+    // 5. The plus arms, then the record of both spans.
     let at = Instant::now();
-    let arms = run_arms(&main_inputs, &a1, &c2, &c3, &plus_inputs, &plus_a1)?;
-    phase(&mut phases, "arms", at);
+    let plus_result = run_plus(&plus_inputs, &plus_a1)?;
+    phase(&mut phases, "plus_arms", at);
+    let arms = combine(main_result, plus_result);
 
     // 6. The record, never over an existing file.
     let mut summary = job.header;
