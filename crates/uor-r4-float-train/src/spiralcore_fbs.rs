@@ -22,7 +22,7 @@ use crate::{invalid, Result};
 
 pub const SCHEMA: &str = "spiralcore-fbs-projection/1";
 pub const FBS_SOURCE_SHA256: &str =
-    "4b51663dc07de7e64feffb6a05bb977c68a7687c9fe1ae902fb92d8e73da0330";
+    "917cb942811971d63cbe499f3a1641d3360c4dde7ebdc6b87e298c3cf1bbd747";
 pub const DIMENSION: usize = 8;
 pub const ORBIT: usize = 16;
 pub const MAX_LEVELS: usize = 8;

@@ -96,47 +96,22 @@ extern "C" __global__ void spiralcore_fbs_fwd(
     act_t* out, uint* error,
     uint rows, uint outputs, uint inputs, uint stages, uint frontier_count, uint identity
 ) {
-    // One CUDA block per output block (codex-54). The route depends only on the output block's
-    // query and the tables, so thread 0 walks the tree once into shared memory and every row of the
-    // block reuses it; before this, each of the `rows * outputs` threads walked the same tree.
-    __shared__ uint s_atom, s_state, s_fault;
-    uint output = blockIdx.x;
-    if (output >= outputs) return;
+    uint item = blockIdx.x * blockDim.x + threadIdx.x;
+    if (item >= rows * outputs) return;
+    uint row = item / outputs, output = item % outputs;
     ScFbsTables t = {nodes, frontier, axes, compose, root_of_state,
         bfs_actions, branch_targets, roots, stages, frontier_count, identity};
-    if (threadIdx.x == 0) {
-        const float* q = queries + (u64)output * stages * 8;
-        s_fault = 0u;
-        for (uint i = 0; i < stages * 8; ++i) {
-            if (!isfinite(q[i])) { s_fault = 1u; break; }
-        }
-        if (s_fault == 0u) {
-            ScFbsRoute r = sc_fbs_route(t, q, SC_FBS_ABSENT, 0);
-            if (r.atom == SC_FBS_ABSENT || r.atom >= inputs) {
-                s_fault = 2u;
-            } else {
-                s_atom = r.atom;
-                s_state = r.state;
-            }
-        }
+    const float* q = queries + (u64)output * stages * 8;
+    for (uint i = 0; i < stages * 8; ++i) {
+        if (!isfinite(q[i])) { atomicExch(error, 1u); return; }
     }
-    __syncthreads();
-    if (s_fault != 0u) {
-        if (threadIdx.x == 0) atomicExch(error, s_fault);
-        return;
-    }
-    // One block per (output, chunk of 256 rows): the route is amortised across the chunk, and the
-    // grid still holds thousands of blocks, so the gathers stay parallel.
-    uint row = blockIdx.y * blockDim.x + threadIdx.x;
-    if (row >= rows) return;
-    {
-        uint item = row * outputs + output;
-        const act_t* x = input + (u64)row * inputs * 8;
-        for (uint axis = 0; axis < 8; ++axis) {
-            float value = sc_fbs_coordinate(t, x, s_atom, s_state, axis);
-            if (!isfinite(value)) { atomicExch(error, 3u); return; }
-            out[(u64)item * 8 + axis] = act_from_f(value);
-        }
+    ScFbsRoute r = sc_fbs_route(t, q, SC_FBS_ABSENT, 0);
+    if (r.atom == SC_FBS_ABSENT || r.atom >= inputs) { atomicExch(error, 2u); return; }
+    const act_t* x = input + (u64)row * inputs * 8;
+    for (uint axis = 0; axis < 8; ++axis) {
+        float value = sc_fbs_coordinate(t, x, r.atom, r.state, axis);
+        if (!isfinite(value)) { atomicExch(error, 3u); return; }
+        out[(u64)item * 8 + axis] = act_from_f(value);
     }
 }
 
@@ -159,106 +134,55 @@ extern "C" __global__ void spiralcore_fbs_bwd(
     float* dq_items, float* dx_values, uint* dx_slots, uint* error,
     uint rows, uint outputs, uint inputs, uint stages, uint frontier_count, uint identity
 ) {
-    // One CUDA block per output block (codex-54): the selected route and every lawful sibling's
-    // route depend only on the output's query, so they are walked once into shared memory. Before
-    // this, each of the `rows * outputs` items walked the selected route plus every sibling's.
-    __shared__ uint s_fault, s_atom, s_state, s_count;
-    __shared__ uint s_before[SC_FBS_LEVELS], s_choice[SC_FBS_LEVELS], s_goal[SC_FBS_LEVELS];
-    __shared__ uint s_siblings[SC_FBS_LEVELS];
-    __shared__ uint s_alt_atom[SC_FBS_LEVELS][SC_FBS_ORBIT];
-    __shared__ uint s_alt_state[SC_FBS_LEVELS][SC_FBS_ORBIT];
-    __shared__ uint s_alt_goal[SC_FBS_LEVELS][SC_FBS_ORBIT];
-
-    uint output = blockIdx.x;
-    if (output >= outputs) return;
+    uint item = blockIdx.x * blockDim.x + threadIdx.x;
+    if (item >= rows * outputs) return;
+    uint row = item / outputs, output = item % outputs;
     ScFbsTables t = {nodes, frontier, axes, compose, root_of_state,
         bfs_actions, branch_targets, roots, stages, frontier_count, identity};
-    if (threadIdx.x == 0) {
-        const float* q = queries + (u64)output * stages * 8;
-        s_fault = 0u;
-        for (uint i = 0; i < stages * 8; ++i) {
-            if (!isfinite(q[i])) { s_fault = 1u; break; }
-        }
-        if (s_fault == 0u) {
-            ScFbsRoute selected = sc_fbs_route(t, q, SC_FBS_ABSENT, 0);
-            if (selected.atom == SC_FBS_ABSENT || selected.atom >= inputs) {
-                s_fault = 2u;
-            } else {
-                s_atom = selected.atom;
-                s_state = selected.state;
-                s_count = selected.count;
-                for (uint stage = 0; stage < selected.count; ++stage) {
-                    s_before[stage] = selected.before[stage];
-                    s_choice[stage] = selected.choice[stage];
-                    s_goal[stage] = selected.goal[stage];
-                    uint count = stage == 0 ? frontier_count : 3u;
-                    if (count > SC_FBS_ORBIT) count = SC_FBS_ORBIT;
-                    s_siblings[stage] = count;
-                    uint root = root_of_state[selected.before[stage]];
-                    for (uint sibling = 0; sibling < count; ++sibling) {
-                        s_alt_atom[stage][sibling] = SC_FBS_ABSENT;
-                        if (sibling == selected.choice[stage]) continue;
-                        ScFbsRoute alternative = sc_fbs_route(t, q, stage, sibling);
-                        if (alternative.atom == SC_FBS_ABSENT || alternative.atom >= inputs) {
-                            s_fault = 2u;
-                            break;
-                        }
-                        s_alt_atom[stage][sibling] = alternative.atom;
-                        s_alt_state[stage][sibling] = alternative.state;
-                        s_alt_goal[stage][sibling] =
-                            stage == 0 ? sibling : branch_targets[root * 3 + sibling];
-                    }
-                    if (s_fault != 0u) break;
-                }
+    const float* q = queries + (u64)output * stages * 8;
+    for (uint i = 0; i < stages * 8; ++i) {
+        if (!isfinite(q[i])) { atomicExch(error, 1u); return; }
+    }
+    ScFbsRoute selected = sc_fbs_route(t, q, SC_FBS_ABSENT, 0);
+    if (selected.atom == SC_FBS_ABSENT || selected.atom >= inputs) { atomicExch(error, 2u); return; }
+    const act_t* x = input + (u64)row * inputs * 8;
+    float dy[8], y[8];
+    for (uint axis = 0; axis < 8; ++axis) {
+        dy[axis] = act_to_f(grad[(u64)item * 8 + axis]);
+        y[axis] = sc_fbs_coordinate(t, x, selected.atom, selected.state, axis);
+        if (!isfinite(dy[axis]) || !isfinite(y[axis])) { atomicExch(error, 3u); return; }
+        uint code = axes[selected.state * 8 + axis];
+        float value = code & 8 ? -dy[axis] : dy[axis];
+        dx_values[(u64)item * 8 + axis] = value;
+        dx_slots[(u64)item * 8 + axis] = selected.atom * 8 + (code & 7);
+    }
+    float* dq = dq_items + (u64)item * stages * 8;
+    for (uint stage = 0; stage < selected.count; ++stage) {
+        uint count = stage == 0 ? frontier_count : 3;
+        uint root = root_of_state[selected.before[stage]];
+        uint old_goal = selected.goal[stage];
+        for (uint sibling = 0; sibling < count; ++sibling) {
+            if (sibling == selected.choice[stage]) continue;
+            ScFbsRoute alternative = sc_fbs_route(t, q, stage, sibling);
+            if (alternative.atom == SC_FBS_ABSENT || alternative.atom >= inputs) {
+                atomicExch(error, 2u); return;
             }
-        }
-    }
-    __syncthreads();
-    if (s_fault != 0u) {
-        if (threadIdx.x == 0) atomicExch(error, s_fault);
-        return;
-    }
-
-    uint row = blockIdx.y * blockDim.x + threadIdx.x;
-    if (row >= rows) return;
-    {
-        uint item = row * outputs + output;
-        const act_t* x = input + (u64)row * inputs * 8;
-        float dy[8], y[8];
-        for (uint axis = 0; axis < 8; ++axis) {
-            dy[axis] = act_to_f(grad[(u64)item * 8 + axis]);
-            y[axis] = sc_fbs_coordinate(t, x, s_atom, s_state, axis);
-            if (!isfinite(dy[axis]) || !isfinite(y[axis])) { atomicExch(error, 3u); return; }
-            uint code = axes[s_state * 8 + axis];
-            float value = code & 8 ? -dy[axis] : dy[axis];
-            dx_values[(u64)item * 8 + axis] = value;
-            dx_slots[(u64)item * 8 + axis] = s_atom * 8 + (code & 7);
-        }
-        float* dq = dq_items + (u64)item * stages * 8;
-        for (uint stage = 0; stage < s_count; ++stage) {
-            uint count = s_siblings[stage];
-            uint old_goal = s_goal[stage];
-            for (uint sibling = 0; sibling < count; ++sibling) {
-                if (sibling == s_choice[stage]) continue;
-                uint atom = s_alt_atom[stage][sibling];
-                uint state = s_alt_state[stage][sibling];
-                uint goal = s_alt_goal[stage][sibling];
-                float contrast = 0.0f, squared_edge = 0.0f;
-                for (uint axis = 0; axis < 8; ++axis) {
-                    float other = sc_fbs_coordinate(t, x, atom, state, axis);
-                    if (!isfinite(other)) { atomicExch(error, 3u); return; }
-                    contrast += dy[axis] * (other - y[axis]);
-                    float edge = roots[goal * 8 + axis] - roots[old_goal * 8 + axis];
-                    squared_edge += edge * edge;
-                }
-                if (squared_edge <= 0.0f || !isfinite(contrast)) { atomicExch(error, 4u); return; }
-                float directional = contrast / squared_edge;
-                for (uint axis = 0; axis < 8; ++axis) {
-                    float edge = roots[goal * 8 + axis] - roots[old_goal * 8 + axis];
-                    float sum = dq[stage * 8 + axis] + directional * edge;
-                    if (!isfinite(sum)) { atomicExch(error, 4u); return; }
-                    dq[stage * 8 + axis] = sum;
-                }
+            uint goal = stage == 0 ? sibling : branch_targets[root * 3 + sibling];
+            float contrast = 0.0f, squared_edge = 0.0f;
+            for (uint axis = 0; axis < 8; ++axis) {
+                float other = sc_fbs_coordinate(t, x, alternative.atom, alternative.state, axis);
+                if (!isfinite(other)) { atomicExch(error, 3u); return; }
+                contrast += dy[axis] * (other - y[axis]);
+                float edge = roots[goal * 8 + axis] - roots[old_goal * 8 + axis];
+                squared_edge += edge * edge;
+            }
+            if (squared_edge <= 0.0f || !isfinite(contrast)) { atomicExch(error, 4u); return; }
+            float directional = contrast / squared_edge;
+            for (uint axis = 0; axis < 8; ++axis) {
+                float edge = roots[goal * 8 + axis] - roots[old_goal * 8 + axis];
+                float sum = dq[stage * 8 + axis] + directional * edge;
+                if (!isfinite(sum)) { atomicExch(error, 4u); return; }
+                dq[stage * 8 + axis] = sum;
             }
         }
     }
