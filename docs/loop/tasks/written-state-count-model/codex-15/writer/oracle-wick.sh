@@ -5,6 +5,7 @@ cd "$HOME/uor-codex/20261118-ordered-role-transfer"
 stage=${1:?specify fresh stage}
 [[ "$stage" == oracle-primary || "$stage" == oracle-repeat ]]
 sha256sum -c driver/oracle-pins.sha256
+sha256sum -c ../20261118-paired-role-fence/fence/identity/INPUTS.sha256
 (cd assets && sha256sum -c SHA256SUMS)
 (cd panel && sha256sum -c panel-inputs.sha256)
 sha256sum -c "$HOME/uor-codex/20261118-query-region-pick/writer/PREDECESSORS.sha256"
