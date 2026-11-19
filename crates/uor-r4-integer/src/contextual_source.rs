@@ -722,7 +722,7 @@ mod tests {
             file.extend_from_slice(bank);
             let error = IntegerDiscreteModel::from_bytes(&file)
                 .err()
-                .ok_or("invalid carrier loaded")?;
+                .ok_or_else(|| invalid("invalid carrier loaded"))?;
             assert!(error.to_string().contains(expected), "{error}");
             Ok(())
         }
