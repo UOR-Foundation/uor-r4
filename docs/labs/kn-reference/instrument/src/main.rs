@@ -31,6 +31,7 @@
 
 mod fit_frame;
 mod pick_arms;
+mod pick_fit;
 
 use sha2::{Digest, Sha256};
 use uor_r4_discrete::kn_score::PROBABILITY_ONE as KN_ONE;
