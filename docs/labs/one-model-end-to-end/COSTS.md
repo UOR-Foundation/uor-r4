@@ -58,3 +58,15 @@ at batch 24 is the shared card, not the model: another lab's process was residen
 writer inventory fits, and (b) fusing the per-element passes — the q16 conversion and the gate —
 into the gather, which is one pass instead of three over the same ~2 M values per projection.
 The route walk was 3 % (measured, codex-54 revert).
+
+## M2 landed (codex-55)
+
+The writer's candidate inventory is now scored in **column chunks**: it no longer materialises
+`(rows, kept_cells x slots, width)` — 537 M elements at 4,096 rows — and the 1 GiB pre-check and the
+**8,192-row cap** are gone. The per-column score is independent, so the result is unchanged: at batch
+24 the step-64 `train_loss` is **1.00246**, identical to before the change. Batch **48 (24,576 rows)
+now runs**, which the old cap refused.
+
+**The timing is not yet a reading**: while the long run holds the card, every measurement is
+time-sliced — batch 24 and batch 48 both show 1.81 s/step, which a compute-bound step cannot do. The
+batch sweep waits for a free card.

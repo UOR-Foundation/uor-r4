@@ -15,7 +15,9 @@ pub const MAX_PER_CELL: usize = 32;
 pub const DEFAULT_KEPT_CELLS: usize = 8;
 /// Includes the pinned rung0 batch16 * context384 = 6144 positions.
 /// Candidate cells and tokens per cell retain their independent bounds.
-pub const MAX_QUERY_ROWS: usize = 8192;
+/// The most rows one writer call accepts. The candidate inventory is scored in column chunks, so
+/// this bound is the query's, not the inventory's (codex-55).
+pub const MAX_QUERY_ROWS: usize = 65_536;
 // At most 1 GiB for each materialized F32 candidate-vector intermediate.
 // Retained forward/backward graphs require a separately admitted GPU budget.
 pub const MAX_CANDIDATE_VECTOR_ELEMENTS: usize = 256 * 1024 * 1024;
@@ -344,13 +346,7 @@ impl NativeVectorWriter {
     /// `MAX_QUERY_ROWS`. At the sheet's shape this is the whole panel; at width 512 and 32 slots it
     /// is 2,048 rows.
     pub fn max_query_rows(&self) -> Result<usize> {
-        let per_row = self
-            .spec
-            .kept_cells
-            .checked_mul(self.slots)
-            .and_then(|n| n.checked_mul(self.spec.width))
-            .ok_or_else(|| invalid("native candidate-vector inventory overflow"))?;
-        Ok((MAX_CANDIDATE_VECTOR_ELEMENTS / per_row.max(1)).clamp(1, MAX_QUERY_ROWS))
+        Ok(MAX_QUERY_ROWS)
     }
 
     /// The candidate inventory for `query`, in row chunks no larger than [`Self::max_query_rows`].
@@ -399,14 +395,6 @@ impl NativeVectorWriter {
                 "native writer query needs 1..8192 rows of complete vector blocks",
             ));
         }
-        let candidate_elements = query
-            .dim(0)?
-            .checked_mul(self.spec.kept_cells * self.slots)
-            .and_then(|n| n.checked_mul(self.spec.width))
-            .ok_or_else(|| invalid("native candidate-vector inventory overflow"))?;
-        if candidate_elements > MAX_CANDIDATE_VECTOR_ELEMENTS {
-            return Err(invalid("native candidate-vector intermediate exceeds 1 GiB F32 bound; use explicitly weighted row chunks"));
-        }
         self.check(query)?;
         let query = query.to_dtype(DType::F32)?;
         let rows = query.dim(0)?;
@@ -437,17 +425,33 @@ impl NativeVectorWriter {
         let count = self.spec.kept_cells * self.slots;
         let token_ids = self.ids.index_select(&flat, 0)?.reshape((rows, count))?;
         let valid = self.valid.index_select(&flat, 0)?.reshape((rows, count))?;
-        let vectors = self
-            .table
-            .index_select(&token_ids.flatten_all()?, 0)?
-            .reshape((rows, count, self.spec.width))?;
-        self.check(&vectors)?;
-        let scores = query
-            .unsqueeze(1)?
-            .broadcast_sub(&vectors)?
-            .abs()?
-            .mean(2)?
-            .neg()?;
+        // Score the candidate inventory in column chunks (codex-55). Materialising
+        // `(rows, count, width)` is 537 M elements at 4,096 rows, 8,192 tokens and width 512; the
+        // chunk keeps the intermediate inside a fraction of the same budget, and the per-column
+        // score is independent, so the result is unchanged.
+        let budget = MAX_CANDIDATE_VECTOR_ELEMENTS / 4;
+        let chunk_cols = (budget / (rows * self.spec.width).max(1)).max(1);
+        let mut parts = Vec::new();
+        let mut start = 0;
+        while start < count {
+            let n = chunk_cols.min(count - start);
+            let cols = token_ids.narrow(1, start, n)?;
+            let vectors = self
+                .table
+                .index_select(&cols.flatten_all()?, 0)?
+                .reshape((rows, n, self.spec.width))?;
+            self.check(&vectors)?;
+            parts.push(
+                query
+                    .unsqueeze(1)?
+                    .broadcast_sub(&vectors)?
+                    .abs()?
+                    .mean(2)?
+                    .neg()?,
+            );
+            start += n;
+        }
+        let scores = Tensor::cat(&parts, 1)?;
         let raw_scores = valid.where_cond(
             &scores,
             &Tensor::full(ABSENT_SCORE, (rows, count), self.table.device())?,
