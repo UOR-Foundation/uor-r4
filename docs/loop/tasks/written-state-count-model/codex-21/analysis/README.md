@@ -1,7 +1,8 @@
 # D21 paired post-run readout
 
-The audit verifies the original result manifests and their bindings to the
-sealed labels, blind prefixes and tokenizer. For every supported prompt it
+The audit verifies each consumed file against the original result manifests
+and checks the bindings to the sealed labels, blind prefixes and tokenizer.
+For every supported prompt it
 reconstructs the expected response from the labelled original prefix slice
 with EOS appended. It compares GPU writer output and independent observation
 records, recomputes exactness and the first mismatched output token, and

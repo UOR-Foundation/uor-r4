@@ -8,11 +8,22 @@ set -euo pipefail
 run=$1 panel=$2 tokenizer=$3 pieces=$4 out=$5
 src=$(cd "$(dirname "$0")" && pwd -P)
 [[ "$(cat "$run/status")" == "done 0" ]]
-(cd "$run" && shasum -a 256 --status --check raw.sha256 && shasum -a 256 --status --check cold.sha256)
 (cd "$panel" && shasum -a 256 --status --check INPUTS.sha256)
+pin() { shasum -a 256 "$1" | cut -d' ' -f1; }
+verify() {
+    local path=$1 manifest=$2 digest
+    [[ -f "$run/$path" ]]
+    digest=$(pin "$run/$path")
+    awk -v path="$path" -v digest="$digest" '
+      $2 == path || $2 == "./" path { count++; ok = $1 == digest }
+      END { exit !(count == 1 && ok) }
+    ' "$run/$manifest" || { echo "unverified $path in $manifest" >&2; return 1; }
+}
+for path in status spec.json cold.sha256; do
+    verify "$path" raw.sha256
+done
 seed=$(jq -er '.seed|select(.==1 or .==2)' "$run/spec.json")
 held="$panel/seed$seed/held"
-pin() { shasum -a 256 "$1" | cut -d' ' -f1; }
 [[ "$(pin "$held/grades.json")" == "$(jq -er .files.labels.sha256 "$run/spec.json")" ]]
 [[ "$(pin "$held/blind.json")" == "$(jq -er .files.blind.sha256 "$run/spec.json")" ]]
 mkdir "$out"
@@ -21,14 +32,21 @@ writer_args=()
 observed_args=()
 source_args=()
 audit_args=()
+inputs=(capture/fixed-roles-verified.json grades/{forced-gold,forced-wrong,wrong-key,controls-verified}.json)
 for spec in reference:reference clause:treatment supplied:supplied veto:supplied-veto wrong_role:wrong-role no_read:no-read; do
     key=${spec%:*} file=${spec#*:}
+    inputs+=("grades/$file-writer.json" "grades/$file.json")
     writer_args+=(--slurpfile "$key" "$run/grades/$file-writer.json")
     observed_args+=(--slurpfile "$key" "$run/grades/$file.json")
     if [[ "$key" != no_read ]]; then
+        inputs+=("modes/$file/sources.json" "arms/$file-source-audit.json")
         source_args+=(--slurpfile "$key" "$run/modes/$file/sources.json")
         audit_args+=(--slurpfile "$key" "$run/arms/$file-source-audit.json")
     fi
+done
+for path in "${inputs[@]}"; do
+    verify "$path" raw.sha256
+    verify "$path" cold.sha256
 done
 jq -ne "${writer_args[@]}" '$ARGS.named|map_values(.[0])' > "$out/writers.json"
 jq -ne "${observed_args[@]}" '$ARGS.named|map_values(.[0])' > "$out/observations.json"
