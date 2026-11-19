@@ -120,6 +120,13 @@ phase=capture-reuse
 fit_cap="$out/fit/requested-diagnostic/candidates.json"
 held_cap="$out/held/requested-diagnostic/candidates.json"
 phase=independent-admissibility
+# These three keys are the independently sealed labels used by the input
+# validity manifest. Reject a self-consistent study spec carrying other keys.
+pin "$fit_grades" 4d84c611a7f612e15e5830a0289373ecdac559649767704487bff38db79f275b
+pin "$supplement" 7d8ddb929d58b75e20b523f1509ff4a8c740dbd792e3eb8a6c69e162153961e1
+pin "$held_grades" 0ebbc7a52393134c2769b1d843d1be49d0733a5f57baa1fea090ea68d86f773b
+pin "$fit_blind" "$(jq -er .blind_sha256 "$fit_cap")"
+pin "$held_blind" "$(jq -er .blind_sha256 "$held_cap")"
 jq -e --arg fit_sha "$(sum "$fit_cap")" --arg held_sha "$(sum "$held_cap")" '
   .schema=="uor-r4.value-rank-input-validity/1" and .fit.capture_sha256==$fit_sha
   and .held.capture_sha256==$held_sha and .fit.rows==94 and .held.rows==42
