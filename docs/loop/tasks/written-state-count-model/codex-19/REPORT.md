@@ -2,7 +2,7 @@
 
 ## What did not work
 
-Putting the exclusion after the target in the “about” construction still selected the named distractor on all 16 supported prompts in that cell. Four requests for Maren changed from fallback to a wrong factual answer, “small glass jars,” copied from Ivor's fact. Their first error stayed at output token zero. Supplying the correct query endpoints raised the fixed downstream path to 16/64, all for the same object literal.
+Putting the exclusion after the target in the “about” construction still selected the named distractor on all 16 supported prompts in that cell. Four requests for Maren (37, 41, 53 and 57) changed from fallback to a wrong factual answer, “small glass jars,” copied from Ivor's fact. Their first error stayed at output token zero. Supplying the correct query endpoints raised the fixed downstream path to 16/64, all for the same object literal.
 
 ## What changed
 
@@ -12,7 +12,7 @@ The treatment admits whole words in the final query clause whose original token 
 
 ## Measurements
 
-Both seed artifacts produced the same per-prompt span and first-error records. Offsets below are zero-based. The complete original traces also retain differences in the continuation after an error. [All 64 prompts and spans](evidence/seed1-span-table.md) · [Expected and emitted token IDs by row](evidence/seed1-spans.jsonl) · [Seed one verification](evidence/seed1-verification.json) · [Seed two verification](evidence/seed2-verification.json)
+Both seed artifacts produced the same per-prompt span and first-error records. Offsets below are zero-based. The complete original traces also retain differences in the continuation after an error. [All 64 prompts and spans](evidence/seed1-span-table.md) · [Expected and emitted first-mismatch IDs by row](evidence/seed1-spans.jsonl) · [Seed one verification](evidence/seed1-verification.json) · [Seed two verification](evidence/seed2-verification.json)
 
 | Query wording | Supported per seed | Correct query occurrence, baseline → treatment | Exact through EOS, baseline → treatment |
 |---|---:|---:|---:|
@@ -32,10 +32,14 @@ The supplied-endpoint arm explains the low end-to-end ceiling under the frozen v
 
 ## Checks run at the head
 
-Against the 32 paired reversals of the requested person, the baseline named the correct occurrence in both directions on 16 pairs and the treatment on 24. The other eight treatment pairs chose the distractor in both directions. No pair produced two exact replies in either arm. Among the six unsupported controls each ordinary arm produced zero factual writes. The new reader abstained on the two unspecified and two absent people; both conflict queries retained a requested span. The ordinary acknowledgment is not a graded answer to an unsupported request. The forced-gold writer produced 64/64 exact on each seed, the opposing forced source 0/64, and the wrong-key scorer rejected the unchanged tape on all 64. The read-disabled and deliberately opposing-role arms also scored 0/64. [Unsupported cases](evidence/seed1-negative.jsonl)
+Against the 32 paired reversals of the requested person, the baseline named the correct occurrence in both directions on 16 pairs and the treatment on 24. The other eight treatment pairs chose the distractor in both directions. The treatment chose the last query name on 48/64 prompts and the first on 16/64. Either fixed positional shortcut scores 32/64 on this panel. No pair produced two exact replies in either arm. Among the six unsupported controls each ordinary arm produced zero factual writes. The new reader abstained on the two unspecified and two absent people; both conflict queries retained a requested span. The ordinary acknowledgment is not a graded answer to an unsupported request. The forced-gold writer produced 64/64 exact on each seed, the opposing forced source 0/64, and the wrong-key scorer rejected the unchanged tape on all 64. The read-disabled and deliberately opposing-role arms also scored 0/64. [Unsupported cases](evidence/seed1-negative.jsonl)
 
 
 Both frozen baselines rebuilt byte-for-byte. The six planted cases exercised both winners, a tie, a sole negative-contrast winner, an incomplete match and missing support. Both legacy and intervention matched the eight raw CUDA role words in all six cases. The treatment normal client reproduced [924,1074,1] from an archived non-held fixture. The legacy reader rejected the new schema. A preliminary SASS scan caught a reciprocal instruction emitted for signed division. The final CUDA scorer uses four shift/compare steps and passed the integer-only instruction scan. [Pre-run review](PRE-RUN.md) · [Independent FIT](FIT.md) · [Device record](evidence/finite.txt)
+
+Each cold repeat matched all 310 replay file hashes and the complete summary for its primary seed. The independent reader compared the ordinary-client tapes directly with the sealed labels and original prompt IDs. A second review replayed 2,670 writer steps from 280 ordinary baseline and treatment records. The complete four-run dispatch took 52 min 24.25 s. A missing GNU time binary initially stopped the launcher before any held output; the retry used the Wick tool and the same sealed stage. [Replay manifests and timing](evidence/cold-replay.txt) · [Archive verification](evidence/storage.json)
+
+The rental ran for 3,627 s at $0.631/h. The initial allocation selected an incompatible 5090 and was closed after 65 s without running study inputs. Estimated total compute at the quoted rates is $0.65. Both instances were deleted. The verified archive restored 2,318 files and two symbolic links locally, and Wick verified an independent copy and all 14 retained model pins. [Rental records](evidence/compute.json)
 
 ## Skills used
 
@@ -43,7 +47,7 @@ The native-space cycle governed the artifact schema, integer score, source posit
 
 ## Still open
 
-The registered role and reply gains justify a fresh replication with independent person/value assignments. The four newly correct outputs are four formulations of a single literal. Freeze the writer for that replication. The paired traces provide a specific role test: vary post-target exclusion wording, train/dev lexical roots and terminal framing independently, and measure whether the rival's score overtakes the target. The supplied-span evidence isolates the separate failure to recover the other three literal values.
+Both strict per-seed advancement criteria passed, with zero new factual writes on unsupported prompts. The registered next step is fresh replication with independent person/value assignments. The four newly correct outputs are four formulations of a single literal. Freeze the writer for that replication. The paired traces provide a specific role test: vary post-target exclusion wording, train/dev lexical roots and terminal framing independently, and measure whether the rival's score overtakes the target. The supplied-span evidence isolates the separate failure to recover the other three literal values.
 
 ## Plain summary
 
