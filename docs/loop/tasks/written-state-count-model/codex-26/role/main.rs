@@ -363,7 +363,12 @@ fn main() -> Result<()> {
                 || client["paired"] != result["ordinary"]
                 || client["generated_ids"] != result["ordinary_writer"]["generated_ids"]
                 || client["copy_step_words"] != result["ordinary_writer"]["copy_step_words"]
-                || client["stop"] != "eos"
+                || client["stop"]
+                    != if ordinary_reply["ends_eos"] == true {
+                        "eos"
+                    } else {
+                        "max_tokens"
+                    }
                 || !client["read_enabled"].as_bool().unwrap_or(false)
             {
                 return Err(format!("row {row} differs from sealed ordinary client").into());

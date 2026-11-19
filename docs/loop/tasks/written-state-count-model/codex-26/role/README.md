@@ -42,3 +42,5 @@ Rows 501–504 admit both Rowan and Isabel with exact earlier heads at [10,13) a
 Build the standalone Cargo manifest with `cargo build --locked`. Invoke `d26-ordinary-role-trace PARENT TOKENIZER GRADE ORDINARY CLIENTS_OR_DASH` with the pinned D25 parent, tokenizer, grade and ordinary JSON. For the disjoint controls, use `PARENT TOKENIZER controls controls.tsv -`. Optional `--last-supported` enables the separate registered text-only diagnostic and omits the first-question-only oracle. This binary is a read-only client replay, with no changes to model or production source. It prints original IDs, candidate geometry and cell counts, byte offsets, assertion and writer traces, and the first mismatching output token.
 
 The D25 local role trace is `~/uor-r4/local/codex/pre-gate-source-26/role/d25.json`. Sealed inputs are under `~/uor-r4/local/codex/contextual-source-25`. See [D25 REPORT](../../codex-25/REPORT.md) for writer and device receipts and [last supported clause](LAST-SUPPORTED.md) for the new diagnostic.
+
+The frozen fallback comparison and its controls are reported in [D26 results](RESULT.md).
