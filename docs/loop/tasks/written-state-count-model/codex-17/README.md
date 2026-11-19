@@ -1,0 +1,15 @@
+# Can geometry choose the complete item from the original fact?
+
+In the [fresh Wick retest](../codex-16/REPORT.md) the correct original address was present on every one of the 11 failures that persisted after supplying the requested name. All existing value policies discarded that address. This study retains the complete candidate set and tests whether a trained integer bank can rank the candidates on new wording. The [pre-registered comparison](SHEET.md) distinguishes the conditional source-selection experiment from the normal text client.
+
+| Question | Verified result | Evidence |
+|---|---|---|
+| Can success on the earlier panel establish semantic onset learning? | Given the correct sentence, taking its last two words recovers all 24 answers. The panel still localizes the frozen client's failures and tests genuine cursor behavior. | [Literal shortcut](diagnosis/final-words.json) |
+| Does a fresh panel reward the same shortcut? | On the first replacement, taking the last three words recovered all 24 fit and all 24 held answers. We withheld that panel from model comparison. | [First replacement](panel/README.md) |
+| Are the replacement questions answerable? | V4 exposed 12 conflicting independent readings. After changing the ambiguous verb phrases, two new readers agreed with the independent labels on all 42 held rows, including the six controls. | [V4 disagreement](panel-v4/README.md) · [V5 adjudication](panel-v5/held-reading.json) |
+| Can a positional shortcut pass? | In each of eight triples the same structural observations require all three different choices. Even an oracle restricted to those observations can answer at most 8/24. A supplied correct address is statically reachable on all 24. | [Held structural bound](panel-v5/held-ceiling.json) |
+| Could the proposed learner actually make a decision? | The original 100 training records had the necessary shape witnesses on 0/24 matched rows and 6/36 overall. An independently worded TRAIN-only supplement increased this to 24/24 and 35/36. It consumes 200 of 256 record slots, with the held text fixed. | [Original support](panel-v5/shape-coverage.json) · [Supplement](train-supplement/README.md) |
+| Can the instrument register wrong behavior through the CUDA writer? | A planted bank selected source 5 and emitted the correct suffix through EOS. A one-witness change selected source 4 and emitted the wrong first token through EOS. Exact ties and unseen evidence abstained. | [Raw Wick verification](device/wick/verification.txt) |
+| Do fitted bank bytes survive reload? | Ordered, order-neutral and position-only fits each produce 8,416 bytes. On synthetic probes the independent portable reference and Wick CUDA implementations agreed on the complete fitted trace. | [Native fit and replay](native/README.md) |
+
+Semantic agreement, static coverage, a planted source, a fitted-bank hardware test and a learned held reply answer different questions. See the [conditional capture release](capture/DISPATCH.md) for the first stage admitted to use the fresh prompts. The full model comparison and milestones require their own measurements.
