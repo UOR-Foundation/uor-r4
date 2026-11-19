@@ -9,7 +9,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use uor_r4_integer::discrete_d11::IntegerDiscreteModel;
 use uor_r4_integer::paired_role::{
-    role_keys, role_spans, validate_role_ids, PairedRoleState, RoleSpan, ROLE_CONTEXT, ROLE_NIL,
+    role_candidates, validate_role_ids, PairedRoleState, RoleSpan, ROLE_CONTEXT, ROLE_NIL,
     ROLE_OFFSETS, ROLE_ROOTS, ROLE_VOCAB,
 };
 
@@ -114,7 +114,9 @@ fn labels(
         if row.prefix != g.prefix {
             return Err("TRAIN prefix and labels differ".into());
         }
-        let spans = role_spans(sites, &row.prefix).collect::<Vec<_>>();
+        let spans = role_candidates(sites, &row.prefix)?
+            .map(|(span, _)| span)
+            .collect::<Vec<_>>();
         let endpoint = |start: Option<usize>, end: Option<usize>| -> Result<_> {
             match (start, end) {
                 (None, None) => Ok(None),
@@ -230,7 +232,7 @@ fn fit(mode: &str, args: &[String]) -> Result<()> {
     let output = launch(exe, &sites, &[], &tape, Some(&labels))?;
     let mut reference = vec![0; output.len()];
     for (row, [q, e]) in tape.iter().zip(labels) {
-        for span in role_spans(&sites, &row.prefix) {
+        for (span, keys) in role_candidates(&sites, &row.prefix)? {
             let role = if q == Some(span) {
                 1
             } else if e == Some(span) {
@@ -238,7 +240,7 @@ fn fit(mode: &str, args: &[String]) -> Result<()> {
             } else {
                 0
             };
-            for key in role_keys(&sites, &row.prefix, span) {
+            for key in keys {
                 reference[3 * key as usize + role] += 1;
             }
         }
@@ -350,7 +352,11 @@ fn finite(exe: &str) -> Result<()> {
     let fitted = launch(exe, &sites, &[], &fit_tape, Some(&[[Some(q), Some(e)]]))?;
     let mut expected = vec![0; fitted.len()];
     for (s, label) in [(q, 1), (e, 2)] {
-        for key in role_keys(&sites, &fit_tape[0].prefix, s) {
+        let keys = role_candidates(&sites, &fit_tape[0].prefix)?
+            .find(|(span, _)| *span == s)
+            .ok_or("missing finite candidate")?
+            .1;
+        for key in keys {
             expected[3 * key as usize + label] = 1;
         }
     }
