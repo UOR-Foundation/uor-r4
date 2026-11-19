@@ -153,6 +153,12 @@ impl FrozenS2Table {
             if len == 0 {
                 continue;
             }
+            if reads[..len]
+                .iter()
+                .any(|read| u32::from(read.token) > LEGAL_IDS)
+            {
+                return Err(invalid("S2 expert row token outside the 12-bit vocabulary"));
+            }
 
             prediction.order = order as u8;
             prediction.matched_key = Some(key);
@@ -205,6 +211,10 @@ mod tests {
     use super::*;
 
     fn table(records: &[(u128, u16, u8)]) -> FrozenS2Table {
+        table_with_vocabulary(records, (LEGAL_IDS + 1) as usize)
+    }
+
+    fn table_with_vocabulary(records: &[(u128, u16, u8)], vocabulary: usize) -> FrozenS2Table {
         let mut records = records.to_vec();
         records.sort_unstable();
         let mut bytes = vec![0; S2_HEADER_BYTES];
@@ -213,7 +223,7 @@ mod tests {
             bytes.extend_from_slice(&token.to_le_bytes());
             bytes.extend_from_slice(&[rank, 0]);
         }
-        FrozenS2Table::load(&bytes, (LEGAL_IDS + 1) as usize).unwrap()
+        FrozenS2Table::load(&bytes, vocabulary).unwrap()
     }
 
     fn assert_exact_distribution(prediction: &S2ExpertPrediction) {
@@ -375,5 +385,11 @@ mod tests {
         assert!(table.predict_expert(&[4095]).is_ok());
         assert!(s2_route_key(&[4096]).is_err());
         assert!(s2_route_key(&[2; 11]).is_err());
+    }
+
+    #[test]
+    fn rejects_matched_retained_ids_outside_expert_support() {
+        let table = table_with_vocabulary(&[(0, 4096, 1)], 4097);
+        assert!(table.predict_expert(&[]).is_err());
     }
 }
