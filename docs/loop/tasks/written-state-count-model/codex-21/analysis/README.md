@@ -34,3 +34,8 @@ source with a later candidate present. A wrong release in that subset also
 requires a new wrong source and a changed unseen candidate status. The
 compact JSON keeps aggregate and paired changes. The full readout retains
 every prompt and decoded source trace.
+
+Once both seed readouts exist, use
+`jq -s -f compare-seeds.jq SEED1/readout.json SEED2/readout.json` to count
+which prompts reproduce each paired outcome across the two frozen seeds.
+The comparison keeps a denominator of 96 supported prompts per seed.
