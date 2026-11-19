@@ -1,0 +1,6 @@
+e0c074b58fe90904cbe644d23a86be2b38718fe38323adccdeaad98ae76486a5  bins/writer-c
+690957c6f622f48aeb48a73b6519007c2aed506e6291b049f1ab68344d1adf45  grading/held-grades.json
+b1661be6bb7318360106b17e78f2c1b73ee0d145c876eb8c460ad4316ad66f49  panel/panel-inputs.sha256
+1749762ad0f4a3328d8e6a0f7c9b802d252492ead37b6e177c7dbf2d46f18c0d  assets/SHA256SUMS
+43d574a53685dd24fd3fa79b937f3f26b3cb8f68a11be5ca191bb8dd50800773  ../20261118-query-region-pick/writer/PREDECESSORS.sha256
+5f7734f3913dc274e67a5e62b6fde33cc348f2bc38862b6690abbec8046b870f  ../20261118-query-region-pick/writer/run-wick.sh
