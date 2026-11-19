@@ -117,7 +117,10 @@ Where each part runs:
   - P+'s two fits on R⁺ (about 32.6M targets) are about 14 min;
   - the Pick reads are minutes.
   - So about 45 min at 100%, and under two hours for every size together.
-- **Host memory:** the largest mass table, R⁺ with 14 experts, is about 3.7 GB.
+- **Host memory:** the P+ span (R⁺ and DEV⁺, about 54M targets) is the largest. Its lookups are about 7 GB, and its 14-expert table about 6 GB, so the peak is about 15 GB.
+  - wick has 59 GB, about 26 GB of it free on 19 Nov beside the other jobs.
+  - The arms are built one at a time, and the main span is finished and freed before the P+ span is looked up.
+  - The lookups go to the GPU in record-aligned chunks of at most 2^24 targets.
 
 ## Stop rule
 
