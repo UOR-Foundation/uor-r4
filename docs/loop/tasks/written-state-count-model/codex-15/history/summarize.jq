@@ -13,7 +13,7 @@ def collision($rows; key):
     retain_example:(map(select(.verdict=="w_only"))|first|with_refs),
     advance_example:(map(select(.verdict=="c_only"))|first|with_refs)}
   ];
-add as $all |
+add | sort_by([.seed,.split,.id]) as $all |
 {
  archived_source_only:true,
  matrix: [$all|group_by([.seed,.split])[] |

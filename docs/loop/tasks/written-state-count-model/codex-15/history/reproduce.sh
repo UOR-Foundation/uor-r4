@@ -46,7 +46,7 @@ for seed in seed1 seed2; do
   f="$here/source/4104"
   grade="$f/$seed/oracle-grade.json"
   sel="$f/$seed/oracle.json"
-  blind="$lab/ordered-role-transfer-20261118/panel-v5-seed1/held-blind.json"
+  blind="$f/held-blind.json"
   labels="$f/held-grades.json"
   [[ "$(digest "$grade")" == "$(awk -v f="$seed/oracle-grade.json" '$2==f {print $1}' "$f/cold.sha256")" ]]
   [[ "$(digest "$sel")" == "$(jq -r '.selection' "$grade")" ]]
@@ -60,12 +60,10 @@ for seed in seed1 seed2; do
   tables="$here/source/tables"
   roots="$tables/$seed-roots.json"
   classes="$tables/$seed-classes.json"
-  model="$lab/role-boundary-count-20261118/writer-archive/inputs/$seed.d11"
   state="$lab/span-connectors-20261118/results/span-01/$seed-state.json"
-  [[ "$(digest "$model")" == "$(jq -r '.artifact_sha256' "$state")" ]]
-  [[ "$(digest "$roots")" == "$(awk -v f="$roots" '$2==f {print $1}' "$tables/INPUTS.sha256")" ]]
+  (cd "$here" && shasum -a 256 -c SOURCE-PINS.sha256) >/dev/null
   diff -q "$classes" <(jq -e '.bank.classes' "$state")
-  record "$roots" "$classes" "$model" "$state"
+  record "$roots" "$classes" "$state"
   jq -s --slurpfile roots "$roots" --slurpfile classes "$classes" -f "$here/geometry.jq" \
     "$out/$seed"-{primary,fresh,transfer,prior,4104-exposed-24}.json > "$out/$seed-geometry.json"
   d="$here/source/4104/$seed/adjudication"

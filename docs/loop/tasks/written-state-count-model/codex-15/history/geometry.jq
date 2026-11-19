@@ -10,7 +10,7 @@ def collision($rows;key):
   {key:(.[0]|key),retain:n(.verdict=="w_only"),advance:n(.verdict=="c_only"),
    retain_example:(map(select(.verdict=="w_only"))|first|screen),
    advance_example:(map(select(.verdict=="c_only"))|first|screen)}];
-add | map(select(.reason==2 and .fact_and_query_align and .context!=null and .verdict!="wrong")) |
+add | sort_by([.seed,.split,.id]) | map(select(.reason==2 and .fact_and_query_align and .context!=null and .verdict!="wrong")) |
 map(. + {descriptor:witness(.)}) as $r |
 {
  rows:($r|length),
