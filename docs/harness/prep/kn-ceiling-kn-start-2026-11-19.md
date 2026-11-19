@@ -38,19 +38,22 @@ Every step runs in one job on one rented RTX 5090 (Vast, through `uor-pod up --c
 
 ## Bar
 
-- **B1 (identity):** at every size, `kn_only` equals the plain run's tallies. At 100% it equals claude-422's DEV-tune 1,432,318 micro-BPB overall and 1,747,150 novel. Step 2 passes.
-- **B2 (the KN start):** at every size, U_count's `fit_bits_q12[0]` is at most `kn_only`'s `all.bits_q12` plus the target count. The last value of `fit_bits_q12` is at most `kn_only`'s `all.bits_q12` plus the target count.
-- **B3 (the bound):** at every size, L ≤ U, and U_count's `gap_bound_q12` is at least four times the target count (its floor terms alone).
+- **B1 (identity):** at 1% and 10%, `kn_only` equals the plain run's tallies. At 1‰, step 2's host check is B1: the host-checked KN masses and lookups equal the device's at every target. At 100%, `kn_only` equals claude-422's DEV-tune 1,432,318 micro-BPB overall and 1,747,150 novel.
+- **B2 (the KN start):** at every size:
+  - U_count's `fit_bits_q12[0]` is at most `kn_only`'s `all.bits_q12` plus the target count;
+  - the last value of `fit_bits_q12` is at most `kn_only`'s `all.bits_q12` plus the target count (EM's integer floors make a false failure very unlikely, and any failure is read as I);
+  - U_count's `scored.all.bits_q12` equals the last `fit_bits_q12`, which confirms that the fit set is the scored set, so L is computed over the targets the bound covers.
+- **B3 (the bound's presence):** at every size, `gap_bound_q12` and `lower_bpb_micro` are present, with L ≤ U and the bound at least four times the target count. These hold by construction (the floor terms alone are four units per target, and the subtraction saturates), so B3 checks that the fields were written, not that the bound is right. The bound's soundness rests on the fixture test `the_gap_bound_covers_what_em_still_saves` and its negative (G1, G2 of the ORDER).
 - **B4 (EM):** each fit's `fit_bits` is recorded per pass. A rise between passes is recorded with its size but does not stop the run.
 - **Gate (c), read only at 100%,** overall, from U and L against 0.85 × R\* and 0.90 × R\*. The novel ratio U_count / R\*'s novel number is reported beside it, with no bound.
 
-**Recorded, with no bar:** U_split and KN + U as ratios to KN-only and to R\*, with their bounds; the gap between U_count and U_split; per-bucket target counts and weights; the passes' fit bits; and wall time, phases and memory at each size.
+**Recorded, with no bar:** U_split and KN + U as ratios to KN-only and to R\*; KN + U's bound; each U_split fit half's bound, which bounds that half's own fit and not U_split's cross-scored score; the gap between U_count and U_split; per-bucket target counts and weights; the passes' fit bits; and wall time, phases and memory at each size.
 
 **Reading map** (fixed before the run):
 - **Counts carry:** U ≤ 0.85 × R\*. The roadmap runs the deployable P1 path next (claude-434 Pick, 435, 436).
 - **Geometry critical:** L > 0.90 × R\*. P2 moves ahead of 435/436. P1(a), (b) and (d) are still built, but they no longer decide where bar Q's risk lies.
 - **Between:** L > 0.85 × R\* and U ≤ 0.90 × R\*. Both stay open, and the order is unchanged.
-- **Unsettled:** [L, U] contains 0.85 × R\* or 0.90 × R\* in its interior, so the fixed passes do not decide the branch. The REPORT records the band and which branches it allows. More passes need a new sheet; the 96 passes are not changed after a result is seen.
+- **Unsettled:** every outcome the three rows above do not match, that is, the closed band [L, U] holds 0.85 × R\* or 0.90 × R\*, so the fixed passes do not decide the branch. The REPORT records the band and which branches it allows. More passes need a new sheet; the 96 passes are not changed after a result is seen.
 - **Large split gap:** U_split above U by more than half the distance from U to R\*. This sits beside the gate's reading and does not replace it.
 - **I (instrument):** step 1 or 2 fails, B1, B2 or B3 fails, or the job's stream check fails. The repair is made under this sheet, and no number is reported from a failing build.
 
@@ -80,10 +83,12 @@ claude-433's 100% run on a 5090 took 289 s for the raw count, 2 s for the lookup
 ## Stop rule
 
 - A failure in step 1 or 2 stops the job before step 3. It is repaired under this sheet.
-- A crash at any size is repeated once, into a new folder. A second crash at the same size needs a new sheet.
+- A crash at any size is repeated once, under a new name (`<name>-retry`) beside the crashed run's files, which are kept. A second crash at the same size needs a new sheet.
 - A B1, B2 or B3 failure stops the reading. It is an instrument fault, and no ratio from that build is reported.
 - Each size is run once. The first JSON written at a size is its record.
 - No DEV-tune number feeds back into N, the bucket rule, the pass count, the start or the expert set: all are fixed in the ORDER.
 - If the rented pod fails to start or stalls, it is destroyed and one replacement is tried. A second failure stops the unit, and the REPORT says so.
 
-TEST FITNESS: pending (no non-author FIT yet).
+FIT history: round 1 (fresh-context non-author, at code `d366c829f`, sheet `16479bb3c`) was FIT with no blocker. It checked the bound's Jensen step, rounding direction, floor slack and overflow, and that L is computed over the fit set. Its should-fix items are folded in above: the Unsettled row now covers every unmatched outcome, including the band's endpoints; B3 is labelled a presence check; U_split's bounds are labelled per fit half; B1 at 1‰ is step 2's host check; B2 states that a false failure is unlikely and is read as I, and gains the identity of scored bits and last fit bits. The retry wording matches the job script.
+
+TEST FITNESS: FIT - round 1 (fresh-context non-author, at `d366c829f`) found no blocker.
