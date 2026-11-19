@@ -26,10 +26,28 @@ sha256sum -c "$out/raw-index.sha256" > "$out/raw-verification.log"
 for seed in 1 2; do
     for split in fit held; do
         cmp "primary-$split-seed$seed/cold.sha256" "repeat-$split-seed$seed/cold.sha256"
-        [[ -f "$split-seed$seed.all.diff" && ! -s "$split-seed$seed.all.diff" ]] || {
-            echo "raw cold difference needs classification at $split-seed$seed" >&2
-            exit 1
-        }
+        primary="$stage/capture/primary-$split-seed$seed"
+        repeat="$stage/capture/repeat-$split-seed$seed"
+        # Original manifests are verified above. Every byte outside the three
+        # path-addressed read inventories must match between independent runs.
+        audit_pattern='  \./(no-read|requested-diagnostic|public)/archive-audit\.json$'
+        cmp <(grep -Ev "$audit_pattern" "$primary.all.sha256") <(grep -Ev "$audit_pattern" "$repeat.all.sha256")
+        for lane in public no-read requested-diagnostic; do
+            for root in "$primary" "$repeat"; do
+                audit="$root/$lane/archive-audit.json"
+                jq -e '.schema=="uor-r4.legacy-assertion-capture-audit/1" and (.reads_sha256|length)>0
+                     and all(.reads_sha256|to_entries[]; (.key|startswith("/") and (test("[\\r\\n]")|not))
+                         and (.value|test("^[0-9a-f]{64}$")))' "$audit" >/dev/null
+                jq -r '.reads_sha256|to_entries[]|.value+"  "+.key' "$audit" | sha256sum --status -c -
+                # Separate namespaces prevent substitution of an external
+                # path for a phase-relative one. All digest values survive.
+                jq -cS --arg prefix "$root/" '.reads_sha256 |=
+                  (to_entries | map({key:(if (.key|startswith($prefix)) then
+                    ["run",(.key|ltrimstr($prefix))] else ["external",.key] end),value}) | sort_by(.key))' \
+                    "$audit" > "$out/$(basename "$root")-$lane.normalized.json"
+            done
+            cmp "$out/$(basename "$primary")-$lane.normalized.json" "$out/$(basename "$repeat")-$lane.normalized.json"
+        done
     done
     case $seed in
         1) draft=135f297e948973a201fc02909e0eb70421179c3e38337bdbcabb811fd7407e57;;
