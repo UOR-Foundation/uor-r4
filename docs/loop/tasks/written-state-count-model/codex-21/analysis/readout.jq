@@ -13,6 +13,21 @@ def mismatch($expected; $emitted):
 def piece($id): if $id == null then null else $pieces[0][$id] end;
 def query_tokens($tape; $span):
   if $span == null then null else $tape[$span[0]:$span[1]] | map(piece(.)) end;
+def role_margin($row; $span):
+  if $span == null then null else
+    (first($row.requested_occurrence.candidates[] | select(.span==$span)
+       | {contrast, scores, clause_evidence}) // null) end;
+def device_roles($rows; $grades; $device; $arm):
+  $device.rows as $device_rows |
+  require(($device_rows|length)==($rows|length); "role trace census differs") |
+  [$rows[] | . as $r | $device_rows[$r.ordinal] as $row |
+   (if $row.role_words[0]==4294967295 then null else $row.role_words[0:2] end) as $chosen |
+   require($row.index==$r.ordinal and $row.prefix_sha256==$grades[$r.ordinal].prefix_sha256 and
+           $chosen==$r.arms[$arm].query; "role words disagree with writer endpoint") |
+   select($r.stratum=="supported") |
+   {ordinal:$r.ordinal,family:$r.family,exclusion_first:$r.exclusion_first,
+    requested:role_margin($row;$r.gold_query),
+    excluded:role_margin($row;$r.excluded_query)}];
 def source($g; $start):
   if $start == null then {classification:"no_source"}
   else (first($g.facts[] | select(.name_span[0] <= $start and $start < .delimiter[0])) // null) as $f
@@ -167,6 +182,8 @@ def negatives($rows):
 ($audits[0] | map_values(indexed(.;"ordinal"))) as $audit_rows |
 dataset($labels[0];$blind[0];$writer_rows;$observed_rows;$source_rows;$audit_rows;$arms) as $rows |
 ($rows|map(select(.stratum=="supported"))) as $sup |
+device_roles($rows;$labels[0];$reference_roles[0];"reference") as $ref_margin |
+device_roles($rows;$labels[0];$clause_roles[0];"clause") as $cls_margin |
 require(($rows|length)==102 and ($sup|length)==96 and
    all($arms[]; . as $a | ($writer_rows[$a]|length)==
       (if (["reference","clause","no_read"]|index($a))!=null then 102 else 96 end)) and
@@ -182,5 +199,10 @@ require(($rows|length)==102 and ($sup|length)==96 and
  roles_by_cell:transitions($sup;"reference";"clause"),
  values_by_cell:transitions($sup;"supplied";"veto"),
  role_pairs:($sup|pair("reference";"clause")),value_pairs:($sup|pair("supplied";"veto")),
+ role_margins:([range($ref_margin|length) as $i | $ref_margin[$i] as $ref | $cls_margin[$i] as $cls |
+   {ordinal:$ref.ordinal, family:$ref.family, exclusion_first:$ref.exclusion_first,
+    reference:[$ref.requested.contrast,$ref.excluded.contrast],
+    clause:[$cls.requested.contrast,$cls.excluded.contrast],
+    clause_bounds:[$cls.requested.clause_evidence.span,$cls.excluded.clause_evidence.span]}]),
  unsupported:negatives($rows),
  verification:$verification[0],rows:$rows}

@@ -32,7 +32,8 @@ writer_args=()
 observed_args=()
 source_args=()
 audit_args=()
-inputs=(capture/fixed-roles-verified.json grades/{forced-gold,forced-wrong,wrong-key,controls-verified}.json)
+inputs=(capture/{fixed-roles-verified,role-reference,role-treatment}.json
+    grades/{forced-gold,forced-wrong,wrong-key,controls-verified}.json)
 for spec in reference:reference clause:treatment supplied:supplied veto:supplied-veto wrong_role:wrong-role no_read:no-read; do
     key=${spec%:*} file=${spec#*:}
     inputs+=("grades/$file-writer.json" "grades/$file.json")
@@ -64,6 +65,8 @@ jq -ne --argjson seed "$seed" --slurpfile labels "$held/grades.json" --slurpfile
    --slurpfile pieces "$out/pieces.json" --slurpfile writers "$out/writers.json" \
    --slurpfile observations "$out/observations.json" --slurpfile traces "$out/traces.json" \
    --slurpfile audits "$out/audits.json" \
+   --slurpfile reference_roles "$run/capture/role-reference.json" \
+   --slurpfile clause_roles "$run/capture/role-treatment.json" \
    --slurpfile verification "$out/verification.json" -f "$src/readout.jq" > "$out/readout.json"
 jq -f "$src/readout-compact.jq" "$out/readout.json" > "$out/compact.json"
 
