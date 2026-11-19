@@ -28,6 +28,141 @@ pub const DISCRETE_S2_SCHEMA: &str = "uor-r4.lut-discrete-trunk-s2/1";
 pub const S2_SECTION: &str = "discrete.trunk.s2.top4.log2.v1";
 const S2_HEADER_BYTES: usize = 96;
 const S2_ROW_BYTES: usize = 20;
+/// Learned read-only role selection, followed by the frozen span, WordStart and continuation operators.
+pub const DISCRETE_ROLE_SCHEMA: &str = "uor-r4.lut-discrete-role-copy/1";
+/// Version 1 stops at a period, EOS, BOS or newline. A witnessed delimiter after a nonempty copy emits EOS.
+pub const ROLE_COPY_STOPS: [u32; 4] = [16, 1, 0, 201];
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RolePolicy {
+    occurrence: [Vec<[u32; 6]>; 3],
+    span: crate::span_selector::Bank,
+    exact: crate::value_selector::ExactBank,
+    legacy_root: u32,
+}
+
+impl std::fmt::Debug for RolePolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RolePolicy")
+            .field(
+                "occurrence_sizes",
+                &self.occurrence.each_ref().map(Vec::len),
+            )
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RoleEnvelope {
+    schema: String,
+    base_sha256: String,
+    tokenizer_sha256: String,
+    policy: RolePolicy,
+}
+
+impl RolePolicy {
+    fn validate(&self) -> Result<()> {
+        self.span.validate()?;
+        self.exact.validate()?;
+        if self.legacy_root > 65535
+            || self.occurrence.iter().any(|g| {
+                g.is_empty()
+                    || g.len() > 4096
+                    || g.iter().flatten().any(|&v| v > 65535 && v != u32::MAX)
+            })
+        {
+            return Err(invalid("invalid role-copy occurrence bank or legacy root"));
+        }
+        Ok(())
+    }
+
+    fn choose(&self, ids: &[u32], roots: &[u32]) -> Result<crate::content_selector::Choice> {
+        use crate::content_selector::{Choice, WIDTH};
+        use crate::span_selector::{bounds, matched};
+        if ids.is_empty()
+            || ids.len() > WIDTH
+            || roots.len() != 4096
+            || ids.iter().any(|&v| v >= 4096)
+        {
+            return Err(invalid("role selector needs a bounded V4096 prompt"));
+        }
+        let orbit = spiralcore_orbit_roots();
+        let lut: [[u32; 16]; 16] = std::array::from_fn(|i| {
+            std::array::from_fn(|j| {
+                orbit[i]
+                    .iter()
+                    .zip(&orbit[j])
+                    .map(|(&x, &y)| u32::from(x.abs_diff(y)))
+                    .sum()
+            })
+        });
+        let distance = |a: u32, b: u32| -> u32 {
+            if a == b {
+                return 0;
+            }
+            if a == u32::MAX || b == u32::MAX {
+                return 64;
+            }
+            (0..4)
+                .map(|k| lut[((a >> (4 * k)) & 15) as usize][((b >> (4 * k)) & 15) as usize])
+                .sum()
+        };
+        let mut prior = Vec::with_capacity(ids.len());
+        let mut winner = None;
+        for q in 0..ids.len() {
+            let span = bounds(ids, &self.span.classes, q);
+            let site: [u32; 6] = std::array::from_fn(|j| {
+                let pos = if j < 3 {
+                    span.0.checked_sub(3 - j)
+                } else {
+                    Some(span.1 + 1 + j - 3)
+                };
+                pos.and_then(|i| ids.get(i))
+                    .map(|&id| roots[id as usize])
+                    .unwrap_or(u32::MAX)
+            });
+            let near = |bank: &[[u32; 6]]| {
+                bank.iter()
+                    .map(|p| {
+                        site.iter()
+                            .zip(p)
+                            .map(|(&x, &y)| distance(x, y))
+                            .sum::<u32>()
+                    })
+                    .min()
+                    .unwrap_or(0)
+            };
+            let role = near(&self.occurrence[0]) + 48u32.saturating_sub(near(&self.occurrence[1]));
+            let fact = near(&self.occurrence[2]);
+            for (f, &(other, cost)) in prior.iter().take(q.saturating_sub(1)).enumerate() {
+                if matched(ids, q, f, span, other) {
+                    let candidate = (role + cost, q, f);
+                    if winner.is_none_or(|old| candidate < old) {
+                        winner = Some(candidate);
+                    }
+                }
+            }
+            prior.push((span, fact));
+        }
+        let Some((_, q, f)) = winner else {
+            return Ok(Choice::default());
+        };
+        let mut choice = Choice {
+            query: Some(q as u32),
+            fact: Some(f as u32),
+            source: None,
+        };
+        let span =
+            crate::span_selector::resolve(ids, roots, &self.span, self.legacy_root, choice)?.span;
+        let value = crate::value_selector::decide(ids, roots, &self.span, &self.exact, span)?;
+        choice.source =
+            crate::continuation_selector::decide(ids, roots, &self.span, span, value)?.source;
+        Ok(choice)
+    }
+}
+
 /// Source snapshot schema recorded by `uor-r4-discrete`.
 pub const SNAPSHOT_SCHEMA: &str = "uor-r4.discrete-spiralcore-fbs/2";
 
@@ -932,6 +1067,7 @@ impl DiscreteTrunkTables {
 /// or 19-table `uor-r4.lut-discrete-trunk/1`) integer container.
 #[derive(Clone, Debug)]
 pub struct IntegerDiscreteModel {
+    role_policy: Option<RolePolicy>,
     tokenizer_sha256: Option<String>,
     shape: DiscreteLutShape,
     source: DiscreteLutSource,
@@ -1309,6 +1445,10 @@ impl IntegerDiscreteModel {
 
     /// Parse and validate a `UORLUT01` (`uor-r4.lut-discrete/1` or `uor-r4.lut-discrete-trunk/1`) byte buffer.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        Self::read_container(bytes, true)
+    }
+
+    fn read_container(bytes: &[u8], allow_role: bool) -> Result<Self> {
         if bytes.len() < 16 || &bytes[..8] != MAGIC {
             return Err(invalid("missing UORLUT01 magic"));
         }
@@ -1318,8 +1458,41 @@ impl IntegerDiscreteModel {
         if header_len > MAX_HEADER || 16 + (header_len as usize) > bytes.len() {
             return Err(invalid("UORLUT01 header length out of bounds"));
         }
-        let header: DiscreteLutHeader =
-            serde_json::from_slice(&bytes[16..16 + (header_len as usize)])?;
+        let end_header = 16 + header_len as usize;
+        let encoded_header = &bytes[16..end_header];
+        #[derive(Deserialize)]
+        struct Schema {
+            schema: String,
+        }
+        if serde_json::from_slice::<Schema>(encoded_header)?.schema == DISCRETE_ROLE_SCHEMA {
+            if !allow_role {
+                return Err(invalid("nested role-copy artifact"));
+            }
+            let envelope: RoleEnvelope = serde_json::from_slice(encoded_header)?;
+            let start = end_header.next_multiple_of(ALIGN);
+            let base = bytes
+                .get(start..)
+                .ok_or_else(|| invalid("missing embedded role-copy trunk"))?;
+            if envelope.schema != DISCRETE_ROLE_SCHEMA
+                || bytes[end_header..start].iter().any(|&v| v != 0)
+            {
+                return Err(invalid("invalid role-copy envelope"));
+            }
+            envelope.policy.validate()?;
+            let mut model = Self::read_container(base, false)?;
+            if model.artifact_schema() != DISCRETE_TRUNK_SCHEMA
+                || model.artifact_sha256() != envelope.base_sha256
+                || model.tokenizer_sha256() != Some(&envelope.tokenizer_sha256)
+                || model.shape.vocabulary != 4096
+            {
+                return Err(invalid("role-copy carrier or tokenizer identity mismatch"));
+            }
+            model.tokenizer_sha256 = Some(envelope.tokenizer_sha256);
+            model.artifact_sha256 = hex::encode(Sha256::digest(bytes));
+            model.role_policy = Some(envelope.policy);
+            return Ok(model);
+        }
+        let header: DiscreteLutHeader = serde_json::from_slice(encoded_header)?;
         let is_trunk = match header.schema.as_str() {
             DISCRETE_SCHEMA => false,
             DISCRETE_TRUNK_SCHEMA | DISCRETE_S2_SCHEMA => true,
@@ -1692,6 +1865,7 @@ impl IntegerDiscreteModel {
 
         let artifact_sha256 = hex::encode(Sha256::digest(bytes));
         Ok(Self {
+            role_policy: None,
             tokenizer_sha256: header.tokenizer_sha256,
             shape: header.shape,
             source: header.source,
@@ -1753,13 +1927,34 @@ impl IntegerDiscreteModel {
 
     /// Schema of the artifact loaded by this instance.
     pub fn artifact_schema(&self) -> &'static str {
-        if self.frozen_s2().is_some() {
+        if self.role_policy.is_some() {
+            DISCRETE_ROLE_SCHEMA
+        } else if self.frozen_s2().is_some() {
             DISCRETE_S2_SCHEMA
         } else if self.is_trunk_d11() {
             DISCRETE_TRUNK_SCHEMA
         } else {
             DISCRETE_SCHEMA
         }
+    }
+
+    /// Select an occurrence from the immutable prompt. A role carrier returns an empty
+    /// choice on a disabled read or on abstention; legacy models have no such policy.
+    pub fn role_choice(
+        &self,
+        prompt: &[u32],
+        read: bool,
+    ) -> Result<Option<crate::content_selector::Choice>> {
+        self.role_policy
+            .as_ref()
+            .map(|policy| {
+                if read {
+                    policy.choose(prompt, &self.packed_codebook_roots())
+                } else {
+                    Ok(crate::content_selector::Choice::default())
+                }
+            })
+            .transpose()
     }
 
     pub fn source(&self) -> &DiscreteLutSource {

@@ -1980,7 +1980,7 @@ fn run_discrete_parity(cli: &CliArgs) -> Result<()> {
         encoded = protocol
             .bind(&tokenizer)
             .map_err(|e| IntegerError::Invalid(e.to_string()))?
-            .encode_user_prefix(text, false)
+            .encode_assistant_prefix(&[Message { role: "user", content: text }])
             .tokens;
         text_mode = Some((tokenizer, protocol, digest));
         encoded.as_slice()
@@ -2003,10 +2003,25 @@ fn run_discrete_parity(cli: &CliArgs) -> Result<()> {
         )));
     }
 
+    use uor_r4_integer::discrete_d11::{ExactCopyState, DISCRETE_ROLE_SCHEMA, ROLE_COPY_STOPS};
+    let role_carrier = model.artifact_schema() == DISCRETE_ROLE_SCHEMA;
+    if role_carrier && text_mode.is_some() && cli.protocol != 2 {
+        return Err(IntegerError::Invalid("role-copy text uses literal dialogue protocol 2".into()));
+    }
+    let choice = model.role_choice(prompt, cli.read_mode == ReadMode::Enabled)?;
+    let mut cursor = ExactCopyState::new(choice.and_then(|c| c.source), prompt.len() as u32);
+    let mut copy_steps = Vec::new();
     let mut context = prompt.to_vec();
     let mut generated_ids = Vec::with_capacity(cli.max_tokens);
     for _ in 0..cli.max_tokens {
-        let prediction = model.evaluate_prefix(&context)?.prediction;
+        let ordinary = model.evaluate_prefix(&context)?.prediction;
+        let prediction = if role_carrier {
+            // Cursor addresses stay relative to the captured prompt even when the decode window slides.
+            let step = cursor.write(prompt, ordinary, ROLE_COPY_STOPS)?.finish_with_eos(true, 1);
+            cursor = step.state;
+            copy_steps.push(step.words());
+            step.emitted
+        } else { ordinary };
         generated_ids.push(prediction);
         if text_mode
             .as_ref()
@@ -2029,6 +2044,12 @@ fn run_discrete_parity(cli: &CliArgs) -> Result<()> {
         "prompt_ids": prompt,
         "generated_ids": generated_ids,
     });
+    if let Some(choice) = choice {
+        record["decoding"] = "role-only selector, WordStart, continuation and exact-copy EOS".into();
+        record["read_enabled"] = (cli.read_mode == ReadMode::Enabled).into();
+        record["selected"] = serde_json::to_value(choice)?;
+        record["copy_step_words"] = serde_json::to_value(copy_steps)?;
+    }
     if let Some((tokenizer, protocol, digest)) = text_mode {
         let visible = generated_ids.strip_suffix(&[protocol.eos_id]);
         record["schema"] = "uor-r4.uor-chat-discrete-text/1".into();
