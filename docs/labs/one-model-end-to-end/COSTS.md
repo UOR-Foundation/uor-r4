@@ -77,3 +77,38 @@ M2 changed that file, so `fbs-snapshot` was rebuilt immediately; a checkpoint tr
 change cannot be exported by tools built after it, and one trained after cannot be read by tools
 built before. The artifact itself is unaffected — it carries the shape and the table, not the
 writer's source hash.
+
+## Two silent kills, and what the run now does about them (18 Nov, late)
+
+**The run died at step 8,192 (0.22 epochs) with no error.** Not a crash signature and not resource
+pressure: no OOM in the kernel log, 42 GB of host RAM free, 40 TB free on the pool, no panic line in
+the log, and the last line was a normal step-8,192 report. Both queue scripts were gone with it. The
+signature is an external `SIGKILL` of the process group, the same one that killed the earlier attempt.
+**90 minutes of training were lost**, and with it every queued stage, because the queue lived in the
+same process tree.
+
+**Three defects in the recovery, found by testing rather than by reading:**
+
+1. **`--init-from` was never validated.** It is the only continuation path, and the whole resilience
+   design depends on it. Validated directly: a 30-step run reached `top-1 2 / nearest 30 / admitted
+   197`, and a 2-step run started `--init-from` that checkpoint began at **exactly those numbers**
+   (a fresh init gives `top-1 0 / nearest 6`). It restores weights; per the source it never reads
+   optimizer moments or the schedule, so a continued run is a **documented approximation**, not a
+   bit-identical resume.
+2. **The supervisor's arithmetic was wrong.** `latest()` returns the zero-padded directory name, and
+   `008192` is not a valid Python literal, so the computed learning rate came out empty, the CLI
+   refused the empty `--lr`, and the script fell through to the queue with the long run never
+   started. Arithmetic is now bash `10#` plus `awk`, with no Python in the loop.
+3. **Checkpoints were 90 minutes apart.** There is no separate checkpoint flag: checkpoints are
+   written at `--eval-every`. At 8,192 that is one checkpoint per 1.5 h, which is why the kill cost
+   the whole interval. It is now **2,048**, so a kill costs at most ~22 minutes, at ~16 extra
+   evaluations over the run (roughly 16 minutes).
+
+**The supervisor now logs every stage start and exit code** to `/tmp/opencode/survive.log`, continues
+from the newest checkpoint at the decayed rate rather than restarting from zero, and carries the
+kept-cell arms, the batch sweep and the address A/B in its own process so a kill of one trainer does
+not lose the queue. Twenty failed attempts are allowed before it gives up, and it records the last
+log line when an attempt writes no checkpoint.
+
+**Cost of this lesson: ~1.5 h of training plus one hour of forensics.** The check it teaches is the
+cheap one: a resilience path that has never been executed is not a resilience path.
