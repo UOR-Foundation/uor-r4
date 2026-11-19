@@ -15,8 +15,21 @@ Every feature line contains 32 whitespace-separated signed 32-bit coordinates in
 
 The saved bank is 800 bytes. Its eight-byte ASCII header is `D24ROLE1`, followed by three records in role order. Each record is a signed little-endian 64-bit count followed by 32 signed little-endian 64-bit coordinate sums. The CUDA fit kernel directly writes these integer counts and sums. Serialization preserves all 99 words. Both controls have the same learned state capacity and serialized footprint.
 
-For query vector `x`, role count `c` and role coordinate sums `s_i`, CUDA computes `n = sum_i abs(c*x_i - s_i)`. The L1 distance to the exact rational class prototype is `n/c`. The comparison uses the integer quotient and a cross product of the remainders with the opposing denominators. The row cap bounds each distance numerator by 137,438,953,440,000,000 and each remainder product below 1,000,000,000,000. The selected role is the unique minimum, with `-1` for a tied minimum. This analytic prototype fit uses supervised integer accumulation and has no gradient or optimizer state.
+For query vector `x`, role count `c` and role coordinate sums `s_i`, CUDA computes `n = sum_i abs(c*x_i - s_i)`. The L1 distance to the exact rational class prototype is `n/c`. The exact comparison uses unsigned 128-bit cross products. The row cap bounds each distance numerator by 137,438,953,440,000,000 and each cross product below 2^77. The selected role is the unique minimum, with `-1` for a tied minimum. This analytic prototype fit uses supervised integer accumulation and has no gradient or optimizer state.
 
 Prediction TSV has no header. It preserves input row order and writes the selected role followed by the three exact distance numerators in role order. Recover each distance by pairing its numerator with the corresponding count in the serialized bank. Candidate identity, clause metadata and held labels stay outside the device interface.
 
 The finite command uses only a synthetic unequal-count fixture. It checks all raw bank words against explicit counts and sums before and after reload. It checks the raw result words for unique requested, excluded and unspecified predictions, abstentions and a case where the smallest raw numerator would pick the wrong class. The same typed classifier is compiled for CUDA and for the finite host comparison. The host comparison executes only inside the finite command.
+
+## Projector and CLI refusal checks
+
+```sh
+nvcc -std=c++17 -O2 device/project.cu -o d24-project
+./d24-project identity tables.bin train.candidates.txt train.device.identity.txt
+./d24-project positional tables.bin train.candidates.txt train.device.positional.txt
+device/invalid-inputs.sh ./d24-role ./d24-project invalid
+```
+
+Use the seed's frozen D15 table packet. It contains 4096 packed-root and class pairs as little-endian u32 words, then 16 × 8 signed root bytes and 64 × 8 unsigned signed-axis codes. Each candidate line contains four half-open token offsets followed by the original tokenizer IDs, beginning with BOS. The offsets are mention start, mention end, clause start and clause end. Candidate tapes carry at most 192 tokens. Project preserves row order across 1024-row CUDA batches and writes the 32 signed coordinates separated by single spaces. A bytewise comparison with the panel's host feature output checks the entire projector boundary. The same packet and tape apply to both projector arms. The dispatch manifest binds each fitted bank to the arm, seed and train input identities before scoring.
+
+The finite fit also permutes requested and excluded TRAIN classes and checks the resulting bank, distances and calls for that permutation. The CLI refusal script independently checks malformed features, label files, banks and projector inputs. Its checks fail before CUDA initializes.

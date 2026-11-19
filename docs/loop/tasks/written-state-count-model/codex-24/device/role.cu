@@ -39,14 +39,9 @@ static_assert(sizeof(Result) == 32);
 
 __host__ __device__ int compare(int64_t left, int64_t left_count,
                                int64_t right, int64_t right_count) {
-    // Compare fractions without overflowing on the full i32 coordinate range.
-    const auto left_quotient = left / left_count;
-    const auto right_quotient = right / right_count;
-    if (left_quotient != right_quotient) {
-        return left_quotient < right_quotient ? -1 : 1;
-    }
-    const auto a = (left % left_count) * right_count;
-    const auto b = (right % right_count) * left_count;
+    // The cross products fit in 77 bits at the declared row and coordinate bounds.
+    const auto a = static_cast<unsigned __int128>(left) * right_count;
+    const auto b = static_cast<unsigned __int128>(right) * left_count;
     return (a > b) - (a < b);
 }
 
@@ -321,10 +316,29 @@ void finite(const char* path) {
         {{0, 18, 12}, 0}, {{12, 0, 6}, 1}, {{24, 18, 0}, 2},
         {{6, 9, 9}, -1}, {{18, 9, 3}, -1}, {{16, 6, 4}, 1},
     }};
+    const auto permuted = fit(train, {0, 0, 2, 2, 2, 1});
     const auto before = predict(held, fitted);
     const auto after = predict(held, reloaded);
+    const auto permuted_results = predict(held, permuted);
+    constexpr int swapped[] = {0, 2, 1};
+    for (int role = 0; role < classes; ++role) {
+        const auto& original = expected.prototype[swapped[role]];
+        const auto& actual = permuted.prototype[role];
+        require(actual.count == original.count, "Permuted label count mismatch");
+        for (int axis = 0; axis < dimensions; ++axis) {
+            require(actual.sum[axis] == original.sum[axis], "Permuted label sum mismatch");
+        }
+    }
     for (size_t row = 0; row < held.size(); ++row) {
         const auto host = classify(held[row], expected);
+        const auto& permuted_result = permuted_results[row];
+        const auto expected_role = oracle[row].role;
+        require(permuted_result.role == (expected_role < 0 ? -1 : swapped[expected_role]),
+                "Permuted prediction role mismatch");
+        for (int role = 0; role < classes; ++role) {
+            require(permuted_result.numerator[role] == oracle[row].numerator[swapped[role]],
+                    "Permuted prediction distance mismatch");
+        }
         for (const auto& result : {before[row], after[row], host}) {
             require(result.role == oracle[row].role, "Finite role mismatch");
             for (int role = 0; role < classes; ++role) {
@@ -334,7 +348,7 @@ void finite(const char* path) {
         }
     }
     std::cout << "PASS 99 state words and 24 prediction words match the finite oracle"
-              << " on host, CUDA and artifact replay\n";
+              << " on host, CUDA and artifact replay, plus permuted labels\n";
 }
 
 int main(int argc, char** argv) {
