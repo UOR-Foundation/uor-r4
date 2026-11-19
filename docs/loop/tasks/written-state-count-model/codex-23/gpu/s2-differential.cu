@@ -1,5 +1,6 @@
 #include <cuda_runtime.h>
 
+#include <charconv>
 #include <cinttypes>
 #include <cstdio>
 #include <cstdlib>
@@ -288,9 +289,10 @@ std::vector<Prefix> read_queries(const char* path, std::vector<uint16_t>& tokens
         std::istringstream words(line);
         std::string word;
         while (words >> word) {
-            size_t length = 0;
-            const unsigned long token = std::stoul(word, &length);
-            if (length != word.size() || token >= vocabulary) {
+            unsigned token = 0;
+            const auto* end = word.data() + word.size();
+            const auto parsed = std::from_chars(word.data(), end, token);
+            if (parsed.ec != std::errc{} || parsed.ptr != end || token >= vocabulary) {
                 throw std::runtime_error("invalid query token");
             }
             tokens.push_back(token);
