@@ -719,10 +719,15 @@ mod tests {
         kn_u[0] = true;
         kn_u[experts - 1] = true;
         for iterations in [0, 1, 6] {
-            let result = table.fit_em_with(&fit, &kn_u, iterations, test_bits).unwrap();
+            let result = table
+                .fit_em_with(&fit, &kn_u, iterations, test_bits)
+                .unwrap();
             for b in 0..bucket_count(2) {
                 let row = &result.weights[b * experts..(b + 1) * experts];
-                assert!(row[1..experts - 1].iter().all(|&w| w == 0), "bucket {b}: {row:?}");
+                assert!(
+                    row[1..experts - 1].iter().all(|&w| w == 0),
+                    "bucket {b}: {row:?}"
+                );
                 assert!(row[0] >= 1 && row[experts - 1] >= 1, "bucket {b}: {row:?}");
                 assert_eq!(row[0] + row[experts - 1], WEIGHT_ONE, "bucket {b}");
             }
