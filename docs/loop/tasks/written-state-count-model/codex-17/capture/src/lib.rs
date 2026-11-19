@@ -473,8 +473,8 @@ fn bind_assertions(
 }
 
 pub fn capture(args: &[String]) -> Result<()> {
-    let [base, paired, span, blind, select, chain, out] = args else {
-        return Err("capture BASE_D11 PAIRED_D11 FROZEN_SPAN_STATE BLIND_JSON PUBLIC_SELECTION CHAIN_DIR NEW_DIR".into());
+    let [base, paired, span, blind, select, chain, out, diagnostics @ ..] = args else {
+        return Err("capture BASE_D11 PAIRED_D11 FROZEN_SPAN_STATE BLIND_JSON SELECTION CHAIN_DIR NEW_DIR [PUBLIC_SELECTION RESOLVED_REQUESTED EXPECTED_SHA]".into());
     };
     let (span, blind, select, chain, out) = (
         Path::new(span),
@@ -510,11 +510,28 @@ pub fn capture(args: &[String]) -> Result<()> {
     let selections: Value = load(select, &mut hashes)?;
     let arm = selections["arm"].as_str().ok_or("missing selection arm")?;
     let enabled = match arm {
-        "public" => true,
+        "public" | "requested-diagnostic" => true,
         "no-read" => false,
-        _ => {
-            return Err("capture accepts only label-free public or disabled selection arms".into())
+        _ => return Err("unrecognized or grade-derived selection arm".into()),
+    };
+    let diagnostic = match (arm, diagnostics) {
+        ("requested-diagnostic", [public, resolved, expected_sha]) => {
+            let (public_path, resolved_path) = (Path::new(public), Path::new(resolved));
+            let public: Value = load(public_path, &mut hashes)?;
+            let parsed = requested::read_resolved(resolved_path, expected_sha)?;
+            hashes.insert(resolved.clone(), expected_sha.clone());
+            requested::verify_inputs(&paired_d11, &prompts, &blind_hash, &public, &parsed)?;
+            need(
+                selections["public_selection_sha256"] == digest(&hashes, public_path)?
+                    && selections["resolved_request_sha256"] == *expected_sha,
+                "diagnostic does not bind the untouched public selection and sealed endpoints",
+            )?;
+            Some((public, parsed))
         }
+        ("requested-diagnostic", _) | (_, [_, ..]) => {
+            return Err("wrong requested capture inputs".into())
+        }
+        (_, []) => None,
     };
     need(
         selections["schema"] == "uor-r4.ordered-role.selections/1"
@@ -579,19 +596,36 @@ pub fn capture(args: &[String]) -> Result<()> {
         .map_err(|e| format!("row {i}: {e}"))?;
         let old: [u32; 8] = get(row, "original_role_words")?;
         let raw_pair: Option<[u32; 8]> = get(&row["paired"], "role_words")?;
-        need(
-            raw_pair == enabled.then_some(old),
-            "public role words changed or disabled role not removed",
-        )?;
-        let q = if enabled {
-            pair([old[0], old[1]], ids)?
+        let expected = if let Some((public, resolved)) = &diagnostic {
+            let untouched = &rows(public)?[i];
+            let original = untouched.as_object().ok_or("wrong raw public row")?;
+            let emitted = row.as_object().ok_or("wrong diagnostic row")?;
+            need(
+                original.len() == emitted.len()
+                    && original.iter().all(|(key, value)| {
+                        matches!(key.as_str(), "paired" | "assertions")
+                            || emitted.get(key) == Some(value)
+                    }),
+                "diagnostic changed immutable public row fields",
+            )?;
+            Some(requested::expected_roles(
+                old,
+                resolved.rows[i].requested_span,
+            )?)
         } else {
-            None
+            enabled.then_some(old)
         };
-        let e = if enabled {
-            pair([old[2], old[3]], ids)?
+        need(
+            raw_pair == expected,
+            "non-request role words changed, requested endpoint differs from seal, or disabled role remains",
+        )?;
+        let (q, e) = if let Some(effective) = raw_pair {
+            (
+                pair([effective[0], effective[1]], ids)?,
+                pair([effective[2], effective[3]], ids)?,
+            )
         } else {
-            None
+            (None, None)
         };
         let content = match paired_d11.ordered_role_framing() {
             Some(framing) => framing.content(ids)?,
@@ -636,12 +670,18 @@ pub fn capture(args: &[String]) -> Result<()> {
         .iter()
         .map(|&class| class as u8)
         .collect();
-    let captures = json!({"schema":"uor-r4.legacy-assertion-candidates/1",
+    let mut captures = json!({"schema":"uor-r4.legacy-assertion-candidates/1",
         "base_d11":model,"role_d11":paired_d11.artifact_sha256(),
         "tokenizer_sha256":tokenizer,"codebook_sha256":sha(&root_bytes),
         "span_state_sha256":span_hash,"classes_sha256":sha(&class_bytes),
         "copy_stops":ROLE_COPY_STOPS,"blind_sha256":blind_hash,"selection_sha256":selection_hash,
         "arm":arm,"rows":captures});
+    if diagnostic.is_some() {
+        captures["requested_receipt"] = json!({
+            "public_selection_sha256":selections["public_selection_sha256"],
+            "resolved_request_sha256":selections["resolved_request_sha256"]
+        });
+    }
     let payload = serde_json::to_vec(&captures)?;
     let audit = json!({"schema":"uor-r4.legacy-assertion-capture-audit/1",
         "candidate_capture_sha256":sha(&payload),"writer_sha256":WRITER,
@@ -657,3 +697,4 @@ pub fn capture(args: &[String]) -> Result<()> {
 mod synthetic;
 
 pub use synthetic::fixture as synthetic_fixture;
+pub mod requested;

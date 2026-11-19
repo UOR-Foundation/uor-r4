@@ -247,6 +247,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "uor-r4-tokenizer"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "uor-value-rank-capture"
 version = "0.1.0"
 dependencies = [
@@ -255,6 +264,7 @@ dependencies = [
  "sha2",
  "uor-all-starts-finite",
  "uor-r4-integer",
+ "uor-r4-tokenizer",
 ]
 
 [[package]]
