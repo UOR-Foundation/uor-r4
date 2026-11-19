@@ -22,6 +22,12 @@ pub const MAGIC: &[u8; 8] = b"UORLUT01";
 pub const DISCRETE_SCHEMA: &str = "uor-r4.lut-discrete/1";
 /// Header schema of a 19-table discrete SpiralCore/FBS + post-rotation trunk `UORLUT01` artifact.
 pub const DISCRETE_TRUNK_SCHEMA: &str = "uor-r4.lut-discrete-trunk/1";
+/// Trunk with a frozen positional-prime successor-count section for P1 read-back.
+pub const DISCRETE_S2_SCHEMA: &str = "uor-r4.lut-discrete-trunk-s2/1";
+/// The S2 format binds the base artifact, TRAIN and selected token stream (three SHA-256s).
+pub const S2_SECTION: &str = "discrete.trunk.s2.top4.log2.v1";
+const S2_HEADER_BYTES: usize = 96;
+const S2_ROW_BYTES: usize = 20;
 /// Source snapshot schema recorded by `uor-r4-discrete`.
 pub const SNAPSHOT_SCHEMA: &str = "uor-r4.discrete-spiralcore-fbs/2";
 
@@ -378,6 +384,8 @@ struct SectionSpec {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct DiscreteLutHeader {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    tokenizer_sha256: Option<String>,
     schema: String,
     shape: DiscreteLutShape,
     matrices: Vec<serde_json::Value>,
@@ -643,9 +651,100 @@ fn orbit_root_causal_successor(prefix: &[u32], codebook_roots: &[[u8; 4]]) -> Re
     Ok(matched_succ)
 }
 
+/// Validated on load, then searched directly in its serialized representation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FrozenS2Table {
+    bytes: Box<[u8]>,
+}
+
+impl FrozenS2Table {
+    fn load(bytes: &[u8], vocabulary: usize) -> Result<Self> {
+        let rows = bytes
+            .get(S2_HEADER_BYTES..)
+            .ok_or_else(|| invalid("short S2 header"))?;
+        if !rows.len().is_multiple_of(S2_ROW_BYTES) {
+            return Err(invalid("partial S2 record"));
+        }
+        let mut previous = None;
+        let mut successors = 0;
+        for row in rows.chunks_exact(S2_ROW_BYTES) {
+            let (key, token, rank) = Self::fields(row);
+            let order = (key >> 120) as u32;
+            if order > 10 || key & (((1u128 << 120) - 1) >> (12 * order)) != 0 {
+                return Err(invalid("invalid S2 prime-route key"));
+            }
+            if token == 0
+                || usize::from(token) >= vocabulary
+                || !(1..=31).contains(&rank)
+                || row[19] != 0
+            {
+                return Err(invalid("invalid S2 token, rank or padding"));
+            }
+            if previous.is_some_and(|prior| prior >= (key, token)) {
+                return Err(invalid("unordered or duplicate S2 record"));
+            }
+            successors = if previous.is_some_and(|(prior, _)| prior == key) {
+                successors + 1
+            } else {
+                1
+            };
+            if successors > 4 {
+                return Err(invalid("S2 context exceeds four retained successors"));
+            }
+            previous = Some((key, token));
+        }
+        Ok(Self {
+            bytes: bytes.into(),
+        })
+    }
+
+    fn fields(row: &[u8]) -> (u128, u16, u8) {
+        let mut key = [0; 16];
+        key.copy_from_slice(&row[..16]);
+        (
+            u128::from_le_bytes(key),
+            u16::from_le_bytes([row[16], row[17]]),
+            row[18],
+        )
+    }
+
+    /// Three concatenated SHA-256 digests: original trunk, full TRAIN file, sampled token IDs.
+    pub fn source_digests(&self) -> &[u8] {
+        &self.bytes[..S2_HEADER_BYTES]
+    }
+
+    /// Canonical (ordered key, token, declared count) stream.
+    pub fn triples(&self) -> impl ExactSizeIterator<Item = (u128, u16, u32)> + '_ {
+        self.bytes[S2_HEADER_BYTES..]
+            .chunks_exact(S2_ROW_BYTES)
+            .map(|row| {
+                let (key, token, rank) = Self::fields(row);
+                (key, token, 1u32 << rank)
+            })
+    }
+
+    /// Read a declared count using the exact packed PrimeRouteKey and original token ID.
+    pub fn count(&self, key: u128, token: u16) -> u32 {
+        let rows = &self.bytes[S2_HEADER_BYTES..];
+        let mut low = 0;
+        let mut high = rows.len() / S2_ROW_BYTES;
+        while low < high {
+            let mid = low + (high - low) / 2;
+            let (found_key, found_token, rank) = Self::fields(&rows[mid * S2_ROW_BYTES..]);
+            match (found_key, found_token).cmp(&(key, token)) {
+                std::cmp::Ordering::Less => low = mid + 1,
+                std::cmp::Ordering::Greater => high = mid,
+                std::cmp::Ordering::Equal => return 1u32 << rank,
+            }
+        }
+        0
+    }
+}
+
 /// Optional 15-table post-rotation joint-pointer trunk (`uor-r4.lut-discrete-trunk/1`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct DiscreteTrunkTables {
+    s2: Option<FrozenS2Table>,
     step_candidates: [u8; 64],
     norm_candidates: [u8; 4],
     unigram_best_global: u16,
@@ -833,6 +932,7 @@ impl DiscreteTrunkTables {
 /// or 19-table `uor-r4.lut-discrete-trunk/1`) integer container.
 #[derive(Clone, Debug)]
 pub struct IntegerDiscreteModel {
+    tokenizer_sha256: Option<String>,
     shape: DiscreteLutShape,
     source: DiscreteLutSource,
     read_mode: DiscreteReadMode,
@@ -1222,7 +1322,7 @@ impl IntegerDiscreteModel {
             serde_json::from_slice(&bytes[16..16 + (header_len as usize)])?;
         let is_trunk = match header.schema.as_str() {
             DISCRETE_SCHEMA => false,
-            DISCRETE_TRUNK_SCHEMA => true,
+            DISCRETE_TRUNK_SCHEMA | DISCRETE_S2_SCHEMA => true,
             _ => {
                 return Err(invalid(
                     "discrete UORLUT01 artifact requires schema uor-r4.lut-discrete/1 or uor-r4.lut-discrete-trunk/1",
@@ -1306,8 +1406,10 @@ impl IntegerDiscreteModel {
         } else {
             4
         };
+        let has_s2 = header.schema == DISCRETE_S2_SCHEMA;
+        let trunk_tables = if has_s2 { 20 } else { 19 };
         if (!is_trunk && header.tables.len() != plain_tables)
-            || (is_trunk && (header.tables.len() != 19 || s.blocks != 4))
+            || (is_trunk && (header.tables.len() != trunk_tables || s.blocks != 4))
         {
             return Err(invalid(
                 "discrete UORLUT01 requires 4 tables (uor-r4.lut-discrete/1) or 19 tables with 4 blocks (uor-r4.lut-discrete-trunk/1)",
@@ -1553,7 +1655,20 @@ impl IntegerDiscreteModel {
                 DiscreteSparseCountTable::from_triples(&words, vocab)
             };
 
+            let s2 = if has_s2 {
+                let entry = &header.tables[19];
+                if entry.name != S2_SECTION {
+                    return Err(invalid("missing final S2 section"));
+                }
+                Some(FrozenS2Table::load(
+                    read_section(S2_SECTION, SectionKind::U32, entry.len)?,
+                    vocab,
+                )?)
+            } else {
+                None
+            };
             Some(DiscreteTrunkTables {
+                s2,
                 step_candidates,
                 norm_candidates,
                 unigram_best_global,
@@ -1577,6 +1692,7 @@ impl IntegerDiscreteModel {
 
         let artifact_sha256 = hex::encode(Sha256::digest(bytes));
         Ok(Self {
+            tokenizer_sha256: header.tokenizer_sha256,
             shape: header.shape,
             source: header.source,
             read_mode,
@@ -1592,6 +1708,11 @@ impl IntegerDiscreteModel {
             state_transport_knockout: false,
             pick_transport,
         })
+    }
+
+    /// Count-state read-back for a model carrying the optional frozen S2 family.
+    pub fn frozen_s2(&self) -> Option<&FrozenS2Table> {
+        self.trunk.as_ref()?.s2.as_ref()
     }
 
     /// Returns `true` when this model was loaded from a 19-table `uor-r4.lut-discrete-trunk/1` container.
@@ -1630,6 +1751,17 @@ impl IntegerDiscreteModel {
         &self.shape
     }
 
+    /// Schema of the artifact loaded by this instance.
+    pub fn artifact_schema(&self) -> &'static str {
+        if self.frozen_s2().is_some() {
+            DISCRETE_S2_SCHEMA
+        } else if self.is_trunk_d11() {
+            DISCRETE_TRUNK_SCHEMA
+        } else {
+            DISCRETE_SCHEMA
+        }
+    }
+
     pub fn source(&self) -> &DiscreteLutSource {
         &self.source
     }
@@ -1640,6 +1772,23 @@ impl IntegerDiscreteModel {
 
     pub fn artifact_sha256(&self) -> &str {
         &self.artifact_sha256
+    }
+
+    /// Tokenizer-byte identity for serving this model from text. The two released
+    /// M1 files predate the header field and are bound by their full-file digests.
+    pub fn tokenizer_sha256(&self) -> Option<&str> {
+        if let Some(digest) = &self.tokenizer_sha256 {
+            return Some(digest);
+        }
+        match self.artifact_sha256.as_str() {
+            "04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d" => {
+                Some("a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377")
+            }
+            "1b49e8bd823a1021e31de55c767111f9cf43807d3e6d007644e49281935877de" => {
+                Some("f804ecbee34e3c4e0001a737d003e3d620ba2c40722d416e7f3dd64843e2b30e")
+            }
+            _ => None,
+        }
     }
 
     pub fn cells(&self) -> &[u32] {
@@ -2475,6 +2624,7 @@ mod tests {
             span: push_section(&mut blob, &gates_bytes),
         });
         let header = DiscreteLutHeader {
+            tokenizer_sha256: None,
             schema: DISCRETE_SCHEMA.to_owned(),
             shape,
             matrices: Vec::new(),
@@ -2826,6 +2976,7 @@ mod tests {
         }
 
         let header = DiscreteLutHeader {
+            tokenizer_sha256: None,
             schema: DISCRETE_TRUNK_SCHEMA.to_owned(),
             shape,
             matrices: Vec::new(),
