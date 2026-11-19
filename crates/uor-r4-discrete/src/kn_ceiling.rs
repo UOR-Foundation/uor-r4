@@ -244,12 +244,18 @@ impl CeilingTable {
     /// Uniform Q32 weights over each bucket's present experts, the
     /// remainder on the lowest present index.
     pub fn uniform_weights(&self) -> Vec<u64> {
+        self.uniform_weights_with(&vec![true; self.experts()])
+    }
+
+    /// Uniform Q32 weights over each bucket's present experts that `on`
+    /// keeps; an expert `on` drops holds 0 in every bucket.
+    fn uniform_weights_with(&self, on: &[bool]) -> Vec<u64> {
         let experts = self.experts();
         let mut weights = vec![0u64; bucket_count(self.highest) * experts];
         for b in 0..bucket_count(self.highest) {
             let row = &mut weights[b * experts..(b + 1) * experts];
             let live: Vec<usize> = (0..experts)
-                .filter(|&e| present(self.highest, b, e))
+                .filter(|&e| on[e] && present(self.highest, b, e))
                 .collect();
             let share = WEIGHT_ONE / live.len() as u64;
             for &e in &live {
@@ -317,6 +323,35 @@ impl CeilingTable {
         iterations: u32,
         bits: impl Fn(u64) -> std::result::Result<u64, E>,
     ) -> Result<CeilingFit> {
+        self.fit_em_with(fit, &vec![true; self.experts()], iterations, bits)
+    }
+
+    /// Integer EM over the fit targets with only the experts `experts` keeps:
+    /// an expert it drops is absent in every bucket, at weight 0 from the
+    /// start and never lifted to 1. All experts on is `fit_em`. Refuses a
+    /// mask of the wrong length and one that leaves a bucket no expert.
+    pub fn fit_em_with<E: std::fmt::Display>(
+        &self,
+        fit: &[bool],
+        experts: &[bool],
+        iterations: u32,
+        bits: impl Fn(u64) -> std::result::Result<u64, E>,
+    ) -> Result<CeilingFit> {
+        let on = experts;
+        if on.len() != self.experts() {
+            return Err(invalid(format!(
+                "the expert mask holds {} entries, not {}",
+                on.len(),
+                self.experts()
+            )));
+        }
+        if let Some(b) = (0..bucket_count(self.highest))
+            .find(|&b| !(0..on.len()).any(|e| on[e] && present(self.highest, b, e)))
+        {
+            return Err(invalid(format!(
+                "the expert mask leaves bucket {b} no expert"
+            )));
+        }
         if fit.len() != self.targets() {
             return Err(invalid(format!(
                 "fit selects {} targets of {}",
@@ -326,7 +361,7 @@ impl CeilingTable {
         }
         let experts = self.experts();
         let buckets = bucket_count(self.highest);
-        let mut weights = self.uniform_weights();
+        let mut weights = self.uniform_weights_with(on);
         let mut fit_bits = vec![self.fit_bits_sum(&weights, fit, &bits)?];
         for _ in 0..iterations {
             let mut resp = vec![0u128; buckets * experts];
@@ -347,7 +382,7 @@ impl CeilingTable {
             for b in (0..buckets).filter(|&b| seen[b]) {
                 let r = &resp[b * experts..(b + 1) * experts];
                 let row = &mut weights[b * experts..(b + 1) * experts];
-                self.update_bucket(b, r, row);
+                self.update_bucket(b, on, r, row);
             }
             fit_bits.push(self.fit_bits_sum(&weights, fit, &bits)?);
         }
@@ -357,7 +392,7 @@ impl CeilingTable {
     /// One bucket's M step: w_e = floor(R_e * 2^32 / sum R), the remainder
     /// to the largest weight, then every present expert at 0 lifted to 1
     /// from the largest weight. A bucket with sum R = 0 keeps its weights.
-    fn update_bucket(&self, b: usize, r: &[u128], row: &mut [u64]) {
+    fn update_bucket(&self, b: usize, on: &[bool], r: &[u128], row: &mut [u64]) {
         let total: u128 = r.iter().sum();
         if total == 0 {
             return;
@@ -369,7 +404,7 @@ impl CeilingTable {
         let top = largest(row);
         row[top] += WEIGHT_ONE - assigned;
         for e in 0..row.len() {
-            if present(self.highest, b, e) && row[e] == 0 {
+            if on[e] && present(self.highest, b, e) && row[e] == 0 {
                 let top = largest(row);
                 row[top] -= 1;
                 row[e] = 1;
@@ -666,6 +701,37 @@ mod tests {
         weights[b * 4 + 1] = 1;
         weights[b * 4 + 3] = 1;
         assert_eq!(table.mixed_masses(&weights).unwrap()[0], KN_BASE_MASS >> 32);
+    }
+
+    #[test]
+    fn an_expert_mask_keeps_dropped_experts_at_zero() {
+        let table = fixture();
+        let experts = table.experts();
+        let fit: Vec<bool> = (0..table.targets()).map(|t| t % 5 != 0).collect();
+        // All experts on is fit_em.
+        let all = vec![true; experts];
+        assert_eq!(
+            table.fit_em_with(&fit, &all, 6, test_bits).unwrap(),
+            table.fit_em(&fit, 6, test_bits).unwrap()
+        );
+        // KN and U only: every ML weight stays 0, KN + U sum to one.
+        let mut kn_u = vec![false; experts];
+        kn_u[0] = true;
+        kn_u[experts - 1] = true;
+        for iterations in [0, 1, 6] {
+            let result = table.fit_em_with(&fit, &kn_u, iterations, test_bits).unwrap();
+            for b in 0..bucket_count(2) {
+                let row = &result.weights[b * experts..(b + 1) * experts];
+                assert!(row[1..experts - 1].iter().all(|&w| w == 0), "bucket {b}: {row:?}");
+                assert!(row[0] >= 1 && row[experts - 1] >= 1, "bucket {b}: {row:?}");
+                assert_eq!(row[0] + row[experts - 1], WEIGHT_ONE, "bucket {b}");
+            }
+        }
+        // A wrong length and a mask that leaves a bucket nothing are refused.
+        assert!(table.fit_em_with(&fit, &all[1..], 1, test_bits).is_err());
+        let mut ml_2 = vec![false; experts];
+        ml_2[3] = true;
+        assert!(table.fit_em_with(&fit, &ml_2, 1, test_bits).is_err());
     }
 
     #[test]
