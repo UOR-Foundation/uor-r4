@@ -155,14 +155,24 @@ fn splitmix64(state: &mut u64) -> u64 {
 /// value in `[2, i]` (modulo draw, so very slightly non-uniform), and swap
 /// rows `i` and `j`.
 pub fn permute_code_rows<const B: usize>(codes: &[[u16; B]], seed: u64) -> Vec<[u16; B]> {
-    let mut out = codes.to_vec();
+    row_permutation(codes.len(), seed)
+        .into_iter()
+        .map(|from| codes[from])
+        .collect()
+}
+
+/// claude-439: the permutation `permute_code_rows` applies, as source row
+/// indices: row i of the permuted table is row `perm[i]` of the original. The
+/// same draw, so a device table permuted by it matches the permuted codes.
+pub fn row_permutation(len: usize, seed: u64) -> Vec<usize> {
+    let mut perm: Vec<usize> = (0..len).collect();
     let mut state = seed;
-    for i in (3..out.len()).rev() {
+    for i in (3..len).rev() {
         let r = splitmix64(&mut state);
         let j = 2 + (r % (i as u64 - 1)) as usize;
-        out.swap(i, j);
+        perm.swap(i, j);
     }
-    out
+    perm
 }
 
 /// The P+ stream: each record `BOS body EOS` becomes `BOS c1 c1 c2 c2 ... ck
@@ -352,6 +362,29 @@ mod tests {
         assert_eq!(short[8].class, 0);
         assert!(code_pick_rows(&[2u16, 3, 1], &codes, 8).is_err());
         assert!(code_pick_rows(&[0u16, 10, 1], &codes, 8).is_err());
+    }
+
+    /// claude-439: `row_permutation` drives `permute_code_rows`, which still
+    /// equals the in-place shuffle of 0988dc0f0 (written out here) at every
+    /// length and on the run's seed.
+    #[test]
+    fn row_permutation_drives_permute_code_rows() {
+        for len in [0usize, 1, 2, 3, 4, 9, 64, 4096] {
+            let codes: Vec<[u16; 2]> = (0..len).map(|i| [i as u16, (i * 7) as u16]).collect();
+            for seed in [0u64, 1, 439] {
+                let mut want = codes.clone();
+                let mut state = seed;
+                for i in (3..want.len()).rev() {
+                    let r = splitmix64(&mut state);
+                    let j = 2 + (r % (i as u64 - 1)) as usize;
+                    want.swap(i, j);
+                }
+                assert_eq!(permute_code_rows(&codes, seed), want);
+                let perm = row_permutation(len, seed);
+                let gathered: Vec<[u16; 2]> = perm.iter().map(|&from| codes[from]).collect();
+                assert_eq!(gathered, want);
+            }
+        }
     }
 
     #[test]
