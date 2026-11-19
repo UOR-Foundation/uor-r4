@@ -22,6 +22,12 @@ struct Trunk {
     Counts counts[6];
 };
 
+struct Observation {
+    U length, query, read, recurrence, successor, winner, winner_roots, output_roots;
+    W score;
+    int before[32];
+};
+
 __device__ U count_at(Counts table, U key, U token) {
     U low = 0, high = table.size;
     while (low < high) {
@@ -96,7 +102,8 @@ __global__ void encode_prefixes(const int *table, const U *ids, U words, int *ou
 
 __global__ void context_vectors(const U *routes, const int *gates, const U *ids,
                                 const int *input, const U *plans, const U *g, const U *spec,
-                                const U *roots, Trunk trunk, int *out, U *status) {
+                                const U *roots, Trunk trunk, int *out,
+                                Observation *observations, U *status) {
     const U row = blockIdx.x * blockDim.x + threadIdx.x;
     if (row >= spec[4] || *status != 0) return;
     int vector[MAX_WIDTH];
@@ -140,13 +147,28 @@ __global__ void context_vectors(const U *routes, const int *gates, const U *ids,
             best_unigram = unigram;
         }
     }
+    U output_code = 0;
     for (U block = 0; block < 4; ++block) {
         const U destination = (roots[best] >> (4 * block)) & 15;
         const U frame = g[BFS + 16 * read_roots[block] + destination];
         int rotated[8];
         action(g, frame, vector + 8 * block, rotated);
         const U output_root = snap(rotated, 1, g);
+        output_code |= output_root << (4 * block);
         for (U d = 0; d < 8; ++d) out[row * 32 + block * 8 + d] = static_cast<int>(g[8 * output_root + d]);
+    }
+    if (observations) {
+        Observation &trace = observations[row];
+        trace.length = length;
+        trace.query = query;
+        trace.read = read_code;
+        trace.recurrence = rec_code;
+        trace.successor = successor;
+        trace.winner = best;
+        trace.winner_roots = roots[best];
+        trace.output_roots = output_code;
+        trace.score = best_score;
+        for (U d = 0; d < 32; ++d) trace.before[d] = vector[d];
     }
 }
 
@@ -182,7 +204,7 @@ template <typename T = U> std::vector<T> words(std::istream &input, size_t size)
     return result;
 }
 
-void run(const char *packet, const char *output) {
+void run(const char *packet, const char *output, const char *trace) {
     static_assert(sizeof(U) == 4 && sizeof(int) == 4 && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__);
     std::ifstream input(packet, std::ios::binary);
     char magic[8];
@@ -219,11 +241,17 @@ void run(const char *packet, const char *output) {
     require(input.peek() == std::char_traits<char>::eof() && !input.bad(), "trailing context packet");
     std::ifstream existing(output);
     require(!existing, "output must be fresh");
+    if (trace) {
+        std::ifstream existing_trace(trace);
+        require(!existing_trace && std::string(output) != trace, "trace must be a fresh distinct path");
+    }
 
     Buffer<U> gpu_spec(spec), gpu_g(g), gpu_routes(routes), gpu_plans(plans), gpu_ids(ids);
     Buffer<U> gpu_steps(steps), gpu_normalization(normalization), gpu_unigram(unigram);
     Buffer<int> gpu_gates(gates), gpu_table(table), gpu_input(ids.size() * 32), gpu_out(rows * 32);
     Buffer<U> gpu_roots(vocab), gpu_status(std::vector<U>{0});
+    std::unique_ptr<Buffer<Observation>> gpu_trace;
+    if (trace) gpu_trace = std::make_unique<Buffer<Observation>>(rows);
     Trunk trunk{gpu_steps.ptr, gpu_normalization.ptr, gpu_unigram.ptr, {}};
     std::array<std::unique_ptr<Buffer<U>>, 6> storage;
     for (size_t i = 0; i < count_tables.size(); ++i) {
@@ -239,7 +267,8 @@ void run(const char *packet, const char *output) {
     check(cudaGetLastError());
     context_vectors<<<(rows + threads - 1) / threads, threads>>>(
         gpu_routes.ptr, gpu_gates.ptr, gpu_ids.ptr, gpu_input.ptr, gpu_plans.ptr,
-        gpu_g.ptr, gpu_spec.ptr, gpu_roots.ptr, trunk, gpu_out.ptr, gpu_status.ptr);
+        gpu_g.ptr, gpu_spec.ptr, gpu_roots.ptr, trunk, gpu_out.ptr,
+        gpu_trace ? gpu_trace->ptr : nullptr, gpu_status.ptr);
     check(cudaGetLastError());
     require(gpu_status.read(1).front() == 0, "context CUDA rejected packet or read");
     const auto vectors = gpu_out.read(rows * 32);
@@ -251,17 +280,34 @@ void run(const char *packet, const char *output) {
     }
     out.close();
     require(out.good(), "could not write context vectors");
+    if (trace) {
+        const auto observations = gpu_trace->read(rows);
+        std::ofstream out_trace(trace);
+        for (U row = 0; row < rows; ++row) {
+            const auto &entry = observations[row];
+            out_trace << row_ids[row] << '\t' << entry.length << '\t' << entry.query << '\t'
+                      << entry.read << '\t' << entry.recurrence << '\t';
+            if (entry.successor == ABSENT) out_trace << "NA";
+            else out_trace << entry.successor;
+            out_trace << '\t' << entry.winner << '\t' << entry.score << '\t'
+                      << entry.winner_roots << '\t' << entry.output_roots;
+            for (const int coordinate : entry.before) out_trace << '\t' << coordinate;
+            out_trace << '\n';
+        }
+        out_trace.close();
+        require(out_trace.good(), "could not write context observations");
+    }
 }
 
 } // namespace
 
 int main(int argc, char **argv) {
-    if (argc != 3) {
-        std::cerr << "usage: d25-context PACKET OUT_TSV\n";
+    if (argc != 3 && argc != 4) {
+        std::cerr << "usage: d25-context PACKET OUT_TSV [TRACE_TSV]\n";
         return 1;
     }
     try {
-        run(argv[1], argv[2]);
+        run(argv[1], argv[2], argc == 4 ? argv[3] : nullptr);
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';
         return 1;

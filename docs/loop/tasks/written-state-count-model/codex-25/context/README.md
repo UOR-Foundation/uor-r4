@@ -47,3 +47,19 @@ The output has no header. Each TSV row consists of the row ID and all 32
 signed post-gate coordinates in block order. The reference consists of the
 same original row IDs and native serving context words. Candidate selection,
 writing, and panel grading are outside this diagnostic.
+
+## Optional forensic trace
+
+Pass a third argument to write the pre-gate Relation vector and joint-pointer
+gate observations alongside the ordinary post-gate output.
+
+```sh
+./d25-context context.packet device-context.tsv gate-trace.tsv
+```
+
+The trace has no header. Its columns are row ID, valid prefix length, query
+token ID, packed Relation roots, packed recurrence roots, causal successor
+token ID (`NA` if absent), winning token ID, winning score, packed winning
+token roots, packed output roots, and 32 signed pre-gate Relation coordinates.
+Packed roots use four nibbles in block order from low to high. See the
+[locked Wick readback](FORENSIC.md) for the 21 frozen D25 prefixes.
