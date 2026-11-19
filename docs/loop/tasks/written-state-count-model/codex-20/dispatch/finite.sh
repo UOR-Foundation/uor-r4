@@ -39,6 +39,6 @@ cmp "$out/rebuilt-assertion-agreement.json" "$out/upstream/treatment.json"
 if "$prior/bin/uor-chat" --discrete "$stage/artifacts/seed1/user-text-only.d11" --tokenizer "$tokenizer" --protocol 2 --temperature 0 --max-tokens 16 --read-mode enabled --say "$text" > "$out/old-reader.log" 2>&1; then
     exit 1
 fi
-grep -Eiq 'missing field|unknown (variant|field)|unsupported.*schema|unrecognized.*schema' "$out/old-reader.log"
+grep -Eiq 'missing field|unknown (variant|field)|unsupported.*schema|unrecognized.*schema|requires schema' "$out/old-reader.log"
 sha256sum "$out"/{device.txt,planted.json,upstream/finite.sha256,old-reader.log,rebuilt-assertion-agreement.json,user-text-only.json,*-role.json} > "$out/finite.sha256"
 phase=done
