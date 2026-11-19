@@ -27,8 +27,8 @@ that: the D11 codes beat it by only 24 to 232 micro-BPB.
   distance > 0 class, the same in A1 and C3.
 - **Most of A1's lead over exact pairs is "fire on the nearest pair", not geometry** [claude]. A1 beats C2 (exact
   pairs only, distance 0) by 4,318 to 5,232 micro-BPB. C3 fires on as many targets with scrambled
-  codes and lands 126 micro-BPB from A1, so nearly all of that 4,774 point gain comes from firing at
-  distance > 0 at all, under any code map.
+  codes and lands 126 micro-BPB from A1. So C3 suggests that nearly all of that 4,774 point gain
+  comes from firing at distance > 0 at all, under any code map; no arm measures that directly.
 - **B2 tests the distance-0 path only** (the sheet's scope note). P+'s second copies are distance-0
   copies, so the read at distance > 0 rests on B1's equality with the host oracle at 1‰.
 - **The cap was raised outside the memory rule** [claude]. The rule names the 100% run only. At
@@ -166,12 +166,11 @@ changes no model state, operator or artifact.
 - **A decision card for P1's copy path:** C2 (exact pairs, host, cheap) against A1 (D11 codes, device
   read, 4,318 to 5,232 micro-BPB better). C3 shows that the codes themselves add little over any code
   map, so a cheaper nearest-pair fallback may hold most of A1's lead. That is an untested hypothesis.
-- **Whether the geometry edge closes at larger C.** A1 − C3 narrowed at every size. A run on a C
-  C cannot grow past D87's TRAIN, so the trend can only be read from these four sizes or another
+- **Whether the geometry edge closes at larger C.** A1 − C3 narrowed at every size. C cannot grow past D87's TRAIN, so the trend can only be read from these four sizes or another
   corpus.
 - **The distance > 0 class gets 10‰ of weight.** A per-distance bucket split (distance 1, 2, 3+)
   would show whether near codes carry more than far ones. It is not in this sheet.
-- **The memory rule's linear estimate** should not be reused as is: it doubled the real peak here.
+- **The memory rule's linear estimate** should not be reused as is: it was about 1¾ times the real peak here.
 - **The ORDER's gate negative** has no record; a unit that reads a saved
   Pick-mode D11 artifact would need it.
 - Carried minors from the code review: `oracle_rows` keeps block 0 only (test-only); `repeat_chunks`
