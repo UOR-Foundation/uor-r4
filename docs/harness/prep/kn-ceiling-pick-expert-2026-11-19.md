@@ -55,7 +55,7 @@ Where each part runs:
 ## Bar (pre-registered)
 
 - **B1 (identity):** step 2 passes. The CUDA Pick, C2 and C3 equal their host versions at every target of the 1‰ slice. The lookups pass their host check.
-- **B2 (P+, the instrument can show a copy gain):** at every size, A1's bits on DEV⁺'s second copies are at most half of A0's bits on the same targets. If B2 fails, the instrument is broken and no arm's result is read (L-007). A plus span with no second-copy target, or A0 bits of 0 there, fails the run: B2 never passes on nothing compared. Every second copy sits at distance 0, so B2 tests the distance-0 path only; the read at distance above 0 rests on B1's equality with the host oracle.
+- **B2 (P+, the instrument can show a copy gain):** at every size, A1's bits on DEV⁺'s second copies are at most half of A0's bits on the same targets. If B2 fails, the instrument is broken and no arm's result is read (L-007). A plus span with no second-copy target, or A0 bits of 0 there, fails the run: B2 never passes on nothing compared. A second copy's targets at offset 2 or more sit at distance 0; the first two straddle the copy boundary, so their query pair has no earlier exact match and is not a copy target (about 2 in 64 of B2's targets). So B2 tests the distance-0 path only; the read at distance above 0 rests on B1's equality with the host oracle.
 - **B3 (EM):**
   - each fit's last `fit_bits` is at most its first;
   - each fit's scored bits on R equal its last `fit_bits`;
@@ -149,4 +149,6 @@ FIT history:
 - Round 2, 19 Nov, a fresh-context non-author reviewer at `42872c98df2276d8197e7131ee035e24212689f9`: FIT WITH CHANGES. Every round-1 change was present, and the sheet and code agreed. It asked for B2 to fail on an empty second-copy set and for the bands' record count to be checked. Both are in the next head, each with a test that fails without it. Round 2 did not read `kn_pick.rs` or `pick_device.rs`; round 3 reads them.
 - Note from round 2: every size writes a `reading` label, but the reading is taken at 100% only. The REPORT never quotes a 1% or 10% label as the reading.
 
-TEST FITNESS: PENDING - round 2's changes are made; round 3, a fresh-context non-author FIT, reads the guards and the two files round 2 did not read.
+- Round 3, 19 Nov, a fresh-context non-author reviewer at `2d5ac69b01fc1e3c22a53435af7c2616f0958625`, reading the two guards, `kn_pick.rs` and `pick_device.rs`: FIT WITH CHANGES. Its one change was to reword B2's scope note, because the first two targets of each second copy are not distance-0 copies. It said the reworded note turns the verdict to FIT, and the note is reworded at the next head, a document-only change. Its open minor: no test pins the `check_band_records` call site. So step 2's job checks that `band_records` is 2,670 in the JSON.
+
+TEST FITNESS: FIT - round 3's one requested change, the B2 scope note, is made; the code is as reviewed at `2d5ac69b01fc1e3c22a53435af7c2616f0958625`.
