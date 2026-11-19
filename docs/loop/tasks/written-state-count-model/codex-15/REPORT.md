@@ -46,3 +46,7 @@ The native-space cycle and research-architect review bound the integer state, sh
 ## Still open
 
 The strongest local explanation joins the role decision, the assertion-local value start and the unchanged exact writer. The 24 misses all sharing one adjective prevents estimating lexical generalization. An earlier continuation study recovered genuine long connectors and also lost starts for “old lamp” and “old ring.” A blanket rollback would discard measured gains. Test opposing boundary roles on new material before fitting the next geometric discriminator. The whole-model roadmap also requires a deployable count baseline, equal-byte geometric predictive gain and self-fed prose and reasoning on one native artifact. [Decision](DECISION.md) · [Historical continuation tradeoff](../codex-7/REPORT.md) · [Program closure plan](../codex-9/CLOSURE-PLAN.md)
+
+## Plain summary
+
+The current client answered one family of questions reliably and missed the other three. Telling it whom the question meant fixed most of the replies. On the remaining cases the model found the right fact and copied the last word of the item, having discarded its color before it began writing. We can now test whether the model can learn when to keep that leading word while retaining its earlier successes with longer connectors.
