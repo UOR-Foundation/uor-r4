@@ -8,7 +8,9 @@ test "${stage:0:1}" = /
 test "${receipt:0:1}" = /
 cd "$stage"
 mkdir "$receipt"
-export PATH="$HOME/.cargo/bin:$PATH" CARGO_TARGET_DIR="$stage/target"
+export PATH="$HOME/.cargo/bin:$PATH"
+target="$stage/target/$(basename "$receipt")"
+mkdir "$target"
 src="$stage/sources"
 tasks="$src/docs/loop/tasks/written-state-count-model"
 cuda=/usr/local/cuda/bin
@@ -25,12 +27,18 @@ if "$cuda/cuobjdump" --list-ptx bin/requested-role-sm89 > "$receipt/ptx.txt" 2> 
 else
     grep -Fxq 'cuobjdump info    : File contains no PTX data' "$receipt/ptx.stderr"
 fi
-cargo build --offline --locked --release --manifest-path "$src/Cargo.toml" -p uor-r4-integer --features serving-wasm --bin uor-chat --bin pack-all-starts > "$receipt/client-build.log" 2>&1
-for package in codex-19/run codex-19/operator codex-17/regrade; do
-    cargo build --offline --locked --release --manifest-path "$tasks/$package/Cargo.toml" >> "$receipt/tools-build.log" 2>&1
+CARGO_TARGET_DIR="$target/client" cargo build --offline --locked --release --manifest-path "$src/Cargo.toml" -p uor-r4-integer --features serving-wasm --bin uor-chat --bin pack-all-starts > "$receipt/client-build.log" 2>&1
+for tool in uor-chat pack-all-starts; do
+    install -m 500 "$target/client/release/$tool" "bin/$tool"
 done
-for tool in uor-chat pack-all-starts requested-role-device project-role fresh-validity-check; do
-    install -m 500 "$CARGO_TARGET_DIR/release/$tool" "bin/$tool"
+for package in codex-19/run codex-19/operator codex-17/regrade; do
+    case "$package" in
+        codex-19/run) tool=project-role ;;
+        codex-19/operator) tool=requested-role-device ;;
+        codex-17/regrade) tool=fresh-validity-check ;;
+    esac
+    CARGO_TARGET_DIR="$target/$tool" cargo build --offline --locked --release --manifest-path "$tasks/$package/Cargo.toml" >> "$receipt/tools-build.log" 2>&1
+    install -m 500 "$target/$tool/release/$tool" "bin/$tool"
 done
 sha256sum --status --check "$receipt/source.sha256"
 sha256sum bin/{uor-chat,pack-all-starts,requested-role-device,requested-role-sm89,project-role,fresh-validity-check} > "$receipt/executables.sha256"

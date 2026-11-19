@@ -32,6 +32,11 @@ text='Mira kept blue green. Nora kept red. Please give what Mira collected befor
 cmp "$out/current.witness.json" "$prior/finite/public/ordered.witness.json"
 phase=treatment-client
 tokenizer="$old/assets/tokenizer-seed1.json"
+if "$prior/bin/uor-chat" --discrete "$stage/artifacts/seed1/assertion-agreement.d11" --tokenizer "$tokenizer" --protocol 2 --temperature 0 --max-tokens 16 --read-mode enabled --say "$text" > "$out/legacy-on-treatment.log" 2>&1; then
+    echo 'legacy reader silently accepted the new treatment schema' >&2
+    exit 1
+fi
+test -s "$out/legacy-on-treatment.log"
 "$stage/bin/uor-chat" --discrete "$stage/artifacts/seed1/assertion-agreement.d11" --tokenizer "$tokenizer" --protocol 2 --temperature 0 --max-tokens 16 --read-mode enabled --say "$text" > "$out/treatment.json"
 jq -c --arg text "$text" '[{text:$text,prefix:.prompt_ids}]' "$out/treatment.json" > "$out/treatment-blind.json"
 (
@@ -43,5 +48,5 @@ jq -en --slurpfile client "$out/treatment.json" --slurpfile device "$out/treatme
     $client[0].paired.role_words==$device[0].rows[0].role_words and
     ($client[0].generated_ids|length)>0' > "$out/arm-parity.json"
 (cd "$out/original" && sha256sum --status --check outputs.sha256)
-sha256sum "$out"/{device.txt,role.json,current.witness.json,treatment.json,treatment-blind.json,treatment-role.json,arm-parity.json,original/outputs.sha256} > "$out/finite.sha256"
+sha256sum "$out"/{device.txt,role.json,current.witness.json,legacy-on-treatment.log,treatment.json,treatment-blind.json,treatment-role.json,arm-parity.json,original/outputs.sha256} > "$out/finite.sha256"
 phase=done

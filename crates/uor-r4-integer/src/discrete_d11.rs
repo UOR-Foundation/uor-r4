@@ -39,6 +39,7 @@ const S2_ROW_BYTES: usize = 20;
 pub const DISCRETE_ROLE_SCHEMA: &str = "uor-r4.lut-discrete-role-copy/1";
 /// Frozen paired carrier with an explicit learned all-starts onset bank.
 pub const DISCRETE_ALL_STARTS_SCHEMA: &str = "uor-r4.lut-discrete-all-starts/1";
+const DISCRETE_REQUESTED_OCCURRENCE_SCHEMA: &str = "uor-r4.lut-discrete-requested-occurrence/1";
 /// A learned requested/excluded role bank, assertion-local value read and exact-copy agreement.
 pub const DISCRETE_PAIRED_SCHEMA: &str = "uor-r4.lut-discrete-paired-copy/1";
 /// Positional or identity Cl(0,6) role state with the frozen paired writer.
@@ -89,6 +90,13 @@ impl RolePolicy {
 #[serde(rename_all = "snake_case")]
 enum RequestedPolicy {
     AssertionAgreement(RoleFraming),
+}
+
+fn onset_schema(requested: Option<&RequestedPolicy>) -> &'static str {
+    match requested {
+        Some(RequestedPolicy::AssertionAgreement(_)) => DISCRETE_REQUESTED_OCCURRENCE_SCHEMA,
+        None => DISCRETE_ALL_STARTS_SCHEMA,
+    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -1609,7 +1617,7 @@ fn pack_all_starts(
 ) -> Result<Vec<u8>> {
     validate_onset_bank(parent, span_state, bank, profile, requested_policy.clone())?;
     let header = serde_json::to_vec(&OnsetEnvelope {
-        schema: DISCRETE_ALL_STARTS_SCHEMA.to_owned(),
+        schema: onset_schema(requested_policy.as_ref()).to_owned(),
         parent_sha256: parent.artifact_sha256.clone(),
         span_sha256: hex::encode(Sha256::digest(span_state)),
         bank_sha256: hex::encode(Sha256::digest(bank)),
@@ -1813,11 +1821,14 @@ impl IntegerDiscreteModel {
             schema: String,
         }
         let schema = serde_json::from_slice::<Schema>(encoded_header)?.schema;
-        if schema == DISCRETE_ALL_STARTS_SCHEMA {
+        if schema == DISCRETE_ALL_STARTS_SCHEMA || schema == DISCRETE_REQUESTED_OCCURRENCE_SCHEMA {
             if !allow_role {
                 return Err(invalid("nested onset artifact"));
             }
             let envelope: OnsetEnvelope = serde_json::from_slice(encoded_header)?;
+            if schema != onset_schema(envelope.requested_policy.as_ref()) {
+                return Err(invalid("requested policy and onset artifact schema disagree"));
+            }
             let start = end_header.next_multiple_of(ALIGN);
             let payload = bytes
                 .get(start..)
@@ -2437,8 +2448,8 @@ impl IntegerDiscreteModel {
         if let Some(mixer) = &self.count_mixer {
             mixer.schema()
         } else if let Some(policy) = &self.role_policy {
-            if policy.onset.is_some() {
-                return DISCRETE_ALL_STARTS_SCHEMA;
+            if let Some(onset) = &policy.onset {
+                return onset_schema(onset.requested_policy.as_ref());
             }
             match policy.paired.as_ref().map(|paired| &paired.roles) {
                 Some(paired_copy::Roles::Frozen(_)) => DISCRETE_PAIRED_SCHEMA,
