@@ -222,9 +222,8 @@ mod gpu {
             context: usize,
             keep_words: &dyn Fn(usize) -> bool,
         ) -> Result<DeviceTape, Failure> {
-            Ok(self
-                .rows_batched(stream, context, keep_words, READ_BATCH)?
-                .0)
+            let (tape, _times) = self.rows_batched(stream, context, keep_words, READ_BATCH)?;
+            Ok(tape)
         }
 
         /// `rows` with `batch` windows per device call, and the time spent in each part

@@ -121,8 +121,8 @@ Where each part runs:
   - the raw count at 100% is about 7 min on the 4090;
   - each fit on R is about 3.5 min, five fits about 17 min;
   - P+'s two fits on R⁺ (about 32.6M targets) are about 14 min;
-  - the Pick reads are minutes. (Wrong at 256 windows per call: measured about 5 h per size. See the read amendment; at 4096 per call, about 1 h per size.)
-  - So about 45 min at 100%, and under two hours for every size together.
+  - the Pick reads are minutes. (Wrong at 256 windows per call: about 5 h per size at run1's rate, about 13 h at the probe's. See the read amendment; at 4096 per call, about 1 h per size.)
+  - So about 45 min at 100%, and under two hours for every size together. (Corrected by the read amendment: the three reads cover the whole query stream at every size, so about 2 h per size and about 8 h for every size together.)
 - **Host memory:** the P+ span (R⁺ and DEV⁺, about 54M targets) is the largest. Its lookups are about 7 GB, and its 14-expert table about 6 GB, so the peak is about 15 GB.
   - wick has 59 GB, about 26 GB of it free on 19 Nov beside the other jobs.
   - The arms are built one at a time, and the main span is finished and freed before the P+ span is looked up.
@@ -147,10 +147,11 @@ Where each part runs:
 ## Read amendment, 19 Nov (before any band was computed)
 
 - **What happened.** Run1 at `51be0e0a8aad48b04ecc6fa63cb0b5160ae2e768` passed step 1 on wick: 60 discrete CUDA tests, the instrument suite and the trunk oracle. Step 2 (1‰ with `--check-host`) was stopped by its pid at 19:01Z, 2 h 11 min in, inside A1's read of the main span. It wrote no JSON; its claimed, empty `pick-p1.json` and its log stay in run1. No arm was fitted and no band was computed, so no DEV-tune number was seen.
-- **Why.** The read sent 256 windows per device call. A probe on wick (`device_read_is_batch_invariant`, at `8bf1ac29ef1039ba1eeb612706ceaee0536c8173`) timed 10,165 windows of the trunk: 4,390 ms at 256 per call, 1,221 ms at 1,000, 323 ms at 4,096. The forward call costs about 100 ms whatever it holds. At 256 the three reads (107M windows per size) take about 5 h at every size.
+- **Why.** The read sent 256 windows per device call. A probe on wick (`device_read_is_batch_invariant`, at `8bf1ac29ef1039ba1eeb612706ceaee0536c8173`) timed 10,165 windows of the trunk: 4,390 ms at 256 per call, 1,221 ms at 1,000, 323 ms at 4,096. The forward call costs about 100 ms whatever it holds. At 256 the three reads (107M windows per size) take about 5 h per size at run1's rate (about 6,000 windows a second, read from its memory growth) and about 13 h at the probe's (432 µs a window), at every size. At 4,096 the probe's rate (about 32 µs a window) gives about 57 min per size.
 - **The change.** The read sends `READ_BATCH` = 4,096 windows per call, the device's maximum (`MAX_BATCH_ROWS`). Each window's Identity `record` is still its ordinal in the stream, so no input to the device changes. The probe asserts the same rows and kept words at 256, 1,000 and 4,096. `the_read_fills_each_device_call` pins the constant and fails at 256.
 - **What does not change.** Every arm, control, band, bar, parameter, seed and stop rule above. B1 at step 2 still compares the device read with the host at every DEV-tune target.
-- **The rerun.** Steps 1 and 2 rerun at the new head into `run2`, then steps 3 and 4. Run1 is not a size's record: no size wrote a JSON there.
+- **The rerun.** Steps 1 and 2 rerun at the new head into `run2`, a new folder (L-002), then steps 3 and 4. Run1 is not a size's record: a deliberate stop before any fit is neither a crash nor a record, and its empty claim file is not a JSON written. So the crash rule (`<name>-retry`) and "the first JSON written at a size is its record" both apply from run2 on.
+- **The use of the constant.** `the_read_fills_each_device_call` pins `READ_BATCH`, not the call in `rows`, which a host test cannot reach. So step 2's job also requires `a1_main_rows_per_s` of at least 12,000 in the JSON (256 per call gave about 2,300 to 6,000).
 
 FIT history:
 - Round 1, 19 Nov, a fresh-context non-author reviewer at `83fd3737e14f6ade8bdefa5446659812d010c968`: FIT WITH CHANGES. Made at the next head: the code writes the reading label; C1 − A0 joins the bands, with the "not separable" row; the overall bands decide; each band is also in micro-BPB; B2's and B3's scope notes; the memory rule's two branches; the trunk is read from the HF store.
@@ -159,6 +160,6 @@ FIT history:
 
 - Round 3, 19 Nov, a fresh-context non-author reviewer at `2d5ac69b01fc1e3c22a53435af7c2616f0958625`, reading the two guards, `kn_pick.rs` and `pick_device.rs`: FIT WITH CHANGES. Its one change was to reword B2's scope note, because the first two targets of each second copy are not distance-0 copies. It said the reworded note turns the verdict to FIT, and the note is reworded at the next head, a document-only change. Its open minor: no test pins the `check_band_records` call site. So step 2's job checks that `band_records` is 2,670 in the JSON.
 
-- Round 4, 19 Nov: pending, for the read amendment only (the batch size, the probe and the run2 rerun).
+- Round 4, 19 Nov, a fresh-context non-author reviewer at `da9f4670742d4140feb66edcbe408cfd39e83743`, for the read amendment only: FIT WITH CHANGES. It found the device sees the same input for a window at every batch size (only the token ids are uploaded; padding and row plans are per row), and 4,096 inside every device limit (about 150 MB a call). Its changes, all made at the next head: a `.0` line start in `rows` is rewritten; the amendment's time figures are corrected; the stop-rule wording for run1 is added. Its minor: the test pins the constant, not its use in `rows`, so step 2's job checks the read rate.
 
-TEST FITNESS: PENDING - round 4 is pending for the read amendment; round 3 found the rest FIT at `2d5ac69b01fc1e3c22a53435af7c2616f0958625`.
+TEST FITNESS: FIT - round 4's changes are made: the `.0` line start in `rows`, the corrected times, the run1 stop-rule wording, and the read-rate check in step 2's job.
