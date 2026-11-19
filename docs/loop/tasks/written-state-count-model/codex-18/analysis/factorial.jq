@@ -20,6 +20,13 @@ def shifts($rows;$a;$b):
     [$rows[] | {ordinal:.index,
       movement:movement(.outputs[$a];.outputs[$b])}] |
     group_by(.movement) | map({key:.[0].movement,value:map(.ordinal)}) | from_entries;
+def pair($r;$a;$b):
+  {before:$a,after:$b,movements:shifts($r;$a;$b),
+   changed_source:[$r[]|select(.outputs[$a].selected_source != .outputs[$b].selected_source)|.index],
+   changed_first_emitted_id_at_same_error:[$r[] | .outputs[$a].first_error as $left |
+     .outputs[$b].first_error as $right |
+     select($left!=null and $right!=null and $left.index==$right.index
+       and $left.emitted_id!=$right.emitted_id)|.index]};
 def exact($r;$a): [$r[] | select(.outputs[$a].exact)] | length;
 def scope($r):
    {rows:($r|length),
@@ -31,7 +38,9 @@ def scope($r):
          stages:([$r[]|.outputs[$a].earliest_stage]|group_by(.)|map({stage:.[0],count:length}))}})|from_entries),
     paired:([["ordered","ranked"],["ordered","veto"],["ordered","both"],["veto","both"],
              ["ranked","both"],["ranked","veto"],["ordered","position"],["position","both"]]
-            |map({before:.[0],after:.[1],movements:shifts($r;.[0];.[1])})),
+            |map(pair($r;.[0];.[1]))),
+    only_combination_recovers:[$r[]|select(.outputs.both.exact and
+      ([.outputs.ordered.exact,.outputs.ranked.exact,.outputs.veto.exact]|any|not))|.index],
     interaction_exact_count:(exact($r;"both")-exact($r;"veto")-exact($r;"ranked")+exact($r;"ordered"))};
 ["both","ordered","position","ranked","veto"] as $names |
 [.arms[]| .arm as $name | ($name|arm_name) as $a | select($names|index($a)) |
