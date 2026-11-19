@@ -102,6 +102,16 @@ fn record_prefix(tokens: &[u16], per_mille: u64) -> Result<usize, Failure> {
     Ok(cut)
 }
 
+/// The query length a run scores. claude-439: the Pick arms read R, DEV and both plus parts
+/// whole at every size, so `--per-mille` cuts only TRAIN there.
+fn query_cut(query: &[u16], per_mille: u64, pick_arms: bool) -> Result<usize, Failure> {
+    if pick_arms {
+        record_prefix(query, 1000)?;
+        return Ok(query.len());
+    }
+    record_prefix(query, per_mille)
+}
+
 /// The classes of the query prefix. The class file must cover the whole query stream, so a
 /// class file made for another stream that only agrees on the prefix is refused.
 fn classes_prefix(classes: &[u8], stream_len: usize, prefix: usize) -> Result<&[u8], Failure> {
@@ -411,12 +421,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
     drop(train_bytes);
     let query_all = read_uort_tokens(&query_bytes)?;
     let train = &train_all[..record_prefix(&train_all, args.per_mille)?];
-    // claude-439: the Pick arms read R, DEV and both plus parts whole.
-    let query_len = if args.pick_arms.is_some() {
-        query_all.len()
-    } else {
-        record_prefix(&query_all, args.per_mille)?
-    };
+    let query_len = query_cut(&query_all, args.per_mille, args.pick_arms.is_some())?;
     let query = &query_all[..query_len];
     let classes = classes_prefix(&classes_bytes, query_all.len(), query_len)?;
     eprintln!(
@@ -1094,6 +1099,15 @@ mod tests {
         let alone = with(&["--check-host"]).unwrap();
         assert_eq!(alone.pick_arms, Some(["s".to_string(), "t".to_string()]));
         assert!(alone.needs_raw_counts() && !alone.ceiling);
+    }
+
+    #[test]
+    fn the_pick_arms_never_cut_the_query() {
+        let tokens = [0u16, 5, 6, 1, 0, 7, 1, 0, 8, 9, 1];
+        assert_eq!(query_cut(&tokens, 500, false).unwrap(), 4);
+        assert_eq!(query_cut(&tokens, 500, true).unwrap(), tokens.len());
+        assert_eq!(query_cut(&tokens, 1000, true).unwrap(), tokens.len());
+        assert!(query_cut(&[], 500, true).is_err());
     }
 
     #[test]

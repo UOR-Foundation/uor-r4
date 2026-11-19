@@ -338,6 +338,9 @@ pub fn run_main(
     c2: &[PickTarget],
     c3: &[PickTarget],
 ) -> Result<MainResult, Failure> {
+    if main.fit_segment != 0 {
+        return Err(fail("run_main: the main span fits on R (segment 0) only"));
+    }
     let arm_a0 = main_arm(main, ArmPick::Absent, None)?;
     let arm_a1 = main_arm(main, ArmPick::Read(a1), Some(a1))?;
     let arm_c1 = main_arm(main, ArmPick::Masked(a1), None)?;
@@ -362,6 +365,9 @@ pub fn run_main(
 
 /// A0 and A1 on the plus span, and B2 over its second copies.
 pub fn run_plus(plus: &SpanInputs, plus_a1: &[PickTarget]) -> Result<PlusResult, Failure> {
+    if plus.fit_segment != 2 {
+        return Err(fail("run_plus: the plus span fits on R+ (segment 2) only"));
+    }
     let (a0_json, a0_second, a0_ok) = plus_arm(plus, ArmPick::Absent)?;
     let (a1_json, a1_second, a1_ok) = plus_arm(plus, ArmPick::Read(plus_a1))?;
     let pass = b2_pass(a1_second, a0_second);
@@ -555,6 +561,70 @@ mod tests {
                 assert!(low <= high);
             }
         }
+    }
+
+    #[test]
+    fn a_band_beats_only_when_a1_is_lower() {
+        let y: Vec<u128> = (0..30).map(|r| 500 + r).collect();
+        let x: Vec<u128> = y.iter().map(|v| v - 7).collect();
+        let lower = band_side(&x, &y).unwrap();
+        assert_eq!(lower["beats"], json!(true));
+        assert_eq!(lower["high"], json!("-210"));
+        let higher = band_side(&y, &x).unwrap();
+        assert_eq!(higher["beats"], json!(false));
+        assert_eq!(higher["low"], json!("210"));
+        // A band across zero never beats, whatever its low end.
+        let mixed: Vec<u128> = y
+            .iter()
+            .enumerate()
+            .map(|(r, v)| if r % 2 == 0 { v - 9 } else { v + 9 })
+            .collect();
+        let across = band_side(&mixed, &y).unwrap();
+        let low: i128 = across["low"].as_str().unwrap().parse().unwrap();
+        assert!(low < 0);
+        assert_eq!(across["beats"], json!(false));
+    }
+
+    #[test]
+    fn the_main_bands_read_a1_minus_the_control() {
+        let data = main_data();
+        let span = data.span(0);
+        let a1 = main_arm(&span, ArmPick::Read(&data.pick), Some(&data.pick)).unwrap();
+        let a0 = main_arm(&span, ArmPick::Absent, None).unwrap();
+        assert_ne!(a1.all, a0.all);
+        let out = run_main(&span, &data.pick, &data.pick, &data.pick).unwrap();
+        assert_eq!(out.bands["a1_minus_a0"], band(&a1, &a0).unwrap());
+        assert_ne!(out.bands["a1_minus_a0"], band(&a0, &a1).unwrap());
+    }
+
+    #[test]
+    fn no_arm_is_read_without_b2_and_every_b3() {
+        let read = |b2_pass: bool, main_b3: bool, plus_b3: bool| {
+            let main = MainResult {
+                arms: json!({}),
+                bands: json!({}),
+                b3_ok: main_b3,
+            };
+            let plus = PlusResult {
+                arms: json!({}),
+                b2: json!({}),
+                b2_pass,
+                b3_ok: plus_b3,
+            };
+            combine(main, plus)["reading_allowed"].clone()
+        };
+        assert_eq!(read(true, true, true), json!(true));
+        assert_eq!(read(false, true, true), json!(false));
+        assert_eq!(read(true, false, true), json!(false));
+        assert_eq!(read(true, true, false), json!(false));
+    }
+
+    #[test]
+    fn each_span_fits_on_its_own_segment_only() {
+        let data = main_data();
+        assert!(run_main(&data.span(1), &data.pick, &data.pick, &data.pick).is_err());
+        let plus = synthetic(&[2, 2, 2, 3, 3, 4, 4]);
+        assert!(run_plus(&plus.span(3), &plus.pick).is_err());
     }
 
     #[test]

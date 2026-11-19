@@ -45,12 +45,48 @@ fn hex(digest: &[u8]) -> String {
     digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Refuses the sealed DEV-test stream as the DEV-tune input.
-fn refuse_sealed(dev_sha256: &str) -> Result<(), Failure> {
-    if dev_sha256 == DEV_TEST_TOKENS_SHA256 {
-        return Err(fail(
-            "the DEV-tune input is the sealed DEV-test stream; pick-split never reads it",
-        ));
+/// The three inputs the sheet pins (claude-420's split v1 `train.json` and `dev-tune.json`).
+const TRAIN_TOKENS_SHA256: &str =
+    "c6cba29ead4c745fb47b3f87007d982e72defc9f04102a268709ba0d34d51460";
+const DEV_TUNE_TOKENS_SHA256: &str =
+    "75c6d1ac479bf120bac3aa60ac160536e8146f8052aa49c002209500799b7d0a";
+const DEV_TUNE_NOVEL_SHA256: &str =
+    "7df42437260bb767e2b1bdfd0cc55a242bd6e0b632a5bcd754852a7ab8aca6af";
+
+/// Refuses a path naming the sealed DEV-test split, before it is opened.
+fn refuse_sealed_path(path: &str) -> Result<(), Failure> {
+    if path.to_ascii_lowercase().contains("dev-test") {
+        return Err(fail(format!(
+            "{path} names the sealed DEV-test split; pick-split never opens it"
+        )));
+    }
+    Ok(())
+}
+
+/// Accepts only the three pinned inputs, each in its own place. The sealed DEV-test stream
+/// is refused by name as well as by not being on the list.
+fn check_inputs(train: &str, dev: &str, novel: &str, pins: [&str; 3]) -> Result<(), Failure> {
+    for (role, got) in [
+        ("TRAIN", train),
+        ("DEV-TUNE", dev),
+        ("DEV-TUNE novel", novel),
+    ] {
+        if got == DEV_TEST_TOKENS_SHA256 {
+            return Err(fail(format!(
+                "the {role} input is the sealed DEV-test stream; pick-split never reads it"
+            )));
+        }
+    }
+    for (role, got, want) in [
+        ("TRAIN", train, pins[0]),
+        ("DEV-TUNE", dev, pins[1]),
+        ("DEV-TUNE novel", novel, pins[2]),
+    ] {
+        if got != want {
+            return Err(fail(format!(
+                "the {role} input has sha256 {got}, not the pinned {want}"
+            )));
+        }
     }
     Ok(())
 }
@@ -277,23 +313,40 @@ fn records(tokens: &[u16]) -> usize {
     tokens.iter().filter(|&&t| t == BOS).count()
 }
 
+/// The sheet's pinned inputs: TRAIN, DEV-tune and its novel classes.
+const PINS: [&str; 3] = [
+    TRAIN_TOKENS_SHA256,
+    DEV_TUNE_TOKENS_SHA256,
+    DEV_TUNE_NOVEL_SHA256,
+];
+
 fn run(args: &[String]) -> Result<serde_json::Value, Failure> {
+    run_pinned(args, PINS)
+}
+
+fn run_pinned(args: &[String], pins: [&str; 3]) -> Result<serde_json::Value, Failure> {
     let [train_path, dev_path, novel_path, out_dir] = args else {
         return Err(fail(
             "usage: pick-split TRAIN.tokens.u16 DEV-TUNE.tokens.u16 DEV-TUNE.novel.u8 OUT-DIR",
         ));
     };
+    for path in [train_path, dev_path, novel_path] {
+        refuse_sealed_path(path)?;
+    }
     let out_dir = Path::new(out_dir);
-    std::fs::create_dir_all(out_dir)?;
     refuse_existing(out_dir)?;
 
     let (_, dev, dev_sha256) = read_tokens(Path::new(dev_path))?;
-    refuse_sealed(&dev_sha256)?;
     let novel = std::fs::read(novel_path)?;
     let novel_sha256 = hex(&Sha256::digest(&novel));
     let (train_header, train, train_sha256) = read_tokens(Path::new(train_path))?;
+    check_inputs(&train_sha256, &dev_sha256, &novel_sha256, pins)?;
 
+    // Every input check runs before the first output is created.
     let (r, c) = split_records(&train)?;
+    let (q, classes, segments) = build_query(&r, &dev, &novel)?;
+    std::fs::create_dir_all(out_dir)?;
+    refuse_existing(out_dir)?;
     let c_tokens: usize = c.iter().map(|s| s.len()).sum();
     let c_records: usize = c.iter().map(|s| records(&train[s.clone()])).sum();
     let mut c_out = create_hashed(&out_dir.join("c.tokens.u16"))?;
@@ -306,7 +359,6 @@ fn run(args: &[String]) -> Result<serde_json::Value, Failure> {
     let train_records = records(&train);
     drop(train);
 
-    let (q, classes, segments) = build_query(&r, &dev, &novel)?;
     let mut q_out = create_hashed(&out_dir.join("q.tokens.u16"))?;
     put(&mut q_out, &uort_header(&train_header, q.len()))?;
     put_tokens(&mut q_out, &q)?;
@@ -492,9 +544,25 @@ mod tests {
     }
 
     #[test]
-    fn the_sealed_stream_is_refused() {
-        assert!(refuse_sealed(DEV_TEST_TOKENS_SHA256).is_err());
-        assert!(refuse_sealed(&"0".repeat(64)).is_ok());
+    fn only_the_pinned_inputs_are_read() {
+        let (t, d, n) = (
+            TRAIN_TOKENS_SHA256,
+            DEV_TUNE_TOKENS_SHA256,
+            DEV_TUNE_NOVEL_SHA256,
+        );
+        assert!(check_inputs(t, d, n, PINS).is_ok());
+        let sealed = DEV_TEST_TOKENS_SHA256;
+        assert!(check_inputs(sealed, d, n, PINS).is_err());
+        assert!(check_inputs(t, sealed, n, PINS).is_err());
+        assert!(check_inputs(t, d, sealed, PINS).is_err());
+        let other = "0".repeat(64);
+        assert!(check_inputs(&other, d, n, PINS).is_err());
+        assert!(check_inputs(t, &other, n, PINS).is_err());
+        assert!(check_inputs(t, d, &other, PINS).is_err());
+        assert!(check_inputs(d, t, n, PINS).is_err());
+        assert!(refuse_sealed_path("/mnt/x/split-v1/dev-test.tokens.u16").is_err());
+        assert!(refuse_sealed_path("/mnt/x/DEV-TEST/a.u16").is_err());
+        assert!(refuse_sealed_path("/mnt/x/split-v1/dev-tune.tokens.u16").is_ok());
     }
 
     #[test]
@@ -522,14 +590,21 @@ mod tests {
             .map(|n| dir.join(n).display().to_string())
             .chain([out.display().to_string()])
             .collect();
-        assert!(run(&args).is_err());
+        let digest = |name: &str| hex(&Sha256::digest(std::fs::read(dir.join(name)).unwrap()));
+        let (t, d, n) = (digest("train.u16"), digest("dev.u16"), digest("novel.u8"));
+        let pins = [t.as_str(), d.as_str(), n.as_str()];
+        assert!(run_pinned(&args, pins).is_err());
         assert_eq!(std::fs::read(out.join("q.segments.u8")).unwrap(), b"keep");
         assert!(!out.join("c.tokens.u16").exists());
         std::fs::remove_file(out.join("q.segments.u8")).unwrap();
-        let manifest = run(&args).unwrap();
+        // The sheet's pins refuse these synthetic inputs before any output is made.
+        assert!(run(&args).is_err());
+        assert!(std::fs::read_dir(&out).unwrap().next().is_none());
+        let manifest = run_pinned(&args, pins).unwrap();
         assert_eq!(manifest["counts"]["r"]["records"], 1);
         assert_eq!(manifest["counts"]["c"]["records"], 2);
-        assert!(run(&args).is_err());
+        assert_eq!(manifest["inputs"]["train_sha256"], serde_json::json!(t));
+        assert!(run_pinned(&args, pins).is_err());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
