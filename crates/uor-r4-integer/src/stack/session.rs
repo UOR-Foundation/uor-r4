@@ -1064,17 +1064,15 @@ impl IntegerStackModel {
                 }
             }
         }
-        let tokenizer_sha256 = if artifact.schema == super::STACK_FBS_BOUND_SCHEMA
-            || artifact.schema == super::STACK_FBS_BOUND_READ_SCHEMA
-        {
-            artifact
-                .source
-                .get("tokenizer_sha256")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_owned)
-        } else {
-            None
-        };
+        // The tokenizer's identity is read from `source` on **any** schema. It used to be read only
+        // for the two bound schemas, so a legacy artifact that did record it (as the 12-layer export
+        // does not) would have been ignored — and a serving path with the wrong tokenizer decodes
+        // gibberish, which is exactly the drift that cost a day of samples (20 Nov).
+        let tokenizer_sha256 = artifact
+            .source
+            .get("tokenizer_sha256")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned);
         let q31_state = artifact.q31_state_bytes()?;
         let q31_lane_state = artifact.q31_lane_state_bytes()?;
         let mut model = Self {
