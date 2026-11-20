@@ -25,7 +25,7 @@ Already checked before this sheet (finite, not the run): 8 batches straight and 
 
 - PASS: some registered DEV evaluation has ft/dev top-1 at or above 7,002 of 14,287 (the M1 trunk's count, the P1(d) floor).
 - Otherwise the result is the best top-1 reached and the curve. A miss closes this configuration only (rows 4,096, K 16, this slice, 16,404 batches), never the law.
-- Instrument check: if DEV top-1 at batch 512 is below the batch-8 value of 581, stop and inspect before reading anything.
+- Instrument check: if DEV top-1 at batch 512 is below this run's own batch-0 value, the run is stopped and classed as an instrument failure, not a model result. Any fix after that inspection runs as a new configuration on a new sheet.
 
 ## Base artifact
 
@@ -33,7 +33,7 @@ A fresh model from `new_model(0)` with the pinned address table. No trunk, donor
 
 ## Data split
 
-TRAIN is D87 TRAIN only. D87 DEV-tune and DEV-test are not opened. ft/dev is the M1 development set, used for evaluation only; evaluation applies no update. No M2 panel is read.
+TRAIN is D87 TRAIN only. Overlap, measured with `corpus-overlap` on wick: of ft/dev's 42,833 windows of 24 tokens, 0 occur in the TRAIN slice (0 of 42,809 at 48 tokens; 154 of 42,844 positions at 13 tokens, 30 distinct windows). D87 DEV-tune and DEV-test are not opened. ft/dev is the M1 development set, used for evaluation only; evaluation applies no update. No M2 panel is read.
 
 ## Minimum test power
 
@@ -41,10 +41,10 @@ TRAIN is D87 TRAIN only. D87 DEV-tune and DEV-test are not opened. ft/dev is the
 
 ## Cost
 
-Measured 1.56 s a batch (2,600 targets/s) at 22 GB host memory free and an idle GPU: about 7.1 hours plus 33 DEV evaluations. No money is spent. The GPU is shared: if another lab's job needs it, the run is resumed from its last checkpoint.
+Measured 1.56 s a batch (2,600 targets/s) at 22 GB host memory free and an idle GPU: about 7.1 hours plus 34 DEV evaluations (batch 0, each multiple of 512, and the end; under 2 s each in the smoke run). No money is spent. The GPU is shared: if another lab's job needs it, the run is resumed from its last checkpoint.
 
 ## Stop rule
 
 Stop at 16,404 batches. Stop early only on the instrument check above, an error, or a GPU conflict with another lab; a stopped run resumes with `--resume`. Results go to a new folder; nothing is written into an earlier run's folder.
 
-TEST FITNESS: pending non-author review
+TEST FITNESS: round 1 (non-author reviewer) UNFIT on two points, an unshown TRAIN and DEV overlap and an undefined instrument outcome; both changes it named are made above and were not read a second time.

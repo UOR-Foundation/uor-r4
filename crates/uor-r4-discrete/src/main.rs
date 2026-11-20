@@ -107,6 +107,11 @@ fn device_command(args: &[String]) -> Result<()> {
             println!("{done}");
             Ok(())
         }
+        Some("corpus-overlap") if args.len()==4=>{
+            let n=args[3].parse::<usize>().map_err(|e|invalid(e.to_string()))?;
+            println!("{}",uor_r4_discrete::corpus_overlap::run(Path::new(&args[1]),Path::new(&args[2]),n)?);
+            Ok(())
+        }
         Some("corpus-slice") if args.len()==7=>{
             let limit=args[3].parse::<u64>().map_err(|e|invalid(e.to_string()))?;
             let bos=args[4].parse::<u16>().map_err(|e|invalid(e.to_string()))?;
