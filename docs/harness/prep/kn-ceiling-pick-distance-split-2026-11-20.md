@@ -62,6 +62,7 @@ The run writes to a new folder, `/workspace/out/c441/run1`. No folder is reused 
 - **Reads:** the device Pick read is not changed at this head (`pick_device.rs` and `discrete.cu` are not in the diff), so A1 and C3's rows are the ones claude-439 measured. The split is made on the host from each row's distance.
 - **Incumbent record:** claude-439's `run2/pick-p1000.json` on wick, also committed in claude-439's `run2/`.
 - **Machine:** wick's RTX 4090 (24 GB), shared. claude-439's 100% run peaked at 24,071 MiB of whole-device memory, other jobs included. The job waits for 16,384 MiB free before it starts, as claude-439's did.
+  - **Run note, 20 Nov:** `pick-p1000` crashed after 480 s with CUDA out of memory, at order 7 of the count build, before any Pick fit. Another lab's GPU job grew from 2,186 MiB at the start to 15,392 MiB, and the device peaked at 24,081 MiB. Under the Stop rule the run is repeated once as `pick-p1000-retry`, beside the crashed files, from the same binary. Only the start bar changes, to 21,504 MiB free: claude-439's 100% run used 20,189 MiB beyond the other jobs. No parameter of the run changes.
 
 ## Data split
 
