@@ -1,0 +1,38 @@
+            for(U sweep=0;sweep<sweeps;++sweep) {
+                for(U i=0;i<nodes;++i) {
+                    if(last[i]>=length)continue;
+                    U li=level[i];
+                    for(U e=0;e<EDGE_TYPES;++e) {
+                        int gt=gate_value(gates,s[1]*s[5]+li*EDGE_TYPES+e,kind,index,candidate);
+                        if(gt==0)continue;
+                        int esum=0;
+                        if(e==0) {
+                            if(plan[i*4+3]==ABSENT) {
+                                for(U c=0;c<3;++c){U ch=plan[i*4+c];if(last[ch]<length)esum+=prev[ch];}
+                            }
+                            for(U p=i+1;p<nodes;++p) {
+                                if(plan[p*4+3]==ABSENT && last[p]<length && (plan[p*4]==i || plan[p*4+1]==i || plan[p*4+2]==i))esum+=prev[p];
+                            }
+                        } else if(e==1) {
+                            for(U p=i+1;p<nodes;++p) {
+                                if(plan[p*4+3]!=ABSENT || last[p]>=length)continue;
+                                U c0=plan[p*4],c1=plan[p*4+1],c2=plan[p*4+2];
+                                if(i==c0 && last[c1]<length)esum+=prev[c1];
+                                else if(i==c1){if(last[c0]<length)esum+=prev[c0];if(last[c2]<length)esum+=prev[c2];}
+                                else if(i==c2 && last[c1]<length)esum+=prev[c1];
+                            }
+                        } else if(e==2) {
+                            for(U j=0;j<i;++j)if(last[j]<length && level[j]==li && last[j]+1==first[i])esum+=prev[j];
+                        } else if(e==3) {
+                            if(li==0) {
+                                U tid=ids[row*s[2]+last[i]];
+                                for(U j=0;j<i;++j)if(last[j]<length && level[j]==0 && ids[row*s[2]+last[j]]==tid)esum=prev[j];
+                            }
+                        } else if(e==4) {
+                            for(U j=0;j<i;++j)if(last[j]<length && level[j]==li && frame[j]==frame[i])esum=prev[j];
+                        }
+                        rel[i]+=gt>0?esum:-esum;
+                    }
+                }
+                for(U i=0;i<nodes;++i)prev[i]=rel[i];
+            }

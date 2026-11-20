@@ -414,6 +414,18 @@ pub struct Block {
 }
 /// The first cursor of a config's schedule (`block` present iff `K > 1`):
 /// the single definition behind `PreparedDriver::initial_cursor`.
+/// Wall time spent in the block transition, in microseconds since process
+/// start: host batch build, carry, proposal (scoring and choice), commit.
+/// Observation only; nothing reads it to decide anything.
+static BLOCK_PHASE_MICROS: [std::sync::atomic::AtomicU64; 4] = [
+    std::sync::atomic::AtomicU64::new(0),
+    std::sync::atomic::AtomicU64::new(0),
+    std::sync::atomic::AtomicU64::new(0),
+    std::sync::atomic::AtomicU64::new(0),
+];
+pub fn block_phase_micros() -> [u64; 4] {
+    std::array::from_fn(|i| BLOCK_PHASE_MICROS[i].load(std::sync::atomic::Ordering::Relaxed))
+}
 pub fn initial_cursor_for(config: &DriverConfig) -> Cursor {
     Cursor {
         block: (!config.coordinate_block.is_one()).then_some(BlockCursor {
@@ -3305,8 +3317,11 @@ impl PreparedDriver {
                 .map(|refused| !refused)
             })
             .collect::<Result<Vec<_>>>()?;
+        let phase_started = std::time::Instant::now();
         let batch = self.batch(cursor)?;
+        let host_done = phase_started.elapsed();
         let carried = model.carry_windows(&batch.windows)?;
+        let carry_done = phase_started.elapsed();
         let proposal = model.propose_block(
             &carried,
             &batch.targets,
@@ -3316,7 +3331,13 @@ impl PreparedDriver {
             bvgk,
         )?;
         let record = proposal.record().clone();
+        let propose_done = phase_started.elapsed();
         let commit = model.apply_block(&proposal)?;
+        let apply_done = phase_started.elapsed();
+        BLOCK_PHASE_MICROS[0].fetch_add(host_done.as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
+        BLOCK_PHASE_MICROS[1].fetch_add((carry_done - host_done).as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
+        BLOCK_PHASE_MICROS[2].fetch_add((propose_done - carry_done).as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
+        BLOCK_PHASE_MICROS[3].fetch_add((apply_done - propose_done).as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
         // The device commit must agree with its own record before the cursor
         // moves: a disagreement is a loud refusal, never a silent drift.
         if commit.moves as usize != record.commit_ordinals.len() || commit.joint != record.joint {
@@ -3361,7 +3382,7 @@ impl PreparedDriver {
         if self.config.coordinate_block.is_one() {
             return Err(invalid("coordinate_block 1 runs through run_transitions"));
         }
-        let rowsk = model.rowsk_scoring()?;
+        let rowsk = model.rowsk_scoring_bucketed()?;
         let bvgk = model.bvgk_kernels()?;
         let mut receipts = Vec::new();
         for _ in 0..batches.get() {

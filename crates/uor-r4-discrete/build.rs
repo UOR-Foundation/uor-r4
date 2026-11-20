@@ -17,6 +17,8 @@ mod decomposition_source;
 mod rows_source;
 #[path = "src/rowsk_source.rs"]
 mod rowsk_source;
+#[path = "src/rowskb_source.rs"]
+mod rowskb_source;
 #[path = "src/wider_carrier_source.rs"]
 mod wider_carrier_source;
 #[path = "src/within_cell_writer_source.rs"]
@@ -405,6 +407,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=src/baseline_reuse_source.rs");
     println!("cargo:rerun-if-changed=src/rows_source.rs");
     println!("cargo:rerun-if-changed=src/rowsk_source.rs");
+    println!("cargo:rerun-if-changed=src/rowskb_source.rs");
+    println!("cargo:rerun-if-changed=src/rowskb_ordinary_sweep.txt");
     println!("cargo:rerun-if-changed=src/bvgk_source.rs");
     println!("cargo:rerun-if-changed=src/bucket_source.rs");
     println!("cargo:rerun-if-changed=src/wider_carrier_source.rs");
@@ -632,6 +636,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &fs::read_to_string(out.join("bucket.ptx"))?,
         &bucket_source::ENTRIES,
     )?;
+    // K-coordinate scoring on the bucketed writer: the generated bucket text
+    // plus two entries, its own admitted nine-entry PTX and cubin. The bucket
+    // and rows-K images above are unchanged; this is a separate module.
+    let rowskb = rowskb_source::generate(&fs::read_to_string(out.join("bucket.cu"))?)?;
+    fs::write(out.join("rowskb.cu"), rowskb)?;
+    let status = Command::new(&nvcc)
+        .args(["-ptx", "-std=c++17"])
+        .arg(format!("-arch={arch}"))
+        .arg("-o")
+        .arg(out.join("rowskb.ptx"))
+        .arg(out.join("rowskb.cu"))
+        .status()?;
+    if !status.success() {
+        return Err(format!("K-coordinate bucket PTX build failed: {status}").into());
+    }
+    admit_ptx_inventory(
+        &fs::read_to_string(out.join("rowskb.ptx"))?,
+        &rowskb_source::ENTRIES,
+    )?;
     // Opt-in wider code carrier qualification & inspection (m1-wider-code-carrier,
     // #2847): separate generated source, admitted two-entry PTX and cubin. Earlier
     // images stay untouched.
@@ -683,6 +706,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("rowsk", out.join("rowsk.ptx")),
         ("bvgk", out.join("bvgk.ptx")),
         ("bucket", out.join("bucket.ptx")),
+        ("rowskb", out.join("rowskb.ptx")),
         ("wider-carrier", out.join("wider-carrier.ptx")),
         ("within-cell-writer", out.join("within-cell-writer.ptx")),
         ("native-vector", out.join("native-vector.ptx")),

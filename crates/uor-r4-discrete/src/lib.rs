@@ -75,6 +75,7 @@ pub mod proposal_timing;
 pub mod q4_import;
 pub mod rows_source;
 pub mod rowsk_source;
+pub mod rowskb_source;
 pub mod snapshot;
 pub mod stage_t;
 pub use objective::ObjectivePolicy;

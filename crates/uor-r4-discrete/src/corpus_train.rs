@@ -95,7 +95,12 @@ pub fn prepare_out(dir: &Path, resume: bool) -> Result<Option<(u64, PathBuf)>> {
             .map(Some)
             .ok_or_else(|| invalid("--resume found no checkpoint in the output folder"));
     }
-    if dir.exists() && fs::read_dir(dir).map_err(|e| invalid(e.to_string()))?.next().is_some() {
+    if dir.exists()
+        && fs::read_dir(dir)
+            .map_err(|e| invalid(e.to_string()))?
+            .next()
+            .is_some()
+    {
         return Err(invalid("a fresh start needs an empty output folder"));
     }
     fs::create_dir_all(dir).map_err(|e| invalid(format!("{}: {e}", dir.display())))?;
@@ -121,7 +126,8 @@ fn without_rows(mut dev: serde_json::Value) -> serde_json::Value {
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     let temp = path.with_extension("json.partial");
-    let mut file = fs::File::create(&temp).map_err(|e| invalid(format!("{}: {e}", temp.display())))?;
+    let mut file =
+        fs::File::create(&temp).map_err(|e| invalid(format!("{}: {e}", temp.display())))?;
     file.write_all(bytes).map_err(|e| invalid(e.to_string()))?;
     file.sync_all().map_err(|e| invalid(e.to_string()))?;
     fs::rename(&temp, path).map_err(|e| invalid(e.to_string()))
@@ -148,7 +154,9 @@ pub fn run(
 
     config.validate()?;
     if config.coordinate_block.is_one() {
-        return Err(invalid("needs coordinate_block above 1 (the rows_v1 block path)"));
+        return Err(invalid(
+            "needs coordinate_block above 1 (the rows_v1 block path)",
+        ));
     }
     let resume_from = prepare_out(out, options.resume)?;
     let rows = u64::from(config.batch_rows);
@@ -195,7 +203,10 @@ pub fn run(
             &serde_json::to_vec(&checkpoint).map_err(|e| invalid(e.to_string()))?,
         )?;
         let dev = without_rows(driver.evaluate(&model)?);
-        append_line(&out.join("dev.jsonl"), &json!({"completed_batches": 0, "dev": dev}))?;
+        append_line(
+            &out.join("dev.jsonl"),
+            &json!({"completed_batches": 0, "dev": dev}),
+        )?;
     }
     let cadences = [
         options.checkpoint_every,
@@ -213,13 +224,25 @@ pub fn run(
         );
         let chunk = std::num::NonZeroU64::new(chunk).ok_or_else(|| invalid("empty chunk"))?;
         let started = Instant::now();
-        let (next, receipts) = driver.run_block_transitions(&mut model, cursor, &admission, chunk)?;
+        let phases_before = crate::training::block_phase_micros();
+        let (next, receipts) =
+            driver.run_block_transitions(&mut model, cursor, &admission, chunk)?;
         let elapsed_ms = (started.elapsed().as_millis() as u64).max(1);
         cursor = next;
-        let moves = receipts.iter().map(|r| r.commit_ordinals.len() as u64).sum::<u64>();
-        let before = receipts.iter().fold(0u64, |s, r| s.saturating_add(r.l_before));
-        let after = receipts.iter().fold(0u64, |s, r| s.saturating_add(r.committed_loss));
+        let moves = receipts
+            .iter()
+            .map(|r| r.commit_ordinals.len() as u64)
+            .sum::<u64>();
+        let before = receipts
+            .iter()
+            .fold(0u64, |s, r| s.saturating_add(r.l_before));
+        let after = receipts
+            .iter()
+            .fold(0u64, |s, r| s.saturating_add(r.committed_loss));
         total_moves += moves;
+        let phases_now = crate::training::block_phase_micros();
+        let phase_ms = |i: usize| (phases_now[i] - phases_before[i]) / 1000;
+        let phases = json!({"host_batch": phase_ms(0), "carry": phase_ms(1), "propose": phase_ms(2), "commit": phase_ms(3)});
         let line = json!({
             "completed_batches": cursor.completed_batches,
             "corpus_pass": cursor.corpus_pass,
@@ -230,6 +253,8 @@ pub fn run(
             "chunk_loss_before": before,
             "chunk_loss_committed": after,
             "chunk_ms": elapsed_ms,
+            "chunk_phase_ms": phases,
+            "score_phase_us_total": crate::device::score_phase_micros().to_vec(),
             "targets_per_second": chunk.get() * rows * 1000 / elapsed_ms,
         });
         append_line(&out.join("progress.jsonl"), &line)?;
@@ -276,7 +301,8 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("uor-corpus-train-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("uor-corpus-train-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -284,16 +310,41 @@ mod tests {
 
     #[test]
     fn parses_flags_and_refuses_bad_ones() {
-        let (config, out, options) =
-            parse(&args(&["c.json", "out", "--batches", "40", "--eval-every", "8", "--resume"])).unwrap();
-        assert_eq!((config, out), (PathBuf::from("c.json"), PathBuf::from("out")));
+        let (config, out, options) = parse(&args(&[
+            "c.json",
+            "out",
+            "--batches",
+            "40",
+            "--eval-every",
+            "8",
+            "--resume",
+        ]))
+        .unwrap();
+        assert_eq!(
+            (config, out),
+            (PathBuf::from("c.json"), PathBuf::from("out"))
+        );
         assert_eq!(
             options,
-            Options { batches: 40, eval_every: 8, checkpoint_every: 256, progress_every: 32, resume: true }
+            Options {
+                batches: 40,
+                eval_every: 8,
+                checkpoint_every: 256,
+                progress_every: 32,
+                resume: true
+            }
         );
         assert!(parse(&args(&["c.json", "out"])).is_err());
         assert!(parse(&args(&["c.json", "out", "--batches"])).is_err());
-        assert!(parse(&args(&["c.json", "out", "--batches", "4", "--checkpoint-every", "0"])).is_err());
+        assert!(parse(&args(&[
+            "c.json",
+            "out",
+            "--batches",
+            "4",
+            "--checkpoint-every",
+            "0"
+        ]))
+        .is_err());
         assert!(parse(&args(&["c.json", "out", "--batches", "4", "--what"])).is_err());
     }
 
@@ -301,7 +352,11 @@ mod tests {
     fn picks_the_newest_checkpoint_by_batch_count() {
         let dir = scratch("newest");
         assert_eq!(newest_checkpoint(&dir).unwrap(), None);
-        for name in [checkpoint_name(0), checkpoint_name(512), checkpoint_name(256)] {
+        for name in [
+            checkpoint_name(0),
+            checkpoint_name(512),
+            checkpoint_name(256),
+        ] {
             fs::write(dir.join(name), b"{}").unwrap();
         }
         fs::write(dir.join("checkpoint-999999999999.json"), b"{}").unwrap();
