@@ -280,6 +280,14 @@ impl PromptRegister {
                         .to_vec2::<f32>()?;
                 let (index, valid) = self.pick_tables(&distance, ids, batch, time);
                 let per_slot = rows * self.picks;
+                // One gather for every slot. Each slot used to index_select the stream on its own,
+                // and each of those costs a dense zero tensor of the whole stream in the backward
+                // (`rows x lanes x 4`, ~6.3M elements) — sixteen of them, twelve layers deep. The
+                // picks are already laid out slot after slot, so a single concatenated gather shares
+                // one scatter in the backward.
+                let all_index =
+                    Tensor::from_vec(index.clone(), self.q * per_slot, device)?;
+                let picked_all = points.index_select(&all_index, 0)?;
                 let mut slots = Vec::with_capacity(self.q);
                 for j in 0..self.q {
                     let range = j * per_slot..(j + 1) * per_slot;
@@ -297,8 +305,12 @@ impl PromptRegister {
                         .relu()?
                         .broadcast_div(&margin.maximum(1.0)?)?
                         .mul(&valid)?;
-                    let values = turned_value(j)?
-                        .index_select(&index, 0)?
+                    // Rotate only the picked points. The previous form rotated **every** position
+                    // (rows x lanes x 4 ~ 6.3M elements at width 512) and then kept `picks` of them
+                    // per row — about 128x the needed work, per slot, per layer, per step.
+                    let rotation = self.value_rotation.as_tensor().get(j)?.unsqueeze(0)?;
+                    let picked_points = picked_all.narrow(0, j * per_slot, per_slot)?;
+                    let values = hamilton_product(&rotation, &picked_points)?
                         .reshape((rows, self.picks, width))?;
                     let sum = values.broadcast_mul(&weight.unsqueeze(2)?)?.sum(1)?;
                     let total = weight.sum_keepdim(1)?;
