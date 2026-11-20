@@ -110,6 +110,10 @@ path = "src/bin/within-cell-writer-run.rs"
 name = "ngram-count-probe"
 path = "src/bin/ngram-count-probe.rs"
 
+[[bin]]
+name = "conjunction-probe"
+path = "src/bin/conjunction-probe.rs"
+
 
 
 
