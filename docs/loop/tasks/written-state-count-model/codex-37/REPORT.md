@@ -23,3 +23,19 @@ The independent comparison covered both ends of every record, both sides of ever
 The three-class and distance-split carriers store 7,392 and 12,320 Q32 words respectively at order ten. The legacy format keeps its original bytes. The five-class format identifies the split on load. Under the ordinary client's identity-code Pick reader, the D37 manifest must name the identity preparation and the arm matching its carrier. A permuted-code control, exact-match control, disabled control or swapped arm label is rejected on that path. The targeted serving test exercised those cases on Wick with `p1-count-serving` enabled. Two earlier invocations without that feature selected zero tests. [Manifest and reader](../../../../../crates/uor-r4-integer/src/discrete_count.rs)
 
 On the 128-row invented fixture the 4090 matched all 97 objective sums and all 717,024 legacy and 1,195,040 split Q32 weight words across optimizer steps. The fixture activates buckets 527 and 879. The truncated row tape was rejected before a trace was created. [Finite GPU parity](fit/evidence/finite/parity.txt) · [Registered fit](fit/FIT-FINITE.md)
+
+## Geometric reads and fitted weights on original R
+
+Both arms completed 96 integer updates from the same KN start. Preparing prefix-only reads and joining their successors to the count tape took 250.71 s wall on Wick. The identity Pick pass occupied 241.26 s of that preparation. The subsequent GPU fit processes took 2.73 s for three classes and 2.66 s for five. Maximum host RSS was 5,906,032 KiB during preparation. Real replay compared the selected bucket and target Q48 mass at 677 original ordinals per arm, including 128 closed-gate injections rejected and 33 positive probe suppressions with nonzero Pick contribution per arm. [Preparation](fit/evidence/identity/prepare.json) · [Three-class fit](fit/evidence/identity/a1.seal.json) · [Five-class fit](fit/evidence/identity/a1s.seal.json)
+
+| Observed read distance | R targets | Correct copied successor |
+| --- | ---: | ---: |
+| No read | 8,120 | 0 |
+| 0 | 6,001,324 | 3,300,209 |
+| 1 | 0 | 0 |
+| 2 | 53,736 | 8,953 |
+| 3 or greater | 9,884,404 | 748,213 |
+
+Fitted weight payloads were 59,180 and 98,604 bytes. Final training objective sums were 208,762,003,941 and 208,755,672,337 Q12 respectively. These are reserved-TRAIN fits. Their paired predictive difference on unseen prompts remains a DEV-tune question. The fitted candidate and paired reference must still meet the sealed quality gate. [Fit inventory](fit/evidence/identity/results.sha256)
+
+The C1 finite control passed 97 sums and 717,024 Q32 words through active bucket 527 with its copy lane masked. The initial real-control review exposed a full-stream exact-pair read on the host for C2. That path needs its own AOT device reader, a planted latest-pair differential, and a fresh scope-bound release before original control scoring. [Finite masked result](fit/evidence/masked-finite/parity.txt)
