@@ -23,7 +23,7 @@ Already checked before this sheet (finite, not the run): 8 batches straight and 
 
 ## Bar (pre-registered)
 
-- PASS: some registered DEV evaluation has ft/dev top-1 at or above 7,002 of 14,287 (the M1 trunk's count, the P1(d) floor).
+- PASS: some registered DEV evaluation has ft/dev top-1 at or above 7,156 of 14,287: the M1 trunk's count of 7,002 (the P1(d) floor) plus all 154 DEV positions whose 13-token window also occurs in the TRAIN slice, counted as if every one were a scored target answered from memory. (Raised from 7,002 after the run started, on the round 2 review; the change only tightens the bar.)
 - Otherwise the result is the best top-1 reached and the curve. A miss closes this configuration only (rows 4,096, K 16, this slice, 16,404 batches), never the law.
 - Instrument check: if DEV top-1 at batch 512 is below this run's own batch-0 value, the run is stopped and classed as an instrument failure, not a model result. Any fix after that inspection runs as a new configuration on a new sheet.
 
@@ -45,6 +45,6 @@ Measured 1.56 s a batch (2,600 targets/s) at 22 GB host memory free and an idle 
 
 ## Stop rule
 
-Stop at 16,404 batches. Stop early only on the instrument check above, an error, or a GPU conflict with another lab; a stopped run resumes with `--resume`. Results go to a new folder; nothing is written into an earlier run's folder.
+Stop at 16,404 batches. Stop early only on the instrument check above, an error, or a GPU conflict with another lab; a run stopped by an error or a GPU conflict resumes with `--resume` on the same `build-identity`; a run stopped by the instrument check is never resumed under this sheet. Results go to a new folder; nothing is written into an earlier run's folder.
 
-TEST FITNESS: round 1 (non-author reviewer) UNFIT on two points, an unshown TRAIN and DEV overlap and an undefined instrument outcome; both changes it named are made above and were not read a second time.
+TEST FITNESS: UNFIT - round 2 (non-author) asked for the overlap positions to be counted in the bar and for resume to exclude instrument stops; both are now written above, after the run had started, and no third read was made.
