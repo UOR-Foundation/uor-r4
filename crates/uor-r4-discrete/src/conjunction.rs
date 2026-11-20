@@ -72,6 +72,51 @@ impl Row {
             (None, copy) => copy,
         }
     }
+    /// Counts which side was right where the copy read and the row output
+    /// differ and one of them is the target. True when a count moved.
+    pub fn judge(&mut self, copy: Option<u32>, target: u32) -> bool {
+        let (Some(copy), Some(output)) = (copy, self.output()) else {
+            return false;
+        };
+        if copy == output {
+            return false;
+        }
+        let side = if copy == target {
+            0
+        } else if output == target {
+            1
+        } else {
+            return false;
+        };
+        self.trust[side] = self.trust[side].saturating_add(1);
+        true
+    }
+    /// Takes `target` into one of the first `slots` slots: a slot that points
+    /// at it gains a count; else it takes an empty slot; with none empty every
+    /// slot loses a count and the target takes one that reached zero.
+    pub fn take(&mut self, slots: usize, target: u32) -> Written {
+        for slot in 0..slots {
+            if self.count[slot] > 0 && self.pointer[slot] == target {
+                self.count[slot] = self.count[slot].saturating_add(1);
+                return Written::Strengthened;
+            }
+        }
+        let mut written = Written::Inserted;
+        if (0..slots).all(|slot| self.count[slot] > 0) {
+            for slot in 0..slots {
+                self.count[slot] -= 1;
+            }
+            written = Written::Replaced;
+        }
+        match (0..slots).find(|&slot| self.count[slot] == 0) {
+            Some(slot) => {
+                self.pointer[slot] = target;
+                self.count[slot] = 1;
+                written
+            }
+            None => Written::Weakened,
+        }
+    }
     /// The pointer with the largest count, the earliest slot on a tie.
     pub fn output(&self) -> Option<u32> {
         let mut best: Option<usize> = None;
@@ -210,24 +255,9 @@ impl Conjunction {
         let (Some(address), Some(copy)) = (self.address(a, b), copy) else {
             return false;
         };
-        let Some(row) = self.rows.get_mut(&address) else {
-            return false;
-        };
-        let Some(output) = row.output() else {
-            return false;
-        };
-        if copy == output {
-            return false;
-        }
-        let side = if copy == target {
-            0
-        } else if output == target {
-            1
-        } else {
-            return false;
-        };
-        row.trust[side] = row.trust[side].saturating_add(1);
-        true
+        self.rows
+            .get_mut(&address)
+            .is_some_and(|row| row.judge(Some(copy), target))
     }
     pub fn write(&mut self, a: u32, b: u32, model: Option<u32>, target: u32) -> Written {
         let Some(address) = self.address(a, b) else {
@@ -244,27 +274,654 @@ impl Conjunction {
             self.rows.insert(address, row);
             return Written::Inserted;
         };
-        for slot in 0..slots {
-            if row.count[slot] > 0 && row.pointer[slot] == target {
-                row.count[slot] = row.count[slot].saturating_add(1);
-                return Written::Strengthened;
+        row.take(slots, target)
+    }
+}
+
+/// Longest suffix a [`Ladder`] row can be keyed by: twelve bits a token and a
+/// leading length bit fit ten tokens in 128 bits.
+pub const MAX_ORDER: usize = 20;
+
+/// Rows keyed by longer context suffixes than the pair (PLAN row 39, step 4
+/// on the host: the key reaches back to the asked turn). A suffix of `k`
+/// tokens has the exact address `1 || t_1 || ... || t_k`, twelve bits a token,
+/// so no two suffixes of any length share one. Each write goes to every order
+/// the window is long enough for and to the pair row; a read takes the row of
+/// the longest suffix that has one.
+#[derive(Debug)]
+pub struct Ladder {
+    /// Suffix lengths above the pair, longest first.
+    orders: Vec<usize>,
+    slots: usize,
+    rows: HashMap<[u128; 2], Row>,
+    pair: Conjunction,
+}
+
+impl Ladder {
+    pub fn new(vocabulary: u32, slots: usize, orders: &[usize]) -> Result<Self> {
+        if vocabulary > 4_096 {
+            return Err(invalid("a ladder address holds twelve bits a token"));
+        }
+        let mut orders = orders.to_vec();
+        orders.sort_unstable_by(|a, b| b.cmp(a));
+        orders.dedup();
+        if orders.iter().any(|&k| !(3..=MAX_ORDER).contains(&k)) {
+            return Err(invalid("ladder orders are 3..20; the pair row is order 2"));
+        }
+        Ok(Self {
+            orders,
+            slots,
+            rows: HashMap::new(),
+            pair: Conjunction::new(vocabulary, slots, Order::Ordered)?,
+        })
+    }
+    pub fn len(&self) -> usize {
+        self.rows.len() + self.pair.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    /// Two words of ten tokens each, twelve bits a token under a leading one,
+    /// so suffixes of different lengths never share an address.
+    pub fn address(suffix: &[u32]) -> [u128; 2] {
+        let pack = |part: &[u32]| {
+            part.iter()
+                .fold(1u128, |address, &token| (address << 12) | u128::from(token))
+        };
+        let cut = suffix.len().saturating_sub(10);
+        [pack(&suffix[..cut]), pack(&suffix[cut..])]
+    }
+    /// The rows of the window's suffixes, longest first, the pair row last.
+    fn held(&self, window: &[u32]) -> Vec<Row> {
+        let mut held = Vec::new();
+        for &k in &self.orders {
+            if window.len() >= k {
+                if let Some(row) = self.rows.get(&Self::address(&window[window.len() - k..])) {
+                    held.push(*row);
+                }
             }
         }
-        let mut written = Written::Inserted;
-        if (0..slots).all(|slot| row.count[slot] > 0) {
-            for slot in 0..slots {
-                row.count[slot] -= 1;
+        if let [.., a, b] = *window {
+            if let Some(row) = self.pair.read(a, b) {
+                held.push(row);
             }
-            written = Written::Replaced;
         }
-        match (0..slots).find(|&slot| row.count[slot] == 0) {
-            Some(slot) => {
-                row.pointer[slot] = target;
-                row.count[slot] = 1;
-                written
+        held
+    }
+    /// Writes `target` after `window` (which ends just before it and holds no
+    /// BOS past its first place). Every row is judged against the copy read
+    /// before it takes the target. Returns the trust counts moved.
+    pub fn write(&mut self, window: &[u32], target: u32) -> u64 {
+        let copy = copy_at(window);
+        let mut judged = 0u64;
+        let slots = self.slots;
+        for &k in &self.orders {
+            if window.len() >= k {
+                let row = self
+                    .rows
+                    .entry(Self::address(&window[window.len() - k..]))
+                    .or_default();
+                judged += u64::from(row.judge(copy, target));
+                row.take(slots, target);
             }
-            None => Written::Weakened,
         }
+        if let [.., a, b] = *window {
+            judged += u64::from(self.pair.judge(a, b, copy, target));
+            self.pair.write(a, b, None, target);
+        }
+        judged
+    }
+    /// The next token after `window`. The longest suffix with a row gives the
+    /// output. Where the copy read names another token, the longest row with
+    /// any trust count decides (the output on a tie or with no count at all).
+    /// With no row the copy read answers. `use_copy` off reads the rows alone.
+    pub fn next(&self, window: &[u32], use_copy: bool) -> Option<u32> {
+        let copy = if use_copy { copy_at(window) } else { None };
+        let held = self.held(window);
+        let Some(output) = held.iter().find_map(Row::output) else {
+            return copy;
+        };
+        let Some(copy) = copy.filter(|&copy| copy != output) else {
+            return Some(output);
+        };
+        let judge = held.iter().find(|row| row.trust != [0, 0]);
+        Some(match judge {
+            Some(row) if row.trust[0] > row.trust[1] => copy,
+            _ => output,
+        })
+    }
+    /// The greedy reply to `prompt`, as [`reply`].
+    pub fn reply(
+        &self,
+        prompt: &[u32],
+        use_copy: bool,
+        window: usize,
+        bos: u32,
+        eos: u32,
+        limit: usize,
+    ) -> Vec<u32> {
+        let mut tokens = prompt.to_vec();
+        let start = tokens.len();
+        while tokens.len() - start < limit {
+            let seen = window_at(&tokens, tokens.len(), window, bos);
+            let Some(next) = self.next(seen, use_copy) else {
+                break;
+            };
+            tokens.push(next);
+            if next == eos {
+                break;
+            }
+        }
+        tokens.split_off(start)
+    }
+}
+
+/// Longest asked turn a question form holds, and the longest gap in it.
+pub const FORM_TOKENS: usize = 30;
+pub const FORM_GAP: usize = 12;
+/// A question form is used once this many TRAIN replies stood under it.
+pub const FORM_SEEN: u32 = 8;
+/// Question tokens a pointer may anchor on, and places it may read ahead.
+pub const POINTER_BACK: usize = 16;
+pub const POINTER_AHEAD: usize = 4;
+/// Kept forms of one turn a reply is written and read under.
+pub const FORMS_HELD: usize = 6;
+/// A held row answers once one of its slots has been right this often.
+pub const ROW_RIGHT: u32 = 2;
+/// Pointer slots one output error may add to a row.
+const POINTERS_ADDED: usize = 3;
+/// Previous-token symbols of a held row: the reply's first place, and any
+/// place after a copied token whose own row is missing.
+const AT_START: u32 = u32::MAX;
+const AFTER_COPY: u32 = u32::MAX - 1;
+
+/// The asked turn with at most one run of tokens left out: up to thirty
+/// tokens in three words (twelve bits each under a leading one) and the gap's
+/// place. "What is ▢?" is one form whatever name fills the gap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Form {
+    words: [u128; 3],
+    gap_at: u8,
+    gap_len: u8,
+}
+
+impl Form {
+    fn of(turn: &[u32], gap_at: usize, gap_len: usize) -> Self {
+        let mut words = [1u128; 3];
+        let kept = turn[..gap_at].iter().chain(&turn[gap_at + gap_len..]);
+        for (place, &token) in kept.enumerate() {
+            let word = &mut words[place / 10];
+            *word = (*word << 12) | u128::from(token);
+        }
+        Self {
+            words,
+            gap_at: gap_at as u8,
+            gap_len: gap_len as u8,
+        }
+    }
+    /// Every form of `turn`: the whole turn, then shorter gaps before longer.
+    fn each(turn: &[u32]) -> impl Iterator<Item = Self> + '_ {
+        let gaps = (1..=FORM_GAP.min(turn.len()))
+            .flat_map(move |len| (0..=turn.len() - len).map(move |at| Self::of(turn, at, len)));
+        std::iter::once(Self::of(turn, 0, 0)).chain(gaps)
+    }
+}
+
+/// How a held row's slot names the next token.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Entry {
+    #[default]
+    Empty,
+    Token(u32),
+    /// The Pick read with its query taken from the question: the token
+    /// `ahead` places after the latest earlier stand of the question token
+    /// `back` places before the reply (that token itself when `ahead` is 0).
+    Pointer {
+        back: u8,
+        ahead: u8,
+        /// The stand must match the question token before it as well (the
+        /// Pick read's pair).
+        wide: bool,
+    },
+    /// The token after the one the last pointer, copy or `Next` read.
+    Next,
+    /// The exact copy read ([`copy_at`]).
+    Copy,
+}
+
+/// A place in a reply: the tokens before the target, the first token the
+/// reads may see, the reply's start and the place the last copy read.
+#[derive(Debug, Clone, Copy)]
+struct Place<'a> {
+    tokens: &'a [u32],
+    floor: usize,
+    start: usize,
+    cursor: Option<usize>,
+}
+
+/// A slot's answer and, for a copying slot, the place it read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Named {
+    token: u32,
+    source: Option<usize>,
+    /// The slot that named it ([`Entry::Empty`] for the ladder).
+    by: Entry,
+}
+
+impl Place<'_> {
+    /// The token after the one the last copy read, while it lies before the
+    /// reply.
+    fn ahead(&self) -> Option<u32> {
+        let source = self.cursor? + 1;
+        (source < self.start).then(|| self.tokens[source])
+    }
+}
+
+impl Entry {
+    fn name(self, at: &Place) -> Option<Named> {
+        let tokens = at.tokens;
+        let source = match self {
+            Entry::Empty => return None,
+            Entry::Token(token) => {
+                return Some(Named {
+                    token,
+                    source: None,
+                    by: self,
+                })
+            }
+            Entry::Pointer { back, ahead, wide } => {
+                let anchor = at.start.checked_sub(1 + usize::from(back))?;
+                let low = at.floor + usize::from(wide);
+                if anchor < low {
+                    return None;
+                }
+                if ahead == 0 {
+                    anchor
+                } else {
+                    let stand = (low..anchor).rev().find(|&place| {
+                        tokens[place] == tokens[anchor]
+                            && (!wide || tokens[place - 1] == tokens[anchor - 1])
+                    })?;
+                    let source = stand + usize::from(ahead);
+                    if source >= anchor {
+                        return None;
+                    }
+                    source
+                }
+            }
+            Entry::Next => {
+                let source = at.cursor? + 1;
+                if source >= at.start {
+                    return None;
+                }
+                source
+            }
+            Entry::Copy => {
+                let last = tokens.len().checked_sub(1)?;
+                (at.floor + 1..last).rev().find(|&place| {
+                    tokens[place - 1] == tokens[last - 1] && tokens[place] == tokens[last]
+                })? + 1
+            }
+        };
+        Some(Named {
+            token: tokens[source],
+            source: Some(source),
+            by: self,
+        })
+    }
+}
+
+/// A row held under a question form: slots that name the next token, ranked
+/// by how often each was right.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct HeldRow {
+    entry: [Entry; MAX_SLOTS],
+    count: [u32; MAX_SLOTS],
+}
+
+impl HeldRow {
+    /// Live slots with their counts, most often right first (the lower slot
+    /// on a tie).
+    fn ranked(&self) -> impl Iterator<Item = (Entry, u32)> + '_ {
+        let mut slots: [usize; MAX_SLOTS] = std::array::from_fn(|slot| slot);
+        slots.sort_by(|a, b| self.count[*b].cmp(&self.count[*a]));
+        slots
+            .into_iter()
+            .filter(|&slot| self.count[slot] > 0)
+            .map(|slot| (self.entry[slot], self.count[slot]))
+    }
+    /// The first ranked slot, right at least `least` times, that names
+    /// anything here. Its place is the one any such slot read that token
+    /// from, so a token slot a copy agrees with still carries the copy on.
+    fn read(&self, at: &Place, least: u32) -> Option<Named> {
+        let named = self
+            .ranked()
+            .filter(|&(_, count)| count >= least)
+            .find_map(|(entry, _)| entry.name(at))?;
+        Some(Named {
+            source: self.source_of(at, named.token, least),
+            ..named
+        })
+    }
+    /// The place the first ranked copying slot, right at least `least`
+    /// times, read `target` from.
+    fn source_of(&self, at: &Place, target: u32, least: u32) -> Option<usize> {
+        self.ranked()
+            .filter(|&(_, count)| count >= least)
+            .filter_map(|(entry, _)| entry.name(at))
+            .find(|named| named.token == target && named.source.is_some())
+            .and_then(|named| named.source)
+    }
+    fn insert(&mut self, entry: Entry) {
+        if let Some(slot) = (0..MAX_SLOTS).find(|&slot| self.count[slot] == 0) {
+            self.entry[slot] = entry;
+            self.count[slot] = 1;
+            return;
+        }
+        let weakest = (0..MAX_SLOTS)
+            .rev()
+            .min_by_key(|&slot| self.count[slot])
+            .unwrap_or(0);
+        self.count[weakest] -= 1;
+        if self.count[weakest] == 0 {
+            self.entry[weakest] = entry;
+            self.count[weakest] = 1;
+        }
+    }
+    /// Every slot that names `target` grows. When none does (the output
+    /// error), the token and each read that names it are added.
+    fn take(&mut self, at: &Place, target: u32) {
+        let right = |entry: Entry| entry.name(at).is_some_and(|named| named.token == target);
+        let mut hit = false;
+        for slot in 0..MAX_SLOTS {
+            if self.count[slot] > 0 && right(self.entry[slot]) {
+                self.count[slot] = self.count[slot].saturating_add(1);
+                hit = true;
+            }
+        }
+        if hit {
+            return;
+        }
+        self.insert(Entry::Token(target));
+        for entry in [Entry::Next, Entry::Copy] {
+            if right(entry) {
+                self.insert(entry);
+            }
+        }
+        // A wide pointer with no reach ahead is the narrow one; it is skipped.
+        let pointers = (0..POINTER_BACK)
+            .flat_map(|back| {
+                (0..=POINTER_AHEAD).flat_map(move |ahead| {
+                    [true, false].map(move |wide| Entry::Pointer {
+                        back: back as u8,
+                        ahead: ahead as u8,
+                        wide,
+                    })
+                })
+            })
+            .filter(|entry| {
+                !matches!(
+                    entry,
+                    Entry::Pointer {
+                        ahead: 0,
+                        wide: true,
+                        ..
+                    }
+                )
+            })
+            .filter(|&entry| right(entry))
+            .take(POINTERS_ADDED);
+        for entry in pointers.collect::<Vec<_>>() {
+            self.insert(entry);
+        }
+    }
+}
+
+/// A held row's address: the form, the reply so far, and after a copied
+/// token the token the copy would read next ([`AT_START`] elsewhere,
+/// [`AFTER_COPY`] for the row every copied token shares). The token ahead
+/// is how a copy knows to stop: a comma, a full stop or a line end in the
+/// source each has its own row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct HeldKey {
+    form: u32,
+    history: [u128; 2],
+    tail: u32,
+}
+
+/// The reply so far as a held row sees it: each token, with a run of copied
+/// tokens as one symbol, so a three-piece name and a one-piece number leave
+/// the same history.
+#[derive(Debug, Clone, Default)]
+struct History {
+    symbols: Vec<u32>,
+}
+
+impl History {
+    /// The symbol that stands for a run of copied tokens (one past the
+    /// twelve-bit vocabulary).
+    const COPIED: u32 = 4_096;
+
+    fn copying(&self) -> bool {
+        self.symbols.last() == Some(&Self::COPIED)
+    }
+    fn push(&mut self, token: u32, copied: bool) {
+        if !copied {
+            self.symbols.push(token);
+        } else if !self.copying() {
+            self.symbols.push(Self::COPIED);
+        }
+    }
+    /// The last sixteen symbols, thirteen bits each under a leading one.
+    fn address(&self) -> [u128; 2] {
+        let mut words = [1u128; 2];
+        let first = self.symbols.len().saturating_sub(16);
+        for (place, &symbol) in self.symbols[first..].iter().enumerate() {
+            let word = &mut words[place / 8];
+            *word = (*word << 13) | u128::from(symbol);
+        }
+        words
+    }
+    /// The tail of this place's own row and, after a copied token, of the
+    /// shared row. `ahead` is the token the copy would read next.
+    fn tails(&self, ahead: Option<u32>) -> (u32, Option<u32>) {
+        match ahead {
+            Some(ahead) if self.copying() => (ahead, Some(AFTER_COPY)),
+            None if self.copying() => (AFTER_COPY, None),
+            _ => (AT_START, None),
+        }
+    }
+}
+
+/// Rows held under the asked turn's form for the whole reply (the question
+/// carried across the reply), each keyed by the form and the reply so far.
+#[derive(Debug, Clone)]
+pub struct Asked {
+    eos: u32,
+    bos: u32,
+    context: usize,
+    seen: HashMap<Form, u32>,
+    rows: HashMap<HeldKey, HeldRow>,
+}
+
+impl Asked {
+    pub fn new(context: usize, bos: u32, eos: u32) -> Self {
+        Self {
+            eos,
+            bos,
+            context,
+            seen: HashMap::new(),
+            rows: HashMap::new(),
+        }
+    }
+    pub fn forms(&self) -> usize {
+        self.seen.len()
+    }
+    pub fn rows(&self) -> usize {
+        self.rows.len()
+    }
+    /// The asked turn before a reply that starts at `start`: the tokens after
+    /// the latest EOS, at most [`FORM_TOKENS`] of them.
+    fn turn<'a>(&self, tokens: &'a [u32], start: usize) -> &'a [u32] {
+        let floor = start - window_at(tokens, start, self.context, self.bos).len();
+        let low = floor.max(start.saturating_sub(FORM_TOKENS));
+        let first = (low..start)
+            .rev()
+            .find(|&place| tokens[place] == self.eos)
+            .map_or(low, |place| place + 1);
+        &tokens[first..start]
+    }
+    /// First pass: counts every form of the turn asked before `start`.
+    pub fn count(&mut self, tokens: &[u32], start: usize) {
+        for form in Form::each(self.turn(tokens, start)) {
+            *self.seen.entry(form).or_default() += 1;
+        }
+    }
+    /// Ends the first pass: forms seen fewer than [`FORM_SEEN`] times go, and
+    /// each kept form's count becomes its row id.
+    pub fn seal(&mut self) {
+        self.seen.retain(|_, count| *count >= FORM_SEEN);
+        let mut forms: Vec<Form> = self.seen.keys().copied().collect();
+        forms.sort_by_key(|form| (form.words, form.gap_at, form.gap_len));
+        for (id, form) in forms.into_iter().enumerate() {
+            self.seen.insert(form, id as u32);
+        }
+    }
+    /// The kept forms of the turn asked before `start`, most specific first,
+    /// at most [`FORMS_HELD`].
+    fn held(&self, tokens: &[u32], start: usize) -> Vec<u32> {
+        Form::each(self.turn(tokens, start))
+            .filter_map(|form| self.seen.get(&form).copied())
+            .take(FORMS_HELD)
+            .collect()
+    }
+    fn place<'a>(&self, tokens: &'a [u32], start: usize, cursor: Option<usize>) -> Place<'a> {
+        let floor = tokens.len() - window_at(tokens, tokens.len(), self.context, self.bos).len();
+        Place {
+            tokens,
+            floor,
+            start,
+            cursor,
+        }
+    }
+    /// The held answer at a place, the index of the form it came from and
+    /// whether the row was the place's own: each form's own row, most
+    /// specific form first, then each form's shared row. A row answers once
+    /// a slot of it has been right [`ROW_RIGHT`] times.
+    fn answer(&self, forms: &[u32], history: &History, at: &Place) -> Option<(Named, usize, bool)> {
+        let (own, shared) = history.tails(at.ahead());
+        let words = history.address();
+        let first = |tail: u32, is_own: bool| {
+            forms.iter().enumerate().find_map(|(index, &form)| {
+                let key = HeldKey {
+                    form,
+                    history: words,
+                    tail,
+                };
+                let named = self.rows.get(&key)?.read(at, ROW_RIGHT)?;
+                Some((named, index, is_own))
+            })
+        };
+        first(own, true).or_else(|| shared.and_then(|tail| first(tail, false)))
+    }
+    /// Second pass: writes the TRAIN reply `tokens[start..end]` under every
+    /// held form. False when the turn has no kept form.
+    pub fn write(&mut self, tokens: &[u32], start: usize, end: usize) -> bool {
+        let forms = self.held(tokens, start);
+        if forms.is_empty() {
+            return false;
+        }
+        let mut cursor = None;
+        let mut history = History::default();
+        for position in start..end {
+            let target = tokens[position];
+            let at = self.place(&tokens[..position], start, cursor);
+            // What the reader would answer here, before this write. Where it
+            // is right its verdict (copied or not) stands, so TRAIN histories
+            // are the histories the reader makes.
+            let read = self.answer(&forms, &history, &at);
+            let (own, shared) = history.tails(at.ahead());
+            let words = history.address();
+            let mut written = None;
+            for &form in &forms {
+                for tail in [Some(own), shared].into_iter().flatten() {
+                    let key = HeldKey {
+                        form,
+                        history: words,
+                        tail,
+                    };
+                    let row = self.rows.entry(key).or_default();
+                    row.take(&at, target);
+                    written = written.or_else(|| row.source_of(&at, target, 1));
+                }
+            }
+            cursor = match read {
+                Some((named, _, _)) if named.token == target => named.source,
+                _ => written,
+            };
+            history.push(target, cursor.is_some());
+        }
+        true
+    }
+    /// The greedy reply to `prompt` and whether a form was held. A place no
+    /// held row answers falls to `ladder` with its copy read.
+    pub fn reply(&self, ladder: &Ladder, prompt: &[u32], limit: usize) -> (Vec<u32>, bool) {
+        let (reply, under_form, _) = self.reply_traced(ladder, prompt, limit);
+        (reply, under_form)
+    }
+    /// As [`Asked::reply`], with what named each token: the form's index, its
+    /// own or the shared row and the slot (`ladder` where no held row
+    /// answered).
+    pub fn reply_traced(
+        &self,
+        ladder: &Ladder,
+        prompt: &[u32],
+        limit: usize,
+    ) -> (Vec<u32>, bool, Vec<String>) {
+        let start = prompt.len();
+        let mut trace = Vec::new();
+        let forms = self.held(prompt, start);
+        if forms.is_empty() {
+            let reply = ladder.reply(prompt, true, self.context, self.bos, self.eos, limit);
+            return (reply, false, trace);
+        }
+        let mut tokens = prompt.to_vec();
+        let mut cursor = None;
+        let mut history = History::default();
+        while tokens.len() - start < limit {
+            let at = self.place(&tokens, start, cursor);
+            let held = self.answer(&forms, &history, &at);
+            let named = match held {
+                Some((named, index, is_own)) => {
+                    let row = if is_own { "own" } else { "shared" };
+                    trace.push(format!(
+                        "form {index} {row} {:?} ahead {:?}",
+                        named.by,
+                        at.ahead()
+                    ));
+                    named
+                }
+                None => {
+                    let seen = window_at(&tokens, tokens.len(), self.context, self.bos);
+                    let Some(token) = ladder.next(seen, true) else {
+                        break;
+                    };
+                    trace.push("ladder".into());
+                    Named {
+                        token,
+                        source: None,
+                        by: Entry::Empty,
+                    }
+                }
+            };
+            cursor = named.source;
+            history.push(named.token, cursor.is_some());
+            tokens.push(named.token);
+            if named.token == self.eos {
+                break;
+            }
+        }
+        (tokens.split_off(start), true, trace)
     }
 }
 
@@ -800,10 +1457,21 @@ pub fn count_replies(
     eos: u32,
     limit: usize,
 ) -> (ReplyCount, Vec<Vec<u32>>) {
+    count_replies_by(panel, eos, &|prompt| {
+        reply(memory, readout, prompt, window, bos, eos, limit)
+    })
+}
+
+/// Counts the replies `answer` gives to a panel.
+pub fn count_replies_by(
+    panel: &[PanelRow],
+    eos: u32,
+    answer: &dyn Fn(&[u32]) -> Vec<u32>,
+) -> (ReplyCount, Vec<Vec<u32>>) {
     let mut count = ReplyCount::default();
     let mut replies = Vec::with_capacity(panel.len());
     for row in panel {
-        let got = reply(memory, readout, &row.prompt, window, bos, eos, limit);
+        let got = answer(&row.prompt);
         let prefix = got
             .iter()
             .zip(&row.reference)
@@ -833,6 +1501,7 @@ pub fn run_replies(
     window: usize,
     limit: usize,
     eos: u32,
+    orders: &[usize],
 ) -> Result<serde_json::Value> {
     use crate::training::PreparedDriver;
     use serde_json::json;
@@ -883,6 +1552,71 @@ pub fn run_replies(
         readouts.insert(name.into(), json!(count));
         replies.insert(name.into(), json!(got));
     }
+    let mut ladder_rows = 0usize;
+    let mut ladder_ms = 0u64;
+    if !orders.is_empty() {
+        let started = Instant::now();
+        let mut ladder = Ladder::new(vocabulary, slots, orders)?;
+        let mut ladder_judged = 0u64;
+        for &position in train.eligible_positions() {
+            ladder_judged +=
+                ladder.write(window_at(tokens, position, context, bos), tokens[position]);
+        }
+        ladder_rows = ladder.len();
+        ladder_ms = started.elapsed().as_millis() as u64;
+        for (name, use_copy) in [("ladder_rows", false), ("ladder_both", true)] {
+            let (count, got) = count_replies_by(&panel, eos, &|prompt| {
+                ladder.reply(prompt, use_copy, window, bos, eos, limit)
+            });
+            readouts.insert(name.into(), json!(count));
+            replies.insert(name.into(), json!(got));
+        }
+        readouts.insert("ladder_trust_writes".into(), json!(ladder_judged));
+
+        // The held-question rows: one reply is one run of adjacent targets.
+        let started = Instant::now();
+        let eligible = train.eligible_positions();
+        let mut runs: Vec<[usize; 2]> = Vec::new();
+        for &position in eligible {
+            match runs.last_mut() {
+                Some(run) if run[1] == position => run[1] = position + 1,
+                _ => runs.push([position, position + 1]),
+            }
+        }
+        let mut asked = Asked::new(window, bos, eos);
+        for run in &runs {
+            asked.count(tokens, run[0]);
+        }
+        asked.seal();
+        let mut written = 0u64;
+        for run in &runs {
+            written += u64::from(asked.write(tokens, run[0], run[1]));
+        }
+        let held = std::cell::Cell::new(0u64);
+        let traces = std::cell::RefCell::new(Vec::new());
+        let (count, got) = count_replies_by(&panel, eos, &|prompt| {
+            let (reply, under_form, trace) = asked.reply_traced(&ladder, prompt, limit);
+            held.set(held.get() + u64::from(under_form));
+            traces.borrow_mut().push(trace);
+            reply
+        });
+        replies.insert("asked_trace".into(), json!(traces.into_inner()));
+        readouts.insert("asked".into(), json!(count));
+        replies.insert("asked".into(), json!(got));
+        readouts.insert(
+            "asked_memory".into(),
+            json!({
+                "train_replies": runs.len(),
+                "train_replies_under_a_form": written,
+                "forms": asked.forms(),
+                "rows": asked.rows(),
+                "panel_replies_under_a_form": held.get(),
+                "form_seen": FORM_SEEN,
+                "form_gap": FORM_GAP,
+                "ms": started.elapsed().as_millis() as u64,
+            }),
+        );
+    }
     let report = json!({
         "schema": "uor-r4.discrete-conjunction-replies/1",
         "panel": panel_path.display().to_string(),
@@ -899,6 +1633,9 @@ pub fn run_replies(
         "writes": tally,
         "trust_writes": judged,
         "write_ms": write_ms,
+        "ladder_orders": orders,
+        "ladder_rows": ladder_rows,
+        "ladder_write_ms": ladder_ms,
         "reply_ms": started.elapsed().as_millis() as u64,
         "model": "none: rows and the copy read only",
         "readouts": readouts,
@@ -1147,6 +1884,73 @@ mod tests {
                 reply_ids: 4,
             }
         );
+        Ok(())
+    }
+
+    #[test]
+    fn a_ladder_reads_the_longest_suffix_and_backs_off_to_the_pair() -> Result<()> {
+        assert_ne!(Ladder::address(&[0, 5]), Ladder::address(&[5]));
+        assert_ne!(Ladder::address(&[0, 0, 5]), Ladder::address(&[0, 5]));
+        assert!(Ladder::new(4_096, 8, &[21]).is_err());
+        assert!(Ladder::new(8_192, 8, &[3]).is_err());
+        let mut ladder = Ladder::new(64, 2, &[3])?;
+        // After "9 5 6" comes 7; after "8 5 6" comes 3. The pair row (5, 6)
+        // holds both, 7 first.
+        ladder.write(&[0, 9, 5, 6], 7);
+        ladder.write(&[0, 9, 5, 6], 7);
+        ladder.write(&[0, 8, 5, 6], 3);
+        assert_eq!(ladder.next(&[0, 9, 5, 6], false), Some(7));
+        assert_eq!(ladder.next(&[0, 8, 5, 6], false), Some(3));
+        // An unseen three-token suffix falls to the pair row.
+        assert_eq!(ladder.next(&[0, 4, 5, 6], false), Some(7));
+        assert_eq!(ladder.next(&[0, 4, 4, 4], false), None);
+        // With no trust count the row output stands against the copy read;
+        // with no row the copy read answers.
+        assert_eq!(ladder.next(&[5, 6, 9, 9, 5, 6], true), Some(7));
+        assert_eq!(ladder.next(&[4, 4, 9, 2, 4, 4], true), Some(9));
+        // The copy read (2) wins a target the row output (7) misses twice.
+        let window = [5u32, 6, 2, 9, 5, 6];
+        assert_eq!(ladder.write(&window, 2), 2);
+        assert_eq!(ladder.write(&window, 2), 2);
+        assert_eq!(ladder.next(&window, true), Some(2));
+        assert_eq!(ladder.reply(&[0, 9, 5, 6], false, 192, 0, 1, 4), vec![7]);
+        Ok(())
+    }
+
+    #[test]
+    fn a_held_form_answers_a_name_it_never_saw_through_a_pointer() -> Result<()> {
+        // BOS x IS v DOT EOS WHAT x QM MARK | v DOT EOS, a new x and v each
+        // record. The form "WHAT ▢ QM MARK" is seen in every record.
+        let [bos, eos, is, dot, what, qm, mark] = [0u32, 1, 2, 3, 4, 5, 6];
+        let record = |x: u32, v: u32| vec![bos, x, is, v, dot, eos, what, x, qm, mark, v, dot, eos];
+        let mut tokens = Vec::new();
+        let mut runs = Vec::new();
+        for index in 0..10u32 {
+            let at = tokens.len();
+            tokens.extend(record(20 + index, 40 + index));
+            runs.push([at + 10, at + 13]);
+        }
+        let mut asked = Asked::new(192, bos, eos);
+        for run in &runs {
+            asked.count(&tokens, run[0]);
+        }
+        asked.seal();
+        assert!(asked.forms() > 0);
+        for run in &runs {
+            assert!(asked.write(&tokens, run[0], run[1]));
+        }
+        let ladder = Ladder::new(64, 2, &[3])?;
+        let prompt = record(60, 61)[..10].to_vec();
+        assert_eq!(asked.reply(&ladder, &prompt, 8), (vec![61, dot, eos], true));
+        // A fact that was never told: no pointer names anything, and the
+        // token slots were each right once only, so nothing answers.
+        let untold = vec![bos, eos, what, 60, qm, mark];
+        let (reply, under_form) = asked.reply(&ladder, &untold, 8);
+        assert!(under_form);
+        assert!(reply.is_empty());
+        // A turn of no kept form falls to the ladder.
+        let other = vec![bos, 7, 7, 7, eos, 8, 8, 8, 8, 8, 8, 8, 8, 8];
+        assert!(!asked.reply(&ladder, &other, 8).1);
         Ok(())
     }
 

@@ -16,10 +16,10 @@ fn run(args: &[String]) -> Result<(), String> {
 
     if args.first().map(String::as_str) == Some("replies") {
         // conjunction-probe replies CONFIG_JSON PANEL_JSON OUT_JSON SLOTS
-        // unordered|ordered WINDOW LIMIT EOS
-        if args.len() != 9 {
+        // unordered|ordered WINDOW LIMIT EOS ORDERS_CSV|-
+        if args.len() != 10 {
             return Err(
-                "usage: conjunction-probe replies CONFIG_JSON PANEL_JSON OUT_JSON SLOTS unordered|ordered WINDOW LIMIT EOS"
+                "usage: conjunction-probe replies CONFIG_JSON PANEL_JSON OUT_JSON SLOTS unordered|ordered WINDOW LIMIT EOS ORDERS_CSV|-"
                     .into(),
             );
         }
@@ -30,6 +30,14 @@ fn run(args: &[String]) -> Result<(), String> {
         };
         let bytes = std::fs::read(&args[1]).map_err(|e| format!("{}: {e}", args[1]))?;
         let config: DriverConfig = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        let orders: Vec<usize> = if args[9] == "-" {
+            Vec::new()
+        } else {
+            args[9]
+                .split(',')
+                .map(|text| text.parse::<usize>().map_err(|e| format!("{text}: {e}")))
+                .collect::<Result<_, _>>()?
+        };
         let number = |text: &String| text.parse::<u32>().map_err(|e| format!("{text}: {e}"));
         let summary = conjunction::run_replies(
             config,
@@ -40,6 +48,7 @@ fn run(args: &[String]) -> Result<(), String> {
             number(&args[6])? as usize,
             number(&args[7])? as usize,
             number(&args[8])?,
+            &orders,
         )
         .map_err(|e| e.to_string())?;
         println!("{summary}");
