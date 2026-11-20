@@ -1,19 +1,23 @@
-//! Conjunction memory (PLAN row 39, step 2): one row per unordered pair of
-//! different tokens, addressed by the prime product, holding one pointer token
-//! and a small confidence count. A row's pointer changes only when the output
-//! was wrong.
+//! Conjunction memory (PLAN row 39, step 2): one row per token pair, addressed
+//! by a prime product, holding a few pointer tokens with counts. A row changes
+//! which tokens it points at only when the output was wrong.
 //!
-//! 1. **Address.** The rule of `uor-r4-integer`'s `fbs_pair_rows`: token `t`
-//!    stands for the `t`-th prime, and the pair `a`, `b` has the address
-//!    `primes[a] * primes[b]`, under 2^31. Equal tokens have no address.
+//! 1. **Address.** Unordered ([`Order::Unordered`]) is the rule of
+//!    `uor-r4-integer`'s `fbs_pair_rows`: token `t` stands for the `t`-th prime
+//!    and the pair of different tokens `a`, `b` has the address
+//!    `primes[a] * primes[b]`, under 2^31. Ordered ([`Order::Ordered`]) gives
+//!    the nearer token its own primes: `primes[a] * primes[vocabulary + b]`,
+//!    under 2^32, so `a b` and `b a` have different rows and equal tokens have
+//!    one. Unique factorisation keeps both free of collisions.
 //! 2. **Pair of a target.** The two tokens before it, when the nearer one is
 //!    not BOS (a window never crosses a record).
-//! 3. **Read.** The output is the row's pointer when the pair has a row, else
-//!    the model's own output.
+//! 3. **Read.** The output is the row's pointer with the largest count (the
+//!    earliest slot on a tie) when the pair has one, else the model's output.
 //! 4. **Write.** With no row: nothing when the model's output was right, else a
-//!    new row pointing at the target. With a row: a right pointer gains one
-//!    count (up to [`CONFIDENCE_CAP`]); a wrong one loses one, and at one count
-//!    it is replaced by the target.
+//!    new row pointing at the target. With a row: a slot that points at the
+//!    target gains one count; otherwise the target takes an empty slot, and
+//!    with none empty every slot loses one count and the target takes a slot
+//!    that reached zero.
 //!
 //! Every step is an integer compare, add or table lookup.
 #![forbid(unsafe_code)]
@@ -24,28 +28,49 @@ fn invalid(message: impl Into<String>) -> Error {
     Error::Invalid(format!("conjunction: {}", message.into()))
 }
 
-/// Bound every pair address stays under.
-const LIMIT: u64 = 1 << 31;
-/// Largest confidence count a row holds.
-pub const CONFIDENCE_CAP: u16 = 255;
-pub const SCHEMA: &str = "uor-r4.discrete-conjunction-probe/1";
+/// Most pointer slots a row holds.
+pub const MAX_SLOTS: usize = 8;
+pub const SCHEMA: &str = "uor-r4.discrete-conjunction-probe/2";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Order {
+    Unordered,
+    Ordered,
+}
+
+/// A row: `count[s] == 0` marks slot `s` empty.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Row {
-    pub pointer: u32,
-    pub confidence: u16,
+    pub pointer: [u32; MAX_SLOTS],
+    pub count: [u32; MAX_SLOTS],
+}
+impl Row {
+    /// The pointer with the largest count, the earliest slot on a tie.
+    pub fn output(&self) -> Option<u32> {
+        let mut best: Option<usize> = None;
+        for slot in 0..MAX_SLOTS {
+            if self.count[slot] > best.map_or(0, |held| self.count[held]) {
+                best = Some(slot);
+            }
+        }
+        best.map(|slot| self.pointer[slot])
+    }
 }
 
 /// What one write did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Written {
-    /// The pair has no address (equal tokens or a token outside the vocabulary).
+    /// The pair has no address.
     NoAddress,
     /// No row, and the model's output was right: nothing stored.
     NotNeeded,
+    /// A new row, or an empty slot of a row, took the target.
     Inserted,
     Strengthened,
+    /// Every slot lost one count and none reached zero.
     Weakened,
+    /// Every slot lost one count and the target took one that reached zero.
     Replaced,
 }
 
@@ -90,24 +115,39 @@ fn first_primes(count: usize) -> Vec<u32> {
 
 #[derive(Debug)]
 pub struct Conjunction {
+    vocabulary: usize,
+    slots: usize,
+    order: Order,
     primes: Vec<u32>,
     rows: HashMap<u32, Row>,
 }
 
 impl Conjunction {
-    pub fn new(vocabulary: u32) -> Result<Self> {
-        if vocabulary < 2 {
-            return Err(invalid("needs a vocabulary of at least 2"));
+    pub fn new(vocabulary: u32, slots: usize, order: Order) -> Result<Self> {
+        if vocabulary < 2 || !(1..=MAX_SLOTS).contains(&slots) {
+            return Err(invalid("needs a vocabulary of at least 2 and 1..8 slots"));
         }
-        let primes = first_primes(vocabulary as usize);
-        let last = primes.len();
-        let top = u64::from(primes[last - 1]) * u64::from(primes[last - 2]);
-        if top >= LIMIT {
+        let vocabulary = vocabulary as usize;
+        let (count, limit) = match order {
+            Order::Unordered => (vocabulary, 1u64 << 31),
+            Order::Ordered => (2 * vocabulary, 1u64 << 32),
+        };
+        let primes = first_primes(count);
+        let top = match order {
+            Order::Unordered => {
+                u64::from(primes[vocabulary - 1]) * u64::from(primes[vocabulary - 2])
+            }
+            Order::Ordered => u64::from(primes[vocabulary - 1]) * u64::from(primes[count - 1]),
+        };
+        if top >= limit {
             return Err(invalid(format!(
-                "a vocabulary of {vocabulary} has the pair address {top}, past 31 bits"
+                "a vocabulary of {vocabulary} has the pair address {top}, past the address width"
             )));
         }
         Ok(Self {
+            vocabulary,
+            slots,
+            order,
             primes,
             rows: HashMap::new(),
         })
@@ -118,51 +158,60 @@ impl Conjunction {
     pub fn is_empty(&self) -> bool {
         self.rows.is_empty()
     }
-    /// The address of the unordered pair `a`, `b`.
+    /// The address of the pair `a`, `b` (`b` the nearer token).
     pub fn address(&self, a: u32, b: u32) -> Option<u32> {
-        if a == b {
+        let (a, b) = (a as usize, b as usize);
+        if a >= self.vocabulary || b >= self.vocabulary {
             return None;
         }
-        let pa = *self.primes.get(a as usize)?;
-        let pb = *self.primes.get(b as usize)?;
-        Some(pa * pb)
+        match self.order {
+            Order::Unordered if a == b => None,
+            Order::Unordered => Some(self.primes[a] * self.primes[b]),
+            Order::Ordered => Some(self.primes[a] * self.primes[self.vocabulary + b]),
+        }
     }
     pub fn read(&self, a: u32, b: u32) -> Option<Row> {
         self.rows.get(&self.address(a, b)?).copied()
     }
-    /// The row's pointer when the pair has a row, else the model's output.
+    /// The row's output when the pair has one, else the model's output.
     pub fn output(&self, a: u32, b: u32, model: Option<u32>) -> Option<u32> {
-        self.read(a, b).map(|row| row.pointer).or(model)
+        self.read(a, b).and_then(|row| row.output()).or(model)
     }
     pub fn write(&mut self, a: u32, b: u32, model: Option<u32>, target: u32) -> Written {
         let Some(address) = self.address(a, b) else {
             return Written::NoAddress;
         };
-        match self.rows.get_mut(&address) {
-            Some(row) if row.pointer == target => {
-                row.confidence = row.confidence.saturating_add(1).min(CONFIDENCE_CAP);
-                Written::Strengthened
+        let slots = self.slots;
+        let Some(row) = self.rows.get_mut(&address) else {
+            if model == Some(target) {
+                return Written::NotNeeded;
             }
-            Some(row) if row.confidence > 1 => {
-                row.confidence -= 1;
-                Written::Weakened
+            let mut row = Row::default();
+            row.pointer[0] = target;
+            row.count[0] = 1;
+            self.rows.insert(address, row);
+            return Written::Inserted;
+        };
+        for slot in 0..slots {
+            if row.count[slot] > 0 && row.pointer[slot] == target {
+                row.count[slot] = row.count[slot].saturating_add(1);
+                return Written::Strengthened;
             }
-            Some(row) => {
-                row.pointer = target;
-                row.confidence = 1;
-                Written::Replaced
+        }
+        let mut written = Written::Inserted;
+        if (0..slots).all(|slot| row.count[slot] > 0) {
+            for slot in 0..slots {
+                row.count[slot] -= 1;
             }
-            None if model == Some(target) => Written::NotNeeded,
-            None => {
-                self.rows.insert(
-                    address,
-                    Row {
-                        pointer: target,
-                        confidence: 1,
-                    },
-                );
-                Written::Inserted
+            written = Written::Replaced;
+        }
+        match (0..slots).find(|&slot| row.count[slot] == 0) {
+            Some(slot) => {
+                row.pointer[slot] = target;
+                row.count[slot] = 1;
+                written
             }
+            None => Written::Weakened,
         }
     }
 }
@@ -194,13 +243,15 @@ pub struct Reading {
     pub rows: u64,
     pub scored_targets: u64,
     pub model_top1: u64,
-    /// Targets whose pair has a row.
+    /// Targets whose pair has a row with an output.
     pub covered: u64,
-    /// Covered targets whose row points at the target.
+    /// Covered targets whose row output is the target.
     pub covered_row_right: u64,
+    /// Covered targets with the target in any slot of the row.
+    pub covered_row_holds: u64,
     /// Covered targets the model alone had right.
     pub covered_model_right: u64,
-    /// Row pointer where covered, model output elsewhere.
+    /// Row output where covered, model output elsewhere.
     pub combined_top1: u64,
 }
 
@@ -214,11 +265,14 @@ pub fn read_scored(memory: &Conjunction, scored: &[Scored]) -> Reading {
         let model_right = item.model == Some(item.target);
         reading.model_top1 += u64::from(model_right);
         let row = item.pair.and_then(|[a, b]| memory.read(a, b));
-        match row {
-            Some(row) => {
-                let right = row.pointer == item.target;
+        match row.and_then(|row| row.output().map(|output| (row, output))) {
+            Some((row, output)) => {
+                let right = output == item.target;
+                let holds = (0..MAX_SLOTS)
+                    .any(|slot| row.count[slot] > 0 && row.pointer[slot] == item.target);
                 reading.covered += 1;
                 reading.covered_row_right += u64::from(right);
+                reading.covered_row_holds += u64::from(holds);
                 reading.covered_model_right += u64::from(model_right);
                 reading.combined_top1 += u64::from(right);
             }
@@ -235,11 +289,15 @@ pub struct Options {
     /// Further TRAIN targets written with no model output (the memory's own
     /// output error decides the write).
     pub bulk_targets: u64,
+    pub slots: usize,
+    pub order: Order,
+    /// Last TRAIN targets kept out of every write and read as a second scored
+    /// set from the training corpus itself.
+    pub holdout: u64,
 }
 
-/// `conjunction-probe <config.json> <checkpoint.json|-> <out.json>
-/// <model_targets> <bulk_targets>`: write the memory from TRAIN and read it
-/// beside the model on DEV.
+/// `conjunction-probe`: write the memory from TRAIN and read it beside the
+/// model on DEV.
 #[cfg(feature = "cuda")]
 pub fn run(
     config: crate::training::DriverConfig,
@@ -262,6 +320,7 @@ pub fn run(
     if context < 2 {
         return Err(invalid("needs a context of at least 2"));
     }
+    let mut memory = Conjunction::new(vocabulary, options.slots, options.order)?;
     let driver = PreparedDriver::load(config)?;
     let model = match checkpoint {
         Some(path) => {
@@ -315,11 +374,22 @@ pub fn run(
     let train = driver.train();
     let eligible = train.eligible_positions();
     let tokens = train.tokens();
-    let model_end = options.model_targets.min(eligible.len() as u64);
+    let write_limit = (eligible.len() as u64).saturating_sub(options.holdout);
+    let model_end = options.model_targets.min(write_limit);
     let bulk_end = model_end
         .saturating_add(options.bulk_targets)
-        .min(eligible.len() as u64);
-    let mut memory = Conjunction::new(vocabulary)?;
+        .min(write_limit);
+    let mut tail = Vec::new();
+    let mut first = write_limit;
+    while first < eligible.len() as u64 {
+        first = model_output(train, first, &mut |position, target, output| {
+            tail.push(Scored {
+                pair: pair_at(tokens, position, bos),
+                target,
+                model: output,
+            });
+        })?;
+    }
     let empty = read_scored(&memory, &scored);
 
     let started = Instant::now();
@@ -344,6 +414,7 @@ pub fn run(
     }
     let model_ms = started.elapsed().as_millis() as u64;
     let after_model = read_scored(&memory, &scored);
+    let tail_after_model = read_scored(&memory, &tail);
 
     let started = Instant::now();
     let mut bulk_tally = WriteTally::default();
@@ -357,22 +428,29 @@ pub fn run(
             bulk_tally.add(memory.write(a, b, None, tokens[position]));
         }
         if done as u64 + 1 == mark {
-            curve.push(json!({"bulk_targets": mark, "dev": read_scored(&memory, &scored)}));
+            curve.push(json!({
+                "bulk_targets": mark,
+                "dev": read_scored(&memory, &scored),
+                "tail": read_scored(&memory, &tail),
+            }));
             mark <<= 1;
         }
     }
     let bulk_ms = started.elapsed().as_millis() as u64;
     let after_bulk = read_scored(&memory, &scored);
+    let tail_after_bulk = read_scored(&memory, &tail);
 
     let report = json!({
         "schema": SCHEMA,
-        "address_rule": "primes[a]*primes[b], unordered pair of different tokens",
+        "order": options.order,
+        "slots": options.slots,
         "pair_rule": "the two tokens before the target; none when the nearer is BOS",
-        "confidence_cap": CONFIDENCE_CAP,
         "lineage_sha256": driver.lineage_sha256()?,
         "checkpoint": checkpoint.map(|path| path.display().to_string()),
         "model_epoch": model.epoch()?,
         "train_eligible_targets": eligible.len(),
+        "tail_rule": "the last TRAIN targets, never written",
+        "tail_targets": tail.len(),
         "dev_ms": dev_ms,
         "dev_empty_memory": empty,
         "model_written": {
@@ -381,6 +459,7 @@ pub fn run(
             "writes": model_tally,
             "ms": model_ms,
             "dev": after_model,
+            "tail": tail_after_model,
         },
         "bulk_written": {
             "targets": bulk_end - model_end,
@@ -388,6 +467,7 @@ pub fn run(
             "ms": bulk_ms,
             "dev_curve": curve,
             "dev": after_bulk,
+            "tail": tail_after_bulk,
         },
     });
     std::fs::write(
@@ -402,9 +482,17 @@ pub fn run(
 mod tests {
     use super::*;
 
+    fn held(memory: &Conjunction, a: u32, b: u32) -> Vec<[u32; 2]> {
+        let row = memory.read(a, b).unwrap_or_default();
+        (0..MAX_SLOTS)
+            .filter(|&slot| row.count[slot] > 0)
+            .map(|slot| [row.pointer[slot], row.count[slot]])
+            .collect()
+    }
+
     #[test]
-    fn address_is_the_prime_product_and_ignores_order() -> Result<()> {
-        let memory = Conjunction::new(4_096)?;
+    fn unordered_address_is_the_prime_product() -> Result<()> {
+        let memory = Conjunction::new(4_096, 1, Order::Unordered)?;
         assert_eq!(memory.address(0, 1), Some(6));
         assert_eq!(memory.address(1, 0), Some(6));
         assert_eq!(memory.address(3, 3), None);
@@ -414,8 +502,27 @@ mod tests {
     }
 
     #[test]
+    fn ordered_address_gives_the_nearer_token_its_own_primes() -> Result<()> {
+        let memory = Conjunction::new(4, 1, Order::Ordered)?;
+        // primes 2 3 5 7 for the farther token, 11 13 17 19 for the nearer.
+        assert_eq!(memory.address(0, 1), Some(2 * 13));
+        assert_eq!(memory.address(1, 0), Some(3 * 11));
+        assert_eq!(memory.address(3, 3), Some(7 * 19));
+        assert_eq!(memory.address(4, 0), None);
+        let wide = Conjunction::new(4_096, 8, Order::Ordered)?;
+        let mut seen = std::collections::HashSet::new();
+        for a in [0u32, 1, 2, 4_094, 4_095] {
+            for b in [0u32, 1, 2, 4_094, 4_095] {
+                assert!(seen.insert(wide.address(a, b)));
+            }
+        }
+        assert!(Conjunction::new(8_192, 1, Order::Ordered).is_err());
+        Ok(())
+    }
+
+    #[test]
     fn a_row_is_stored_only_on_an_output_error() -> Result<()> {
-        let mut memory = Conjunction::new(64)?;
+        let mut memory = Conjunction::new(64, 1, Order::Unordered)?;
         assert_eq!(memory.write(1, 2, Some(9), 9), Written::NotNeeded);
         assert!(memory.is_empty());
         assert_eq!(memory.output(1, 2, Some(9)), Some(9));
@@ -426,30 +533,31 @@ mod tests {
     }
 
     #[test]
-    fn a_wrong_pointer_gives_way_only_after_its_count_is_spent() -> Result<()> {
-        let mut memory = Conjunction::new(64)?;
+    fn one_slot_gives_way_only_after_its_count_is_spent() -> Result<()> {
+        let mut memory = Conjunction::new(64, 1, Order::Unordered)?;
         assert_eq!(memory.write(1, 2, None, 7), Written::Inserted);
         assert_eq!(memory.write(1, 2, None, 7), Written::Strengthened);
         assert_eq!(memory.write(1, 2, None, 8), Written::Weakened);
-        assert_eq!(
-            memory.read(1, 2),
-            Some(Row {
-                pointer: 7,
-                confidence: 1
-            })
-        );
+        assert_eq!(held(&memory, 1, 2), vec![[7, 1]]);
         assert_eq!(memory.write(1, 2, None, 8), Written::Replaced);
-        assert_eq!(
-            memory.read(1, 2),
-            Some(Row {
-                pointer: 8,
-                confidence: 1
-            })
-        );
-        for _ in 0..400 {
-            memory.write(1, 2, None, 8);
+        assert_eq!(held(&memory, 1, 2), vec![[8, 1]]);
+        Ok(())
+    }
+
+    #[test]
+    fn slots_keep_the_commonest_pointer_through_other_targets() -> Result<()> {
+        let mut memory = Conjunction::new(64, 2, Order::Ordered)?;
+        // 7 is the commonest but never a majority of the stream.
+        for target in [7u32, 8, 9, 7, 10, 11, 7, 12, 7, 13] {
+            memory.write(1, 2, None, target);
         }
-        assert_eq!(memory.read(1, 2).map(|row| row.confidence), Some(255));
+        assert_eq!(memory.output(1, 2, None), Some(7));
+        assert_eq!(memory.output(2, 1, Some(3)), Some(3));
+        let mut one = Conjunction::new(64, 1, Order::Ordered)?;
+        for target in [7u32, 8, 9, 7, 10, 11, 7, 12, 7, 13] {
+            one.write(1, 2, None, target);
+        }
+        assert_eq!(one.output(1, 2, None), Some(13));
         Ok(())
     }
 
@@ -461,8 +569,10 @@ mod tests {
         assert_eq!(pair_at(&tokens, 2, bos), Some([0, 5]));
         assert_eq!(pair_at(&tokens, 3, bos), Some([5, 6]));
         assert_eq!(pair_at(&tokens, 5, bos), None);
-        let mut memory = Conjunction::new(64)?;
+        let mut memory = Conjunction::new(64, 2, Order::Unordered)?;
         memory.write(5, 6, None, 7);
+        memory.write(5, 6, None, 7);
+        memory.write(5, 6, None, 9);
         let scored = [
             Scored {
                 pair: Some([5, 6]),
@@ -484,6 +594,7 @@ mod tests {
         assert_eq!(reading.model_top1, 2);
         assert_eq!(reading.covered, 2);
         assert_eq!(reading.covered_row_right, 1);
+        assert_eq!(reading.covered_row_holds, 2);
         assert_eq!(reading.covered_model_right, 1);
         assert_eq!(reading.combined_top1, 2);
         Ok(())

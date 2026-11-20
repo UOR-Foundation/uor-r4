@@ -3,7 +3,7 @@
 //! pin (which covers `main.rs`) and every existing checkpoint stay valid.
 //!
 //! Usage: conjunction-probe CONFIG_JSON CHECKPOINT_JSON|- OUT_JSON
-//! MODEL_TARGETS BULK_TARGETS
+//! MODEL_TARGETS BULK_TARGETS SLOTS unordered|ordered HOLDOUT
 //! OUT_JSON must not exist. `-` reads a new model from the config.
 
 use std::process::ExitCode;
@@ -14,12 +14,17 @@ fn run(args: &[String]) -> Result<(), String> {
     use uor_r4_discrete::conjunction::{self, Options};
     use uor_r4_discrete::training::DriverConfig;
 
-    if args.len() != 5 {
+    if args.len() != 8 {
         return Err(
-            "usage: conjunction-probe CONFIG_JSON CHECKPOINT_JSON|- OUT_JSON MODEL_TARGETS BULK_TARGETS"
+            "usage: conjunction-probe CONFIG_JSON CHECKPOINT_JSON|- OUT_JSON MODEL_TARGETS BULK_TARGETS SLOTS unordered|ordered HOLDOUT"
                 .into(),
         );
     }
+    let order = match args[6].as_str() {
+        "unordered" => conjunction::Order::Unordered,
+        "ordered" => conjunction::Order::Ordered,
+        other => return Err(format!("order {other}: unordered or ordered")),
+    };
     let bytes = std::fs::read(&args[0]).map_err(|e| format!("{}: {e}", args[0]))?;
     let config: DriverConfig = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
     let checkpoint = (args[1] != "-").then(|| Path::new(&args[1]));
@@ -27,6 +32,9 @@ fn run(args: &[String]) -> Result<(), String> {
     let options = Options {
         model_targets: number(&args[3])?,
         bulk_targets: number(&args[4])?,
+        slots: number(&args[5])? as usize,
+        order,
+        holdout: number(&args[7])?,
     };
     let report = conjunction::run(config, checkpoint, Path::new(&args[2]), options)
         .map_err(|e| e.to_string())?;
@@ -36,6 +44,7 @@ fn run(args: &[String]) -> Result<(), String> {
             "empty": report["dev_empty_memory"],
             "model_written": report["model_written"]["dev"],
             "bulk_written": report["bulk_written"]["dev"],
+            "tail": report["bulk_written"]["tail"],
         })
     );
     Ok(())
