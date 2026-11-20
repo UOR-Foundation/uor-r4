@@ -230,3 +230,29 @@ two arms at 4,096 steps with reachable margins (0.10 and 0.25), against the marg
 **bits 7.2223 at the same 50 M tokens**. Gate, fixed before the numbers: a reachable margin must reach
 **below 7.02 bits** (0.2 better) at equal tokens, or the margin is not the deficit and the next suspect
 is the transport.
+
+## The read stack's cost curve, measured on a quiet card (20 Nov)
+
+A cost measurement taken on this laptop's card said the conditioning reads were 6-10x (4.8 s/step
+against 0.585). **It was contention**: two other labs' jobs held 10.7 GiB at 100 % utilisation, and
+the same four configs on a dedicated Vast 5090 give a monotone, modest curve:
+
+| configuration | ms/step | 16,384 steps |
+|---|---|---|
+| no reads | **459** | 2.1 h |
+| opening 4 + register 1 | 589 | 2.7 h |
+| opening 8 + register 4 | **843** | 3.8 h |
+| opening 16 + register 16 (+ picks 4) | 1,259 | 5.7 h |
+
+So the whole read stack at its maximum is **2.7x** the no-read step, and the per-slot cost is roughly
+linear. The stage split at the top of the range puts 67 % in the backward, 5 % in the register's
+forward — the reads are not the forward cost, the gradient through them is.
+
+**What that changes:** the conditioning experiment does not need the maximum, and it does not need
+16,384 steps. The comparison point is **8,192**, where two references already exist — 45 openings
+with no reads, 78 with opening 4 + register 1. The middle config at that point costs 1.9 h instead of
+5.7 h, and still answers the question (does more slot capacity help).
+
+**The rule, now standing:** every cost reading is taken on a **quiet** card, and `nvidia-smi
+--query-compute-apps` is checked before the run, not after the surprise. A timing taken while another
+lab's job is resident is not a measurement, and optimising against it is worse than not measuring.
