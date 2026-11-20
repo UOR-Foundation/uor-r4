@@ -31,3 +31,9 @@ The later count audit requires the histogram launch repair too. It uses the orig
 | `claude-439/run2/pick-p10.json` | `c1c6fe526b99dbc3939ca2fa8927cdebe82eb47f23ebfe83499f35e035fdc959` |
 
 Bind these sources, verified input manifests, finite results and emitted AOT executable and image hashes in the dispatch record. Require sm_120 machine code and fail closed on forbidden instructions or libraries. No customer-facing or held claim follows from this fitness review.
+
+## Exact repaired v4 gate
+
+The source archive SHA-256 is `372fded6915d8ab2677df4fb7b6c5ae768bbabd2226740d559f51b52681a236d`. Its sealed build manifest SHA-256 is `64c0815b0d47056ff500aa213a20c5e87e7e754c37d1c40b65f7f4d90416b593`, and its finite manifest SHA-256 is `d405582d447abe4412c60366a91ff8a014324e57d4a9e3a04a8f0d945c4fc179`. I revalidated the stage, build and finite hash manifests on the owned RTX 5090. The six audited loaded images had zero unadmitted numeric instructions. The exact A1 device executable `9ee5329eedb146fed090a76e96cabf3c69497cdee3b37ad8bdb513e54ec03ae3` and Rust host executable `e146430310a1e6465e779ae6d03d7ab7de0364204380e5f1c122ce5d22338997` passed all 97 Q12 sums, 717,024 Q32 words and the malformed-routine check. The exact repaired C128 checks also passed. Production fit still requires off-pod full-C1 restored identity, the fresh lease/resource checks and the parent GO. Its scope and comparison fields are unchanged. [Repaired count receipt context](../count/REPORT.md)
+
+The production wrapper SHA-256 is `8954e42024d85628382bb9b1c6498140eff33e6ab5d0d757c513363ddce0b705`. It requires strict hash checks and a structured GO record that binds the current GPU, restored count, C1/R inputs, trunk and verified host and device binaries. It rehashes the reviewed stage, build, loaded-machine and finite manifests, and the generated R row and probe ordinal tapes. It also preserves the per-phase resource files. [Production wrapper](dispatch.sh)
