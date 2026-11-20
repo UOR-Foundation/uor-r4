@@ -36,7 +36,9 @@ nearly as much from the same split (10 to 27). The D11 codes' edge over the perm
   the run went through (`kn_score.cu`, `ngram_count.cu`, `kn_pick.rs`, and the move of the Pick
   mixture code into `kn_ceiling/runtime/mixture.rs`). This unit's own diff is unchanged apart from where
   `ceiling_pick_row_classes` lives. The merged head is tested on the laptop only (below); the CUDA tests
-  have not run at it.
+  have not run at it. The sheet's rule for later commits ("only documents, or repair a step-1, B1, B2,
+  B3 or replication failure") does not name a merge from main. This merge (`6faf5d535`) is outside that
+  list, and it is handled by scoping every number here to the binary built at `aa36f9414`.
 - **The sheet's power estimate was far off** [claude]. It expected an A1s − A1 band about as wide as
   A1 − C3 (208 micro-BPB). It was 16 wide: A1s and A1 differ only in the 36,362 distance-2 targets'
   buckets, so their paired differences are near zero on almost every record.
@@ -126,14 +128,15 @@ card, sampled.
 
 ## Checks run at the head
 
-- **G1, laptop, at the code head `57bfb7035`:** `kn_ceiling` tests 25 passed (46 under the `kn_`
+- **G1, laptop, at the code head `57bfb7035`** (the commit to the FIT head `aa36f9414` changes only the sheet): `kn_ceiling` tests 25 passed (46 under the `kn_`
   filter), among them `the_split_class_rule` and `the_split_bucket_rule`; the instrument's tests 44
   passed and 1 ignored, among them `split_arms_leave_the_five_arms_unchanged`,
   `pick_stats_count_each_class`, `the_split_reading_map` and `split_targets_follow_the_distance`;
   stub-nvcc `cargo check --features cuda --bins` clean apart from the unused-import warning already at
   `pick_device.rs:133`.
 - **G2, negatives** (set aside, run red, restored, run green): distance 3 mapped to class 3 failed
-  `the_split_class_rule`; a three-class build failed `the_split_bucket_rule`.
+  `the_split_class_rule`; a three-class build failed `the_split_bucket_rule`; with the split refusal switched off (at the
+  review, 20 Nov), `split_targets_follow_the_distance` failed.
 - **The job's step 3, dry-run on the laptop** against claude-439's committed record: the record against
   itself gave `replication: PASS`; one split arm's B3 flag set false stopped with exit 2 as a B3 failure;
   one changed `scored` gave `replication: FAIL at main.c2.scored`, exit 6.
