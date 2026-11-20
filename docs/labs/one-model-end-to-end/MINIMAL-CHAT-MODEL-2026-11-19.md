@@ -1,80 +1,73 @@
-# The minimal chat model: one corpus, one session, one gate (19 Nov 2026)
+# The minimal chat model: real corpus, real gate (19 Nov 2026)
 
-**This supersedes `PLAN-2026-11-18.md` as the primary objective.** That plan's objective was a
-general-text next-token model measured in bits. The product is a chat model, and the two are not the
-same project. The language-modelling line continues only as an **instrument** (does the transport
-extract information at scale), not as the thing being built.
+**This supersedes `PLAN-2026-11-18.md` as the primary objective**, and it supersedes the first version
+of this document, which specified an authored dialogue shape. That version was wrong for a reason
+already in the record, and the owner named it: Decision 15 in `GO-FORWARD-2026-11-16` says the reply
+defect is *"corpus shape (one frame per intent)"*, and Decision 17 says a prompt echo passed as an
+answer. **Authoring a `User:` / `Assistant:` frame is that same defect with new words.** It is
+refused below, in writing, so it is not proposed again.
 
-## Why this document exists
+## The rule that follows from that history
 
-`GO-FORWARD-2026-11-16.md` is a durable 13-item plan whose item 13 is *the run*: arm r's memory-line
-recipe, 16,384 steps, ~1.4 h per seed, gated on the protocol panel. On 18 Nov a different plan
-(`PLAN-2026-11-18`, M1–M6 / C1–C8) replaced its objective, and the run never happened:
+> **No authored frames, templates or frozen prompt shapes, in the corpus or in the gate.**
+> The corpus is dialogue that already exists. The capability is *mined* from it. If the capability is
+> not in the data, that is a finding, not a reason to manufacture a fixture for it.
 
-- no task directory after 16 Nov corresponds to it (the newest are `codex-49..53`, all the other plan);
-- no run directory exists for a memory-line or chat run;
-- nothing in the record disproves it.
+This is the specific failure the owner describes: a test tied to a hand-written structure passes only
+that structure, then breaks when anything changes and rules out models that were fine.
 
-**It was abandoned, not refuted.** That is the failure this document is written to correct, in the
-same way `GO-FORWARD` was written to correct the one before it.
+## What we already have (nothing to invent)
 
-## The honest position after today
+- **The corpus is real dialogue, tokenised, on the pool**: `tokens-8k-clean-2026-11-17`, **385,284,895
+  tokens**, 223 donor shards, with a **response mask** marking the reply positions and a sealed
+  manifest (`f2437189…`/`452941db…`). It came from real donor prompts and replies through
+  `prepare-chat-jsonl`; there is no authored shape in it.
+- **The gate content is real too**: `instr-panel-2026-11-17.json`, **196 items** with exact `expected`
+  answers (132 `boxed`, 64 `number`), drawn from numina — content-grounded, frame-free, frozen with
+  its census recorded before any score.
+- **The mechanisms** are all built: FBS transport, quaternion recurrence, Hamming reads (copy-latest,
+  **ask**, place, copy-longest), three-key turn memory, pair rows, prompt register, opening read,
+  address memory, vector reads, state-flock / prime-route / starling reads, the centroid writer
+  address, and a reachable margin.
+- **The three fixes from the 18–19 Nov detour**, all portable to this line: a reachable token margin
+  (**0.94 bits, +30 % nearest at equal cost**), the centroid writer address (**2.3 % → 15.8 %**
+  admission, **0.4 % → 11.9 %** pick on a frozen trunk), and a measurement a parrot cannot pass.
 
-Two lines have been running, and they answer different questions:
+## Where the chat question actually stands
 
-| | chat line (arm r) | general-text line |
-|---|---|---|
-| trunk | 1.11 M values | ~30 M values |
-| data | memory-line dialogue curriculum | 385 M tokens of donor text |
-| measures | answering about a fact in context | next-token on general text |
-| state | copy recall 0.749–0.782; **0 complete replies** | top-1 17.5 % (ahead of a bigram), bits behind it |
+The chat line's recorded blockers are **not** "the corpus is synthetic":
 
-The general-text line cannot become a chat model by more training: it is a next-token predictor with
-no dialogue objective and no memory curriculum. **The chat line is the product.**
+- copy recall **0.749 / 0.759 / 0.782** at three seeds, with the copy read and a memory line;
+- **0 complete replies**, because the first reply token takes the *format* from the copy heads rather
+  than the asked value (the trace in `GO-FORWARD` §2c.17: the value arrives four rows later);
+- write-overs of the "47 → 40" class when a copied value is later overwritten;
+- **0 answers, 254/256 replies sharing a 4-token span with the prompt** once echo is measured.
 
-## What the detour bought, and it is portable
+So the work is: the **ask-head in the recipe** (built, never used), the **margin**, the **address**,
+and a gate that cannot be passed by echoing.
 
-1. **The objective was broken on both lines.** `TOKEN_MARGIN` defaulted to 1.0 against a score that
-   is a mean over 512 lanes and cannot express it. A reachable margin was worth **0.94 bits and +30 %
-   nearest at equal cost** on the LM line, and the chat recipe trains with the same default.
-2. **The writer's address was the readout defect**: 2.3 % → 15.8 % admission and 0.4 % → 11.9 % pick
-   on one frozen trunk. The chat line serves through the same writer.
-3. **A measurement top-1 cannot fool.** Bits on bit-identical rows with a count baseline; and the
-   lesson that a metric a parrot passes (Decision 17's echo) is not a capability metric.
+## Unit 0 — mine the capability from the real corpus (no GPU)
 
-## What already exists (do not rebuild it)
+Not "build a corpus". **Measure what the corpus already contains**, and stop if it is not there:
 
-Mechanisms in the trainer today, none of which need to be invented: FBS transport; quaternion
-recurrence; Hamming reads **copy-latest, ask, place, copy-longest**; three-key turn memory; pair rows;
-prompt register; opening read; address memory; vector reads; state-flock, prime-route and starling
-reads; the centroid writer address; a reachable margin.
+1. Reconstruct conversations from the tokenised shards and the dialogue protocol's own separators.
+2. Census, with the existing tooling (`train-in-space --census 1`, `heldout-panel`):
+   - conversations with **more than one user turn** (the shape any "answer about something said
+     earlier" capability needs);
+   - conversations where a **later question refers to an earlier stated span** (the memory shape);
+   - the distribution of **reply openings** and reply lengths (is there one dominant frame?);
+   - **held-out rows that repeat a TRAIN reply** (the echo risk, measured before training).
+3. **Gate on the census, before any run:** if the corpus holds ≥ 2,000 multi-turn conversations and
+   ≥ 500 with a later question about an earlier span, the capability can be measured and trained. If
+   it holds far fewer, **say so and stop** — the finding is that the corpus lacks the capability, and
+   the response is a real-data source that has it (e.g. instruction/QA data), not a fixture we write.
 
-**The ask-head — the mechanism the first-reply-token trace names — is already implemented**
-(`--hamming-ask 1 --hamming-carry-question H`) and **has never been in the recipe**, which uses the
-place read instead. The two are exclusive.
+This unit costs no GPU and decides whether the rest is possible. That is the measurement the last
+three weeks lacked.
 
-## What is missing, in dependency order
+## Unit 1 — the session
 
-1. **A dialogue-shaped memory corpus** with held-out values, paraphrases and distractors, where the
-   answer is the value and not a repeat of the user's sentence. Every chat number so far counted
-   echo fidelity: Decision 17 measured **0 answers and 254/256 replies sharing a 4-token span with
-   their prompt**. This is the blocker, and it is data work, not model work.
-2. **One composition**: arm r's recipe + the ask-head + `--token-margin 0.02` + the centroid address.
-3. **The non-echo gate** on a held-out panel.
-4. **The served artifact** carrying the read (the export path exists; it has been exercised once).
-
-## The corpus spec (unit 0)
-
-- Shape: `User: <fact>` / `Assistant: <ack>` / `User: <question>` / `Assistant: <value>`.
-- Each fact has **≥ 10 paraphrased question forms** and 2–4 **distractor facts** in the same
-  conversation, so answering requires picking the asked fact rather than the nearest one.
-- A **held-out value set** never seen in TRAIN; the panel's facts and values are disjoint from it.
-- Census before training, in the project's own way: TRAIN/held-out overlap, paraphrase count per
-  fact, distractor count, and the share of replies that a prompt echo would pass (**must be 0**).
-- Tooling that exists: `prepare-chat-jsonl` (JSONL `messages` → UORT), `heldout-panel`,
-  `train-in-space --census 1`.
-
-## The session (unit 1)
+The proven recipe, on that corpus, with the three fixes:
 
 ```
 train-in-space --objective nearest --fast-rivals 1 \
@@ -84,31 +77,36 @@ train-in-space --objective nearest --fast-rivals 1 \
   --seed {1,2,3} --out runs/chat-min-s{seed}
 ```
 
-Cost from the measured table in `GO-FORWARD` §6: **0.300 s/step on a 4090, ~1.4 h per seed**, ~4.5 h
-for three. Compute is not the bottleneck.
+Measured cost: **0.300 s/step on a 4090, ~1.4 h per seed**, ~4.5 h for three (`GO-FORWARD` §6).
+Compute is not the bottleneck. **Score the dev-best checkpoint, not the last** (Decision 13).
 
-## The gate (fixed before the numbers)
+## Unit 2 — the gate (content-grounded, frame-free)
 
-- **≥ 25 of 40 held-out memory items answered and non-echo**, at all three seeds.
-  (The bar of 25/40 is the project's own, from the memory line; the non-echo requirement is
-  Decision 17's correction.)
-- **Right attribute ≥ 80 %** of the answered items.
-- **Zero write-over errors of the "47 → 40" class** (a copied value overwritten by an unrelated one).
-- Bits and top-1 are reported **beside** these, never instead of them.
+All three are measured on **held-out real data**, never on a shape we wrote:
 
-## After the first model — the increment ladder
+- **Non-echo**: the reply must not share a 4-token span with the prompt (Decision 17's test), on
+  held-out real prompts.
+- **Novelty**: reply 4-gram novelty against TRAIN (the `m2-evidence` instrument already reports it),
+  so a memorised TRAIN reply is visible rather than credited.
+- **Exact answers where the data has them**: the 196-item panel's exact-answer scoring, reported as
+  an oracle grade beside the two above — not as the chat claim, because a 1.11 M-value model will not
+  solve numina, and a gate the model cannot pass at all measures nothing.
 
-| # | unit | gate |
+Bits and top-1 are reported **beside** these, never instead of them.
+
+## Then increment
+
+| # | unit | decision it changes |
 |---|---|---|
-| 2 | slot / latest-wins arm if values are wrong | write-over errors → 0 |
-| 3 | export and serve the **dev-best** checkpoint (Decision 13), not the last | read+answer parity on the artifact |
-| 4 | pair rows, then 2× facts at the same recipe | the same 25/40 gate at double the facts |
-| 5 | scale tokens at the same mixture (Decision 16: volume is not the lever at 1.11 M) | measured, then decide |
+| 3 | slot / latest-wins arm if values are wrong | the "47 → 40" class |
+| 4 | export and serve the dev-best checkpoint | whether the read survives integer serving |
+| 5 | 2× facts / 2× tokens at the same mixture (Decision 16) | whether volume is a lever at this size |
 
 ## What this refuses
 
+- **Authored frames, templates, or frozen prompt shapes** in the corpus or the gate.
 - Another language-modelling experiment as the primary objective.
 - Any capability number from a metric a prompt echo passes.
 - Scoring the last checkpoint instead of the dev-best.
-- Calling a mechanism "untested" when it is built and simply not in the recipe.
+- Calling a built mechanism "untested" when it is simply not in the recipe.
 - Any matmul or softmax, at any stage, in any form.
