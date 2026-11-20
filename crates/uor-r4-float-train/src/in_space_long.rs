@@ -15838,10 +15838,18 @@ pub fn recall_payload_probe(
 /// The pinned tokenizer.
 fn pinned_tokenizer(data_root: &Path) -> Result<ByteBpeTokenizer> {
     let tokenizer_bytes = fs::read(data_root.join("tokenizer.json"))?;
-    if sha256_bytes(&tokenizer_bytes) != hs::PINNED_TOKENIZER_SHA256 {
-        return Err(invalid(
-            "tokenizer.json differs from the pinned d36d3e87 tokenizer",
-        ));
+    let actual = sha256_bytes(&tokenizer_bytes);
+    // The constant is the 2026-10-25 sheet tokenizer. A later corpus may be built on a later
+    // tokenizer — `tokens-8k-clean-2026-11-17` is (`7d1d0ce2…`), and decoding its rows with the
+    // 2026-10-25 vocabulary produced gibberish in every printed sample. A run that names that
+    // tokenizer explicitly through `UOR4_TOKENIZER_SHA256` may decode with it; without the variable
+    // the pinned behaviour is unchanged, so no existing checkpoint or sheet moves.
+    let expected = std::env::var("UOR4_TOKENIZER_SHA256")
+        .unwrap_or_else(|_| hs::PINNED_TOKENIZER_SHA256.to_owned());
+    if actual != expected {
+        return Err(invalid(format!(
+            "tokenizer.json differs from the pinned {expected} tokenizer (got {actual})"
+        )));
     }
     ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer_bytes)
         .ok_or_else(|| invalid("tokenizer.json is not a byte-level BPE tokenizer"))
