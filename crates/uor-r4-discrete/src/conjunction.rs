@@ -603,6 +603,16 @@ impl HeldRow {
             ..named
         })
     }
+    /// True when the best slot (right at least `least` times) is a pointer
+    /// or the copy read and it names nothing here: the row is about to
+    /// answer from a lower slot for a fact the context does not hold.
+    fn empty_read(&self, at: &Place, least: u32) -> bool {
+        self.ranked()
+            .find(|&(_, count)| count >= least)
+            .is_some_and(|(entry, _)| {
+                matches!(entry, Entry::Pointer { .. } | Entry::Copy) && entry.name(at).is_none()
+            })
+    }
     /// The place the first ranked copying slot, right at least `least`
     /// times, read `target` from.
     fn source_of(&self, at: &Place, target: u32, least: u32) -> Option<usize> {
@@ -687,6 +697,8 @@ struct HeldKey {
     form: u32,
     history: [u128; 2],
     tail: u32,
+    /// The rows for replies whose first read came up empty.
+    empty: bool,
 }
 
 /// The reply so far as a held row sees it: each token, with a run of copied
@@ -807,26 +819,73 @@ impl Asked {
     /// The held answer at a place, the index of the form it came from and
     /// whether the row was the place's own: each form's own row, most
     /// specific form first, then each form's shared row. A row answers once
-    /// a slot of it has been right [`ROW_RIGHT`] times.
-    fn answer(&self, forms: &[u32], history: &History, at: &Place) -> Option<(Named, usize, bool)> {
+    /// a slot of it has been right [`ROW_RIGHT`] times. `empty` reads the
+    /// rows written for replies whose first read came up empty, and falls to
+    /// the ordinary rows where there is none. `missed` is set when a row
+    /// consulted has a pointer or copy read as its best slot and that read
+    /// names nothing.
+    fn answer(
+        &self,
+        forms: &[u32],
+        history: &History,
+        at: &Place,
+        empty: bool,
+        missed: &mut bool,
+    ) -> Option<(Named, usize, bool)> {
         let (own, shared) = history.tails(at.ahead());
         let words = history.address();
-        let first = |tail: u32, is_own: bool| {
+        let mut first = |tail: u32, is_own: bool, empty: bool| {
             forms.iter().enumerate().find_map(|(index, &form)| {
                 let key = HeldKey {
                     form,
                     history: words,
                     tail,
+                    empty,
                 };
-                let named = self.rows.get(&key)?.read(at, ROW_RIGHT)?;
-                Some((named, index, is_own))
+                let row = self.rows.get(&key)?;
+                *missed |= row.empty_read(at, ROW_RIGHT);
+                Some((row.read(at, ROW_RIGHT)?, index, is_own))
             })
         };
-        first(own, true).or_else(|| shared.and_then(|tail| first(tail, false)))
+        let mut both = |empty: bool| {
+            if let Some(found) = first(own, true, empty) {
+                return Some(found);
+            }
+            first(shared?, false, empty)
+        };
+        if empty {
+            if let Some(found) = both(true) {
+                return Some(found);
+            }
+        }
+        both(false)
     }
     /// Second pass: writes the TRAIN reply `tokens[start..end]` under every
     /// held form. False when the turn has no kept form.
     pub fn write(&mut self, tokens: &[u32], start: usize, end: usize) -> bool {
+        self.write_under(tokens, start, end, false)
+    }
+    /// Third pass, after every reply is written: where the reader's own
+    /// reply to this TRAIN prompt meets an empty read, the true reply is
+    /// written again under the rows for that case. True when it was.
+    pub fn write_empty(
+        &mut self,
+        ladder: &Ladder,
+        tokens: &[u32],
+        start: usize,
+        end: usize,
+        limit: usize,
+    ) -> bool {
+        let forms = self.held(tokens, start);
+        if forms.is_empty() {
+            return false;
+        }
+        // The reader sees the prompt's own window, not the corpus before it.
+        let floor = start - window_at(tokens, start, self.context, self.bos).len();
+        let (_, _, missed) = self.generate(ladder, &forms, &tokens[floor..start], limit, false);
+        missed && self.write_under(tokens, start, end, true)
+    }
+    fn write_under(&mut self, tokens: &[u32], start: usize, end: usize, empty: bool) -> bool {
         let forms = self.held(tokens, start);
         if forms.is_empty() {
             return false;
@@ -839,7 +898,7 @@ impl Asked {
             // What the reader would answer here, before this write. Where it
             // is right its verdict (copied or not) stands, so TRAIN histories
             // are the histories the reader makes.
-            let read = self.answer(&forms, &history, &at);
+            let read = self.answer(&forms, &history, &at, empty, &mut false);
             let (own, shared) = history.tails(at.ahead());
             let words = history.address();
             let mut written = None;
@@ -849,6 +908,7 @@ impl Asked {
                         form,
                         history: words,
                         tail,
+                        empty,
                     };
                     let row = self.rows.entry(key).or_default();
                     row.take(&at, target);
@@ -871,26 +931,46 @@ impl Asked {
     }
     /// As [`Asked::reply`], with what named each token: the form's index, its
     /// own or the shared row and the slot (`ladder` where no held row
-    /// answered).
+    /// answered). A reply that met an empty read is answered again from the
+    /// rows for that case; its trace opens with `empty read`.
     pub fn reply_traced(
         &self,
         ladder: &Ladder,
         prompt: &[u32],
         limit: usize,
     ) -> (Vec<u32>, bool, Vec<String>) {
-        let start = prompt.len();
-        let mut trace = Vec::new();
-        let forms = self.held(prompt, start);
+        let forms = self.held(prompt, prompt.len());
         if forms.is_empty() {
             let reply = ladder.reply(prompt, true, self.context, self.bos, self.eos, limit);
-            return (reply, false, trace);
+            return (reply, false, Vec::new());
         }
+        let (reply, trace, missed) = self.generate(ladder, &forms, prompt, limit, false);
+        if !missed {
+            return (reply, true, trace);
+        }
+        let (reply, mut trace, _) = self.generate(ladder, &forms, prompt, limit, true);
+        trace.insert(0, "empty read".into());
+        (reply, true, trace)
+    }
+    /// One greedy reply under `forms`, its trace and whether any place met
+    /// an empty read.
+    fn generate(
+        &self,
+        ladder: &Ladder,
+        forms: &[u32],
+        prompt: &[u32],
+        limit: usize,
+        empty: bool,
+    ) -> (Vec<u32>, Vec<String>, bool) {
+        let start = prompt.len();
+        let mut trace = Vec::new();
+        let mut missed = false;
         let mut tokens = prompt.to_vec();
         let mut cursor = None;
         let mut history = History::default();
         while tokens.len() - start < limit {
             let at = self.place(&tokens, start, cursor);
-            let held = self.answer(&forms, &history, &at);
+            let held = self.answer(forms, &history, &at, empty, &mut missed);
             let named = match held {
                 Some((named, index, is_own)) => {
                     let row = if is_own { "own" } else { "shared" };
@@ -921,7 +1001,7 @@ impl Asked {
                 break;
             }
         }
-        (tokens.split_off(start), true, trace)
+        (tokens.split_off(start), trace, missed)
     }
 }
 
@@ -1592,6 +1672,10 @@ pub fn run_replies(
         for run in &runs {
             written += u64::from(asked.write(tokens, run[0], run[1]));
         }
+        let mut empty_reads = 0u64;
+        for run in &runs {
+            empty_reads += u64::from(asked.write_empty(&ladder, tokens, run[0], run[1], limit));
+        }
         let held = std::cell::Cell::new(0u64);
         let traces = std::cell::RefCell::new(Vec::new());
         let (count, got) = count_replies_by(&panel, eos, &|prompt| {
@@ -1608,6 +1692,7 @@ pub fn run_replies(
             json!({
                 "train_replies": runs.len(),
                 "train_replies_under_a_form": written,
+                "train_replies_with_an_empty_read": empty_reads,
                 "forms": asked.forms(),
                 "rows": asked.rows(),
                 "panel_replies_under_a_form": held.get(),
@@ -1919,17 +2004,30 @@ mod tests {
 
     #[test]
     fn a_held_form_answers_a_name_it_never_saw_through_a_pointer() -> Result<()> {
-        // BOS x IS v DOT EOS WHAT x QM MARK | v DOT EOS, a new x and v each
-        // record. The form "WHAT ▢ QM MARK" is seen in every record.
+        // Told:   BOS x IS v DOT EOS WHAT x QM MARK | YOU GREW v DOT EOS
+        // Untold: BOS EOS WHAT x QM MARK | YOU NO EOS
+        // A new x and v each record; the form "WHAT ▢ QM MARK" is in all.
         let [bos, eos, is, dot, what, qm, mark] = [0u32, 1, 2, 3, 4, 5, 6];
-        let record = |x: u32, v: u32| vec![bos, x, is, v, dot, eos, what, x, qm, mark, v, dot, eos];
+        let [no, you, grew] = [7u32, 8, 9];
+        let told = |x: u32, v: u32| {
+            vec![
+                bos, x, is, v, dot, eos, what, x, qm, mark, you, grew, v, dot, eos,
+            ]
+        };
+        let untold = |x: u32| vec![bos, eos, what, x, qm, mark, you, no, eos];
         let mut tokens = Vec::new();
         let mut runs = Vec::new();
-        for index in 0..10u32 {
+        for index in 0..12u32 {
             let at = tokens.len();
-            tokens.extend(record(20 + index, 40 + index));
-            runs.push([at + 10, at + 13]);
+            tokens.extend(told(20 + index, 40 + index));
+            runs.push([at + 10, at + 15]);
         }
+        for index in 0..9u32 {
+            let at = tokens.len();
+            tokens.extend(untold(32 + index));
+            runs.push([at + 6, at + 9]);
+        }
+        let ladder = Ladder::new(64, 2, &[3])?;
         let mut asked = Asked::new(192, bos, eos);
         for run in &runs {
             asked.count(&tokens, run[0]);
@@ -1939,15 +2037,34 @@ mod tests {
         for run in &runs {
             assert!(asked.write(&tokens, run[0], run[1]));
         }
-        let ladder = Ladder::new(64, 2, &[3])?;
-        let prompt = record(60, 61)[..10].to_vec();
-        assert_eq!(asked.reply(&ladder, &prompt, 8), (vec![61, dot, eos], true));
-        // A fact that was never told: no pointer names anything, and the
-        // token slots were each right once only, so nothing answers.
-        let untold = vec![bos, eos, what, 60, qm, mark];
-        let (reply, under_form) = asked.reply(&ladder, &untold, 8);
-        assert!(under_form);
-        assert!(reply.is_empty());
+        let prompt = told(60, 61)[..10].to_vec();
+        assert_eq!(
+            asked.reply(&ladder, &prompt, 8),
+            (vec![you, grew, 61, dot, eos], true)
+        );
+        // A fact that was never told. The commoner told reply is begun, its
+        // pointer names nothing, and no token slot was right twice: the
+        // reply stops short.
+        let asked_untold = untold(60)[..6].to_vec();
+        assert_eq!(
+            asked.reply(&ladder, &asked_untold, 8),
+            (vec![you, grew], true)
+        );
+        // Third pass: TRAIN prompts whose reply meets an empty read write
+        // their true reply under the rows for that case.
+        let mut met = 0;
+        for run in &runs {
+            met += u32::from(asked.write_empty(&ladder, &tokens, run[0], run[1], 8));
+        }
+        assert_eq!(met, 9);
+        assert_eq!(
+            asked.reply(&ladder, &asked_untold, 8),
+            (vec![you, no, eos], true)
+        );
+        assert_eq!(
+            asked.reply(&ladder, &prompt, 8),
+            (vec![you, grew, 61, dot, eos], true)
+        );
         // A turn of no kept form falls to the ladder.
         let other = vec![bos, 7, 7, 7, eos, 8, 8, 8, 8, 8, 8, 8, 8, 8];
         assert!(!asked.reply(&ladder, &other, 8).1);
