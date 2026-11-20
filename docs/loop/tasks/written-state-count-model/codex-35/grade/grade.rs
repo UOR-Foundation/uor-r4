@@ -144,6 +144,18 @@ fn audit(k: &Key, c: &Capture, digest: &str, mode: &str) -> Result<Value> {
             .iter()
             .any(|a| a.get("fact_span") == Some(&json!(f)))
     });
+    let fence = k.fact.and_then(|f| {
+        assertions
+            .iter()
+            .find(|a| a.get("fact_span") == Some(&json!(f)))
+            .and_then(|a| a.pointer("/assertion/fence")?.as_u64())
+    });
+    let writer_envelope = k.gold_source.map(|[s, e]| match fence {
+        None => "no_bound_fence",
+        Some(f) if f != e as u64 => "wrong_fence",
+        Some(_) if e - s >= 8 => "over_budget",
+        Some(_) => "within_budget",
+    });
     let contextual = c
         .role_replay
         .get("contextual_sources")
@@ -181,7 +193,7 @@ fn audit(k: &Key, c: &Capture, digest: &str, mode: &str) -> Result<Value> {
         .is_some_and(|s| s[7] == 1 && s[4] == 1);
     Ok(
         json!({"mode":mode,"role_words":c.paired.role_words,"requested":query,"requested_correct":k.query.map(|q|query==Some(q)),
-         "excluded":excluded,"excluded_correct":excluded==k.excluded,"eligible_complete":onset.map(|_|eligible_complete),
+         "fence":fence,"writer_envelope":writer_envelope,"excluded":excluded,"excluded_correct":excluded==k.excluded,"eligible_complete":onset.map(|_|eligible_complete),
          "assertion_bound":k.fact.map(|_|bound),"eligible_gold":onset.map(|_|eligible),
          "selected_source":start,"correct_source":onset.map(|s|start==Some(s)),
          "wrong_source":start.is_some() && onset.is_some() && start!=onset,

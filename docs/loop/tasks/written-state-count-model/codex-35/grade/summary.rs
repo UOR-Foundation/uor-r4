@@ -92,6 +92,21 @@ fn main() -> Result<()> {
         let rows: Vec<_> = all.iter().filter(|r| r["mode"] == mode).collect();
         let mut slices = BTreeMap::<String, Vec<&Value>>::new();
         for &row in &rows {
+            if let Some(span) = row["gold_source"].as_array() {
+                let n = span[1].as_u64().ok_or("end")? - span[0].as_u64().ok_or("start")?;
+                let bucket = if n <= 8 {
+                    "target_at_most_8"
+                } else {
+                    "target_over_8"
+                };
+                slices.entry(bucket.into()).or_default().push(row);
+                if let Some(envelope) = arm(row, "baseline")["writer_envelope"].as_str() {
+                    slices
+                        .entry(format!("baseline_{envelope}"))
+                        .or_default()
+                        .push(row);
+                }
+            }
             slices.entry("all".into()).or_default().push(row);
             slices
                 .entry(row["stratum"].as_str().ok_or("stratum")?.into())
