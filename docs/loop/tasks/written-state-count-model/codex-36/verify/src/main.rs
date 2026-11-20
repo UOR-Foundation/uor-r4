@@ -486,6 +486,9 @@ fn main() -> Result<()> {
     let before = decode(&source, train)?;
     let after = decode(&candidate, train)?;
     let audit = audit(&before, &after, threshold)?;
+    if audit.probes.is_empty() {
+        return Err("compact audit has no context for paired native lookup".into());
+    }
     if threshold > 1 && audit.prior_bytes <= cap {
         return Err(format!("prior threshold fits: {} <= {cap}", audit.prior_bytes).into());
     }

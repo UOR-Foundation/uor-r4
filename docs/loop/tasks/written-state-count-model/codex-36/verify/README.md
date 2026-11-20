@@ -15,6 +15,7 @@ raw totals and Q48 masses against an independent integer implementation. For eac
 dropped context, replay after removing the oldest token must give exactly the same
 candidate Q48 word and traces, with a lower context still present. The replay checks
 the compact count component before any mixture, text generation or D11 packaging.
+The verifier refuses an audit with zero paired native lookup probes.
 
 The finite corruption control changes one raw word outside spectrum bins. It
 requires rejection at the original file pin, successful native load under the
@@ -35,6 +36,39 @@ CARGO_TARGET_DIR="$verify_target" cargo build --release --offline --locked \
 
 Append `--corruption-control` on the C128 fixture to exercise the repinned byte
 alteration. The command emits a receipt only after all requested checks pass.
+
+## Full-C continuation
+
+The first full-C Wick continuation uses the released
+[recipe at `38a433a04`](https://github.com/UOR-Foundation/uor-r4/blob/38a433a04a177cc7e4d4136384403133c67f99d8/docs/loop/tasks/written-state-count-model/codex-36/retain-full.sh),
+with recipe SHA-256
+`652edfad4b394adea348e1250d1a04396dce11726738eda465b2cc25f45966f1`
+and verifier SHA-256
+`6d1b8ca7ebbad80129067b629502a12ed2a21f4b407e49521b4e726e0f7f0766`.
+Accept that run only with a literal `true` crosscheck, a valid receipt
+manifest, 18 concrete native lookup pairs and the matching candidate byte
+length and digest.
+
+For a new run, use the [hardened recipe](../retain-full.sh). Its last two
+arguments bind the separately built verifier to the reviewed executable
+digest. The verifier rejects empty comparisons, and the recipe publishes
+`crosscheck` only after the complete comparison returns true.
+
+```sh
+bash retain-full.sh "$wick_run_root" "$full_go" "$full_go_sha256" "$new_output" \
+  "$verify_target/release/d36-retention-verify" "$reviewed_verifier_sha256"
+```
+
+The independently staged Wick build at
+`/mnt/plexpool/uor-r4-corpus/runs/20261120-whole-context-36/verify-hardened-v1`
+produced verifier SHA-256
+`dc0d84c4d781533ca40310aa67f4f6f67cf99dba2862b2af62f7d642bd01d6bd`.
+Its negative control turned an 836-byte header-only artifact from
+`PASS` with zero lookup pairs into an explicit refusal. Both registered
+pruned fixtures reproduced their existing reports byte for byte, including
+18 native lookup pairs each. The shell control published a receipt for
+the matching report and left no canonical crosscheck when the candidate
+byte count changed by one. [Wick regression capture](evidence/hardening.log)
 
 ## Wick results
 

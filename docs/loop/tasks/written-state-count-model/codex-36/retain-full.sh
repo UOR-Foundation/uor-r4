@@ -13,13 +13,14 @@ train=cd3adfe949ee34a62bc8d5e48592e091fcece796618d7910d1667d014a4bae2a
 test "$(jq -er .corpus_sha256 "$go")" = "$train"
 cap=3912936331
 pruner="$root/pruner/target/release/prune-compact-count"
-verifier="$root/verify/target/release/d36-retention-verify"
+verifier=$(realpath "${5:?hardened verifier executable}")
+verifier_sha=${6:?hardened verifier SHA-256}
 source="$spool/compact.counts"
 receipt="$spool/receipt.json"
 printf '%s  %s\n' \
   28d06be01c22439fb715d6ba516845c8ee5a0530c0b0c09ec9d062461d4a4a53 "$census" \
   18dc458be3e6dc95ff0d963220d08d3dfd028a245a1783f93f4f7273be447897 "$pruner" \
-  6d1b8ca7ebbad80129067b629502a12ed2a21f4b407e49521b4e726e0f7f0766 "$verifier" | sha256sum --strict -c -
+  "$verifier_sha" "$verifier" | sha256sum --strict -c -
 test "$(stat -c %s "$source")" = 148096362864
 # The archive gives the adjusted hash domain for the highest raw order.
 # Require both domain-specific raw hashes for all other orders.
@@ -46,7 +47,7 @@ threshold=$(jq -er .threshold "$out/prune.json")
 hash=$(jq -er .artifact_sha256 "$out/prune.json")
 /usr/bin/time -v -o "$out/verify.time" "$verifier" "$source" "$candidate" \
   "$threshold" "$cap" "$train" "$source_hash" "$hash" > "$out/verify.json"
-jq -e --slurpfile w "$out/prune.json" '
+crosscheck=$(jq -e --slurpfile w "$out/prune.json" '
   def same($g;$s): ($g | del(.groups) + {contexts:.groups}) ==
                      ($s | del(.order,.data_bytes));
   . as $v | $w[0] as $p |
@@ -54,8 +55,12 @@ jq -e --slurpfile w "$out/prune.json" '
   .candidate_bytes == $p.artifact_bytes and .candidate_bytes <= .compact_cap and
   .threshold == $p.threshold and .prior_threshold_bytes > .compact_cap and
   .floor_bytes == $p.mandatory_floor_bytes and (.sections|length) == 11 and
+  (.paired_native_lookups|length) > 0 and
   all(range(11); . as $i | $v.sections[$i] as $s |
     $s.order == $i and same($s.original;$p.original[$i]) and
     same($s.retained;$p.retained[$i]) and $s.section_data_bytes == $p.retained[$i].data_bytes)
-' "$out/verify.json" > "$out/crosscheck"
+' "$out/verify.json")
+test "$crosscheck" = true
+printf '%s\n' "$crosscheck" > "$out/crosscheck.partial"
+mv "$out/crosscheck.partial" "$out/crosscheck"
 (cd "$out" && sha256sum prune.json verify.json crosscheck > receipts.sha256)
