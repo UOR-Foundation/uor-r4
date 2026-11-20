@@ -194,3 +194,33 @@ until the stem rule was added.
 carried inside the artifact. The charter's one-state rule (§3.7) requires it there, and the schema
 admits exactly one optional read record, so that is a **schema decision**, not a code cleanup. Until
 then this is a served component in the serving crate, not yet a field of the integer artifact.
+
+## The learned vocabulary, measured (20 Nov): distribution cannot name the attribute
+
+`slot-embed-train` learns word vectors from the corpus by sparse co-occurrence power iteration
+(9,392 words at count >= 50, 24 dimensions, 10 iterations, no matmul) and assigns each word to the
+nearest of the eight labelled seeds. Unsupervised clustering was tried first and names only 3 of 8
+clusters, and the nearest-seed assignment is effectively random on the words that matter:
+
+| word | learned | labelled (corpus coverage) |
+|---|---|---|
+| shade | drink | colour |
+| town | colour | city |
+| profession | drink | job |
+| companion | job | pet |
+| beverage | colour | drink |
+| vehicle | pet | car |
+| hobby | job | sport |
+
+On the panel: **address formation 29/40, held-out wording 0/40** — against 40/40 and 40/40 for the
+labelled table. The reason is structural, not a training defect: **attribute identity is referential,
+not distributional.** "colour" and "city" occupy the same question context ("what is X's ___"), and
+only their *values* differ ("green" vs "Denver"). Co-occurrence over questions therefore cannot
+separate them, and no amount of corpus size changes that.
+
+So the irreducible part is a **tiny labelled taxonomy** (eight attribute names and their seed words),
+and what the corpus supplies is **coverage** (the 56-word table) rather than identity. Everything
+else — the address, the store, the read — is arithmetic and data. That distinction is worth stating
+plainly because the owner asked for no schemas: the eight labels are the one piece that cannot be
+learned from question text, and the data-driven route to removing even them is to learn from
+**answer types** (the corpus's assistant replies), not from questions.
