@@ -76,3 +76,25 @@ winner with `d35-parity` for all eight geometry × mode × pass cells.
 the supplied captures. Release the supplemental key for `d35-value-grade` after
 the blind manifests and parity logs are sealed, then derive transition and
 envelope counts from the independently graded rows.
+
+The frozen geometry shares candidate membership across rank arms. The
+following grid uses the baseline candidate trace to report the onset and
+complete-source envelope for each group and modifier, separately by mode.
+
+```bash
+jq '
+  [ .rows[] | select(.factors != null) ]
+  | group_by(.mode, .group, .factors[3])
+  | map({
+      mode: .[0].mode,
+      group: .[0].group,
+      modifier: (["bare", "only", "also"][.[0].factors[3]]),
+      rows: length,
+      eligible_onset: (map(select(.arms.baseline.eligible_gold == true)) | length),
+      eligible_complete: (map(select(.arms.baseline.eligible_complete == true)) | length),
+      exact_baseline: (map(select(.arms.baseline.exact_eos == true)) | length),
+      exact_fact: (map(select(.arms.fact_true.exact_eos == true)) | length),
+      exact_candidate: (map(select(.arms.candidate_true.exact_eos == true)) | length)
+    })
+' "$SHORT_GRADED_ROWS"
+```

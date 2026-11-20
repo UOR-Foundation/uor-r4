@@ -1,0 +1,37 @@
+# [codex] Original-token value-onset ranking through the fixed writer
+
+## What did not work, first
+
+The original TRAIN generator produced 144 prompts in six families. After binding the supplied factual person, only 36 had both the complete keyed source and at least one eligible rival under the existing geometric source policy and copy writer. These came from two families, model railway (24) and conservation (12). All 108 omitted rows have an omission record. Both geometries used exactly the same admitted prompts, source endpoints and ordered rivals. The original primary evaluation retains all 246 sealed prompts.
+
+The frozen writer detects its eight-token cap **before** it tests the delimiter. It can copy eight token IDs, but exact delimiter-driven EOS at the next step requires a source of at most seven IDs. Source enumeration already calls that same cursor to completion, so this is an upstream eligibility limit as well as an output limit. Independently counting tokenized gold lengths found only 24 of 216 primary crossed prompts within seven tokens. They belong to the bookbinding and costume families. The fixture author examined lengths before observing any held replies. A separate matched short-object instrument preserves the nine families, wording, requested person, fact order, clause order and modifiers, and changes the two object phrases in each family. It has 216 crossed prompts within seven IDs plus 18 unsupported controls. The original test remains intact. Changing the objects can also change token geometry, eligible rivals and selection. Report both populations separately.
+
+## What changed
+
+The D26 fact-prefix recurrence takes one snapshot before the factual person. It is constant across candidate words in that fact. Its signed displacement between any two candidates is therefore identically zero. A second pre-registered geometry takes the same frozen recurrence immediately before each candidate's original start. Its displacement includes information about earlier tokens and position. Both retain the geometric word coordinates and exact original span endpoints.
+
+Each TRAIN target contributes its coordinate minus each eligible rival's coordinate. The bank stores the signed integer differences without deduplication. At a candidate pair the native reader computes the nearest integer L1 distance to recorded differences in each orientation. A winner must strictly beat every rival. Reversal changes the margin sign while reading the same bytes. Empty and singleton cases preserve the historical rule. The opt-in carrier binds the geometry, embedded parent, TRAIN provenance and exact bank. The original D26 remains the ordinary baseline. Both interventions use the original writer, fence, copy cursor and EOS policy. The supplied diagnostic receives the original requested person in the query and its complete factual person head. The ordinary path receives user text.
+
+## Measurements
+
+On Wick's RTX 4090 the finite positive, tie, reversal, cold and corrupted-input controls passed. Independent reconstruction recovered all four serialized TRAIN bank files byte for byte. The two banks have 72 prototypes of 384 bytes and a 12-byte header, 27,660 bytes each. Contextual differences were zero on 72/72 fact-prefix pairs and nonzero on 72/72 candidate-prefix pairs. Both deployed carriers are 86,664,298 bytes. The baseline is the frozen D26 parent. Each reflected control uses the same carrier as its forward arm. This does not compare equal-byte longer-context counts against persistent state.
+
+The initial CUDA held pass consumed captured original source coordinates in 255 pools for 246 ordinary prompts and 228 pools for 228 supplied prompts. Missing or conflicting factual heads made the other 18 supplied cases inapplicable. The CUDA kernel independently ranked all ordered pairs and produced both orientations. The native integer client executes prompt encoding, candidate enumeration, recurrence, role and assertion binding, selection, and exact copy. Primary and cold capture and offline grading are in progress.
+
+## Checks run at the head
+
+The source-pinned release passed 26 discrete runtime tests and reproduced all 44 exposed D34 baseline client captures byte for byte. On exposed D34 row 30100, an oracle source at original position 25 wrote [262, 2115, 3869, 1780, 1]. An eligible rival at 24 wrote [3935, 262, 2115, 3869, 1780, 1]. Disabling the source copied zero tokens. On a separate exposed row, a planted bank produced 20 matching ordered distances in both orientations and distinct original start addresses. The offline grader rejected a corrupted cursor even when primary and cold agreed on the corruption. The native/device comparison rejected an altered nearest distance and the TRAIN bank check rejected a changed bank byte.
+
+## Skills used
+
+Codex used the project native-space-cycle instructions for the native carrier and operator, source-pinned exact writer replay, phase-separated GPU fitting, cold readback and independent comparison. All builds, data processing, GPU launches and normal integer client executions ran on Wick.
+
+## Still open
+
+D35 changes only the value-onset comparison. The requested/excluded/unspecified role fit and assertion provenance still need independent tests. D34 measured zero correct excluded spans on 16 exposed crossed prompts. A win under supplied person spans does not establish that the ordinary selector can bind those roles. The matched causal phrases permit more than one English reading, and changing prior text can also change positions.
+
+For the independent count line, full C and the reserved R inputs were found on Wick by path and size. D33 verified C1 count identity. Its unpruned compact builder accepts only C128/C1, and the historical R fit reconstructs unpruned C1 lookup features. P1(b) requires whole-context retention under the deployed byte budget and supervision from R using those actual pruned lookup features. A finite first test can reuse the 16,459,406-byte C128 count file: retain all groups for byte identity, force omissions at exact byte boundaries, rederive retained count spectra, verify backoff on a dropped context and replay after cold load. Then build the TRAIN-only larger artifact, refit on R and evaluate the paired frozen DEV splits. The claude-442 decision includes the five-distance-class Pick split at the next refit when support is available, with a three-class fallback if necessary. P2 still requires all four matched-dose, equal-deployed-byte arms, including both destructive geometry controls. Neither P1(b) nor P2 follows from the value-rank result.
+
+## Plain summary
+
+The hardware and native reader agree on the trained displacement bank. The ordinary-chat result requires matching each device decision to an actual client reply, preserving the first incorrect original token and EOS. The copy limit and two-family training support constrain the interpretation of this comparison.
