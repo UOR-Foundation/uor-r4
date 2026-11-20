@@ -46,24 +46,35 @@ The chat line's recorded blockers are **not** "the corpus is synthetic":
 So the work is: the **ask-head in the recipe** (built, never used), the **margin**, the **address**,
 and a gate that cannot be passed by echoing.
 
-## Unit 0 — mine the capability from the real corpus (no GPU)
+## The corpus is a distillation, so the teacher is the gate
 
-Not "build a corpus". **Measure what the corpus already contains**, and stop if it is not there:
+The corpus is **1 B tokens distilled from DeepSeek**: prompts with the teacher's replies, tokenised to
+**385,284,895 tokens** at the 8k vocabulary (`tokens-8k-clean-2026-11-17`, pins `f2437189…` /
+`452941db…`), with a 32k tokeniser beside it (`tokenizer-32768-2026-11-17.json`). The `response_mask`
+marks exactly the teacher's reply tokens.
 
-1. Reconstruct conversations from the tokenised shards and the dialogue protocol's own separators.
-2. Census, with the existing tooling (`train-in-space --census 1`, `heldout-panel`):
-   - conversations with **more than one user turn** (the shape any "answer about something said
-     earlier" capability needs);
-   - conversations where a **later question refers to an earlier stated span** (the memory shape);
-   - the distribution of **reply openings** and reply lengths (is there one dominant frame?);
-   - **held-out rows that repeat a TRAIN reply** (the echo risk, measured before training).
-3. **Gate on the census, before any run:** if the corpus holds ≥ 2,000 multi-turn conversations and
-   ≥ 500 with a later question about an earlier span, the capability can be measured and trained. If
-   it holds far fewer, **say so and stop** — the finding is that the corpus lacks the capability, and
-   the response is a real-data source that has it (e.g. instruction/QA data), not a fixture we write.
+Two consequences, and they remove the whole class of problem the owner objected to:
 
-This unit costs no GPU and decides whether the rest is possible. That is the measurement the last
-three weeks lacked.
+1. **Nothing is authored.** The training targets are the teacher's own replies. There is no frame, no
+   template and no fixture anywhere in this line, and there never needs to be.
+2. **Every held-out row has a reference.** A held-out conversation already contains the reply the
+   model should have produced. The gate does not need a panel we wrote — it compares against the
+   teacher, on rows the model never saw.
+
+So "build a corpus" and "mine the corpus" both disappear. The corpus exists, it is a teacher
+distillation, and the objective is to **imitate the teacher's replies on prompts it has not seen**.
+
+## Unit 0 — split the distillation, no GPU
+
+- **Held-out split by conversation**, not by row: no conversation contributes to both TRAIN and the
+  gate. This is the one constraint the corpus requires, and the existing manifests already name the
+  shards.
+- **Census, recorded before any score**: held-out reply rows that also appear in TRAIN (the echo risk),
+  the distribution of reply openings, and the share of held-out replies that a prompt echo would pass.
+  This is measurement of the split, not a licence to reshape the data.
+- No capability is "mined" and nothing is generated: if the teacher's replies contain the behaviour,
+  the distillation can learn it; if they do not, the model will not, and that is a corpus fact worth
+  knowing — not a reason to write a fixture.
 
 ## Unit 1 — the session
 
@@ -80,19 +91,24 @@ train-in-space --objective nearest --fast-rivals 1 \
 Measured cost: **0.300 s/step on a 4090, ~1.4 h per seed**, ~4.5 h for three (`GO-FORWARD` §6).
 Compute is not the bottleneck. **Score the dev-best checkpoint, not the last** (Decision 13).
 
-## Unit 2 — the gate (content-grounded, frame-free)
+## Unit 2 — the gate: agreement with the teacher, on held-out conversations
 
-All three are measured on **held-out real data**, never on a shape we wrote:
+Three measures, all against the teacher's own replies on rows the model never saw. No authored
+content, no frame:
 
-- **Non-echo**: the reply must not share a 4-token span with the prompt (Decision 17's test), on
-  held-out real prompts.
-- **Novelty**: reply 4-gram novelty against TRAIN (the `m2-evidence` instrument already reports it),
-  so a memorised TRAIN reply is visible rather than credited.
-- **Exact answers where the data has them**: the 196-item panel's exact-answer scoring, reported as
-  an oracle grade beside the two above — not as the chat claim, because a 1.11 M-value model will not
-  solve numina, and a gate the model cannot pass at all measures nothing.
+- **Non-echo**: the generated reply must not share a 4-token span with the prompt (Decision 17's
+  test). This is the measure that every earlier chat number failed.
+- **Teacher agreement**: on held-out prompts, how often the model's reply matches the teacher's —
+  exact for short answers, and token-level F1 / longest common subsequence for longer ones. This is
+  the distillation objective made measurable, and it survives any change to the corpus because the
+  reference is in the data.
+- **Reply novelty**: reply 4-gram novelty against TRAIN (`m2-evidence` already reports it), so a
+  memorised TRAIN reply is visible rather than credited.
 
-Bits and top-1 are reported **beside** these, never instead of them.
+The 196-item numina panel stays as an **oracle grade beside** these, not as the chat claim: a 1.11 M
+to 30 M-value model will not solve it, and a gate nothing can pass measures nothing.
+
+Bits and top-1 are reported beside the three, never instead of them.
 
 ## Then increment
 
@@ -109,4 +125,5 @@ Bits and top-1 are reported **beside** these, never instead of them.
 - Any capability number from a metric a prompt echo passes.
 - Scoring the last checkpoint instead of the dev-best.
 - Calling a built mechanism "untested" when it is simply not in the recipe.
+- Reshaping or generating corpus content to make a gate pass: the teacher's replies are the target.
 - Any matmul or softmax, at any stage, in any form.
