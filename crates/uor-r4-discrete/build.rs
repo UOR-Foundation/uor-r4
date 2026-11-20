@@ -639,7 +639,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // K-coordinate scoring on the bucketed writer: the generated bucket text
     // plus two entries, its own admitted nine-entry PTX and cubin. The bucket
     // and rows-K images above are unchanged; this is a separate module.
-    let rowskb = rowskb_source::generate(&fs::read_to_string(out.join("bucket.cu"))?)?;
+    let rowskb = rowskb_source::generate(&fs::read_to_string(out.join("bucket.cu"))?, &fs::read_to_string("src/discrete.cu")?)?;
     fs::write(out.join("rowskb.cu"), rowskb)?;
     let status = Command::new(&nvcc)
         .args(["-ptx", "-std=c++17"])

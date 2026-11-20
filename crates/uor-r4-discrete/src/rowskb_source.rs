@@ -10,8 +10,9 @@
 //! appended. The eval kernel also reuses a row's baseline read for every lane
 //! whose candidate cannot change it.
 //!
-//! The bucket text has no Pick read and admits only the outer address metric;
-//! the device selects this module only for such models.
+//! The bucket text has no Pick read, so this module puts the marked Pick
+//! lines of `discrete.cu` back, unchanged, at their two places. It admits
+//! only the outer address metric; the device selects it only for such models.
 
 pub const ENTRIES: [&str; 9] = [
     "discrete_bucket_build",
@@ -26,15 +27,67 @@ pub const ENTRIES: [&str; 9] = [
 ];
 
 /// Append the two bucketed rows-K entries to the generated bucket source.
-pub fn generate(bucket_source: &str) -> Result<String, String> {
+pub fn generate(bucket_source: &str, discrete_source: &str) -> Result<String, String> {
+    let bucket_source = &restore_pick(bucket_source, discrete_source)?;
+    generate_read(bucket_source)
+}
+
+const PICK_BEGIN: &str = "// PICK-BEGIN";
+const PICK_END: &str = "// PICK-END\n";
+const READ_DISPATCH_COMMENT: &str = "// Mode dispatch: Route (default), Flock, or Relation.";
+const READ_SIGNATURE: &str = "__device__ bool read_vector(const int* input,const U* ids,const U* routes,const int* gates,const U* plan,const U* g,const U* s,const U* position_steps,U row,U kind,U index,U candidate,int* output,U* trace) {\n";
+
+/// The two marked Pick blocks of `discrete.cu`, byte for byte: the read's
+/// functions, and its dispatch line inside `read_vector`.
+fn pick_blocks(discrete_source: &str) -> Result<[&str; 2], String> {
+    let mut blocks = Vec::new();
+    let mut rest = discrete_source;
+    let mut offset = 0;
+    while let Some(begin) = rest.find(PICK_BEGIN) {
+        let end = rest[begin..]
+            .find(PICK_END)
+            .ok_or("rows-K bucket anchor changed: unterminated Pick block")?
+            + begin
+            + PICK_END.len();
+        blocks.push(&discrete_source[offset + begin..offset + end]);
+        offset += end;
+        rest = &rest[end..];
+    }
+    match blocks[..] {
+        [functions, dispatch] => Ok([functions, dispatch]),
+        _ => Err("rows-K bucket anchor changed: expected two Pick blocks".into()),
+    }
+}
+
+/// The bucket text with the Pick read put back where `discrete.cu` has it.
+fn restore_pick(bucket_source: &str, discrete_source: &str) -> Result<String, String> {
+    if bucket_source.contains("MODE_PICK") {
+        return Err("rows-K bucket anchor changed: bucket text carries a Pick read".into());
+    }
+    let [functions, dispatch] = pick_blocks(discrete_source)?;
+    if !functions.contains("__device__ bool pick_vector(") || !dispatch.contains("pick_vector(") {
+        return Err("rows-K bucket anchor changed: Pick blocks differ".into());
+    }
+    if bucket_source.matches(READ_DISPATCH_COMMENT).count() != 1
+        || bucket_source.matches(READ_SIGNATURE).count() != 1
+        || discrete_source.matches(READ_SIGNATURE).count() != 1
+    {
+        return Err("rows-K bucket anchor changed: read dispatch differs".into());
+    }
+    let with_functions = bucket_source.replacen(
+        READ_DISPATCH_COMMENT,
+        &format!("{functions}{READ_DISPATCH_COMMENT}"),
+        1,
+    );
+    Ok(with_functions.replacen(READ_SIGNATURE, &format!("{READ_SIGNATURE}{dispatch}"), 1))
+}
+
+fn generate_read(bucket_source: &str) -> Result<String, String> {
     if bucket_source.matches("__device__ W bucket_writer(").count() != 1 {
         return Err("rows-K bucket anchor changed: bucket_writer missing".into());
     }
     if !bucket_source.contains("extern \"C\" __global__ void discrete_bucket_build(") {
         return Err("rows-K bucket anchor changed: index build missing".into());
-    }
-    if bucket_source.contains("MODE_PICK") {
-        return Err("rows-K bucket anchor changed: bucket text carries a Pick read".into());
     }
     // The relation sweep this module replaces. If its text changes, the linear
     // sweep must be re-derived and re-reviewed rather than silently diverge.
@@ -135,7 +188,7 @@ const ROWSKB: &str = r#"
 #define ROWSKB_TR_BIT 0x10000u
 #define ROWSKB_STATUS_MASK 0xffffu
 __device__ bool rowskb_refused(const U* s,U kind,U index) {
-    bool gated=s[8]==MODE_FLOCK || s[8]==MODE_RELATION;
+    bool gated=s[8]==MODE_FLOCK || s[8]==MODE_RELATION || s[8]==MODE_PICK;
     return (kind==GATE_KIND && !gated) || (kind==0u && gated) || (kind==GATE_KIND && index>=gate_count(s));
 }
 extern "C" __global__ void discrete_counterfactual_rowskb_baseline(
@@ -176,6 +229,9 @@ extern "C" __global__ void discrete_counterfactual_rowskb_eval(
     // token is one of this row's context ids) and gate_value (a gate move). A
     // lane with neither reads exactly the baseline vector stored for the row.
     bool reuse=candidate==0u && (kind==1u || kind==GATE_KIND);
+    // The Pick read takes one gate per block, at block*levels; a move of any
+    // other gate cannot change it.
+    if(!reuse && kind==GATE_KIND && s[8]==MODE_PICK && s[5]!=0u && index%s[5]!=0u)reuse=true;
     if(!reuse && kind==1u){
         U token=index/s[1];const U* window=ids+row*s[2];reuse=true;
         for(U p=0;p<s[2];++p)if(window[p]==token){reuse=false;break;}
@@ -202,11 +258,21 @@ mod tests {
     #[test]
     fn rowskb_module_appends_exactly_two_entries_to_the_bucket_module() {
         let bucket = bucket();
-        let rowskb = generate(&bucket).expect("rows-K bucket module");
-        // Outside the relation sweep the bucket text is carried unchanged.
+        let discrete = include_str!("discrete.cu");
+        let rowskb = generate(&bucket, discrete).expect("rows-K bucket module");
+        // The Pick read is put back byte for byte, where discrete.cu has it:
+        // its functions before the read dispatch, its dispatch line first in it.
+        let [functions, dispatch] = pick_blocks(discrete).expect("pick blocks");
+        assert_eq!(rowskb.matches(functions).count(), 1);
+        assert!(rowskb.contains(&format!("{functions}{READ_DISPATCH_COMMENT}")));
+        assert!(rowskb.contains(&format!("{READ_SIGNATURE}{dispatch}")));
+        assert!(discrete.contains(&format!("{READ_SIGNATURE}{dispatch}")));
+        // With those two blocks taken out again, the bucket text is carried
+        // unchanged outside the relation sweep.
+        let without_pick = rowskb.replacen(functions, "", 1).replacen(dispatch, "", 1);
         let at = bucket.find(ORDINARY_SWEEP).expect("ordinary sweep");
-        assert!(rowskb.contains(&bucket[..at]));
-        assert!(rowskb.contains(&bucket[at + ORDINARY_SWEEP.len()..]));
+        assert!(without_pick.contains(&bucket[..at]));
+        assert!(without_pick.contains(&bucket[at + ORDINARY_SWEEP.len()..]));
         // The ordinary loop stays as the fallback branch, once.
         assert_eq!(rowskb.matches(ORDINARY_SWEEP).count(), 1);
         assert_eq!(
@@ -237,8 +303,11 @@ mod tests {
 
     #[test]
     fn changed_anchors_are_refused() {
-        assert!(generate("no bucket writer here").is_err());
+        let discrete = include_str!("discrete.cu");
+        assert!(generate("no bucket writer here", discrete).is_err());
         let bucket = bucket();
-        assert!(generate(&format!("{bucket}\n// MODE_PICK")).is_err());
+        assert!(generate(&format!("{bucket}\n// MODE_PICK"), discrete).is_err());
+        // A kernel source with one Pick block, or none, is refused.
+        assert!(generate(&bucket, &bucket).is_err());
     }
 }

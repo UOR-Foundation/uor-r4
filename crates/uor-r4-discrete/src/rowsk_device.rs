@@ -110,10 +110,10 @@ impl Device {
     /// carry, keeps the full-scan kernels.
     pub fn rowsk_scoring_bucketed(&self) -> Result<RowsKScoring> {
         let mut scoring = self.rowsk_scoring()?;
-        if self.read_spec() == ReadSpec::Pick || !self.binding.address_metric.is_outer() {
+        if !self.binding.address_metric.is_outer() {
             return Ok(scoring);
         }
-        let expected = crate::rowskb_source::generate(super::writer_bucket_device::BUCKET_SOURCE)
+        let expected = crate::rowskb_source::generate(super::writer_bucket_device::BUCKET_SOURCE, include_str!("discrete.cu"))
             .map_err(invalid)?;
         if ROWSKB_SOURCE != expected {
             return Err(invalid(
