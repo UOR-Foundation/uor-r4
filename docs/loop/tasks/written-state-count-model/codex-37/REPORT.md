@@ -17,3 +17,9 @@ The two fresh Wick RTX 4090 processes each read the same physical threshold-318 
 | Independent native reader | 12,500 selected ordinals, 287,500 exact words, 9.50 s wall |
 
 The independent comparison covered both ends of every record, both sides of every interior primary batch boundary, and an interior sample specified before dispatch. Every tape row also passed framing, count/total and Q48 range checks. The two GPU traversals give whole-stream reproducibility under shifted batching. Native numerical parity was measured on the declared sample. No DEV split was used. [Native receipt](count/evidence/native.json) · [Output manifest](count/evidence/capture.sha256)
+
+## Native classes and finite GPU optimizer
+
+The three-class and distance-split carriers store 7,392 and 12,320 Q32 words respectively at order ten. The legacy format keeps its original bytes. The five-class format identifies the split on load. Under the ordinary client's identity-code Pick reader, the D37 manifest must name the identity preparation and the arm matching its carrier. A permuted-code control, exact-match control, disabled control or swapped arm label is rejected on that path. The targeted serving test exercised those cases on Wick with `p1-count-serving` enabled. Two earlier invocations without that feature selected zero tests. [Manifest and reader](../../../../../crates/uor-r4-integer/src/discrete_count.rs)
+
+On the 128-row invented fixture the 4090 matched all 97 objective sums and all 717,024 legacy and 1,195,040 split Q32 weight words across optimizer steps. The fixture activates buckets 527 and 879. The truncated row tape was rejected before a trace was created. [Finite GPU parity](fit/evidence/finite/parity.txt) · [Registered fit](fit/FIT-FINITE.md)
