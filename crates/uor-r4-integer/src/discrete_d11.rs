@@ -2688,11 +2688,7 @@ impl IntegerDiscreteModel {
         if !read {
             return Ok(Some(PairedCopyDecision::default()));
         }
-        if self.pair_rank_bindings().is_some() {
-            return Err(invalid(
-                "pair-rank reader requires tokenizer-bound full-detached role selection",
-            ));
-        }
+        self.require_parent_copy_reader()?;
         paired_copy::Policy::validate_ids(prompt)?;
         let roles = match &paired.roles {
             paired_copy::Roles::Frozen(_) => {
@@ -2849,6 +2845,7 @@ impl IntegerDiscreteModel {
         prompt: &[u32],
         arm: RequestedReplayArm,
     ) -> Result<(PairedCopyDecision, RequestedRoleReplayTrace)> {
+        self.require_parent_copy_reader()?;
         self.requested_role_replay_inner(prompt, arm, None, pair_rank::Replay::default())
     }
 
@@ -2861,10 +2858,22 @@ impl IntegerDiscreteModel {
         self.requested_detached_pair_replay(prompt, sites, pair_rank::Replay::default())
     }
 
+    fn require_parent_copy_reader(&self) -> Result<()> {
+        if self.pair_rank.is_some() {
+            return Err(invalid(
+                "pair-rank reader requires tokenizer-bound full-detached role selection",
+            ));
+        }
+        Ok(())
+    }
+
     pub fn pair_rank_bindings(&self) -> Option<&pair_rank::Bindings> {
         Some(&self.pair_rank.as_ref()?.bindings)
     }
 
+    /// The caller must verify the original tokenizer bytes against this artifact's
+    /// tokenizer digest before deriving `sites`. The full-detached text client
+    /// checks that binding before it constructs the site table.
     pub fn requested_detached_pair_replay(
         &self,
         prompt: &[u32],
@@ -3229,6 +3238,7 @@ impl IntegerDiscreteModel {
         detached_heads: Option<&[[usize; 2]]>,
         visit: impl FnMut(PairedAssertionWitness),
     ) -> Result<PairedCopyDecision> {
+        self.require_parent_copy_reader()?;
         self.resolve_assertion_subset_with_reader(
             policy,
             paired,

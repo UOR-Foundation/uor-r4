@@ -2223,7 +2223,7 @@ fn run_discrete_parity(cli: &CliArgs) -> Result<()> {
         }
     }
     let read_enabled = cli.read_mode == ReadMode::Enabled;
-    if model.pair_rank_bindings().is_some()
+    if read_enabled && model.pair_rank_bindings().is_some()
         && !matches!(cli.role_replay, Some(RoleReplay::Detached))
     {
         return Err(IntegerError::Invalid(
