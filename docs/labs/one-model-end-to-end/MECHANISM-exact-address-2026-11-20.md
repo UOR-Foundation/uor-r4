@@ -1,0 +1,106 @@
+# The mechanism: exact addressed memory with a formed address (20 Nov 2026)
+
+**This is the plan of record for the chat capability.** It replaces every trunk-scaling and
+"beat a bigram" line as the primary objective. It is built on `docs/mechanisms/exact-memory.md`,
+whose status is PARKED with a named reopening condition, and on `GO-FORWARD-2026-11-16.md` §4/§5.
+
+## Why this and not a bigger model
+
+The project's own record says where the failure is, twice:
+
+- *"The plain exact store itself worked whenever its address was right… What failed was the model's
+  learned step of forming the address from a question."*
+- *"77.7 percent of the held-out failures were query-entity tagging."*
+
+And the measured failures of every alternative are already in the record: Hamming/SDM reads average
+(values smear), zeta-prime routing is negative or inconclusive, a learned mixer gave 4.44 % against a
+5 % gate, and the trunk line trains a next-token predictor that cannot condition on the prompt
+(measured today: first reply token 12.7 %, mid-reply 22.7 %, generation collapses to one string).
+
+A bigger trunk does not address any of that. **The missing component is address formation**, and it
+is a small, closed classification problem, not a language-modelling one.
+
+## The mechanism, concretely
+
+Per conversation, three parts. All integer, all arithmetic, no matmul, no squashing, one native state.
+
+1. **An exact store.** `address -> value`, written from the conversation's own statements, with
+   **latest-wins** overwrite (the "47 → 40" class is a write-priority defect, not a read defect) and
+   **typed abstention** for an address never written.
+2. **A formed address.** `address = canonical_code(entity, attribute)` — a hash/code over the two
+   slots, **not a product of primes**. Amended 20 Nov on the adversarial review's evidence: the
+   archive already flags prime schemes as an address as *crank-adjacent* and, as a code, *worse than
+   random or hashed* for a low-coherence codebook (`GO-FORWARD` §4); the existing `PrimeAddress` sorts
+   and dedups primes into an unordered list, `semiprime()` exists only for exactly two primes and
+   overflows `u64` for any multi-word slot, and gcd admission makes a one-prime address shadow every
+   pair that shares it. A canonical code has none of those defects and is what Decision 11 actually
+   recommends.
+3. **A slot tagger.** From the question's surface form to `(entity, attribute)` over a **closed
+   attribute set**, with the entity resolved by matching the question against the conversation's own
+   mentions. **It is a deterministic table, and that must be stated rather than hidden:** it is not
+   "learned in the one native state" (§3.7) and the plan does not claim it is. Its justification is
+   not novelty — it is that a compositional (entity, attribute) key answers **recombinations** the
+   table has never seen, which a question→answer table cannot. That is the only claim the mechanism
+   makes, and it is the claim the gate must test.
+
+The reply is then **copied**, not generated: the value span from the store (or from the context by
+copy precedence), placed in a frame the corpus supplies. That is the literature's "shortlist then
+exact verify" and the charter's §3.12 ("exact identity stays separate from geometric address").
+
+## What is already built (do not rebuild)
+
+- the exact store and its five-arm oracle (40/40 current, 20/20 previous, 20/20 abstention, 0/80 with
+  no memory) — `docs/mechanisms/exact-memory.md`;
+- the copy read at 0.98–0.99 recall over three seeds;
+- the integer serving path and the artifact format;
+- `README.md`'s dialogue protocol and the frozen panels infrastructure.
+
+## The pieces to build (this plan)
+
+| # | piece | why it is the piece |
+|---|---|---|
+| **A** | **Slot tagger**: question → `(entity, attribute)`, as a table over content bigrams with a closed attribute set | it is the measured 77.7 % of failures |
+| **B** | **Role-tagged prime address** with separate entity/attribute domains, integer | the archive's order/role objection, fixed by construction |
+| **C** | **Latest-wins write and copy precedence**, integrated into the store | arm rt's "47 → 40" |
+| **D** | **Integer read kernel**: admit by the formed address, return the value exactly, abstain when absent | reopening condition 4 |
+| **E** | **The panel**: ≥ 80 held-out rows (fact stated, question, value), paraphrased, with distractor entities in the same conversation | reopening condition 1 |
+
+## The gate (re-anchored on the review's evidence)
+
+The 27/40 figure is **withdrawn as the gate**: the review showed its anchor (19/40) was a product-key
+feed-forward swap on an authored panel whose *no-memory* baseline was 20/40, so "7 over half-correct"
+measures the panel, not the mechanism. The gate is now relative, on the same frozen panel:
+
+1. **Beat the registered count-table control** — a question→answer table fit on the panel's TRAIN
+   half — **on the held-out half, where every (entity, attribute) pair is a recombination never seen
+   in TRAIN.** This is the compositionality claim, and it is the only one worth making. §4.4 and
+   L-010 require the control to be part of the gate, not a post-hoc check.
+2. **Beat the copy read's recorded 0.749–0.782** on the same held-out rows, since a copy read is the
+   strongest non-compositional reference the project has.
+3. **Held-out paraphrases only**: no held-out question may appear in TRAIN in any form.
+4. **Held-out combinations only**: each held-out row recombines an entity and an attribute that TRAIN
+   never paired. A one-entity/one-attribute panel cannot pass this by accident.
+5. **Address formation apart from read accuracy**, and **typed abstention** for unwritten addresses.
+- **Address formation reported separately from read accuracy** (reopening condition 5), so a pass
+  cannot be a store artefact and a failure cannot hide in the tagger.
+- **Zero write-over errors** of the "47 → 40" class.
+- **Typed abstention**: an unwritten address answers "not known", never a wrong value.
+- Deterministic grading only; no neural grader (§3.10).
+
+## Adversarial checks required before implementation is called done
+
+1. **Value swap**: permute the values between addresses. If accuracy is unchanged, nothing reads the
+   pairing and the mechanism is refuted.
+2. **Oracle key**: feed the gold `(entity, attribute)`. If oracle ≈ 100 % and the tagger ≈ 40 %, the
+   failure is canonicalisation (the tagger), which is the claim.
+3. **Distractor honesty**: every question has ≥ 1 same-attribute distractor entity in context. A
+   narrowest-possible question set (one entity, one attribute) would pass without forming an address.
+4. **Constraint audit**: no matmul, no squashing, integer serving, one state, bit-identical replay.
+
+## What this refuses
+
+- A bigger trunk as the answer to an address-formation failure.
+- Any gate the architecture cannot meet (bits-per-token vs a bigram, teacher token-F1): those measure a
+  language model, and this plan builds a memory with a tagger.
+- An authored dialogue *training* corpus. The corpus stays the real distillation; only the **test**
+  panel is written, because the mechanism doc requires a frozen panel and a deterministic grader.
