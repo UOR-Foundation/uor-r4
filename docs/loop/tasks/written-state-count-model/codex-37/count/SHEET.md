@@ -50,3 +50,8 @@ only after all checks pass. Preserve failed or partial directories. Run
 on Wick with no rented pod. Record process time, RSS and device admission.
 Only a digest-pinned parent GO with the non-author FIT and admissible run
 identity authorizes launch.
+
+Independent structural enumeration of the original UORT on Wick gives 12,500
+distinct native probes for the primary width. The interior rule is ordinal
+modulo 4,093 equal to 197. Require all 287,500 sampled words, both frame
+ends and the registered receipt fields. Compute the output digest independently.

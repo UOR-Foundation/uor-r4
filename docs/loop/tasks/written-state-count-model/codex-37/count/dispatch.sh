@@ -115,7 +115,12 @@ check d37-count-replay "$(field replay_sha256)"
 /usr/bin/time -v -o "$dest/native.time" "$stage/d37-count-replay" \
     "$compact" "$train_sha" "$compact_sha" "$r" "$r_sha" "$dest/primary.features" 65536 \
     > "$dest/native.json" 2> "$dest/native.stderr"
-jq -e 'type == "object" and length > 0' "$dest/native.json" > /dev/null
+primary_sha=$(sha256sum "$dest/primary.features" | cut -d ' ' -f1)
+jq -e --arg sha "$primary_sha" '
+    .rows == 15947584 and .records == 4060 and .width == 65536 and
+    .bytes == 2232661872 and .native_rows == 12500 and
+    .words_per_native_row == 23 and .sha256 == $sha
+' "$dest/native.json" > /dev/null
 (
     cd "$dest"
     sha256sum GO.json FIT.md SHEET.md admission.txt device.csv compare.txt \
