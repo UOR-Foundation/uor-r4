@@ -4,7 +4,8 @@ set -euo pipefail
 chat=${1:?uor-chat}; artifact=${2:?D26 carrier}; tokenizer=${3:?tokenizer}
 blind=${4:?sealed blind TSV}; go=${5:?top-level GO JSON}; dest=${6:?new capture directory}
 [[ $(hostname -s) == wick ]]
-native_sha=$(jq -er 'select(.decision == "GO") | .native_sha256 | select(test("^[a-f0-9]{64}$"))' "$go")
+native_sha=$(jq -er 'select(.decision == "GO" and .phase == "exposed" and .host == "wick")
+    | .native_sha256 | select(test("^[a-f0-9]{64}$"))' "$go")
 printf '%s  %s\n' \
     "$native_sha" "$chat" \
     b17352679c64a96bf657fad7640d4bb05ea3de0ecd08dadd13e9d2756e979bc4 "$artifact" \
