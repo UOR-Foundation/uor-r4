@@ -31,6 +31,8 @@
 use crate::{Error, Result};
 use std::collections::HashMap;
 
+pub mod saved;
+
 fn invalid(message: impl Into<String>) -> Error {
     Error::Invalid(format!("conjunction: {}", message.into()))
 }
@@ -799,6 +801,9 @@ impl Asked {
     }
     pub fn rows(&self) -> usize {
         self.rows.len()
+    }
+    pub fn eos(&self) -> u32 {
+        self.eos
     }
     /// The asked turn before a reply that starts at `start`: the tokens after
     /// the latest EOS, at most [`FORM_TOKENS`] of them.

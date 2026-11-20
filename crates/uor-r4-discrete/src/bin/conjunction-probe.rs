@@ -160,12 +160,14 @@ impl M2Grammar {
 }
 
 /// A fixed integer sequence (splitmix64) for the TRAIN draw.
-struct Draw(u64);
+struct Draw {
+    state: u64,
+}
 
 impl Draw {
     fn next(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
-        let mut word = self.0;
+        self.state = self.state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut word = self.state;
         word = (word ^ (word >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
         word = (word ^ (word >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
         word ^ (word >> 31)
@@ -234,7 +236,7 @@ fn m2_format(args: &[String]) -> Result<(), String> {
         }));
     }
 
-    let mut draw = Draw(seed);
+    let mut draw = Draw { state: seed };
     let mut tokens: Vec<u32> = Vec::new();
     let mut mask: Vec<u8> = Vec::new();
     for _ in 0..examples {
@@ -305,10 +307,150 @@ fn strip(segment: &serde_json::Value) -> serde_json::Value {
     }
 }
 
+/// `reader-save` trains the reader from a TRAIN stream and writes it as one
+/// integer file; `reader-replies` answers a panel from such a file alone.
+/// Neither needs a model, a driver config or the cuda feature.
+fn reader(args: &[String]) -> Result<(), String> {
+    use sha2::{Digest, Sha256};
+    use std::time::Instant;
+    use uor_r4_discrete::conjunction::{self, saved::Reader};
+
+    let sha = |bytes: &[u8]| {
+        Sha256::digest(bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    let read = |path: &String| std::fs::read(path).map_err(|e| format!("{path}: {e}"));
+    let number = |text: &String| text.parse::<u32>().map_err(|e| format!("{text}: {e}"));
+    let fresh = |path: &String| {
+        if std::path::Path::new(path).exists() {
+            return Err(format!("{path} already exists"));
+        }
+        Ok(())
+    };
+    if args[0] == "reader-save" {
+        if args.len() != 12 {
+            return Err(
+                "usage: conjunction-probe reader-save TOKENS_U16 MASK_U8 OUT_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST"
+                    .into(),
+            );
+        }
+        fresh(&args[3])?;
+        let stream = read(&args[1])?;
+        let mask = read(&args[2])?;
+        let tokens: Vec<u32> = uor_r4_discrete::w2_capacity::parse_uort_tokens(&stream)?
+            .into_iter()
+            .map(u32::from)
+            .collect();
+        if mask.len() != tokens.len() || mask.iter().any(|&bit| bit > 1) {
+            return Err("the mask must hold one 0 or 1 for each token".into());
+        }
+        let eligible: Vec<usize> = (0..mask.len()).filter(|&place| mask[place] == 1).collect();
+        let orders: Vec<usize> = if args[10] == "-" {
+            Vec::new()
+        } else {
+            args[10]
+                .split(',')
+                .map(|text| text.parse::<usize>().map_err(|e| format!("{text}: {e}")))
+                .collect::<Result<_, _>>()?
+        };
+        let started = Instant::now();
+        let (reader, trained) = Reader::train(
+            &tokens,
+            &eligible,
+            number(&args[4])?,
+            number(&args[5])? as usize,
+            number(&args[7])?,
+            number(&args[8])?,
+            number(&args[9])? as usize,
+            &orders,
+            number(&args[6])? as usize,
+        )
+        .map_err(|e| e.to_string())?;
+        let train_ms = started.elapsed().as_millis() as u64;
+        let started = Instant::now();
+        let (bytes, saved) = reader.to_bytes(number(&args[11])?);
+        // The file must read back to the same bytes before it is kept.
+        let loaded = Reader::from_bytes(&bytes).map_err(|e| e.to_string())?;
+        let (again, resaved) = loaded.to_bytes(1);
+        if again != bytes || resaved != saved {
+            return Err("the saved reader does not read back to its own bytes".into());
+        }
+        std::fs::write(&args[3], &bytes).map_err(|e| format!("{}: {e}", args[3]))?;
+        println!(
+            "{}",
+            serde_json::json!({
+                "tokens_sha256": sha(&stream),
+                "mask_sha256": sha(&mask),
+                "trained": trained,
+                "saved": saved,
+                "reader_sha256": sha(&bytes),
+                "train_ms": train_ms,
+                "save_ms": started.elapsed().as_millis() as u64,
+            })
+        );
+        return Ok(());
+    }
+    if args.len() != 5 {
+        return Err(
+            "usage: conjunction-probe reader-replies READER_FILE PANEL_JSON OUT_JSON LIMIT".into(),
+        );
+    }
+    fresh(&args[3])?;
+    let bytes = read(&args[1])?;
+    let panel_bytes = read(&args[2])?;
+    let limit = number(&args[4])? as usize;
+    let started = Instant::now();
+    let reader = Reader::from_bytes(&bytes).map_err(|e| e.to_string())?;
+    let load_ms = started.elapsed().as_millis() as u64;
+    let panel: Vec<conjunction::PanelRow> =
+        serde_json::from_slice(&panel_bytes).map_err(|e| e.to_string())?;
+    if panel
+        .iter()
+        .flat_map(|row| row.prompt.iter())
+        .any(|&id| id >= reader.vocabulary)
+    {
+        return Err("a panel id is past the vocabulary".into());
+    }
+    let started = Instant::now();
+    let (count, replies) = conjunction::count_replies_by(&panel, reader.asked.eos(), &|prompt| {
+        reader.reply(prompt, limit)
+    });
+    let reply_us = (started.elapsed().as_micros() as u64).max(1);
+    let ids: usize = replies.iter().map(Vec::len).sum();
+    let summary = serde_json::json!({
+        "schema": "uor-r4.discrete-reader-replies/1",
+        "reader_sha256": sha(&bytes),
+        "reader_bytes": bytes.len(),
+        "panel_sha256": sha(&panel_bytes),
+        "reply_limit": limit,
+        "count": count,
+        "load_ms": load_ms,
+        "reply_us": reply_us,
+        "reply_ids": ids,
+        "ids_per_second": ids as u64 * 1_000_000 / reply_us,
+    });
+    let mut report = summary.clone();
+    report["replies"] = serde_json::json!(replies);
+    std::fs::write(
+        &args[3],
+        serde_json::to_vec(&report).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| format!("{}: {e}", args[3]))?;
+    println!("{summary}");
+    Ok(())
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let done = if args.first().map(String::as_str) == Some("m2-format") {
         m2_format(&args)
+    } else if matches!(
+        args.first().map(String::as_str),
+        Some("reader-save" | "reader-replies")
+    ) {
+        reader(&args)
     } else {
         run(&args)
     };
