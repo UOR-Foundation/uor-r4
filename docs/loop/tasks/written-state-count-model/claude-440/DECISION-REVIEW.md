@@ -54,7 +54,11 @@ codex-27's REPORTs; the run2 JSONs. The top session closed those gaps below.
 | 7 | Softened to "A1 reuses the operator that P2 already carries". |
 | 8 | The speed condition now cites claude-409's bar B. "One M1 performance core" is that bar's own wording, not a narrowing. |
 
-**Gaps closed by the top session:**
+**Gaps closed by the top session** (one stays partly open):
+- **The charter.** The top session read §3.1 (geometry only, `CHARTER.md` line 26) and §5.1 item 1
+  (line 58: the decision review, D68) at `67d54aa0a`. It did not re-read §3.7 in full. The card's
+  native-space duty rests on D85 through claude-409's bar B (replay on ≥ 64 prompts), which it
+  quotes.
 - **The run2 JSON.** At 100% (`run2/pick-p1000.json`), each arm's DEV-tune `bpb_micro` (A0
   1,432,620; A1 1,360,806; C2 1,365,580; C3 1,360,932; novel 1,747,432, 1,651,188, 1,657,701,
   1,651,364) matches the card. So do the bands (A1 − C2 −5,232 / −4,318 overall, −7,141 / −5,889 novel;

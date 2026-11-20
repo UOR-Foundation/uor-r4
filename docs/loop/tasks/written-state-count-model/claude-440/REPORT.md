@@ -46,7 +46,7 @@ Bands: A1 − C2 [−5,232, −4,318] overall and [−7,141, −5,889] on novel 
 ## What the numbers say
 
 - A1 is the best measured copy path, and it beats exact pairs by a band that clears 0 widely.
-- Its extra cost over C2 is offline, about 9 min of device reads per pass on wick, against about
+- Its measured extra cost over C2 is offline, about 9 min of device reads per pass on wick, against about
   1,300 ms on the host for C2.
 - C3 is never the cheaper choice: it costs the same device read as A1 and scores slightly worse.
 
@@ -55,9 +55,14 @@ Bands: A1 − C2 [−5,232, −4,318] overall and [−7,141, −5,889] on novel 
 - `UOR_LAB=claude uor-harness check`: info lines only, no error. The branch check said "only the
   first 25 branches were queried".
 - `UOR_LAB=claude uor-harness loop pr-check --local`: before this REPORT existed, the only FAIL was
-  "REPORT missing". The read-path and filemap WARNs are advisory and come from base (AGENTS.md is 83
+  "REPORT missing"; at `cb37292da`, the first head with this REPORT, the verdict was PASS. It is
+  re-run at the final head and its result is posted on the PR. The read-path and filemap WARNs are advisory and come from base (AGENTS.md is 83
   lines, the same as on base).
 - The decision review: APPROVE WITH CHANGES; the eight findings are disposed of in DECISION-REVIEW.
+- An exact-head review at `cb37292da`: APPROVE with six minor findings (a charter-read gap in the
+  review record, "extra cost is offline" without "measured", the per-class weight wording, PLAN's
+  controls list, this section's pr-check timing, and no memory condition in the reversal rule). All
+  six are fixed at the next head, which gets its own exact-head review.
 - The card's numbers were checked against `pick-p1000.json` by `jq` (DECISION-REVIEW, "Gaps closed").
 
 ## Skills used

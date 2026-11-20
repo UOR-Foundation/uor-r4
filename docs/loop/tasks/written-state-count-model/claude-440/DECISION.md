@@ -41,7 +41,7 @@ Paired bands (2,670 records, 1,000 resamples): A1 − C2 [−5,232, −4,318] ov
 - **It is the better measured path, by a band that clears 0 widely.** A1 beats C2 by 4,318 to 5,232
   micro-BPB out of sample, about 3½‰ of A1's bits, and by more on novel text. Of the measured arms
   only C3 comes close, and C3 costs the same device read. So C3 is never the cheaper choice. [claude]
-- **The cost is small where it lands.** A1's extra cost over C2 is offline: about 9 min of device
+- **The measured cost is small.** A1's measured extra cost over C2 is offline: about 9 min of device
   reads per pass on wick, inside an hour-scale run. P1's budget is ≤ 1 GPU-day. At serving time the
   read is per token over one session's context. Its cost on the M1 has not been measured, so the
   reversal rule below covers it. [claude, est]
@@ -67,13 +67,13 @@ Paired bands (2,670 records, 1,000 resamples): A1 − C2 [−5,232, −4,318] ov
 - **A cheaper nearest-pair path.** A read that fires on the nearest earlier pair under a cheap
   injective map might hold most of A1's lead at C2's cost. That is an untested hypothesis
   (claude-439, "Still open"). A unit that tests it keeps A1 as the incumbent and C2, C3 as controls.
-- **Per-distance weights.** EM gives the distance > 0 class 10‰ of Pick's weight, against 190‰ at
-  distance 0. A split by distance (1, 2, 3+) may change that. That is a future unit, not a choice made
+- **Per-distance weights.** EM gives Pick about 10‰ of the mixture in the distance > 0 class,
+  against 190‰ at distance 0 (target-weighted over R's buckets, claude-439). A split by distance (1, 2, 3+) may change that. That is a future unit, not a choice made
   here.
 
 ## Reversal rule
 
-A new card switches S5 to C2 if either of these holds:
+A new card switches S5 to C2 if any of these holds:
 
 1. **Bits.** At P1(b)'s deployable size, the paired A1 − C2 band does not lie wholly below 0. That
    covers a band that includes 0 and one wholly above 0. The band is read on DEV-tune, and on the
@@ -81,6 +81,8 @@ A new card switches S5 to C2 if either of these holds:
    read cannot gain an arm afterwards (§4.5).
 2. **Speed.** The served model with A1 misses claude-409's bar B speed (≥ 1,000 tok/s warm at 2k
    context on one M1 performance core), and the same model with C2 meets it.
+3. **Memory.** The served model with A1 misses claude-409's bar B state limit (≤ 4 GB resident),
+   and the same model with C2 meets it. The P1(b) footprint record above feeds this rule.
 
 **Replay is required, not optional.** The unit that packs A1 into the D11 artifact carries a
 bit-identical CUDA-to-CPU Pick replay: route, tie and read choice, on ≥ 64 prompts, the count in
