@@ -33,7 +33,7 @@ No new training state was fitted. [Native operator](operator/README.md) · [Writ
 
 The held panel had 92 prompts. Eighty had a unique supported object.
 Six unsupported prompts required a literal refusal and six had no specified
-response string. Thus 86 had a complete tape to compare. Two blind readers
+response string. Thus 86 had a complete tape to compare. The conflict cases give two distinct objects for a singular request and both source statements can be true. Two blind readers
 agreed on all 92, and both flagged the semantic limits of “indexes” versus
 “catalogs.” All prompts asked about a person. This panel does not qualify
 no-request or multiple-request role handling. [Sealed semantic checks](evidence/SEMANTIC.md)
@@ -97,7 +97,9 @@ device processes matched all 276 projected held rows for the two parent
 models, including all evidence words and membership decisions. The GPU scored
 host-discovered query and cue spans. The normal client separately checked
 original role, source, complete emitted IDs, cursor steps and stopping
-condition. The full serving-feature library suite passed 724 tests with one
+condition. All 552 raw client transcripts from the primary run matched their cold-process counterparts byte for byte across six configurations. [Cold client checks](evidence/cold-replay.txt)
+
+The full serving-feature library suite passed 724 tests with one
 ignored. All twelve full harness gates passed. The rented GPU was released
 and deleted after verified archive transfer. Its ledger estimates $0.19.
 [Non-author FIT](FIT.md) · [Sealed GO](evidence/GO.json) · [Compute ledger](evidence/compute.json) · [Storage](evidence/STORAGE.md)
@@ -125,7 +127,9 @@ radius cannot repair comparisons that are discarded before distance is
 computed. The D27 exact-cue fallback and its secondary recurrence gains
 do not establish semantic relation retrieval.
 
-The next prediction unit should package the TRAIN-fitted mixed-mass read, qualify its P1(a) stream and serving parity, and measure P1(b) on the frozen carrier. For P2, choose the token-context order on DEV-tune with
+The next prediction unit should package the reserved-TRAIN mixture into an active D11 and run its real mass read through the ordinary client and the CUDA scorer. The original 1% stream has 5,196 records and 20,475,957 tokens. The existing public evidence qualifies the earlier retained-count replay on that slice, while the full fitted mixture still needs its own readback and P1(b) result. Use DEV-tune for deployment verification, then freeze the carrier before the sealed panel. [Existing order-ten replay](../codex-10/REPORT.md) · [Reserved-TRAIN output fit](../claude-439/REPORT.md)
+
+For P2, choose the token-context order on DEV-tune with
 adequate order range, and measure persistent geometry, reseeded same-transport
 and SplitMix at equal charged bytes and training dose. Reserve sealed DEV-test
 for the registered best-control comparison. The capped pilot is lossful and
