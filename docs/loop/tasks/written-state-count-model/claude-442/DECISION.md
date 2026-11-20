@@ -66,13 +66,15 @@ did not fire; distance 0 holds 4,111,759 at 190‰; distance 1 holds none; dista
 
 ## What the refit unit carries
 
-1. **One class rule, shared.** The serving runtime and the fit use one function for the class
-   (claude-441's `pick_split_class`, now in `kn_ceiling.rs`, moved where `count_runtime.rs` includes
-   it, `runtime/mixture.rs`). Two copies of the rule would break D85's one operator path.
+1. **One class rule, shared.** The serving runtime and the fit use one function for the class.
+   claude-441's `pick_split_class` is at `kn_ceiling.rs:179` today. The refit unit moves it into
+   `runtime/mixture.rs`, which `count_runtime.rs:23` and `kn_ceiling.rs:25` both include, and
+   `runtime/rank.rs:23-27` calls it in place of its three-arm match. Two copies of the rule would
+   break §3.7's "same typed operator definitions" in training and serving (D85).
 2. **Both arms on R and DEV-tune.** The unit fits A1 (three classes) and A1s (split) on the same
-   reserved TRAIN rows and reports A1s − A1 on DEV-tune before it freezes either. The fit's measured
-   cost is the 270 s of feature preparation, shared by both arms, and 2.37 s of GPU optimizer per
-   arm (codex-31 at C1) [est at full C].
+   reserved TRAIN rows and reports A1s − A1 on DEV-tune before it freezes either. Measured at C1
+   (codex-31): 270 s of feature preparation, shared by both arms, and 2.37 s of GPU optimizer per
+   arm. At full C the cost is unmeasured [est: larger, and still shared].
 3. **The replay covers the class.** The unit's bit-identical CUDA-to-CPU replay checks route, tie,
    read choice and class on ≥ 64 prompts (claude-409's bar B count, as claude-440's card requires),
    with a planted negative: a target whose distance is moved across a class boundary must fail it.
@@ -88,9 +90,15 @@ A new card, or the refit unit's own REPORT, returns S5 to three classes if any o
    sealed DEV-test gets an A1s − A1 arm only if the candidate's prep sheet registers it before its one
    sealed run (§4.5); this card does not require one.
 2. **Cost.** The split's support makes the refit unit miss its own sheet's budget or delays the
-   frozen candidate. This defers the split to the next refit; it is not a finding against it.
+   frozen candidate. This defers the split to the next refit; it is not a finding against it. The
+   refit unit's REPORT records the deferral and PLAN's P1 row says so. If that refit was P1(b)'s
+   last, P1(b) is three-class, and the split waits for the first S5 refit after it (P2's equal-byte
+   arms or a later freeze).
 
-A failed replay is a bug to fix, not a reason to switch. [claude]
+Speed and memory need no clause of their own. The split adds no read and no per-session state, and
+39 KB of weights; the refit unit's bar B checks (claude-409: ≥ 1,000 tok/s warm, ≤ 4 GB resident)
+time and size the served model with whichever rule it packs. A failed replay is a bug to fix, not a
+reason to switch. [claude]
 
 ## Alternatives turned down
 
