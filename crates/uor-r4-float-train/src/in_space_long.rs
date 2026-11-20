@@ -117,6 +117,15 @@ pub struct LongConfig {
     /// Hamming flock attention with this many heads after layer 2 and on the readout; 0 is no read
     /// (`flock_read_hamming`).
     pub hamming_read: usize,
+    /// The token hinge's margin (`--token-margin`). `None` is the 1.0 default. Recorded because the
+    /// objective is part of what a run *is*: without it a run's margin can only be inferred from its
+    /// loss value, which is not reproducible (L-025).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_margin: Option<f64>,
+    /// The writer's address (`--writer-address`). `None` is the ports default, and "centroids" is
+    /// the geometric address. Recorded for the same reason as `token_margin`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub writer_address: Option<String>,
     /// The opening read (claude-154) after layer 2: the mean of up to this many opening token
     /// points; 0 is no read (`flock_read_opening`). Left out of `config.json` when 0.
     #[serde(skip_serializing_if = "is_zero")]
@@ -18894,6 +18903,8 @@ mod tests {
     fn config(opening_read: usize, opening_anchor: Option<OpeningAnchor>) -> LongConfig {
         LongConfig {
             objective: PointObjective::Sheet,
+            token_margin: None,
+            writer_address: None,
             steps: 1,
             batch: 1,
             eval_every: 1,

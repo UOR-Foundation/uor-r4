@@ -696,6 +696,8 @@ fn main() -> Result<()> {
         micro_batch: 0,
         carry_windows: 0,
         fast_rivals: false,
+        token_margin: None,
+        writer_address: None,
         profile: 0,
         turn_memory: 0,
         turn_memory_empty: false,
@@ -1048,6 +1050,8 @@ fn main() -> Result<()> {
                     ));
                 }
                 uor_r4_float_train::in_space_long::set_token_margin(margin);
+                // Recorded as well as applied: the objective is part of the run's identity.
+                config.token_margin = Some(margin);
             }
             "--dev" => {
                 uor_r4_float_train::in_space_long::set_dev_override(Some(PathBuf::from(&value)));
@@ -1078,6 +1082,7 @@ fn main() -> Result<()> {
                         )))
                     }
                 }
+                config.writer_address = Some(value.clone());
             }
             "--kept-cells" => {
                 let kept = usize::try_from(number(&value)?)
