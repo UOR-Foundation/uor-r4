@@ -31,3 +31,9 @@ oracle gives the binder the correct original person and all relevant heads.
 The forced-value and opposing-value controls exercise the exact original token
 addresses. Bare unsupported prompts have no literal reply key. A withheld
 source, a factual write and a requested literal refusal are scored separately.
+
+For post-run localization, use `d27-value-witness PARENT PANEL` on each original
+parent and combine its two outputs with `jq -s -f onsets.jq`. This records the
+actual assertion, continuation and final onset fields for an oracle-supplied
+assertion set. Intermediate addresses that the final policy rejects are
+observations about that stage. They were never supplied to the ordinary writer.
