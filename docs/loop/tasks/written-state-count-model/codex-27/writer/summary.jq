@@ -82,6 +82,7 @@ def validate:
   group_by(key) as $g |
   ($g | map(.[0]|key) | map(select(.[0]!="forced"))) as $keys |
   (map(.row)|unique) as $rows |
+  (map(select(.lane=="ordinary" and .arm=="unfiltered" and (.unsupported|not))|.row)|sort) as $supported |
   if ($rows|length)!=92 or
      $keys != [["disabled","disabled"],["oracle","assertions"],["ordinary","exact"],["ordinary","geometry"],
        ["ordinary","unfiltered"],["person","exact"],["person","geometry"],["person","unfiltered"],
@@ -89,6 +90,10 @@ def validate:
      ($g | any((map(.row)|length)!=(map(.row)|unique|length))) or
      ($g | any(.[0].lane!="forced" and (map(.row)|sort)!=$rows))
     then error("missing or duplicate grade rows or arms")
+    elif (map(select(.lane=="forced" and .arm=="value")|.row)|sort)!=$supported or
+         (map(select(.lane=="forced" and .arm=="opposing")|.row)|sort)!=$supported or
+         any(.[]; .lane=="forced" and ((.arm=="value") != (.exact==true)))
+    then error("missing or failed forced-address controls")
     else . end;
 validate as $rows |
 { held_rows:($rows|map(.row)|unique|length),
