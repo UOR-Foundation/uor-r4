@@ -4,7 +4,7 @@ umask 077
 
 case "${1:?build or run}" in
 build)
-  sha256sum -c stage.sha256
+  sha256sum --strict -c stage.sha256
   test "$(df -Pk . | awk 'NR == 2 {print $4}')" -ge 20971520
   mkdir source
   tar -xf source.tar.gz -C source
@@ -33,10 +33,27 @@ build)
   done
   ;;
 run)
-  sha256sum -c stage.sha256
-  sha256sum -c build.sha256
-  sha256sum -c GO.sha256
-  grep -q '^TEST FITNESS: FIT' FIT.md
+  sha256sum --strict -c stage.sha256 build.sha256 GO.sha256
+  awk '$2 == "GO-COUNT.json" || $2 == "*GO-COUNT.json" { count++ } END { exit count != 1 }' GO.sha256
+  grep -qx 'TEST FITNESS: FIT' FIT.md
+  gpu=$(nvidia-smi --query-gpu=uuid --format=csv,noheader)
+  jq -er --arg gpu "$gpu" '
+    if .schema != "uor-r4.d31.full-c1-go/1" or .decision != "GO" or .lab != "codex"
+      or .scope != "Complete registered C1 count and lookup" or .gpu != $gpu
+      or (.pod | test("^vast-[0-9]+$") | not) or (.lease | test("^codex/[a-z0-9-]+$") | not)
+    then error("count GO does not authorize the requested scope and device")
+    else [
+      [.stage_sha256, "stage.sha256"], [.source_sha256, "source.tar.gz"],
+      [.source_manifest_sha256, "source-all.sha256"],
+      [.sheet_sha256, "source/docs/loop/tasks/written-state-count-model/codex-31/count/SHEET.md"],
+      [.fit_sha256, "FIT.md"], [.build_sha256, "build.sha256"],
+      [.machine_sha256, "machine.sha256"], [.finite_sha256, "finite.sha256"],
+      [.exe_sha256, "target/release/full-compact-count"], [.c1_sha256, "c1.tokens.u16"],
+      [.c128_sha256, "finite/c128/compact.counts"]
+    ][] | if (.[0] | test("^[0-9a-f]{64}$")) then join("  ")
+          else error("count GO is missing a required digest") end
+    end' GO-COUNT.json | sha256sum --strict -c -
+  sha256sum --strict -c machine.sha256 finite.sha256
   test "$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)" -ge 8388608
   test "$(df -Pk . | awk 'NR == 2 {print $4}')" -ge 6291456
   test "$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits)" -ge 8192

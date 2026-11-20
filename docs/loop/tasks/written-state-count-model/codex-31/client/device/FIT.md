@@ -21,3 +21,7 @@ The synthetic fixture checks 17 generation steps, each one comparing all 4,095 e
 | Ordinary index arithmetic | `af6f4922af9a297579799bceb2a6cc84f8f9f079cd3cdd3f983fe74382994626` |
 | KN CUDA source | `cb423de7a83250100c81db4443748eb197bf81717ff8bf2ac17c5e887a777fe5` |
 | KN restoring division | `5b2eaa7f1e3844f2412674d15327174f064bb60b86883cd13a5b4133667a2d95` |
+
+## Strict v4 real replay gate
+
+The separate `replay-strict.sh` wrapper, SHA-256 `3b5586ed9f49bb54c24e00ae6dbe38e623ad543372688dd5b7039cde0ce32a1b`, leaves the v4 compiled source and finite fixture unchanged. It strictly rehashes GO, stage, build and finite manifests, verifies the exact loaded-image evidence and independently verified C1 / R-fit components, and requires the blind packet to contain only registered ID prefixes. It starts two fresh processes from the same exact inputs, compares both complete decisions and receipts, then seals the outputs. The v4 AOT loaded-image and 17-step finite controls passed, including 4,095 original IDs per step and malformed input refusal. Real release additionally requires the verified C1 and preserved real A1 fit with their exact output digests and parent GO. [Strict replay](replay-strict.sh)
