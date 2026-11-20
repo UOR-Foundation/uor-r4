@@ -71,6 +71,10 @@ path = "src/bin/teacher-paraphrase.rs"
 required-features = ["historical-reference"]
 
 [[bin]]
+name = "slot-address-check"
+path = "src/bin/slot-address-check.rs"
+
+[[bin]]
 name = "instr-panel-freeze"
 path = "src/bin/instr-panel-freeze.rs"
 

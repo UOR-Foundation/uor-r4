@@ -104,3 +104,35 @@ measures the panel, not the mechanism. The gate is now relative, on the same fro
   language model, and this plan builds a memory with a tagger.
 - An authored dialogue *training* corpus. The corpus stays the real distillation; only the **test**
   panel is written, because the mechanism doc requires a frozen panel and a deterministic grader.
+
+## First measurement of the mechanism (20 Nov, `slot-address-check`)
+
+A generated, frozen panel: 10 entities x 8 closed attributes = 80 pairs, half TRAIN and half HELD
+OUT, where the held-out half shares every entity and every *fitted* surface form with TRAIN and
+shares **no pair**. Integer tables only; no matmul, no squashing, no learned weights; deterministic
+from a fixed seed; four seeds run.
+
+| measure | result |
+|---|---|
+| address formation, known wording | **40/40** (all four seeds) |
+| oracle key (gold address) | 40/40 |
+| **mechanism (formed address, exact store)** | **40/40** |
+| control: question->answer pair table | **0/40** |
+| falsifier: permuted values | **0/40** |
+| falsifier: held-out wording | **17/40** |
+
+**What this establishes.** The store is not the failure and neither is the address arithmetic: with a
+formed `(entity, attribute)` address, **recombinations that were never seen are answered exactly**,
+while the memorised pair table answers none. The value swap drops it to zero, so it is reading the
+binding rather than answering by coincidence. That is the compositional claim, measured.
+
+**What it does not establish, and it is the recorded hard case.** On **wording the tagger never saw**
+it scores **17/40** — and the 17 are exactly the rows whose alternative surface happens to share a
+word with the fitted one. A word table cannot map a novel synonym, which is the archive's
+"same relation in new words — sieve alone answered 1 of 52". The tagger's **coverage** is the limit,
+and coverage is a data problem, not a geometry one: the fitted table in this panel saw 40 rows.
+
+**So the next unit is tagger coverage**, not the store, not the trunk: fit the attribute table from
+the real questions in the corpus, and report the same table on the same panel. If coverage closes,
+the mechanism is complete for the closed attribute set; if it does not, the honest answer is a
+smaller closed set, not a bigger model.
