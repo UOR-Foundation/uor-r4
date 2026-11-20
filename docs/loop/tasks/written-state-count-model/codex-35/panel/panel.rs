@@ -54,15 +54,24 @@ fn query(out: &mut String, template: &str, name: &str) -> Span {
     mention
 }
 
-fn rows() -> Result<Vec<Row>> {
+fn rows(short: bool) -> Result<Vec<Row>> {
     let mut result = Vec::new();
     let mut train_id = 35_000;
-    let mut held_id = 36_000;
+    let mut held_id = if short { 46_000 } else { 36_000 };
     let mut train_entities = BTreeSet::new();
     let mut held_entities = BTreeSet::new();
     let mut train_values = BTreeSet::new();
     let mut held_values = BTreeSet::new();
-    for line in include_str!("families.tsv").lines() {
+    let families = include_str!("families.tsv").lines();
+    let family_rows: Vec<_> = if short {
+        families
+            .filter(|line| line.starts_with("train\t"))
+            .chain(include_str!("held_short.tsv").lines())
+            .collect()
+    } else {
+        families.collect()
+    };
+    for line in family_rows {
         let fields: Vec<_> = line.split('\t').collect();
         let [split, group, n1, n2, verb, v1, v2, introduction, request, exclude] =
             fields.as_slice()
@@ -173,7 +182,7 @@ fn rows() -> Result<Vec<Row>> {
             *id += 1;
         }
     }
-    for line in include_str!("causal.tsv").lines() {
+    for line in include_str!("causal.tsv").lines().filter(|_| !short) {
         let fields: Vec<_> = line.split('\t').collect();
         let [group, name, verb, particle, noun, context_a, context_b, context_missing, request] =
             fields.as_slice()
@@ -250,7 +259,7 @@ fn jsonl(file: &mut fs::File, value: &Input) -> Result<()> {
     Ok(())
 }
 
-fn freeze(tokenizer_path: &Path, output: &Path) -> Result<()> {
+fn freeze(tokenizer_path: &Path, output: &Path, short: bool) -> Result<()> {
     let tokenizer_bytes = fs::read(tokenizer_path)?;
     if sha(&tokenizer_bytes) != TOKENIZER {
         return Err("D26-bound tokenizer SHA-256 mismatch".into());
@@ -259,7 +268,7 @@ fn freeze(tokenizer_path: &Path, output: &Path) -> Result<()> {
         ByteBpeTokenizer::from_tokenizer_json_bytes(&tokenizer_bytes).ok_or("invalid tokenizer")?;
     let protocol = DialogueProtocol::literal_roles_v2(&tokenizer)?;
     let encoder = protocol.bind(&tokenizer)?;
-    let rows = rows()?;
+    let rows = rows(short)?;
     fs::create_dir(output)?;
     let fit = output.join("train");
     let blind = output.join("held");
@@ -329,6 +338,9 @@ fn freeze(tokenizer_path: &Path, output: &Path) -> Result<()> {
                     .ok_or("assistant changed prefix")?;
                 if ids.get(b) != Some(&16) || tape != [&ids[a..b], &[EOS]].concat() {
                     return Err(format!("row {} lacks an exact copy-to-EOS path", row.row).into());
+                }
+                if short && row.split == "held" && tape.len() > 8 {
+                    return Err(format!("row {} exceeds the 7-token writer limit", row.row).into());
                 }
                 Some(tape.to_vec())
             }
@@ -402,7 +414,10 @@ fn freeze(tokenizer_path: &Path, output: &Path) -> Result<()> {
 fn main() -> Result<()> {
     let args: Vec<_> = env::args().skip(1).collect();
     match args.as_slice() {
-        [tokenizer, output] => freeze(Path::new(tokenizer), Path::new(output)),
-        _ => Err("usage: d35-panel-freeze TOKENIZER NEW_DIR".into()),
+        [tokenizer, output] => freeze(Path::new(tokenizer), Path::new(output), false),
+        [option, tokenizer, output] if option == "--short" => {
+            freeze(Path::new(tokenizer), Path::new(output), true)
+        }
+        _ => Err("usage: d35-panel-freeze [--short] TOKENIZER NEW_DIR".into()),
     }
 }
