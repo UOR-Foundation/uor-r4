@@ -1,7 +1,7 @@
 //! Prepare only compact sections and original IDs for AOT CUDA. Compare the
 //! resulting device words separately against native and independent witnesses.
-#![forbid(unsafe_code)]
 
+use memmap2::{Advice, MmapOptions};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -13,7 +13,8 @@ use uor_r4_count_runtime::{kn_score::KnDiscounts, ngram_count::PrimeRouteKey, Co
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 const ORDERS: usize = 11;
 const RESULT_BYTES: usize = 32;
-const VERIFY_MAX: u64 = 32 << 20;
+const ARTIFACT_MAX: u64 = 4_000_000_000;
+const PROBE_MAX: usize = 18;
 
 fn get32(bytes: &[u8]) -> Result<u32> {
     Ok(u32::from_le_bytes(bytes.try_into()?))
@@ -63,7 +64,7 @@ impl Case {
                 Ok(tokens)
             })
             .collect::<Result<Vec<_>>>()?;
-        if probes.is_empty() || probes.len() > 65_536 {
+        if probes.is_empty() || probes.len() > PROBE_MAX {
             return Err("invalid finite probe count".into());
         }
         Ok(Self {
@@ -78,7 +79,7 @@ impl Case {
 
 fn metadata(path: &Path, case: &Case) -> Result<Vec<u8>> {
     let mut file = BufReader::with_capacity(1 << 20, File::open(path)?);
-    if file.get_ref().metadata()?.len() != case.bytes || case.bytes > 4_000_000_000 {
+    if file.get_ref().metadata()?.len() != case.bytes || case.bytes > ARTIFACT_MAX {
         return Err("wrong witness compact length".into());
     }
     let mut digest = Sha256::new();
@@ -170,10 +171,15 @@ impl Order {
 }
 
 fn verify(case: &Case, artifact: &Path, results: &Path) -> Result<()> {
-    if case.bytes > VERIFY_MAX || fs::metadata(artifact)?.len() != case.bytes {
-        return Err("independent native comparison is bounded to finite artifacts".into());
+    let file = File::open(artifact)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || case.bytes > ARTIFACT_MAX || metadata.len() != case.bytes {
+        return Err("wrong immutable compact length for native comparison".into());
     }
-    let data = fs::read(artifact)?;
+    // SAFETY: The receipt-pinned artifact is a regular file that the caller
+    // keeps immutable until replay completes. This mapping is read-only.
+    let data = unsafe { MmapOptions::new().map(&file)? };
+    data.advise(Advice::Sequential)?;
     let native = CompactCountLookup::from_bytes(&data, case.train, case.artifact)?;
     let result_bytes = case.probes.len() * ORDERS * RESULT_BYTES;
     if fs::metadata(results)?.len() != result_bytes as u64 {
@@ -251,6 +257,10 @@ fn verify(case: &Case, artifact: &Path, results: &Path) -> Result<()> {
                 .into());
             }
         }
+    }
+    let after = file.metadata()?;
+    if after.len() != metadata.len() || after.modified()? != metadata.modified()? {
+        return Err("compact input changed during native comparison".into());
     }
     println!(
         "{}",
