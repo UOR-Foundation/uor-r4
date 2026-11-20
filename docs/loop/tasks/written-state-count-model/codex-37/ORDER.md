@@ -10,7 +10,7 @@ The item's done-when reads:
 
 ## Cancel probe (run first)
 
-To fill in.
+See the execution contract below.
 
 ## Files in scope
 
@@ -38,8 +38,14 @@ To fill in.
 
 ## Done when
 
-To fill in.
+See the execution contract below.
 
 ## Stop and ask if
 
-To fill in.
+See the execution contract below.
+
+## Execution contract for this unit
+
+The cancel probe checks the open claims, parent PR #4134 on main, original R identity, the 3,912,334,481-byte deployed count artifact, resident AOT reader, and fresh output capacity. Missing or overlapping evidence holds the affected dispatch. This is the full-C P1(b) reserved-TRAIN refit. First qualify and capture the lossless count tape for every original R target through EOS. Join by original ordinal with causal prefix-only Pick reads and pin both inputs. Fit the registered A1 and A1s states on identical training rows, preserve all controls and test upper buckets. Frozen candidate choice requires the registered paired DEV-tune comparison. The sealed DEV-test and paired R* reconstruction need a separate admission. Do not spend held observations on implementation.
+
+Native schema includes UORT original u16 IDs, BOS-reset ten-token count history and 192-token Pick history, u32/u64 counts and totals, integer Q48 masses and Q32 weights. Count lookup uses the existing AOT compact reader and its native counterpart. Both share the deployed count bytes. Use one typed class rule during preparation and serving. Bucket and expert weights update in integer arithmetic and serialize without conversion, preserving the three-class carrier and explicitly tagging five-class state. Replay original ordinals, prefix, read distance, hit, bucket, mass and original-ID tie against native and device controls, including the final bucket, empty history, EOS and batch seams. Scope includes the S5 carrier and its readers, new fitter/receipts under this unit, and no writer changes. A material divergence stops the affected arm at its first ordinal. Report instrument, fit, selection and held score at their own evidence levels. All builds and runs use Wick or an admitted pod.
