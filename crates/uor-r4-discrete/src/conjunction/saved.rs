@@ -17,9 +17,10 @@
 //! Layout: `UORRDR01`, the header integers, the question forms in id order,
 //! the held rows, the suffix rows, the pair rows, then the SHA-256 of
 //! everything before it.
+use super::bind::BindTable;
 use super::{
-    invalid, window_at, Asked, Entry, Form, HeldKey, HeldRow, Ladder, Row, FORMS_HELD, FORM_GAP,
-    FORM_TOKENS, MAX_ORDER, MAX_SLOTS, ROW_RIGHT,
+    invalid, window_at, Asked, Entry, Form, HeldKey, HeldRow, Ladder, Row, StandBy, FORMS_HELD,
+    FORM_GAP, FORM_TOKENS, MAX_ORDER, MAX_SLOTS, ROW_RIGHT,
 };
 use crate::Result;
 use sha2::{Digest, Sha256};
@@ -27,6 +28,10 @@ use sha2::{Digest, Sha256};
 pub const MAGIC: &[u8; 8] = b"UORRDR01";
 /// A file that also holds one class code per token, after the orders.
 pub const MAGIC_CODES: &[u8; 8] = b"UORRDR02";
+/// A file whose pointers pick their stand by the bound pair: after the
+/// orders it holds the class code count and codes, the stand choice (1 the
+/// pair, 2 its octonion bind address) and the bind table.
+pub const MAGIC_STAND: &[u8; 8] = b"UORRDR03";
 
 /// One class code per token from an address-cells codebook table (`blocks`
 /// blocks of eight coordinates a token): the writer cell, sixteen times the
@@ -220,7 +225,12 @@ impl Reader {
         orders: &[usize],
         limit: usize,
         codes: &[u16],
+        by: StandBy,
+        bind: BindTable,
     ) -> Result<(Self, Trained)> {
+        if !bind.words.is_empty() && bind.words.len() != vocabulary as usize {
+            return Err(invalid("the bind table must hold one word a token"));
+        }
         if !codes.is_empty() && codes.len() != vocabulary as usize {
             return Err(invalid("class codes must be one a token"));
         }
@@ -244,7 +254,9 @@ impl Reader {
                 _ => runs.push([position, position + 1]),
             }
         }
-        let mut asked = Asked::new(window, bos, eos).with_codes(codes.to_vec())?;
+        let mut asked = Asked::new(window, bos, eos)
+            .with_codes(codes.to_vec())?
+            .with_stand(by, bind)?;
         for run in &runs {
             asked.count(tokens, run[0]);
         }
@@ -287,12 +299,14 @@ impl Reader {
     pub fn to_bytes(&self, ladder_least: u32) -> (Vec<u8>, Saved) {
         let mut out = Out { bytes: Vec::new() };
         let mut saved = Saved::default();
-        out.bytes
-            .extend_from_slice(if self.asked.codes().is_empty() {
-                MAGIC
-            } else {
-                MAGIC_CODES
-            });
+        let by = self.asked.stand_by();
+        out.bytes.extend_from_slice(if by != StandBy::Latest {
+            MAGIC_STAND
+        } else if self.asked.codes().is_empty() {
+            MAGIC
+        } else {
+            MAGIC_CODES
+        });
         for value in [
             self.vocabulary,
             self.asked.context as u32,
@@ -311,8 +325,19 @@ impl Reader {
         for &order in &self.ladder.orders {
             out.u32(order as u32);
         }
+        if by != StandBy::Latest {
+            out.u32(self.asked.codes().len() as u32);
+        }
         for &code in self.asked.codes() {
             out.bytes.extend_from_slice(&code.to_le_bytes());
+        }
+        if by != StandBy::Latest {
+            let bind = self.asked.bind();
+            out.u32(if by == StandBy::Pair { 1 } else { 2 });
+            out.u32(bind.count as u32);
+            for &word in bind.words.iter().chain(&bind.of) {
+                out.bytes.extend_from_slice(&word.to_le_bytes());
+            }
         }
 
         let mut forms: Vec<(&Form, &u32)> = self.asked.seen.iter().collect();
@@ -397,10 +422,11 @@ impl Reader {
         if bytes.len() < MAGIC.len() + 32 {
             return Err(invalid("not a reader file"));
         }
-        let coded = match &bytes[..MAGIC.len()] {
-            magic if magic == MAGIC => false,
-            magic if magic == MAGIC_CODES => true,
-            _ => return Err(invalid("not a UORRDR01 or UORRDR02 reader file")),
+        let (coded, bound) = match &bytes[..MAGIC.len()] {
+            magic if magic == MAGIC => (false, false),
+            magic if magic == MAGIC_CODES => (true, false),
+            magic if magic == MAGIC_STAND => (false, true),
+            _ => return Err(invalid("not a UORRDR01, 02 or 03 reader file")),
         };
         let (body, digest) = bytes.split_at(bytes.len() - 32);
         if Sha256::digest(body).as_slice() != digest {
@@ -447,13 +473,43 @@ impl Reader {
         if ladder.orders != orders {
             return Err(invalid("ladder orders must fall and not repeat"));
         }
+        let code_count = match (coded, bound) {
+            (_, true) => input.u32()?,
+            (true, _) => vocabulary,
+            _ => 0,
+        };
+        if code_count != 0 && code_count != vocabulary {
+            return Err(invalid("class codes must be one a token"));
+        }
         let mut codes = Vec::new();
-        if coded {
-            for _ in 0..vocabulary {
-                codes.push(u16::from_le_bytes(input.take()?));
-            }
+        for _ in 0..code_count {
+            codes.push(u16::from_le_bytes(input.take()?));
         }
         let mut asked = Asked::new(context, bos, eos).with_codes(codes)?;
+        if bound {
+            let by = match input.u32()? {
+                1 => StandBy::Pair,
+                2 => StandBy::Octonion,
+                _ => return Err(invalid("an unknown stand choice")),
+            };
+            let count = input.u32()? as usize;
+            if count > 16 {
+                return Err(invalid("more than sixteen block vectors"));
+            }
+            let mut bind = BindTable {
+                count,
+                ..BindTable::default()
+            };
+            if count > 0 {
+                for _ in 0..vocabulary {
+                    bind.words.push(u16::from_le_bytes(input.take()?));
+                }
+                for _ in 0..count * count {
+                    bind.of.push(u16::from_le_bytes(input.take()?));
+                }
+            }
+            asked = asked.with_stand(by, bind.checked()?)?;
+        }
 
         let form_count = input.u32()?;
         let mut last: Option<Form> = None;
@@ -577,8 +633,20 @@ mod tests {
         tokens.extend([bos, 19, is, 39, dot, eos, what, 19, qm, mark]);
         tokens.extend([you, grew, 39, dot, 10, eos]);
         eligible.extend(at + 10..at + 16);
-        let (reader, trained) =
-            Reader::train(&tokens, &eligible, 64, 192, bos, eos, 2, &[3], 8, &[])?;
+        let (reader, trained) = Reader::train(
+            &tokens,
+            &eligible,
+            64,
+            192,
+            bos,
+            eos,
+            2,
+            &[3],
+            8,
+            &[],
+            StandBy::Latest,
+            BindTable::default(),
+        )?;
         assert_eq!(trained.replies, 22);
         assert_eq!(trained.replies_with_an_empty_read, 9);
         let prompts = vec![
@@ -638,8 +706,22 @@ mod tests {
         prompt.extend(asked(22, 60, 23));
         let right = vec![you, grew, 61, dot, eos];
 
-        let train =
-            |codes: &[u16]| Reader::train(&tokens, &eligible, 64, 192, bos, eos, 2, &[], 8, codes);
+        let train = |codes: &[u16]| {
+            Reader::train(
+                &tokens,
+                &eligible,
+                64,
+                192,
+                bos,
+                eos,
+                2,
+                &[],
+                8,
+                codes,
+                StandBy::Latest,
+                BindTable::default(),
+            )
+        };
         let (plain, _) = train(&[])?;
         assert!(!plain.asked.reads_classes(&prompt));
         assert_ne!(plain.reply(&prompt, 8), right);
@@ -662,6 +744,96 @@ mod tests {
         assert_eq!(loaded.asked.codes(), &codes[..]);
         assert_eq!(loaded.reply(&prompt, 8), right);
         assert_eq!(loaded.to_bytes(1), (bytes, saved));
+        Ok(())
+    }
+
+    /// "My friend is v. / Good friend. / My dog is w. / Who is the friend?"
+    /// The latest stand of `friend` is the echo, with no value after it, and
+    /// the latest `is` leads to the dog. Only the stand where `friend` and
+    /// `is` hold together reads the friend's name.
+    #[test]
+    fn a_value_is_read_where_relation_and_is_stand_together() -> Result<()> {
+        let [bos, eos, is, dot, who, qm, mark] = [0u32, 1, 2, 3, 4, 5, 6];
+        let [my, friend, dog, good, your, the] = [7u32, 8, 9, 10, 11, 12];
+        // The two facts come in either order and up to two small turns
+        // stand before the question, so no fixed place holds the name.
+        let told = |v: u32, w: u32, dog_first: bool, turns: usize| {
+            let mut record = vec![bos];
+            if dog_first {
+                record.extend([my, dog, is, w, dot, eos]);
+            }
+            record.extend([my, friend, is, v, dot, eos, good, friend, dot, eos]);
+            if !dog_first {
+                record.extend([my, dog, is, w, dot, eos]);
+            }
+            for _ in 0..turns {
+                record.extend([good, dot, eos]);
+            }
+            record.extend([who, is, the, friend, qm, mark]);
+            record
+        };
+        let mut tokens = Vec::new();
+        let mut eligible = Vec::new();
+        for index in 0..18u32 {
+            let dog_first = index % 2 == 1;
+            tokens.extend(told(20 + index, 40 + index, dog_first, index as usize % 3));
+            let at = tokens.len();
+            // The reply does not say "friend is" again, so the copy read
+            // has no pair to find.
+            tokens.extend([your, 20 + index, dot, eos]);
+            eligible.extend(at..at + 4);
+        }
+        let prompt = told(60, 61, false, 2);
+        let right = vec![your, 60, dot, eos];
+        // A codebook of four block vectors: token t has blocks t%4, t/4%4,
+        // t/16, 0, so every token has its own word.
+        let rows: [[i32; 8]; 4] = [
+            [2, 2, 0, 0, 0, 0, 0, 0],
+            [0, 2, -2, 0, 0, 0, 0, 0],
+            [0, 0, 0, 2, 0, 0, 2, 0],
+            [2, 0, 0, 0, 0, -2, 0, 0],
+        ];
+        let table: Vec<i32> = (0..64usize)
+            .flat_map(|t| [rows[t % 4], rows[t / 4 % 4], rows[t / 16], rows[0]])
+            .flatten()
+            .collect();
+        let bind = BindTable::from_codebook(&table, 64, 4)?;
+        let train = |by: StandBy, bind: BindTable| {
+            Reader::train(
+                &tokens,
+                &eligible,
+                64,
+                192,
+                bos,
+                eos,
+                2,
+                &[],
+                8,
+                &[],
+                by,
+                bind,
+            )
+        };
+
+        let (latest, _) = train(StandBy::Latest, BindTable::default())?;
+        assert_ne!(latest.reply(&prompt, 8), right);
+        let (latest_bytes, _) = latest.to_bytes(1);
+        assert_eq!(&latest_bytes[..8], MAGIC);
+
+        for (by, bind) in [
+            (StandBy::Pair, BindTable::default()),
+            (StandBy::Octonion, bind),
+        ] {
+            let (reader, _) = train(by, bind)?;
+            assert_eq!(reader.reply(&prompt, 8), right, "{by:?}");
+            let (bytes, saved) = reader.to_bytes(1);
+            assert_eq!(&bytes[..8], MAGIC_STAND);
+            let loaded = Reader::from_bytes(&bytes)?;
+            assert_eq!(loaded.asked.stand_by(), by);
+            assert_eq!(loaded.reply(&prompt, 8), right, "{by:?} loaded");
+            assert_eq!(loaded.to_bytes(1), (bytes, saved));
+        }
+        assert!(train(StandBy::Octonion, BindTable::default()).is_err());
         Ok(())
     }
 

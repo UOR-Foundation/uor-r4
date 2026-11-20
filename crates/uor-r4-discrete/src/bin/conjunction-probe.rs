@@ -329,10 +329,36 @@ fn reader(args: &[String]) -> Result<(), String> {
         }
         Ok(())
     };
+    if args[0] == "bind-census" {
+        if args.len() != 2 {
+            return Err("usage: conjunction-probe bind-census CODEBOOK_TABLE_JSON".into());
+        }
+        let bytes = read(&args[1])?;
+        let file: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", args[1]))?;
+        let size = |name: &str| {
+            file["spec"][name]
+                .as_u64()
+                .ok_or(format!("the codebook table has no spec.{name}"))
+        };
+        let table: Vec<i32> = serde_json::from_value(file["table"].clone())
+            .map_err(|e| format!("{} table: {e}", args[1]))?;
+        let census = uor_r4_discrete::conjunction::bind::census(
+            &table,
+            size("vocabulary")? as usize,
+            size("blocks")? as usize,
+        )
+        .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::json!({ "codebook_sha256": sha(&bytes), "census": census })
+        );
+        return Ok(());
+    }
     if args[0] == "reader-save" {
-        if !(12..=13).contains(&args.len()) {
+        if !(12..=14).contains(&args.len()) {
             return Err(
-                "usage: conjunction-probe reader-save TOKENS_U16 MASK_U8 OUT_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST [CODEBOOK_TABLE_JSON]"
+                "usage: conjunction-probe reader-save TOKENS_U16 MASK_U8 OUT_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST [CODEBOOK_TABLE_JSON|- [latest|pair|octonion:CODEBOOK_TABLE_JSON]]"
                     .into(),
             );
         }
@@ -357,7 +383,30 @@ fn reader(args: &[String]) -> Result<(), String> {
         };
         // Class codes: each token's writer cell in an address-cells table.
         let mut codebook_sha256 = None;
-        let codes: Vec<u16> = match args.get(12) {
+        use uor_r4_discrete::conjunction::{bind::BindTable, StandBy};
+        let (by, bind) = match args.get(13).map(String::as_str) {
+            None | Some("latest") => (StandBy::Latest, BindTable::default()),
+            Some("pair") => (StandBy::Pair, BindTable::default()),
+            Some(other) => {
+                let path = other
+                    .strip_prefix("octonion:")
+                    .ok_or(format!("unknown stand choice {other}"))?
+                    .to_string();
+                let file: serde_json::Value =
+                    serde_json::from_slice(&read(&path)?).map_err(|e| format!("{path}: {e}"))?;
+                let blocks = file["spec"]["blocks"]
+                    .as_u64()
+                    .ok_or("the codebook table has no spec.blocks")?;
+                let table: Vec<i32> = serde_json::from_value(file["table"].clone())
+                    .map_err(|e| format!("{path} table: {e}"))?;
+                let bind =
+                    BindTable::from_codebook(&table, number(&args[4])? as usize, blocks as usize)
+                        .map_err(|e| e.to_string())?;
+                (StandBy::Octonion, bind)
+            }
+        };
+        let stand = format!("{by:?}");
+        let codes: Vec<u16> = match args.get(12).filter(|path| path.as_str() != "-") {
             None => Vec::new(),
             Some(path) => {
                 let bytes = read(path)?;
@@ -389,6 +438,8 @@ fn reader(args: &[String]) -> Result<(), String> {
             &orders,
             number(&args[6])? as usize,
             &codes,
+            by,
+            bind,
         )
         .map_err(|e| e.to_string())?;
         let train_ms = started.elapsed().as_millis() as u64;
@@ -408,6 +459,7 @@ fn reader(args: &[String]) -> Result<(), String> {
                 "mask_sha256": sha(&mask),
                 "codebook_sha256": codebook_sha256,
                 "class_codes": codes.iter().collect::<std::collections::BTreeSet<_>>().len(),
+                "stand": stand,
                 "trained": trained,
                 "saved": saved,
                 "reader_sha256": sha(&bytes),
@@ -515,7 +567,7 @@ fn main() -> ExitCode {
         m2_format(&args)
     } else if matches!(
         args.first().map(String::as_str),
-        Some("reader-save" | "reader-replies")
+        Some("reader-save" | "reader-replies" | "bind-census")
     ) {
         reader(&args)
     } else {

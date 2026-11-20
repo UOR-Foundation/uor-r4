@@ -31,6 +31,7 @@
 use crate::{Error, Result};
 use std::collections::HashMap;
 
+pub mod bind;
 pub mod saved;
 
 fn invalid(message: impl Into<String>) -> Error {
@@ -510,6 +511,28 @@ struct Place<'a> {
     floor: usize,
     start: usize,
     cursor: Option<usize>,
+    stand: &'a Stand,
+}
+
+/// How a pointer picks the stand it reads from.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum StandBy {
+    /// The latest earlier stand of the question token; the word before the
+    /// value is checked after.
+    #[default]
+    Latest,
+    /// The latest stand where the question token and the word before the
+    /// value both hold: the value is bound to the pair.
+    Pair,
+    /// As `Pair`, with the pair compared by its octonion bind address.
+    Octonion,
+}
+
+/// The stand choice and, for the octonion bind, its table.
+#[derive(Debug, Clone, Default)]
+pub struct Stand {
+    by: StandBy,
+    bind: bind::BindTable,
 }
 
 /// A slot's answer and, for a copying slot, the place it read.
@@ -532,7 +555,15 @@ impl Place<'_> {
 
 /// The place a pointer reads: `ahead` places after the latest earlier stand
 /// of the question token `back` places before the reply.
-fn pointer_source(at: &Place, back: u8, ahead: u8, wide: bool) -> Option<usize> {
+/// `before` is the word that must stand just before the value; `None` takes
+/// the latest stand whatever stands there.
+fn pointer_source(
+    at: &Place,
+    back: u8,
+    ahead: u8,
+    wide: bool,
+    before: Option<u16>,
+) -> Option<usize> {
     let tokens = at.tokens;
     let anchor = at.start.checked_sub(1 + usize::from(back))?;
     let low = at.floor + usize::from(wide);
@@ -542,22 +573,81 @@ fn pointer_source(at: &Place, back: u8, ahead: u8, wide: bool) -> Option<usize> 
     if ahead == 0 {
         return Some(anchor);
     }
-    let stand = (low..anchor).rev().find(|&place| {
-        tokens[place] == tokens[anchor] && (!wide || tokens[place - 1] == tokens[anchor - 1])
-    })?;
-    let source = stand + usize::from(ahead);
-    (source < anchor).then_some(source)
+    let reach = usize::from(ahead);
+    let key = tokens[anchor];
+    let wide_holds = |place: usize| !wide || tokens[place - 1] == tokens[anchor - 1];
+    let by = match before {
+        Some(_) => at.stand.by,
+        None => StandBy::Latest,
+    };
+    let holds = |place: usize| match (by, before) {
+        (StandBy::Pair, Some(word)) => {
+            tokens[place] == key && tokens[place + reach - 1] == u32::from(word)
+        }
+        // One place ahead the word before the value is the stand itself.
+        (StandBy::Octonion, Some(_)) if reach == 1 => tokens[place] == key,
+        (StandBy::Octonion, Some(word)) => {
+            let wanted = at.stand.bind.address(key, u32::from(word));
+            wanted.is_some()
+                && at
+                    .stand
+                    .bind
+                    .address(tokens[place], tokens[place + reach - 1])
+                    == wanted
+        }
+        _ => tokens[place] == key,
+    };
+    let source = match by {
+        // The latest stand of the token, even one too near the question.
+        StandBy::Latest => {
+            let stand = (low..anchor)
+                .rev()
+                .find(|&place| wide_holds(place) && tokens[place] == key)?;
+            stand + reach
+        }
+        _ => {
+            (low..anchor)
+                .rev()
+                .filter(|&place| place + reach < anchor)
+                .find(|&place| wide_holds(place) && holds(place))?
+                + reach
+        }
+    };
+    if source >= anchor {
+        return None;
+    }
+    match before {
+        Some(word) if by == StandBy::Latest && tokens[source - 1] != u32::from(word) => None,
+        _ => Some(source),
+    }
 }
 
 impl Entry {
-    /// The pointer that reads this place's `back`, `ahead`, `wide` source,
-    /// bound to the token before it.
-    fn pointer(at: &Place, back: u8, ahead: u8, wide: bool) -> Option<Entry> {
-        let source = pointer_source(at, back, ahead, wide)?;
+    /// The pointer of this `back`, `ahead`, `wide` that reads `target` here,
+    /// bound to the token before it. Under [`StandBy::Latest`] only the
+    /// latest stand is tried; otherwise the latest stand that reads `target`.
+    fn pointer(at: &Place, back: u8, ahead: u8, wide: bool, target: u32) -> Option<Entry> {
+        let tokens = at.tokens;
         let before = if ahead == 0 {
+            pointer_source(at, back, ahead, wide, None)?;
             0
+        } else if at.stand.by == StandBy::Latest {
+            let source = pointer_source(at, back, ahead, wide, None)?;
+            u16::try_from(tokens[source - 1]).ok()?
         } else {
-            u16::try_from(at.tokens[source - 1]).ok()?
+            let anchor = at.start.checked_sub(1 + usize::from(back))?;
+            let low = at.floor + usize::from(wide);
+            let reach = usize::from(ahead);
+            let source = (low..anchor)
+                .rev()
+                .filter(|&place| place + reach < anchor)
+                .find(|&place| {
+                    tokens[place] == tokens[anchor]
+                        && (!wide || tokens[place - 1] == tokens[anchor - 1])
+                        && tokens[place + reach] == target
+                })?
+                + reach;
+            u16::try_from(tokens[source - 1]).ok()?
         };
         Some(Entry::Pointer {
             back,
@@ -582,13 +672,7 @@ impl Entry {
                 ahead,
                 wide,
                 before,
-            } => {
-                let source = pointer_source(at, back, ahead, wide)?;
-                if ahead > 0 && tokens[source - 1] != u32::from(before) {
-                    return None;
-                }
-                source
-            }
+            } => pointer_source(at, back, ahead, wide, (ahead > 0).then_some(before))?,
             Entry::Next => {
                 let source = at.cursor? + 1;
                 if source >= at.start {
@@ -706,7 +790,7 @@ impl HeldRow {
                 })
             })
             .filter(|&(_, ahead, wide)| !(ahead == 0 && wide))
-            .filter_map(|(back, ahead, wide)| Entry::pointer(at, back, ahead, wide))
+            .filter_map(|(back, ahead, wide)| Entry::pointer(at, back, ahead, wide, target))
             .filter(|&entry| right(entry))
             .take(POINTERS_ADDED);
         for entry in pointers.collect::<Vec<_>>() {
@@ -797,6 +881,7 @@ pub struct Asked {
     /// shorter gap than its most specific token form is read under its class
     /// forms.
     sharper: bool,
+    stand: std::sync::Arc<Stand>,
     seen: HashMap<Form, u32>,
     rows: HashMap<HeldKey, HeldRow>,
 }
@@ -809,6 +894,7 @@ impl Asked {
             context,
             codes: Vec::new(),
             sharper: false,
+            stand: Default::default(),
             seen: HashMap::new(),
             rows: HashMap::new(),
         }
@@ -830,6 +916,21 @@ impl Asked {
         }
         self.codes = codes;
         Ok(self)
+    }
+    /// Sets how pointers pick their stand, before the first pass. The
+    /// octonion bind needs its table.
+    pub fn with_stand(mut self, by: StandBy, bind: bind::BindTable) -> Result<Self> {
+        if by == StandBy::Octonion && bind.words.is_empty() {
+            return Err(invalid("the octonion stand needs a bind table"));
+        }
+        self.stand = std::sync::Arc::new(Stand { by, bind });
+        Ok(self)
+    }
+    pub fn stand_by(&self) -> StandBy {
+        self.stand.by
+    }
+    pub fn bind(&self) -> &bind::BindTable {
+        &self.stand.bind
     }
     pub fn read_sharper_classes(&mut self, on: bool) {
         self.sharper = on;
@@ -934,13 +1035,22 @@ impl Asked {
         self.held(prompt, prompt.len()).is_empty()
             && !self.held_classes(prompt, prompt.len()).is_empty()
     }
-    fn place<'a>(&self, tokens: &'a [u32], start: usize, cursor: Option<usize>) -> Place<'a> {
+    /// `stand` is passed apart from `self` so rows can be written while a
+    /// place is held.
+    fn place<'a>(
+        &self,
+        stand: &'a Stand,
+        tokens: &'a [u32],
+        start: usize,
+        cursor: Option<usize>,
+    ) -> Place<'a> {
         let floor = tokens.len() - window_at(tokens, tokens.len(), self.context, self.bos).len();
         Place {
             tokens,
             floor,
             start,
             cursor,
+            stand,
         }
     }
     /// The held answer at a place, the index of the form it came from and
@@ -1038,11 +1148,12 @@ impl Asked {
         end: usize,
         empty: bool,
     ) {
+        let stand = std::sync::Arc::clone(&self.stand);
         let mut cursor = None;
         let mut history = History::default();
         for position in start..end {
             let target = tokens[position];
-            let at = self.place(&tokens[..position], start, cursor);
+            let at = self.place(&stand, &tokens[..position], start, cursor);
             // What the reader would answer here, before this write. Where it
             // is right its verdict (copied or not) stands, so TRAIN histories
             // are the histories the reader makes.
@@ -1116,7 +1227,7 @@ impl Asked {
         let mut cursor = None;
         let mut history = History::default();
         while tokens.len() - start < limit {
-            let at = self.place(&tokens, start, cursor);
+            let at = self.place(&self.stand, &tokens, start, cursor);
             let held = self.answer(forms, &history, &at, empty, &mut missed);
             let named = match held {
                 Some((named, index, is_own)) => {
