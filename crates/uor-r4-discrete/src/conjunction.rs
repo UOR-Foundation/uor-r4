@@ -19,6 +19,13 @@
 //!    with none empty every slot loses one count and the target takes a slot
 //!    that reached zero.
 //!
+//! 5. **Readout from the pick** (PLAN row 39, step 3). The copy read
+//!    ([`copy_at`]) is the Pick read at distance zero: the token after the
+//!    latest earlier place of the same pair in the window. Where it and the
+//!    row output name different tokens, the row's two trust counts decide;
+//!    each count is one side's wins on targets the row had not yet seen
+//!    ([`Conjunction::judge`], [`Row::answer`]).
+//!
 //! Every step is an integer compare, add or table lookup.
 #![forbid(unsafe_code)]
 use crate::{Error, Result};
@@ -30,7 +37,7 @@ fn invalid(message: impl Into<String>) -> Error {
 
 /// Most pointer slots a row holds.
 pub const MAX_SLOTS: usize = 8;
-pub const SCHEMA: &str = "uor-r4.discrete-conjunction-probe/2";
+pub const SCHEMA: &str = "uor-r4.discrete-conjunction-probe/3";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -44,8 +51,27 @@ pub enum Order {
 pub struct Row {
     pub pointer: [u32; MAX_SLOTS],
     pub count: [u32; MAX_SLOTS],
+    /// Times the copy read was right against the row output, and the row
+    /// output against the copy read, counted only where the two differed.
+    pub trust: [u32; 2],
 }
 impl Row {
+    /// The readout that answers from the pick: where the copy read names a
+    /// token other than the row output, the side with more wins on this row
+    /// answers (the copy read on a tie); else the row output; else the copy.
+    pub fn answer(&self, copy: Option<u32>) -> Option<u32> {
+        match (self.output(), copy) {
+            (Some(output), Some(copy)) if copy != output => {
+                Some(if self.trust[0] >= self.trust[1] {
+                    copy
+                } else {
+                    output
+                })
+            }
+            (Some(output), _) => Some(output),
+            (None, copy) => copy,
+        }
+    }
     /// The pointer with the largest count, the earliest slot on a tie.
     pub fn output(&self) -> Option<u32> {
         let mut best: Option<usize> = None;
@@ -177,6 +203,32 @@ impl Conjunction {
     pub fn output(&self, a: u32, b: u32, model: Option<u32>) -> Option<u32> {
         self.read(a, b).and_then(|row| row.output()).or(model)
     }
+    /// Counts which side was right where the copy read and the row output
+    /// differ and one of them is the target. Call before `write`, so the row
+    /// is judged on a target it has not yet seen. True when a count moved.
+    pub fn judge(&mut self, a: u32, b: u32, copy: Option<u32>, target: u32) -> bool {
+        let (Some(address), Some(copy)) = (self.address(a, b), copy) else {
+            return false;
+        };
+        let Some(row) = self.rows.get_mut(&address) else {
+            return false;
+        };
+        let Some(output) = row.output() else {
+            return false;
+        };
+        if copy == output {
+            return false;
+        }
+        let side = if copy == target {
+            0
+        } else if output == target {
+            1
+        } else {
+            return false;
+        };
+        row.trust[side] = row.trust[side].saturating_add(1);
+        true
+    }
     pub fn write(&mut self, a: u32, b: u32, model: Option<u32>, target: u32) -> Written {
         let Some(address) = self.address(a, b) else {
             return Written::NoAddress;
@@ -238,6 +290,89 @@ pub struct Scored {
     /// The model's ranked outputs, best first; a value past the vocabulary
     /// marks an unused place.
     pub ranked: [u32; 8],
+    /// The exact copy read ([`copy_at`]) on the target's window.
+    pub copy: Option<u32>,
+    /// The token after the position the model's Pick read chose.
+    pub picked: Option<u32>,
+}
+
+/// The exact copy read (the Pick read at distance zero, `kn_pick`'s
+/// `exact_pair_pick`): `window` ends just before the target; the latest earlier
+/// place where its last two tokens stood together gives the token that
+/// followed them there.
+pub fn copy_at(window: &[u32]) -> Option<u32> {
+    if window.len() < 3 {
+        return None;
+    }
+    let t = window.len() - 1;
+    (1..t)
+        .rev()
+        .find(|&p| window[p - 1] == window[t - 1] && window[p] == window[t])
+        .map(|p| window[p + 1])
+}
+
+/// The window the copy read sees for the target at `position`: up to
+/// `context` tokens before it, starting no earlier than its record's BOS.
+pub fn window_at(tokens: &[u32], position: usize, context: usize, bos: u32) -> &[u32] {
+    let position = position.min(tokens.len());
+    let floor = position.saturating_sub(context);
+    let mut start = position;
+    while start > floor {
+        start -= 1;
+        if tokens[start] == bos {
+            break;
+        }
+    }
+    &tokens[start..position]
+}
+
+/// A pointer readout over scored targets: a context position (the exact copy
+/// read, or the model's pick) names a token.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+pub struct Pointer {
+    /// Scored targets where the position names a token.
+    pub present: u64,
+    /// Of those, the token is the target.
+    pub right: u64,
+    /// Covered targets whose row holds the named token in a slot.
+    pub covered_in_row: u64,
+    /// Of those, the named token is the target.
+    pub covered_in_row_right: u64,
+    /// Covered: the named token when the row holds it, else the row output.
+    /// Not covered: the model's output.
+    pub slot_top1: u64,
+    /// The named token wherever there is one; else the row output where
+    /// covered; else the model's output.
+    pub first_top1: u64,
+}
+
+impl Pointer {
+    fn add(&mut self, named: Option<u32>, item: &Scored, live: Option<(Row, u32)>) {
+        let model_right = item.model == Some(item.target);
+        let named_right = named == Some(item.target);
+        self.present += u64::from(named.is_some());
+        self.right += u64::from(named_right);
+        match live {
+            Some((row, output)) => {
+                let in_row = named.is_some_and(|token| {
+                    (0..MAX_SLOTS).any(|slot| row.count[slot] > 0 && row.pointer[slot] == token)
+                });
+                self.covered_in_row += u64::from(in_row);
+                self.covered_in_row_right += u64::from(in_row && named_right);
+                let slot = if in_row { named } else { Some(output) };
+                self.slot_top1 += u64::from(slot == Some(item.target));
+                self.first_top1 += u64::from(named.unwrap_or(output) == item.target);
+            }
+            None => {
+                self.slot_top1 += u64::from(model_right);
+                self.first_top1 += u64::from(if named.is_some() {
+                    named_right
+                } else {
+                    model_right
+                });
+            }
+        }
+    }
 }
 
 /// A reading of the memory beside the model on scored targets.
@@ -261,6 +396,19 @@ pub struct Reading {
     /// As `combined_top1`, but a covered target takes the row slot the model
     /// ranks first when it ranks any, else the row output.
     pub picked_top1: u64,
+    /// Pointer readout from the exact copy read.
+    pub copy: Pointer,
+    /// Pointer readout from the model's Pick position.
+    pub pick: Pointer,
+    /// Targets where both name a token and the tokens agree.
+    pub pick_agrees_with_copy: u64,
+    /// Covered targets where the copy read names a token other than the row
+    /// output.
+    pub disagreements: u64,
+    /// Of those, the row's trust counts gave the answer to the copy read.
+    pub disagreements_to_copy: u64,
+    /// [`Row::answer`] where covered; else the copy read; else the model.
+    pub answered_top1: u64,
 }
 
 pub fn read_scored(memory: &Conjunction, scored: &[Scored]) -> Reading {
@@ -273,7 +421,23 @@ pub fn read_scored(memory: &Conjunction, scored: &[Scored]) -> Reading {
         let model_right = item.model == Some(item.target);
         reading.model_top1 += u64::from(model_right);
         let row = item.pair.and_then(|[a, b]| memory.read(a, b));
-        match row.and_then(|row| row.output().map(|output| (row, output))) {
+        let live = row.and_then(|row| row.output().map(|output| (row, output)));
+        reading.copy.add(item.copy, item, live);
+        reading.pick.add(item.picked, item, live);
+        reading.pick_agrees_with_copy += u64::from(item.copy.is_some() && item.copy == item.picked);
+        let answer = match live {
+            Some((row, output)) => {
+                let answer = row.answer(item.copy);
+                if item.copy.is_some_and(|copy| copy != output) {
+                    reading.disagreements += 1;
+                    reading.disagreements_to_copy += u64::from(answer == item.copy);
+                }
+                answer
+            }
+            None => item.copy.or(item.model),
+        };
+        reading.answered_top1 += u64::from(answer == Some(item.target));
+        match live {
             Some((row, output)) => {
                 let right = output == item.target;
                 let holds = (0..MAX_SLOTS)
@@ -331,6 +495,7 @@ pub fn run(
     config.validate()?;
     let vocabulary = config.spec.vocabulary;
     let context = config.spec.context;
+    let blocks = config.spec.blocks as usize;
     let batch_rows = config.batch_rows;
     let bos = config.bos.id;
     if context < 2 {
@@ -372,20 +537,62 @@ pub fn run(
         }
         Ok(batch.next_target)
     };
+    let window_mismatch = std::cell::Cell::new(0u64);
+    // A scored set also takes the exact copy read on each window and, from the
+    // forward trace, the token after the model's Pick position (first word of
+    // a row's first block record; a Pick read only).
+    let score = |corpus: &crate::corpus::PreparedCorpus,
+                 first: u64,
+                 scored: &mut Vec<Scored>|
+     -> Result<u64> {
+        let batch = corpus.batch(first, context, batch_rows)?;
+        let carried = model.carry_windows(&batch.windows)?;
+        let forward = model.forward_traced(&carried, &batch.targets)?;
+        let picks = match (forward.read_trace()?, forward.trace_stride()) {
+            (Some(words), Some(stride)) if model.read_spec() == crate::ReadSpec::Pick => {
+                Some((words, stride * blocks))
+            }
+            _ => None,
+        };
+        drop(forward);
+        let evaluation = model.evaluate(&carried, &batch.targets)?;
+        for (index, row) in evaluation.rows.iter().enumerate() {
+            let window: Vec<u32> = batch.windows[index]
+                .iter()
+                .map(|identity| identity.token)
+                .collect();
+            let picked = picks.as_ref().and_then(|(words, step)| {
+                let pick = *words.get(index * step)? as usize;
+                window.get(pick.checked_add(1)?).copied()
+            });
+            let host = window_at(
+                corpus.tokens(),
+                batch.target_positions[index] as usize,
+                context as usize,
+                bos,
+            );
+            if copy_at(host) != copy_at(&window) {
+                window_mismatch.set(window_mismatch.get() + 1);
+            }
+            let top = row.top8[0];
+            scored.push(Scored {
+                pair: pair_at(corpus.tokens(), batch.target_positions[index] as usize, bos),
+                target: batch.targets[index],
+                model: (top < vocabulary).then_some(top),
+                ranked: row.top8,
+                copy: copy_at(&window),
+                picked,
+            });
+        }
+        Ok(batch.next_target)
+    };
 
     let started = Instant::now();
     let dev = driver.dev();
     let mut scored = Vec::with_capacity(dev.eligible_len());
     let mut first = 0u64;
     while first < dev.eligible_len() as u64 {
-        first = model_output(dev, first, &mut |position, target, output, ranked| {
-            scored.push(Scored {
-                pair: pair_at(dev.tokens(), position, bos),
-                target,
-                model: output,
-                ranked,
-            });
-        })?;
+        first = score(dev, first, &mut scored)?;
     }
     let dev_ms = started.elapsed().as_millis() as u64;
 
@@ -400,18 +607,12 @@ pub fn run(
     let mut tail = Vec::new();
     let mut first = write_limit;
     while first < eligible.len() as u64 {
-        first = model_output(train, first, &mut |position, target, output, ranked| {
-            tail.push(Scored {
-                pair: pair_at(tokens, position, bos),
-                target,
-                model: output,
-                ranked,
-            });
-        })?;
+        first = score(train, first, &mut tail)?;
     }
     let empty = read_scored(&memory, &scored);
 
     let started = Instant::now();
+    let mut judged = 0u64;
     let mut model_tally = WriteTally::default();
     let mut train_model_top1 = 0u64;
     let mut first = 0u64;
@@ -426,6 +627,8 @@ pub fn run(
             }
             train_model_top1 += u64::from(output == Some(target));
             if let Some([a, b]) = pair_at(tokens, position, bos) {
+                let copy = copy_at(window_at(tokens, position, context as usize, bos));
+                judged += u64::from(memory.judge(a, b, copy, target));
                 model_tally.add(memory.write(a, b, output, target));
             }
         }
@@ -444,6 +647,8 @@ pub fn run(
         .enumerate()
     {
         if let Some([a, b]) = pair_at(tokens, position, bos) {
+            let copy = copy_at(window_at(tokens, position, context as usize, bos));
+            judged += u64::from(memory.judge(a, b, copy, tokens[position]));
             bulk_tally.add(memory.write(a, b, None, tokens[position]));
         }
         if done as u64 + 1 == mark {
@@ -470,6 +675,9 @@ pub fn run(
         "train_eligible_targets": eligible.len(),
         "tail_rule": "the last TRAIN targets, never written",
         "tail_targets": tail.len(),
+        "copy_rule": "the latest earlier place in the window where the pair stood; the token after it",
+        "trust_writes": judged,
+        "scored_copy_differs_between_host_and_batch_window": window_mismatch.get(),
         "dev_ms": dev_ms,
         "dev_empty_memory": empty,
         "model_written": {
@@ -598,18 +806,24 @@ mod tests {
                 target: 7,
                 model: Some(1),
                 ranked: [1, 7, 9, 64, 64, 64, 64, 64],
+                copy: Some(9),
+                picked: Some(7),
             },
             Scored {
                 pair: Some([5, 6]),
                 target: 9,
                 model: Some(9),
                 ranked: [9, 7, 64, 64, 64, 64, 64, 64],
+                copy: Some(9),
+                picked: None,
             },
             Scored {
                 pair: None,
                 target: 5,
                 model: Some(5),
                 ranked: [5, 64, 64, 64, 64, 64, 64, 64],
+                copy: Some(5),
+                picked: Some(3),
             },
         ];
         let reading = read_scored(&memory, &scored);
@@ -624,6 +838,77 @@ mod tests {
         // on both; the third has no pair and keeps the model's output.
         assert_eq!(reading.covered_model_ranks_a_slot, 2);
         assert_eq!(reading.picked_top1, 3);
+        // Copy names 9, 9, 5: wrong where the row also holds it (first
+        // target), right on the second, right with no row on the third.
+        assert_eq!(
+            reading.copy,
+            Pointer {
+                present: 3,
+                right: 2,
+                covered_in_row: 2,
+                covered_in_row_right: 1,
+                slot_top1: 2,
+                first_top1: 2,
+            }
+        );
+        // The pick names 7, nothing, 3: the second target falls back to the
+        // row output 7 (wrong), the third keeps the model under the slot rule.
+        assert_eq!(
+            reading.pick,
+            Pointer {
+                present: 2,
+                right: 1,
+                covered_in_row: 1,
+                covered_in_row_right: 1,
+                slot_top1: 2,
+                first_top1: 1,
+            }
+        );
+        assert_eq!(reading.pick_agrees_with_copy, 0);
         Ok(())
+    }
+
+    #[test]
+    fn trust_counts_decide_between_the_copy_read_and_the_row() -> Result<()> {
+        let mut memory = Conjunction::new(64, 2, Order::Ordered)?;
+        assert!(!memory.judge(1, 2, Some(9), 9));
+        memory.write(1, 2, None, 7);
+        let row = |memory: &Conjunction| memory.read(1, 2).unwrap_or_default();
+        assert_eq!(row(&memory).answer(None), Some(7));
+        assert_eq!(row(&memory).answer(Some(7)), Some(7));
+        // No evidence yet: the copy read answers.
+        assert_eq!(row(&memory).answer(Some(9)), Some(9));
+        // Agreement and a target neither side names move nothing.
+        assert!(!memory.judge(1, 2, Some(7), 7));
+        assert!(!memory.judge(1, 2, Some(9), 3));
+        assert!(memory.judge(1, 2, Some(9), 7));
+        assert_eq!(row(&memory).trust, [0, 1]);
+        assert_eq!(row(&memory).answer(Some(9)), Some(7));
+        assert!(memory.judge(1, 2, Some(9), 9));
+        assert!(memory.judge(1, 2, Some(9), 9));
+        assert_eq!(row(&memory).trust, [2, 1]);
+        assert_eq!(row(&memory).answer(Some(9)), Some(9));
+        assert_eq!(Row::default().answer(Some(4)), Some(4));
+        assert_eq!(Row::default().answer(None), None);
+        Ok(())
+    }
+
+    #[test]
+    fn the_window_stops_at_the_record_start_and_the_context() {
+        let tokens = [0u32, 5, 6, 7, 0, 5, 6, 9, 8];
+        assert_eq!(window_at(&tokens, 3, 192, 0), &[0, 5, 6]);
+        assert_eq!(window_at(&tokens, 8, 192, 0), &[0, 5, 6, 9]);
+        assert_eq!(window_at(&tokens, 8, 2, 0), &[6, 9]);
+        assert_eq!(window_at(&tokens, 0, 192, 0), &[] as &[u32]);
+    }
+
+    #[test]
+    fn the_copy_read_takes_the_latest_earlier_place_of_the_pair() {
+        assert_eq!(copy_at(&[5, 6]), None);
+        assert_eq!(copy_at(&[1, 2, 3]), None);
+        assert_eq!(copy_at(&[5, 6, 7, 1, 5, 6]), Some(7));
+        assert_eq!(copy_at(&[5, 6, 7, 5, 6, 8, 5, 6]), Some(8));
+        // The pair's own last place is not an earlier place.
+        assert_eq!(copy_at(&[6, 5, 5, 6]), None);
     }
 }
