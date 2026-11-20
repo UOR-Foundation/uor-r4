@@ -705,6 +705,213 @@ pub fn run(
     Ok(report)
 }
 
+/// Which parts answer when a reply is generated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Readout {
+    /// The row output alone.
+    Rows,
+    /// The copy read alone.
+    Copy,
+    /// [`Row::answer`]: the copy read against the row, decided by trust.
+    Both,
+}
+
+/// The next token after `tokens`, or none when nothing answers.
+pub fn next_token(
+    memory: &Conjunction,
+    readout: Readout,
+    tokens: &[u32],
+    window: usize,
+    bos: u32,
+) -> Option<u32> {
+    let position = tokens.len();
+    let copy = match readout {
+        Readout::Rows => None,
+        Readout::Copy | Readout::Both => copy_at(window_at(tokens, position, window, bos)),
+    };
+    let row = match readout {
+        Readout::Copy => None,
+        Readout::Rows | Readout::Both => {
+            pair_at(tokens, position, bos).and_then(|[a, b]| memory.read(a, b))
+        }
+    };
+    match row {
+        Some(row) => row.answer(copy),
+        None => copy,
+    }
+}
+
+/// The greedy reply to `prompt`: tokens are taken one at a time until EOS,
+/// `limit` tokens, or a place where nothing answers.
+pub fn reply(
+    memory: &Conjunction,
+    readout: Readout,
+    prompt: &[u32],
+    window: usize,
+    bos: u32,
+    eos: u32,
+    limit: usize,
+) -> Vec<u32> {
+    let mut tokens = prompt.to_vec();
+    let start = tokens.len();
+    while tokens.len() - start < limit {
+        let Some(next) = next_token(memory, readout, &tokens, window, bos) else {
+            break;
+        };
+        tokens.push(next);
+        if next == eos {
+            break;
+        }
+    }
+    tokens.split_off(start)
+}
+
+/// One panel row: a prompt and its reference reply, as token ids.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct PanelRow {
+    pub prompt: Vec<u32>,
+    pub reference: Vec<u32>,
+}
+
+/// Counts of one readout's greedy replies against the references.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+pub struct ReplyCount {
+    pub rows: u64,
+    /// The reply is the reference, id for id.
+    pub exact: u64,
+    /// The reply ends on EOS.
+    pub ended: u64,
+    /// The reply's first id is the reference's first id.
+    pub first_right: u64,
+    /// Reference ids, and how many the reply matches from the start.
+    pub reference_ids: u64,
+    pub prefix_ids: u64,
+    /// Reply ids generated.
+    pub reply_ids: u64,
+}
+
+pub fn count_replies(
+    memory: &Conjunction,
+    readout: Readout,
+    panel: &[PanelRow],
+    window: usize,
+    bos: u32,
+    eos: u32,
+    limit: usize,
+) -> (ReplyCount, Vec<Vec<u32>>) {
+    let mut count = ReplyCount::default();
+    let mut replies = Vec::with_capacity(panel.len());
+    for row in panel {
+        let got = reply(memory, readout, &row.prompt, window, bos, eos, limit);
+        let prefix = got
+            .iter()
+            .zip(&row.reference)
+            .take_while(|(a, b)| a == b)
+            .count();
+        count.rows += 1;
+        count.exact += u64::from(got == row.reference);
+        count.ended += u64::from(got.last() == Some(&eos));
+        count.first_right += u64::from(prefix > 0);
+        count.reference_ids += row.reference.len() as u64;
+        count.prefix_ids += prefix as u64;
+        count.reply_ids += got.len() as u64;
+        replies.push(got);
+    }
+    (count, replies)
+}
+
+/// `conjunction-probe replies`: write rows and trust from every TRAIN target
+/// with no model, then answer a panel's prompts greedily under each readout.
+#[cfg(feature = "cuda")]
+pub fn run_replies(
+    config: crate::training::DriverConfig,
+    panel_path: &std::path::Path,
+    out: &std::path::Path,
+    slots: usize,
+    order: Order,
+    window: usize,
+    limit: usize,
+    eos: u32,
+) -> Result<serde_json::Value> {
+    use crate::training::PreparedDriver;
+    use serde_json::json;
+    use std::time::Instant;
+
+    if out.exists() {
+        return Err(invalid(format!("{} already exists", out.display())));
+    }
+    config.validate()?;
+    let vocabulary = config.spec.vocabulary;
+    let context = config.spec.context as usize;
+    let bos = config.bos.id;
+    let bytes =
+        std::fs::read(panel_path).map_err(|e| invalid(format!("{}: {e}", panel_path.display())))?;
+    let panel: Vec<PanelRow> =
+        serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
+    if panel
+        .iter()
+        .flat_map(|row| row.prompt.iter().chain(&row.reference))
+        .any(|&id| id >= vocabulary)
+    {
+        return Err(invalid("a panel id is past the vocabulary"));
+    }
+    let mut memory = Conjunction::new(vocabulary, slots, order)?;
+    let driver = PreparedDriver::load(config)?;
+    let train = driver.train();
+    let tokens = train.tokens();
+    let started = Instant::now();
+    let mut tally = WriteTally::default();
+    let mut judged = 0u64;
+    for &position in train.eligible_positions() {
+        if let Some([a, b]) = pair_at(tokens, position, bos) {
+            let copy = copy_at(window_at(tokens, position, context, bos));
+            judged += u64::from(memory.judge(a, b, copy, tokens[position]));
+            tally.add(memory.write(a, b, None, tokens[position]));
+        }
+    }
+    let write_ms = started.elapsed().as_millis() as u64;
+    let started = Instant::now();
+    let mut readouts = serde_json::Map::new();
+    let mut replies = serde_json::Map::new();
+    for (name, readout) in [
+        ("rows", Readout::Rows),
+        ("copy", Readout::Copy),
+        ("both", Readout::Both),
+    ] {
+        let (count, got) = count_replies(&memory, readout, &panel, window, bos, eos, limit);
+        readouts.insert(name.into(), json!(count));
+        replies.insert(name.into(), json!(got));
+    }
+    let report = json!({
+        "schema": "uor-r4.discrete-conjunction-replies/1",
+        "panel": panel_path.display().to_string(),
+        "panel_sha256": crate::corpus::sha256(&bytes),
+        "order": order,
+        "slots": slots,
+        "write_window": context,
+        "reply_window": window,
+        "reply_limit": limit,
+        "eos": eos,
+        "lineage_sha256": driver.lineage_sha256()?,
+        "train_targets": train.eligible_len(),
+        "memory_rows": memory.len(),
+        "writes": tally,
+        "trust_writes": judged,
+        "write_ms": write_ms,
+        "reply_ms": started.elapsed().as_millis() as u64,
+        "model": "none: rows and the copy read only",
+        "readouts": readouts,
+        "replies": replies,
+    });
+    std::fs::write(
+        out,
+        serde_json::to_vec(&report).map_err(|e| invalid(e.to_string()))?,
+    )
+    .map_err(|e| invalid(format!("{}: {e}", out.display())))?;
+    Ok(json!({ "readouts": report["readouts"], "memory_rows": memory.len(), "write_ms": write_ms }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -890,6 +1097,56 @@ mod tests {
         assert_eq!(row(&memory).answer(Some(9)), Some(9));
         assert_eq!(Row::default().answer(Some(4)), Some(4));
         assert_eq!(Row::default().answer(None), None);
+        Ok(())
+    }
+
+    #[test]
+    fn a_reply_is_generated_until_eos_the_limit_or_no_answer() -> Result<()> {
+        let (bos, eos) = (0u32, 1u32);
+        let mut memory = Conjunction::new(64, 2, Order::Ordered)?;
+        memory.write(5, 6, None, 7);
+        memory.write(6, 7, None, eos);
+        let run =
+            |readout, prompt: &[u32], limit| reply(&memory, readout, prompt, 192, bos, eos, limit);
+        assert_eq!(run(Readout::Rows, &[0, 5, 6], 8), vec![7, 1]);
+        assert_eq!(run(Readout::Rows, &[0, 5, 6], 1), vec![7]);
+        assert_eq!(run(Readout::Rows, &[0, 9, 9], 8), Vec::<u32>::new());
+        // The copy read repeats what followed the pair before; with no row for
+        // (9, 4) and no earlier place of it, the reply stops.
+        assert_eq!(
+            run(Readout::Copy, &[0, 5, 6, 9, 4, 5, 6], 8),
+            vec![9, 4, 5, 6, 9, 4, 5, 6]
+        );
+        assert_eq!(
+            run(Readout::Copy, &[0, 5, 6, 9, 4, 8, 6], 8),
+            Vec::<u32>::new()
+        );
+        // Both: the copy read names 9, the row 7, and no evidence favours the row.
+        assert_eq!(run(Readout::Both, &[0, 5, 6, 9, 3, 5, 6], 1), vec![9]);
+        let panel = [
+            PanelRow {
+                prompt: vec![0, 5, 6],
+                reference: vec![7, 1],
+            },
+            PanelRow {
+                prompt: vec![0, 5, 6],
+                reference: vec![7, 8, 1],
+            },
+        ];
+        let (count, replies) = count_replies(&memory, Readout::Rows, &panel, 192, bos, eos, 8);
+        assert_eq!(replies, vec![vec![7, 1], vec![7, 1]]);
+        assert_eq!(
+            count,
+            ReplyCount {
+                rows: 2,
+                exact: 1,
+                ended: 2,
+                first_right: 2,
+                reference_ids: 5,
+                prefix_ids: 3,
+                reply_ids: 4,
+            }
+        );
         Ok(())
     }
 
