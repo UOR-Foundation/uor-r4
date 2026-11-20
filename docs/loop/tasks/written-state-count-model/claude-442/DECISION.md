@@ -37,9 +37,9 @@ original-id ties and the writable, reloadable D11 carrier. [claude]
 Paired bands (2,670 records, 1,000 resamples): A1s − A1 [−32, −16] overall and [−44, −23] on novel
 targets; C3s − C3 [−27, −10]; A1s − C3s [−241, −28], against A1 − C3's [−232, −24]. [claude-441]
 
-By class (DEV-tune targets, and EM's Pick weight over R's buckets): distance 0 holds 4,111,759
-targets at 190‰; distance 1 holds none; distance 2 holds 36,362 at 37‰; 3 or more holds 6,653,956 at
-10‰. A copy at distance 2 hits about 17% of the time, one at 3 or more about 8%. [claude-441]
+By class (A1s's DEV-tune targets, and EM's Pick weight over R's buckets): 5,340 targets where Pick
+did not fire; distance 0 holds 4,111,759 at 190‰; distance 1 holds none; distance 2 holds 36,362 at
+37‰; 3 or more holds 6,653,956 at 10‰. The five classes sum to the 10,807,417 scored targets. A copy at distance 2 hits about 17% of the time, one at 3 or more about 8%. [claude-441]
 
 ## Why the split, and why only bundled
 
@@ -83,7 +83,8 @@ targets at 190‰; distance 1 holds none; distance 2 holds 36,362 at 37‰; 3 or
 
 A new card, or the refit unit's own REPORT, returns S5 to three classes if any of these holds:
 
-1. **Bits.** At the refit, the paired A1s − A1 band on DEV-tune does not lie wholly below 0. The
+1. **Bits.** At the refit, the paired A1s − A1 band on DEV-tune does not lie wholly below 0. Here
+   DEV-tune only selects the arm; it is not the held score. The
    sealed DEV-test gets an A1s − A1 arm only if the candidate's prep sheet registers it before its one
    sealed run (§4.5); this card does not require one.
 2. **Cost.** The split's support makes the refit unit miss its own sheet's budget or delays the
@@ -100,9 +101,10 @@ A failed replay is a bug to fix, not a reason to switch. [claude]
   test on the 1% slice, not the candidate. A unit spent there buys 2 parts in 100,000 on an artifact
   no bar scores (L-008). [claude]
 - **Four classes, dropping distance 1.** No target fell at distance 1, and claude-441 reads that as
-  the D11 code set having no two codes 1 bit apart; nobody has checked the code set. d = 1 needs one
-  of the two token pairs to match and the other to differ in one bit. If no two distinct codes are 1
-  bit apart and no two tokens share a code, d = 1 cannot occur. Then the four-class rule addresses the
+  the D11 code set having no two codes 1 bit apart; nobody has checked the code set. `code_pick`'s d
+  is the sum of two Hamming distances between codes, one per token pair, so d = 1 needs one pair at 0
+  and the other at exactly 1. If no two distinct codes are 1 bit apart, each pair adds 0 or at least
+  2, and d = 1 cannot occur. Then the four-class rule addresses the
   same weights for every target and scores the same, saving 176 × 14 × 8 = 19,712 bytes. The refit unit
   may use it only after it reads the code set and shows that. Otherwise the measured five-class rule
   stands. [claude]
