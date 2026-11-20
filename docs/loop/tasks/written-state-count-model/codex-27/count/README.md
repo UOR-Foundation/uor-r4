@@ -49,3 +49,5 @@ cmp "$R/fixture.d11" "$fixture"
 The packer ran using Rust 1.97.1 (8bab26f4f) on arm64 macOS. The primary client executable was the local D26 release build under `pre-gate-source-26/target-views/release/uor-chat`, SHA-256 `19b00209b5368e95ec0cc327f4e29813078316f84991233533273cc4c4993ca9`. The raw client responses and exported carriers are in local custody under `query-assertion-27/count-run`. The committed response receipt removes only the local artifact path fields.
 
 A fresh release build of the ordinary client from the D27 worktree, SHA-256 `5d1aaec765c3e2c0f965bd418da85189d9125c0b07024b22e3c4df68376d7f85`, reproduced all three ordinary-text JSON outputs byte for byte. The installed harness reported zero selected rules for the native-space filter, so that invocation confers no check result.
+
+The [follow-up finite GPU differential](GPU.md) records device replay on the same capped table and the original planted controls.
