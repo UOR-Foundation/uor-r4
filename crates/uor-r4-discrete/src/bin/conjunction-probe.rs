@@ -330,9 +330,9 @@ fn reader(args: &[String]) -> Result<(), String> {
         Ok(())
     };
     if args[0] == "reader-save" {
-        if args.len() != 12 {
+        if !(12..=13).contains(&args.len()) {
             return Err(
-                "usage: conjunction-probe reader-save TOKENS_U16 MASK_U8 OUT_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST"
+                "usage: conjunction-probe reader-save TOKENS_U16 MASK_U8 OUT_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST [CODEBOOK_TABLE_JSON]"
                     .into(),
             );
         }
@@ -355,6 +355,28 @@ fn reader(args: &[String]) -> Result<(), String> {
                 .map(|text| text.parse::<usize>().map_err(|e| format!("{text}: {e}")))
                 .collect::<Result<_, _>>()?
         };
+        // Class codes: each token's writer cell in an address-cells table.
+        let mut codebook_sha256 = None;
+        let codes: Vec<u16> = match args.get(12) {
+            None => Vec::new(),
+            Some(path) => {
+                let bytes = read(path)?;
+                codebook_sha256 = Some(sha(&bytes));
+                let file: serde_json::Value =
+                    serde_json::from_slice(&bytes).map_err(|e| format!("{path}: {e}"))?;
+                let blocks = file["spec"]["blocks"]
+                    .as_u64()
+                    .ok_or("the codebook table has no spec.blocks")?;
+                let table: Vec<i32> = serde_json::from_value(file["table"].clone())
+                    .map_err(|e| format!("{path} table: {e}"))?;
+                uor_r4_discrete::conjunction::saved::cell_codes(
+                    &table,
+                    number(&args[4])? as usize,
+                    blocks as usize,
+                )
+                .map_err(|e| e.to_string())?
+            }
+        };
         let started = Instant::now();
         let (reader, trained) = Reader::train(
             &tokens,
@@ -366,6 +388,7 @@ fn reader(args: &[String]) -> Result<(), String> {
             number(&args[9])? as usize,
             &orders,
             number(&args[6])? as usize,
+            &codes,
         )
         .map_err(|e| e.to_string())?;
         let train_ms = started.elapsed().as_millis() as u64;
@@ -383,6 +406,8 @@ fn reader(args: &[String]) -> Result<(), String> {
             serde_json::json!({
                 "tokens_sha256": sha(&stream),
                 "mask_sha256": sha(&mask),
+                "codebook_sha256": codebook_sha256,
+                "class_codes": codes.iter().collect::<std::collections::BTreeSet<_>>().len(),
                 "trained": trained,
                 "saved": saved,
                 "reader_sha256": sha(&bytes),
@@ -392,9 +417,11 @@ fn reader(args: &[String]) -> Result<(), String> {
         );
         return Ok(());
     }
-    if args.len() != 5 {
+    let sharper = args.get(5).map(String::as_str) == Some("sharper");
+    if args.len() != 5 && !(args.len() == 6 && sharper) {
         return Err(
-            "usage: conjunction-probe reader-replies READER_FILE PANEL_JSON OUT_JSON LIMIT".into(),
+            "usage: conjunction-probe reader-replies READER_FILE PANEL_JSON OUT_JSON LIMIT [sharper]"
+                .into(),
         );
     }
     fresh(&args[3])?;
@@ -402,7 +429,8 @@ fn reader(args: &[String]) -> Result<(), String> {
     let panel_bytes = read(&args[2])?;
     let limit = number(&args[4])? as usize;
     let started = Instant::now();
-    let reader = Reader::from_bytes(&bytes).map_err(|e| e.to_string())?;
+    let mut reader = Reader::from_bytes(&bytes).map_err(|e| e.to_string())?;
+    reader.asked.read_sharper_classes(sharper);
     let load_ms = started.elapsed().as_millis() as u64;
     let panel: Vec<conjunction::PanelRow> =
         serde_json::from_slice(&panel_bytes).map_err(|e| e.to_string())?;
@@ -419,13 +447,52 @@ fn reader(args: &[String]) -> Result<(), String> {
     });
     let reply_us = (started.elapsed().as_micros() as u64).max(1);
     let ids: usize = replies.iter().map(Vec::len).sum();
+    // Where class forms could matter: prompts with no token form, with any
+    // class form, and with a class form of a shorter gap than the token form.
+    let mut no_token_form = 0u64;
+    let mut no_token_form_turns: Vec<usize> = Vec::new();
+    let mut any_class_form = 0u64;
+    let mut class_sharper = 0u64;
+    let mut class_sharper_exact = 0u64;
+    for (row, reply) in panel.iter().zip(&replies) {
+        let (turn, [tokens, classes]) = reader.asked.sharpest(&row.prompt);
+        if tokens.is_none() {
+            no_token_form += 1;
+            no_token_form_turns.push(turn);
+        }
+        any_class_form += u64::from(classes.is_some());
+        if let (Some(tokens), Some(classes)) = (tokens, classes) {
+            if classes < tokens {
+                class_sharper += 1;
+                class_sharper_exact += u64::from(reply == &row.reference);
+            }
+        }
+    }
+    no_token_form_turns.sort_unstable();
+    // Replies read under class forms alone, and how many of those are exact.
+    let mut class_read = 0u64;
+    let mut class_read_exact = 0u64;
+    for (row, reply) in panel.iter().zip(&replies) {
+        if reader.asked.reads_classes(&row.prompt) {
+            class_read += 1;
+            class_read_exact += u64::from(reply == &row.reference);
+        }
+    }
     let summary = serde_json::json!({
         "schema": "uor-r4.discrete-reader-replies/1",
         "reader_sha256": sha(&bytes),
         "reader_bytes": bytes.len(),
         "panel_sha256": sha(&panel_bytes),
         "reply_limit": limit,
+        "sharper_class_read": sharper,
         "count": count,
+        "no_token_form": no_token_form,
+        "no_token_form_turn_lengths": no_token_form_turns,
+        "any_class_form": any_class_form,
+        "class_sharper": class_sharper,
+        "class_sharper_exact": class_sharper_exact,
+        "class_read": class_read,
+        "class_read_exact": class_read_exact,
         "load_ms": load_ms,
         "reply_us": reply_us,
         "reply_ids": ids,

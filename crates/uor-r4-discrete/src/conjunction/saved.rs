@@ -25,6 +25,30 @@ use crate::Result;
 use sha2::{Digest, Sha256};
 
 pub const MAGIC: &[u8; 8] = b"UORRDR01";
+/// A file that also holds one class code per token, after the orders.
+pub const MAGIC_CODES: &[u8; 8] = b"UORRDR02";
+
+/// One class code per token from an address-cells codebook table (`blocks`
+/// blocks of eight coordinates a token): the writer cell, sixteen times the
+/// root of the first block plus the root of the last.
+pub fn cell_codes(table: &[i32], vocabulary: usize, blocks: usize) -> Result<Vec<u16>> {
+    if blocks < 2 || table.len() != vocabulary * blocks * 8 {
+        return Err(invalid("the codebook table is not vocabulary x blocks x 8"));
+    }
+    let root = |block: &[i32]| {
+        (0..16usize)
+            .find(|&root| crate::address_cells::block_l1(block, root) == 0)
+            .ok_or_else(|| invalid("a codebook block is not a root"))
+    };
+    table
+        .chunks_exact(blocks * 8)
+        .map(|token| {
+            let first = root(&token[..8])?;
+            let last = root(&token[(blocks - 1) * 8..])?;
+            Ok((first * 16 + last) as u16)
+        })
+        .collect()
+}
 
 /// The rows a reply is read from.
 #[derive(Debug)]
@@ -195,7 +219,11 @@ impl Reader {
         slots: usize,
         orders: &[usize],
         limit: usize,
+        codes: &[u16],
     ) -> Result<(Self, Trained)> {
+        if !codes.is_empty() && codes.len() != vocabulary as usize {
+            return Err(invalid("class codes must be one a token"));
+        }
         if tokens.iter().any(|&token| token >= vocabulary) {
             return Err(invalid("a TRAIN id is past the vocabulary"));
         }
@@ -216,7 +244,7 @@ impl Reader {
                 _ => runs.push([position, position + 1]),
             }
         }
-        let mut asked = Asked::new(window, bos, eos);
+        let mut asked = Asked::new(window, bos, eos).with_codes(codes.to_vec())?;
         for run in &runs {
             asked.count(tokens, run[0]);
         }
@@ -259,7 +287,12 @@ impl Reader {
     pub fn to_bytes(&self, ladder_least: u32) -> (Vec<u8>, Saved) {
         let mut out = Out { bytes: Vec::new() };
         let mut saved = Saved::default();
-        out.bytes.extend_from_slice(MAGIC);
+        out.bytes
+            .extend_from_slice(if self.asked.codes().is_empty() {
+                MAGIC
+            } else {
+                MAGIC_CODES
+            });
         for value in [
             self.vocabulary,
             self.asked.context as u32,
@@ -277,6 +310,9 @@ impl Reader {
         }
         for &order in &self.ladder.orders {
             out.u32(order as u32);
+        }
+        for &code in self.asked.codes() {
+            out.bytes.extend_from_slice(&code.to_le_bytes());
         }
 
         let mut forms: Vec<(&Form, &u32)> = self.asked.seen.iter().collect();
@@ -358,9 +394,14 @@ impl Reader {
     /// read constants, key order or slot kinds are not what this build
     /// writes.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        if bytes.len() < MAGIC.len() + 32 || &bytes[..MAGIC.len()] != MAGIC {
-            return Err(invalid("not a UORRDR01 reader file"));
+        if bytes.len() < MAGIC.len() + 32 {
+            return Err(invalid("not a reader file"));
         }
+        let coded = match &bytes[..MAGIC.len()] {
+            magic if magic == MAGIC => false,
+            magic if magic == MAGIC_CODES => true,
+            _ => return Err(invalid("not a UORRDR01 or UORRDR02 reader file")),
+        };
         let (body, digest) = bytes.split_at(bytes.len() - 32);
         if Sha256::digest(body).as_slice() != digest {
             return Err(invalid("the reader file's digest does not match its bytes"));
@@ -406,7 +447,13 @@ impl Reader {
         if ladder.orders != orders {
             return Err(invalid("ladder orders must fall and not repeat"));
         }
-        let mut asked = Asked::new(context, bos, eos);
+        let mut codes = Vec::new();
+        if coded {
+            for _ in 0..vocabulary {
+                codes.push(u16::from_le_bytes(input.take()?));
+            }
+        }
+        let mut asked = Asked::new(context, bos, eos).with_codes(codes)?;
 
         let form_count = input.u32()?;
         let mut last: Option<Form> = None;
@@ -530,7 +577,8 @@ mod tests {
         tokens.extend([bos, 19, is, 39, dot, eos, what, 19, qm, mark]);
         tokens.extend([you, grew, 39, dot, 10, eos]);
         eligible.extend(at + 10..at + 16);
-        let (reader, trained) = Reader::train(&tokens, &eligible, 64, 192, bos, eos, 2, &[3], 8)?;
+        let (reader, trained) =
+            Reader::train(&tokens, &eligible, 64, 192, bos, eos, 2, &[3], 8, &[])?;
         assert_eq!(trained.replies, 22);
         assert_eq!(trained.replies_with_an_empty_read, 9);
         let prompts = vec![
@@ -559,6 +607,61 @@ mod tests {
         let (again, resaved) = loaded.to_bytes(1);
         assert_eq!(again, bytes);
         assert_eq!(resaved, saved);
+        Ok(())
+    }
+
+    /// A fourteen-token question whose first and last words are new: no one
+    /// gap of twelve covers both, so no token form is kept. With the new
+    /// words in the classes of the TRAIN words the class form answers.
+    #[test]
+    fn a_question_in_new_words_of_known_classes_is_answered() -> Result<()> {
+        let [bos, eos, is, dot, mark, you, grew] = [0u32, 1, 2, 3, 6, 8, 9];
+        let asked = |first: u32, x: u32, last: u32| {
+            let mut turn = vec![first, 11, 12, 13, 14, 15, x, 16, 17, 18, 19, 20, last];
+            turn.push(mark);
+            turn
+        };
+        let mut tokens = Vec::new();
+        let mut eligible = Vec::new();
+        for index in 0..12u32 {
+            let at = tokens.len();
+            let [x, v] = [30 + index, 44 + index];
+            tokens.extend([bos, x, is, v, dot, eos]);
+            tokens.extend(asked(10, x, 21));
+            tokens.extend([you, grew, v, dot, eos]);
+            eligible.extend(at + 20..at + 25);
+        }
+        let mut codes: Vec<u16> = (0..64).collect();
+        codes[22] = codes[10];
+        codes[23] = codes[21];
+        let mut prompt = vec![bos, 60, is, 61, dot, eos];
+        prompt.extend(asked(22, 60, 23));
+        let right = vec![you, grew, 61, dot, eos];
+
+        let train =
+            |codes: &[u16]| Reader::train(&tokens, &eligible, 64, 192, bos, eos, 2, &[], 8, codes);
+        let (plain, _) = train(&[])?;
+        assert!(!plain.asked.reads_classes(&prompt));
+        assert_ne!(plain.reply(&prompt, 8), right);
+        let (plain_bytes, _) = plain.to_bytes(1);
+        assert_eq!(&plain_bytes[..8], MAGIC);
+
+        let (reader, _) = train(&codes)?;
+        assert!(reader.asked.reads_classes(&prompt));
+        assert_eq!(reader.reply(&prompt, 8), right);
+        // A question in TRAIN's own words is read under its token forms.
+        let mut known = vec![bos, 60, is, 61, dot, eos];
+        known.extend(asked(10, 60, 21));
+        assert!(!reader.asked.reads_classes(&known));
+        assert_eq!(reader.reply(&known, 8), plain.reply(&known, 8));
+        assert_eq!(reader.reply(&known, 8), right);
+
+        let (bytes, saved) = reader.to_bytes(1);
+        assert_eq!(&bytes[..8], MAGIC_CODES);
+        let loaded = Reader::from_bytes(&bytes)?;
+        assert_eq!(loaded.asked.codes(), &codes[..]);
+        assert_eq!(loaded.reply(&prompt, 8), right);
+        assert_eq!(loaded.to_bytes(1), (bytes, saved));
         Ok(())
     }
 

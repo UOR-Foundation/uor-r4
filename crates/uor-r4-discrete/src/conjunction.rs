@@ -430,6 +430,8 @@ pub const POINTER_AHEAD: usize = 4;
 pub const FORMS_HELD: usize = 6;
 /// A held row answers once one of its slots has been right this often.
 pub const ROW_RIGHT: u32 = 2;
+/// Marks a form taken over class codes in place of tokens (in `gap_len`).
+const CLASS_FORM: u8 = 0x80;
 /// Pointer slots one output error may add to a row.
 const POINTERS_ADDED: usize = 3;
 /// Previous-token symbols of a held row: the reply's first place, and any
@@ -466,6 +468,12 @@ impl Form {
         let gaps = (1..=FORM_GAP.min(turn.len()))
             .flat_map(move |len| (0..=turn.len() - len).map(move |at| Self::of(turn, at, len)));
         std::iter::once(Self::of(turn, 0, 0)).chain(gaps)
+    }
+    /// The same form, marked as one over class codes: it never meets a form
+    /// over tokens.
+    fn classed(mut self) -> Self {
+        self.gap_len |= CLASS_FORM;
+        self
     }
 }
 
@@ -782,6 +790,13 @@ pub struct Asked {
     eos: u32,
     bos: u32,
     context: usize,
+    /// One class code per token (its writer cell), or empty: a turn none of
+    /// whose token forms is kept is then read under the forms of its codes.
+    codes: Vec<u16>,
+    /// Read choice, not saved: a turn whose most specific class form has a
+    /// shorter gap than its most specific token form is read under its class
+    /// forms.
+    sharper: bool,
     seen: HashMap<Form, u32>,
     rows: HashMap<HeldKey, HeldRow>,
 }
@@ -792,6 +807,8 @@ impl Asked {
             eos,
             bos,
             context,
+            codes: Vec::new(),
+            sharper: false,
             seen: HashMap::new(),
             rows: HashMap::new(),
         }
@@ -804,6 +821,30 @@ impl Asked {
     }
     pub fn eos(&self) -> u32 {
         self.eos
+    }
+    /// Sets one class code per token, before the first pass. Codes must be
+    /// below 4096 (a form holds twelve bits a place).
+    pub fn with_codes(mut self, codes: Vec<u16>) -> Result<Self> {
+        if codes.iter().any(|&code| code >= 4096) {
+            return Err(invalid("a class code must be below 4096"));
+        }
+        self.codes = codes;
+        Ok(self)
+    }
+    pub fn read_sharper_classes(&mut self, on: bool) {
+        self.sharper = on;
+    }
+    pub fn codes(&self) -> &[u16] {
+        &self.codes
+    }
+    /// The turn as class codes; `None` with no code table or a token past it.
+    fn coded(&self, turn: &[u32]) -> Option<Vec<u32>> {
+        if self.codes.is_empty() {
+            return None;
+        }
+        turn.iter()
+            .map(|&token| self.codes.get(token as usize).map(|&code| u32::from(code)))
+            .collect()
     }
     /// The asked turn before a reply that starts at `start`: the tokens after
     /// the latest EOS, at most [`FORM_TOKENS`] of them.
@@ -818,8 +859,14 @@ impl Asked {
     }
     /// First pass: counts every form of the turn asked before `start`.
     pub fn count(&mut self, tokens: &[u32], start: usize) {
-        for form in Form::each(self.turn(tokens, start)) {
+        let turn = self.turn(tokens, start);
+        for form in Form::each(turn) {
             *self.seen.entry(form).or_default() += 1;
+        }
+        if let Some(coded) = self.coded(turn) {
+            for form in Form::each(&coded) {
+                *self.seen.entry(form.classed()).or_default() += 1;
+            }
         }
     }
     /// Ends the first pass: forms seen fewer than [`FORM_SEEN`] times go, and
@@ -839,6 +886,53 @@ impl Asked {
             .filter_map(|form| self.seen.get(&form).copied())
             .take(FORMS_HELD)
             .collect()
+    }
+    /// The kept class forms of that turn, most specific first, at most
+    /// [`FORMS_HELD`]. Empty with no code table.
+    fn held_classes(&self, tokens: &[u32], start: usize) -> Vec<u32> {
+        let Some(coded) = self.coded(self.turn(tokens, start)) else {
+            return Vec::new();
+        };
+        Form::each(&coded)
+            .filter_map(|form| self.seen.get(&form.classed()).copied())
+            .take(FORMS_HELD)
+            .collect()
+    }
+    /// The forms a reply to this turn is read under: its kept token forms,
+    /// or its kept class forms when it has no token form (or, under the
+    /// sharper read, when a class form leaves less of the turn out).
+    fn read_under(&self, tokens: &[u32], start: usize) -> Vec<u32> {
+        let forms = self.held(tokens, start);
+        if forms.is_empty() {
+            return self.held_classes(tokens, start);
+        }
+        if self.sharper {
+            if let (_, [Some(token), Some(class)]) = self.sharpest(&tokens[..start]) {
+                if class < token {
+                    return self.held_classes(tokens, start);
+                }
+            }
+        }
+        forms
+    }
+    /// The asked turn's length and the gap of its most specific kept form,
+    /// over tokens and over class codes (`None` where no form is kept).
+    pub fn sharpest(&self, prompt: &[u32]) -> (usize, [Option<u8>; 2]) {
+        let turn = self.turn(prompt, prompt.len());
+        let tokens = Form::each(turn)
+            .find(|form| self.seen.contains_key(form))
+            .map(|form| form.gap_len);
+        let classes = self.coded(turn).and_then(|coded| {
+            Form::each(&coded)
+                .find(|form| self.seen.contains_key(&form.classed()))
+                .map(|form| form.gap_len)
+        });
+        (turn.len(), [tokens, classes])
+    }
+    /// True when a reply to `prompt` is read under class forms alone.
+    pub fn reads_classes(&self, prompt: &[u32]) -> bool {
+        self.held(prompt, prompt.len()).is_empty()
+            && !self.held_classes(prompt, prompt.len()).is_empty()
     }
     fn place<'a>(&self, tokens: &'a [u32], start: usize, cursor: Option<usize>) -> Place<'a> {
         let floor = tokens.len() - window_at(tokens, tokens.len(), self.context, self.bos).len();
@@ -909,20 +1003,41 @@ impl Asked {
         end: usize,
         limit: usize,
     ) -> bool {
-        let forms = self.held(tokens, start);
-        if forms.is_empty() {
-            return false;
-        }
         // The reader sees the prompt's own window, not the corpus before it.
         let floor = start - window_at(tokens, start, self.context, self.bos).len();
-        let (_, _, missed) = self.generate(ladder, &forms, &tokens[floor..start], limit, false);
-        missed && self.write_under(tokens, start, end, true)
-    }
-    fn write_under(&mut self, tokens: &[u32], start: usize, end: usize, empty: bool) -> bool {
-        let forms = self.held(tokens, start);
-        if forms.is_empty() {
-            return false;
+        let mut wrote = false;
+        for forms in [self.held(tokens, start), self.held_classes(tokens, start)] {
+            if forms.is_empty() {
+                continue;
+            }
+            let (_, _, missed) = self.generate(ladder, &forms, &tokens[floor..start], limit, false);
+            if missed {
+                self.write_forms(&forms, tokens, start, end, true);
+                wrote = true;
+            }
         }
+        wrote
+    }
+    /// Writes the reply under the turn's token forms and, apart from them,
+    /// under its class forms: a read uses one set or the other, never both.
+    fn write_under(&mut self, tokens: &[u32], start: usize, end: usize, empty: bool) -> bool {
+        let mut wrote = false;
+        for forms in [self.held(tokens, start), self.held_classes(tokens, start)] {
+            if !forms.is_empty() {
+                self.write_forms(&forms, tokens, start, end, empty);
+                wrote = true;
+            }
+        }
+        wrote
+    }
+    fn write_forms(
+        &mut self,
+        forms: &[u32],
+        tokens: &[u32],
+        start: usize,
+        end: usize,
+        empty: bool,
+    ) {
         let mut cursor = None;
         let mut history = History::default();
         for position in start..end {
@@ -931,11 +1046,11 @@ impl Asked {
             // What the reader would answer here, before this write. Where it
             // is right its verdict (copied or not) stands, so TRAIN histories
             // are the histories the reader makes.
-            let read = self.answer(&forms, &history, &at, empty, &mut false);
+            let read = self.answer(forms, &history, &at, empty, &mut false);
             let (own, shared) = history.tails(at.ahead());
             let words = history.address();
             let mut written = None;
-            for &form in &forms {
+            for &form in forms {
                 for tail in [Some(own), shared].into_iter().flatten() {
                     let key = HeldKey {
                         form,
@@ -954,7 +1069,6 @@ impl Asked {
             };
             history.push(target, cursor);
         }
-        true
     }
     /// The greedy reply to `prompt` and whether a form was held. A place no
     /// held row answers falls to `ladder` with its copy read.
@@ -972,7 +1086,7 @@ impl Asked {
         prompt: &[u32],
         limit: usize,
     ) -> (Vec<u32>, bool, Vec<String>) {
-        let forms = self.held(prompt, prompt.len());
+        let forms = self.read_under(prompt, prompt.len());
         if forms.is_empty() {
             let reply = ladder.reply(prompt, true, self.context, self.bos, self.eos, limit);
             return (reply, false, Vec::new());
