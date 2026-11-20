@@ -235,6 +235,9 @@ pub struct Scored {
     pub pair: Option<[u32; 2]>,
     pub target: u32,
     pub model: Option<u32>,
+    /// The model's ranked outputs, best first; a value past the vocabulary
+    /// marks an unused place.
+    pub ranked: [u32; 8],
 }
 
 /// A reading of the memory beside the model on scored targets.
@@ -253,6 +256,11 @@ pub struct Reading {
     pub covered_model_right: u64,
     /// Row output where covered, model output elsewhere.
     pub combined_top1: u64,
+    /// Covered targets where the model ranks at least one of the row's slots.
+    pub covered_model_ranks_a_slot: u64,
+    /// As `combined_top1`, but a covered target takes the row slot the model
+    /// ranks first when it ranks any, else the row output.
+    pub picked_top1: u64,
 }
 
 pub fn read_scored(memory: &Conjunction, scored: &[Scored]) -> Reading {
@@ -275,8 +283,16 @@ pub fn read_scored(memory: &Conjunction, scored: &[Scored]) -> Reading {
                 reading.covered_row_holds += u64::from(holds);
                 reading.covered_model_right += u64::from(model_right);
                 reading.combined_top1 += u64::from(right);
+                let picked = item.ranked.iter().copied().find(|&token| {
+                    (0..MAX_SLOTS).any(|slot| row.count[slot] > 0 && row.pointer[slot] == token)
+                });
+                reading.covered_model_ranks_a_slot += u64::from(picked.is_some());
+                reading.picked_top1 += u64::from(picked.unwrap_or(output) == item.target);
             }
-            None => reading.combined_top1 += u64::from(model_right),
+            None => {
+                reading.combined_top1 += u64::from(model_right);
+                reading.picked_top1 += u64::from(model_right);
+            }
         }
     }
     reading
@@ -335,7 +351,7 @@ pub fn run(
     };
     let model_output = |corpus: &crate::corpus::PreparedCorpus,
                         first: u64,
-                        sink: &mut dyn FnMut(usize, u32, Option<u32>)|
+                        sink: &mut dyn FnMut(usize, u32, Option<u32>, [u32; 8])|
      -> Result<u64> {
         let batch = corpus.batch(first, context, batch_rows)?;
         let carried = model.carry_windows(&batch.windows)?;
@@ -351,6 +367,7 @@ pub fn run(
                 *position as usize,
                 *target,
                 (top < vocabulary).then_some(top),
+                row.top8,
             );
         }
         Ok(batch.next_target)
@@ -361,11 +378,12 @@ pub fn run(
     let mut scored = Vec::with_capacity(dev.eligible_len());
     let mut first = 0u64;
     while first < dev.eligible_len() as u64 {
-        first = model_output(dev, first, &mut |position, target, output| {
+        first = model_output(dev, first, &mut |position, target, output, ranked| {
             scored.push(Scored {
                 pair: pair_at(dev.tokens(), position, bos),
                 target,
                 model: output,
+                ranked,
             });
         })?;
     }
@@ -382,11 +400,12 @@ pub fn run(
     let mut tail = Vec::new();
     let mut first = write_limit;
     while first < eligible.len() as u64 {
-        first = model_output(train, first, &mut |position, target, output| {
+        first = model_output(train, first, &mut |position, target, output, ranked| {
             tail.push(Scored {
                 pair: pair_at(tokens, position, bos),
                 target,
                 model: output,
+                ranked,
             });
         })?;
     }
@@ -398,7 +417,7 @@ pub fn run(
     let mut first = 0u64;
     while first < model_end {
         let mut pending = Vec::with_capacity(batch_rows as usize);
-        let next = model_output(train, first, &mut |position, target, output| {
+        let next = model_output(train, first, &mut |position, target, output, _| {
             pending.push((position, target, output));
         })?;
         for (index, (position, target, output)) in pending.into_iter().enumerate() {
@@ -578,16 +597,19 @@ mod tests {
                 pair: Some([5, 6]),
                 target: 7,
                 model: Some(1),
+                ranked: [1, 7, 9, 64, 64, 64, 64, 64],
             },
             Scored {
                 pair: Some([5, 6]),
                 target: 9,
                 model: Some(9),
+                ranked: [9, 7, 64, 64, 64, 64, 64, 64],
             },
             Scored {
                 pair: None,
                 target: 5,
                 model: Some(5),
+                ranked: [5, 64, 64, 64, 64, 64, 64, 64],
             },
         ];
         let reading = read_scored(&memory, &scored);
@@ -597,6 +619,11 @@ mod tests {
         assert_eq!(reading.covered_row_holds, 2);
         assert_eq!(reading.covered_model_right, 1);
         assert_eq!(reading.combined_top1, 2);
+        // Row holds 7 (count 2) and 9 (count 1). The model ranks 7 before 9 on
+        // the first target and 9 before 7 on the second, so the pick is right
+        // on both; the third has no pair and keeps the model's output.
+        assert_eq!(reading.covered_model_ranks_a_slot, 2);
+        assert_eq!(reading.picked_top1, 3);
         Ok(())
     }
 }
