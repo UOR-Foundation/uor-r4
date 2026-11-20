@@ -20,6 +20,7 @@ include!("serving_root.rs");
 
 #[cfg(not(feature = "serving-wasm"))]
 pub mod discrete_d11;
+pub mod clifford_address;
 pub mod slot_memory;
 #[cfg(not(feature = "serving-wasm"))]
 pub mod fbs_address;
