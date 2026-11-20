@@ -23,6 +23,8 @@ The broader fence changed output token zero on 12 crossed rows. Row 30116 recove
 
 ## Checks run at the head
 
+The order header was normalized for the repository parser after execution. The [original order bytes](evidence/ORDER-at-GO.md) retain the digest in the authorization.
+
 All seven planted cases passed on both CUDA runs, 224 decision words each, including fence-only, iterator-only, joint-only, duplicate, tie, exclusion and word-boundary controls. All 22 historical ordinary runs reproduced the corresponding D30 role, source, cursor, generated IDs, stop and text. The 88 new ordinary records replayed byte for byte in independent cold processes. Each of two GPU passes matched all 704 role words against the ordinary client. GPU coverage is the role decision. The source and writer traces are from Wick's normal client. The release integer suite passed 728 library and 13 client tests with one ignored library test. The blind packet, raw results and FIT were sealed separately. The first device audit conservatively stopped on constant construction, and the image lacked GNU time; both events and the final accepted machine-code inventory are in the custody record. The short rental was deleted after verification. [FIT](FIT.md) · [Device custody and cost](GPU-CUSTODY.md)
 
 The interrupted D31 post-merge check completed separately on Wick. A fresh checkout of merged main ac9fc3a2dd3147a2b01bb21a4f395e44c278627f passed all twelve harness gates. Its raw log is on Wick under /mnt/plexpool/uor-r4-corpus/runs/20261120-role-endpoints-32/d31-main-gates.log, SHA-256 90eba5ef617af77645219741c2695e06107506890ec74e227525205e1b661e50.
