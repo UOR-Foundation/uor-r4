@@ -17,6 +17,7 @@ use uor_r4_integer::{
     relation_retrieval::{write_device_preamble, Arm, DEVICE_OUTPUT_ROW_BYTES},
 };
 
+mod transfer;
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 type Span = [usize; 2];
 
@@ -227,9 +228,10 @@ fn verify(staged: &Path, gpu_path: &Path) -> Result<()> {
 fn main() -> Result<()> {
     let args: Vec<_> = env::args_os().skip(1).map(PathBuf::from).collect();
     match args.as_slice() {
+        [command, staged, gold, relation, gpu] if command == Path::new("audit-transfer") => transfer::audit(staged, gold, relation, gpu),
         [command, model, blind, output, supplied @ ..] if command == Path::new("stage") =>
             stage(model, blind, output, supplied),
         [command, staged, gpu] if command == Path::new("verify") => verify(staged, gpu),
-        _ => Err("usage: d27-relation-stage stage MODEL BLIND NEW_DIR [PERSON RELATION] or verify STAGE_DIR CUDA_OUTPUT".into()),
+        _ => Err("usage: d27-relation-stage stage MODEL BLIND NEW_DIR [PERSON RELATION]\n       d27-relation-stage verify STAGE_DIR CUDA_OUTPUT\n       d27-relation-stage audit-transfer STAGE_DIR HELD_GOLD HELD_RELATION CUDA_OUTPUT".into()),
     }
 }

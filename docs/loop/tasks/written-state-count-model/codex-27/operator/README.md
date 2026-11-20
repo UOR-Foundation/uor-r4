@@ -35,3 +35,9 @@ cargo run --locked --manifest-path "$D/Cargo.toml" --bin d27-relation-stage -- v
 The first stage form reads only blind prompt IDs. The second additionally opens separate supplied-person and supplied-relation annotations and emits all three lanes. The supplied-person lane changes the requested span and preserves ordinary exclusion. The supplied-relation lane additionally restricts the query evidence to one eligible word. The artifact computes query framing in all three lanes. The scorer never opens the gold answer file.
 
 The stage directory contains `input.bin`, `oracle.bin`, `native.jsonl` and `binding.json`. Its JSONL includes the candidate spans, evidence and decisions keyed by panel row and lane. Missing roles and unavailable supplied relation words receive an explicit skip status and have no device row. The verifier uses the recorded zero-based indices to identify the first differing output word and rejects missing or trailing data.
+
+The post-hoc transfer audit reads the sealed packet and its matching CUDA output. It uses the held keys to compare each known target cue against the supplied query word and records the first failed comparison, any competing evidence and the source hashes. It performs no role inference, generation or threshold tuning.
+
+```sh
+cargo run --locked --manifest-path "$D/Cargo.toml" --bin d27-relation-stage -- audit-transfer STAGE_DIR HELD_GOLD HELD_RELATION CUDA_OUTPUT
+```
