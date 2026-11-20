@@ -30,15 +30,17 @@ These are split artifacts only. They exclude count indexes, KN tables, lookup ta
 Read-only verification can run immediately without building anything:
 
 ```sh
-ssh -o BatchMode=yes wick 'docker exec uor-r4-claude   sha256sum -c /workspace/out/c439/run2/split.sha256'
+ssh -o BatchMode=yes wick 'docker exec uor-r4-claude sha256sum -c /workspace/out/c439/run2/split.sha256'
 ```
 
 If the original bundle ever needs repair, build the unchanged `pick-split` CLI from the historical source and run the following with `pick_split` set to that binary and `fresh` set to an unused lab-owned output path in the same container:
 
 ```sh
 base=/workspace/out/c420/run1
-"$pick_split" "$base/train.tokens.u16" "$base/dev-tune.tokens.u16"   "$base/dev-tune.novel.u8" "$fresh"
-(cd "$fresh" && awk '{name=$2; sub(/^.*\//,"",name); print $1"  "name}'   /workspace/out/c439/run2/split.sha256 | sha256sum -c -)
+"$pick_split" "$base/train.tokens.u16" "$base/dev-tune.tokens.u16" \
+  "$base/dev-tune.novel.u8" "$fresh"
+(cd "$fresh" && awk '{name=$2; sub(/^.*\//,"",name); print $1"  "name}' \
+  /workspace/out/c439/run2/split.sha256 | sha256sum -c -)
 ```
 
 For the bounded new path, add a training-only Rust exporter that writes precisely the C and R cuts above from the verified split, then demonstrate exact raw and adjusted lookup words on R before seeking FIT for a new 1%-C mixture. Keep the historical original replay and any new R-only comparison separately labeled.
