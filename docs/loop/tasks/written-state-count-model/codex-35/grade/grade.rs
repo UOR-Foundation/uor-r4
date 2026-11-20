@@ -18,6 +18,10 @@ const ARMS: [&str; 5] = [
 ];
 const MODES: [&str; 2] = ["ordinary", "supplied"];
 const NIL: u32 = u32::MAX;
+const EOS: u32 = 1;
+const COPY_STOPS: [u32; 4] = [16, EOS, 0, 201];
+const COPY_CAP: u32 = 8;
+const TOKENIZER_SHA256: &str = "a9fb13f70c69ffe5afed40c8251a8e702adf0b00732d35ccff9457a3309ee377";
 type Span = [usize; 2];
 
 #[derive(Deserialize)]
@@ -45,6 +49,7 @@ struct Paired {
 #[derive(Deserialize)]
 struct Capture {
     artifact_sha256: String,
+    tokenizer_sha256: String,
     prompt_ids: Vec<u32>,
     generated_ids: Vec<u32>,
     selected: Selection,
@@ -88,8 +93,8 @@ fn valid_key(k: &Key) -> Result<()> {
     match (k.gold_source, &k.expected_tape) {
         (Some([s, e]), Some(t)) => check(
             !t.is_empty()
-                && t.last() == Some(&1)
-                && !t[..t.len() - 1].contains(&1)
+                && t.last() == Some(&EOS)
+                && !t[..t.len() - 1].contains(&EOS)
                 && k.original_ids[s..e] == t[..t.len() - 1],
             "gold phrase fails original-token writer check",
         )?,
@@ -99,8 +104,72 @@ fn valid_key(k: &Key) -> Result<()> {
     Ok(())
 }
 
+fn audit_writer(c: &Capture) -> Result<()> {
+    let prompt_end = u32::try_from(c.prompt_ids.len())?;
+    let mut active = c.selected.source.is_some();
+    let source = match c.selected.source {
+        Some(source) => {
+            check(
+                source < c.prompt_ids.len(),
+                "copy source outside original prompt",
+            )?;
+            u32::try_from(source)?
+        }
+        None => NIL,
+    };
+    let mut cursor = source;
+    for (offset, (&id, step)) in c.generated_ids.iter().zip(&c.copy_step_words).enumerate() {
+        // The ordinary predictor is outside the writer audit. Only a copy or
+        // delimiter-driven EOS forces its output independently of that predictor.
+        let mut emitted = id;
+        let mut exact_id = NIL;
+        let mut copied = 0;
+        let mut release = 0;
+        if active {
+            if cursor - source == COPY_CAP {
+                release = 3;
+            } else if cursor == prompt_end {
+                release = 2;
+            } else {
+                let token = c.prompt_ids[cursor as usize];
+                if COPY_STOPS.contains(&token) {
+                    release = 1;
+                    if cursor > source {
+                        emitted = EOS;
+                    }
+                } else {
+                    cursor += 1;
+                    emitted = token;
+                    exact_id = token;
+                    copied = 1;
+                }
+            }
+            active = release == 0;
+        }
+        let expected = [
+            u32::from(active),
+            source,
+            cursor,
+            prompt_end,
+            emitted,
+            exact_id,
+            copied,
+            release,
+        ];
+        check(
+            emitted == id && *step == expected,
+            format!("invalid original writer transition at generated offset {offset}"),
+        )?;
+    }
+    check(
+        c.selected.source.is_none() || cursor > source,
+        "claimed copy without an emitted source token",
+    )
+}
+
 fn audit(k: &Key, c: &Capture, digest: &str, mode: &str) -> Result<Value> {
     check(c.artifact_sha256 == digest, "artifact identity")?;
+    check(c.tokenizer_sha256 == TOKENIZER_SHA256, "tokenizer identity")?;
     check(c.prompt_ids == k.original_ids, "prefix identity")?;
     let ids = &c.generated_ids;
     check(
@@ -108,30 +177,17 @@ fn audit(k: &Key, c: &Capture, digest: &str, mode: &str) -> Result<Value> {
         "token/step count differs",
     )?;
     check(
-        !ids[..ids.len() - 1].contains(&1) && ((ids.last() == Some(&1)) == (c.stop == "eos")),
+        !ids[..ids.len() - 1].contains(&EOS)
+            && c.stop
+                == if ids.last() == Some(&EOS) {
+                    "eos"
+                } else {
+                    "max_tokens"
+                },
         "EOS/stop mismatch",
     )?;
-    for (&id, step) in ids.iter().zip(&c.copy_step_words) {
-        check(step[4] == id, "writer emitted ID differs from step")?;
-    }
+    audit_writer(c)?;
     let start = c.selected.source;
-    if let Some(s) = start {
-        let mut count = 0;
-        for step in &c.copy_step_words {
-            if step[6] == 1 {
-                let pos = s + count;
-                check(
-                    k.original_ids.get(pos) == Some(&step[4])
-                        && step[5] == step[4]
-                        && step[1] as usize == s
-                        && step[2] as usize == pos + 1,
-                    "active cursor lost original source position or ID",
-                )?;
-                count += 1;
-            }
-        }
-        check(count > 0, "claimed copy without an emitted source token")?;
-    }
     let query = class_span(&c.paired.role_words, 0);
     let excluded = class_span(&c.paired.role_words, 2);
     let assertions = c
@@ -153,7 +209,7 @@ fn audit(k: &Key, c: &Capture, digest: &str, mode: &str) -> Result<Value> {
     let writer_envelope = k.gold_source.map(|[s, e]| match fence {
         None => "no_bound_fence",
         Some(f) if f != e as u64 => "wrong_fence",
-        Some(_) if e - s >= 8 => "over_budget",
+        Some(_) if e - s >= COPY_CAP as usize => "over_budget",
         Some(_) => "within_budget",
     });
     let contextual = c
@@ -190,7 +246,7 @@ fn audit(k: &Key, c: &Capture, digest: &str, mode: &str) -> Result<Value> {
     let cursor_eos = c
         .copy_step_words
         .last()
-        .is_some_and(|s| s[7] == 1 && s[4] == 1);
+        .is_some_and(|s| s[7] == 1 && s[2] > s[1] && s[4] == EOS);
     Ok(
         json!({"mode":mode,"role_words":c.paired.role_words,"requested":query,"requested_correct":k.query.map(|q|query==Some(q)),
          "fence":fence,"writer_envelope":writer_envelope,"excluded":excluded,"excluded_correct":excluded==k.excluded,"eligible_complete":onset.map(|_|eligible_complete),

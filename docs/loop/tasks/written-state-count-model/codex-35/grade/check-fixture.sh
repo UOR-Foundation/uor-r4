@@ -23,12 +23,12 @@ done; done; done
 jq -e '[.rows[].arms|to_entries[]|.value] as $all |
     ($all|length)==20 and ([$all[]|select(.exact_eos==true and .correct_source==true)]|length)==10 and
     ([$all[]|select(.first_wrong=={offset:0,expected:262,actual:1155})]|length)==10' positive.json > /dev/null
-# Both cold and primary are changed. Their agreement cannot mask an incorrect writer cursor.
+# Change the active state in both tapes without changing any emitted ID.
 for pass in primary cold; do
     target="$pass/ordinary/fact_true/30106.json"
-    jq '.copy_step_words[0][2]+=1' "$target" > "$target.mutant"
+    jq '.copy_step_words[0][0]=0' "$target" > "$target.mutant"
     mv "$target.mutant" "$target"
 done
 if "$grade" key.json primary cold hashes.json > negative.json 2> negative.log; then exit 4; fi
-grep -Fq 'active cursor lost original source position or ID' negative.log
+grep -Fq 'invalid original writer transition at generated offset 0' negative.log
 sha256sum positive.json negative.log

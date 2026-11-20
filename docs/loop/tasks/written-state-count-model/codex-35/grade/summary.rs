@@ -91,6 +91,9 @@ fn main() -> Result<()> {
     for mode in ["ordinary", "supplied"] {
         let rows: Vec<_> = all.iter().filter(|r| r["mode"] == mode).collect();
         let mut slices = BTreeMap::<String, Vec<&Value>>::new();
+        for bucket in ["target_at_most_7", "target_at_least_8"] {
+            slices.entry(bucket.into()).or_default();
+        }
         for &row in &rows {
             if let Some(span) = row["gold_source"].as_array() {
                 let n = span[1].as_u64().ok_or("end")? - span[0].as_u64().ok_or("start")?;
@@ -100,6 +103,12 @@ fn main() -> Result<()> {
                     "target_over_8"
                 };
                 slices.entry(bucket.into()).or_default().push(row);
+                let writer_bucket = if n <= 7 {
+                    "target_at_most_7"
+                } else {
+                    "target_at_least_8"
+                };
+                slices.entry(writer_bucket.into()).or_default().push(row);
                 if let Some(envelope) = arm(row, "baseline")["writer_envelope"].as_str() {
                     slices
                         .entry(format!("baseline_{envelope}"))

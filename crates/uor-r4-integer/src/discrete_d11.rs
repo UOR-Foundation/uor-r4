@@ -2688,6 +2688,11 @@ impl IntegerDiscreteModel {
         if !read {
             return Ok(Some(PairedCopyDecision::default()));
         }
+        if self.pair_rank_bindings().is_some() {
+            return Err(invalid(
+                "pair-rank reader requires tokenizer-bound full-detached role selection",
+            ));
+        }
         paired_copy::Policy::validate_ids(prompt)?;
         let roles = match &paired.roles {
             paired_copy::Roles::Frozen(_) => {
