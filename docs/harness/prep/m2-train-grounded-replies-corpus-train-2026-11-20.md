@@ -47,4 +47,4 @@ Measured 1.56 s a batch (2,600 targets/s) at 22 GB host memory free and an idle 
 
 Stop at 16,404 batches. Stop early only on the instrument check above, an error, or a GPU conflict with another lab; a run stopped by an error or a GPU conflict resumes with `--resume` on the same `build-identity`; a run stopped by the instrument check is never resumed under this sheet. Results go to a new folder; nothing is written into an earlier run's folder.
 
-TEST FITNESS: UNFIT - round 2 (non-author) asked for the overlap positions to be counted in the bar and for resume to exclude instrument stops; both are now written above, after the run had started, and no third read was made.
+TEST FITNESS: NOT_FIT - round 2 (non-author) asked for the overlap positions to be counted in the bar and for resume to exclude instrument stops; both are now written above, after the run had started, and no third read was made.
