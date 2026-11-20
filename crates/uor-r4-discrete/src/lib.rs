@@ -18,6 +18,7 @@ pub mod carrier_arms;
 pub mod carrier_fresh;
 pub mod controller;
 pub mod corpus;
+pub mod corpus_slice;
 pub mod coverage_census;
 #[cfg(all(test, feature = "cuda"))]
 mod cpu_oracle_parity;
