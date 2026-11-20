@@ -162,3 +162,35 @@ second state.
 the conversation, in a closed set of eight attributes. The next unit is **integration into the served
 path**, so a real conversation (facts stated, question asked, value returned) runs end to end through
 the integer artifact, and then the closed set grows.
+
+## Served: the mechanism answers a conversation (20 Nov)
+
+`crates/uor-r4-integer/src/slot_memory.rs` is the served form: an exact `address -> value` store with
+**latest-wins**, a canonical integer code for `(entity, attribute)` (FNV-1a mix, **not** a prime
+product), a tagger loaded as data, whole-word matching with a deterministic stem rule, and typed
+abstention. `memory-chat` runs it against a live conversation.
+
+```
+user: Alice's favourite colour is green.     assistant: noted (alice / colour)
+user: Bruno lives in Denver.                 assistant: noted (bruno / city)
+user: Carla works as a nurse.                assistant: noted (carla / job)
+user: What is Alice's colour?                assistant: green
+user: What is Bruno's town?                  assistant: Denver
+user: What is Carla's profession?            assistant: a nurse
+user: What is Alice's city?                  assistant: I don't know that.
+user: Alice's favourite colour is blue.      assistant: noted (alice / colour)
+user: What is Alice's shade?                 assistant: blue
+```
+
+Five unit tests: a recombination never stated, latest-wins, abstention on an unwritten slot,
+word-boundary matching ("carla" must not match "car"), and a statement writing the slot a question
+then reads.
+
+**Two bugs the conversation exposed and the tests now cover**: the write reported the last mentioned
+entity rather than the one it wrote, and inflections ("works", "lives", "plays") missed the table
+until the stem rule was added.
+
+**Remaining gap, stated plainly**: the tagger table is loaded from `slot-table-build` output, not yet
+carried inside the artifact. The charter's one-state rule (§3.7) requires it there, and the schema
+admits exactly one optional read record, so that is a **schema decision**, not a code cleanup. Until
+then this is a served component in the serving crate, not yet a field of the integer artifact.

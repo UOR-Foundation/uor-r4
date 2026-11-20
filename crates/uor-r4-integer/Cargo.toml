@@ -116,6 +116,10 @@ path = "src/bin/read-ledger.rs"
 required-features = ["serving-wasm"]
 
 [[bin]]
+name = "memory-chat"
+path = "src/bin/memory-chat.rs"
+
+[[bin]]
 name = "encode-dialogue"
 path = "src/bin/encode-dialogue.rs"
 required-features = ["serving-wasm"]
