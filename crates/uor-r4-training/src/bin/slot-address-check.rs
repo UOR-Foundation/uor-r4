@@ -69,10 +69,6 @@ const VALUES: [&[&str]; 8] = [
     &["tennis", "chess", "rowing", "darts"],
 ];
 
-fn entity_index(name: &str) -> Option<usize> {
-    ENTITIES.iter().position(|&e| e == name)
-}
-
 /// Every fact the conversation states, as fragments the panel's context is built from.
 fn fact(entity: usize, attribute: usize, variant: usize) -> String {
     let value = VALUES[attribute][variant % VALUES[attribute].len()];
@@ -128,6 +124,7 @@ fn tag(
 fn main() -> ExitCode {
     let mut seed: u64 = 20_261_120;
     let mut verbose = false;
+    let mut table_path: Option<String> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -139,13 +136,14 @@ fn main() -> ExitCode {
                 }
             },
             "--verbose" => verbose = true,
+            "--table" => table_path = args.next(),
             other => {
                 eprintln!("unknown argument {other}");
                 return ExitCode::FAILURE;
             }
         }
     }
-    match run(seed, verbose) {
+    match run(seed, verbose, table_path.as_deref()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("Error: {e}");
@@ -154,7 +152,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(seed: u64, verbose: bool) -> Result<()> {
+fn run(seed: u64, verbose: bool, table_path: Option<&str>) -> Result<()> {
     // The panel: every (entity, attribute) pair, split by a seeded order. Held out shares every
     // entity and every attribute surface with TRAIN, and shares no pair.
     let mut pairs: Vec<(usize, usize)> = (0..ENTITIES.len())
@@ -178,6 +176,22 @@ fn run(seed: u64, verbose: bool) -> Result<()> {
         for w in SURFACES[a] {
             attribute_table.insert((*w).to_string(), a);
         }
+    }
+
+    // A corpus-fitted table, when given, replaces the panel-fitted one: that is the deployment
+    // tagger, and the panel is then only a test set.
+    if let Some(path) = table_path {
+        let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+        let loaded: BTreeMap<String, String> = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+        attribute_table.clear();
+        for (word, name) in loaded {
+            let index = ATTRIBUTES
+                .iter()
+                .position(|&a| a == name)
+                .ok_or_else(|| format!("{path}: unknown attribute {name}"))?;
+            attribute_table.insert(word, index);
+        }
+        println!("table: {} words from {path}", attribute_table.len());
     }
 
     // The store: address -> value, written from each held-out row's own context. The value is the

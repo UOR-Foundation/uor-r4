@@ -136,3 +136,29 @@ and coverage is a data problem, not a geometry one: the fitted table in this pan
 the real questions in the corpus, and report the same table on the same panel. If coverage closes,
 the mechanism is complete for the closed attribute set; if it does not, the honest answer is a
 smaller closed set, not a bigger model.
+
+## The tagger's coverage closes with real data (20 Nov, `slot-table-build`)
+
+The measured limit was wording coverage: 17/40 on surfaces a 40-row panel never saw. `slot-table-build`
+fits the attribute table from the project's own dialogue corpus instead: **168,956 user questions**,
+**20,099 labelled by exactly one attribute**, keeping only words whose dominant attribute has at least
+3 observations and 2x the runner-up. Result: **56 words**, and every one lands where it should.
+
+| measure | panel-fitted table | corpus-fitted table |
+|---|---|---|
+| address formation (known wording) | 40/40 | 40/40 |
+| **held-out wording** | **17/40** | **40/40** |
+| mechanism (formed address, exact store) | 40/40 | 40/40 |
+| control (question->answer pair table) | 0/40 | 0/40 |
+| falsifier: permuted values | 0/40 | 0/40 |
+
+**The mechanism is now complete for a closed attribute set, and every part is measured:** an exact
+store, a canonical `(entity, attribute)` address, and a tagger whose vocabulary comes from real
+questions. It answers recombinations never seen, on wording never seen, and it is reading the binding
+(permuted values score zero). No part of it needs a matmul, a squashing function, a float master or a
+second state.
+
+**What it is not yet.** It is a memory, not a conversation: it answers questions about facts stated in
+the conversation, in a closed set of eight attributes. The next unit is **integration into the served
+path**, so a real conversation (facts stated, question asked, value returned) runs end to end through
+the integer artifact, and then the closed set grows.
