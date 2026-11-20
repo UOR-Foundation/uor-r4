@@ -482,6 +482,9 @@ pub enum Entry {
         /// The stand must match the question token before it as well (the
         /// Pick read's pair).
         wide: bool,
+        /// The token that must stand just before the one read (the word a
+        /// value follows: `is`, `to`, `in`). Unused when `ahead` is 0.
+        before: u16,
     },
     /// The token after the one the last pointer, copy or `Next` read.
     Next,
@@ -517,7 +520,42 @@ impl Place<'_> {
     }
 }
 
+/// The place a pointer reads: `ahead` places after the latest earlier stand
+/// of the question token `back` places before the reply.
+fn pointer_source(at: &Place, back: u8, ahead: u8, wide: bool) -> Option<usize> {
+    let tokens = at.tokens;
+    let anchor = at.start.checked_sub(1 + usize::from(back))?;
+    let low = at.floor + usize::from(wide);
+    if anchor < low {
+        return None;
+    }
+    if ahead == 0 {
+        return Some(anchor);
+    }
+    let stand = (low..anchor).rev().find(|&place| {
+        tokens[place] == tokens[anchor] && (!wide || tokens[place - 1] == tokens[anchor - 1])
+    })?;
+    let source = stand + usize::from(ahead);
+    (source < anchor).then_some(source)
+}
+
 impl Entry {
+    /// The pointer that reads this place's `back`, `ahead`, `wide` source,
+    /// bound to the token before it.
+    fn pointer(at: &Place, back: u8, ahead: u8, wide: bool) -> Option<Entry> {
+        let source = pointer_source(at, back, ahead, wide)?;
+        let before = if ahead == 0 {
+            0
+        } else {
+            u16::try_from(at.tokens[source - 1]).ok()?
+        };
+        Some(Entry::Pointer {
+            back,
+            ahead,
+            wide,
+            before,
+        })
+    }
     fn name(self, at: &Place) -> Option<Named> {
         let tokens = at.tokens;
         let source = match self {
@@ -529,25 +567,17 @@ impl Entry {
                     by: self,
                 })
             }
-            Entry::Pointer { back, ahead, wide } => {
-                let anchor = at.start.checked_sub(1 + usize::from(back))?;
-                let low = at.floor + usize::from(wide);
-                if anchor < low {
+            Entry::Pointer {
+                back,
+                ahead,
+                wide,
+                before,
+            } => {
+                let source = pointer_source(at, back, ahead, wide)?;
+                if ahead > 0 && tokens[source - 1] != u32::from(before) {
                     return None;
                 }
-                if ahead == 0 {
-                    anchor
-                } else {
-                    let stand = (low..anchor).rev().find(|&place| {
-                        tokens[place] == tokens[anchor]
-                            && (!wide || tokens[place - 1] == tokens[anchor - 1])
-                    })?;
-                    let source = stand + usize::from(ahead);
-                    if source >= anchor {
-                        return None;
-                    }
-                    source
-                }
+                source
             }
             Entry::Next => {
                 let source = at.cursor? + 1;
@@ -662,23 +692,11 @@ impl HeldRow {
         let pointers = (0..POINTER_BACK)
             .flat_map(|back| {
                 (0..=POINTER_AHEAD).flat_map(move |ahead| {
-                    [true, false].map(move |wide| Entry::Pointer {
-                        back: back as u8,
-                        ahead: ahead as u8,
-                        wide,
-                    })
+                    [true, false].map(move |wide| (back as u8, ahead as u8, wide))
                 })
             })
-            .filter(|entry| {
-                !matches!(
-                    entry,
-                    Entry::Pointer {
-                        ahead: 0,
-                        wide: true,
-                        ..
-                    }
-                )
-            })
+            .filter(|&(_, ahead, wide)| !(ahead == 0 && wide))
+            .filter_map(|(back, ahead, wide)| Entry::pointer(at, back, ahead, wide))
             .filter(|&entry| right(entry))
             .take(POINTERS_ADDED);
         for entry in pointers.collect::<Vec<_>>() {
@@ -702,11 +720,13 @@ struct HeldKey {
 }
 
 /// The reply so far as a held row sees it: each token, with a run of copied
-/// tokens as one symbol, so a three-piece name and a one-piece number leave
+/// tokens read in a row as one symbol, so a three-piece name and a one-piece number leave
 /// the same history.
 #[derive(Debug, Clone, Default)]
 struct History {
     symbols: Vec<u32>,
+    /// The place the last token was copied from.
+    last: Option<usize>,
 }
 
 impl History {
@@ -717,12 +737,20 @@ impl History {
     fn copying(&self) -> bool {
         self.symbols.last() == Some(&Self::COPIED)
     }
-    fn push(&mut self, token: u32, copied: bool) {
-        if !copied {
-            self.symbols.push(token);
-        } else if !self.copying() {
-            self.symbols.push(Self::COPIED);
+    /// Takes the next reply token and the place it was copied from. A run
+    /// goes on only while each token is read from the place after the last:
+    /// a copy that jumps elsewhere starts a new run.
+    fn push(&mut self, token: u32, source: Option<usize>) {
+        match source {
+            None => self.symbols.push(token),
+            Some(place) => {
+                let follows = self.last.is_some_and(|last| last + 1 == place);
+                if !(self.copying() && follows) {
+                    self.symbols.push(Self::COPIED);
+                }
+            }
         }
+        self.last = source;
     }
     /// The last sixteen symbols, thirteen bits each under a leading one.
     fn address(&self) -> [u128; 2] {
@@ -919,7 +947,7 @@ impl Asked {
                 Some((named, _, _)) if named.token == target => named.source,
                 _ => written,
             };
-            history.push(target, cursor.is_some());
+            history.push(target, cursor);
         }
         true
     }
@@ -995,7 +1023,7 @@ impl Asked {
                 }
             };
             cursor = named.source;
-            history.push(named.token, cursor.is_some());
+            history.push(named.token, cursor);
             tokens.push(named.token);
             if named.token == self.eos {
                 break;
@@ -1999,6 +2027,53 @@ mod tests {
         assert_eq!(ladder.write(&window, 2), 2);
         assert_eq!(ladder.next(&window, true), Some(2));
         assert_eq!(ladder.reply(&[0, 9, 5, 6], false, 192, 0, 1, 4), vec![7]);
+        Ok(())
+    }
+
+    #[test]
+    fn a_pointer_is_bound_to_the_word_before_its_value() -> Result<()> {
+        // Stated:  BOS JOB IS v DOT EOS WHAT JOB QM MARK | YOU GREW v DOT EOS
+        // Changed: BOS JOB HAS TO v DOT EOS WHAT JOB QM MARK | YOU GREW v DOT EOS
+        // The value stands two places after JOB in one wording and three in
+        // the other, under the same question form. A turn of zero to three
+        // FILL tokens before the question moves the value, so no fixed place
+        // before the reply holds it.
+        let [bos, eos, is, dot, what, qm, mark] = [0u32, 1, 2, 3, 4, 5, 6];
+        let [you, grew, has, to, job, fill] = [8u32, 9, 10, 11, 12, 13];
+        let record = |changed: bool, v: u32, filled: usize| {
+            let mut tokens = vec![bos, job];
+            tokens.extend(if changed { vec![has, to] } else { vec![is] });
+            tokens.extend([v, dot, eos]);
+            tokens.extend(std::iter::repeat(fill).take(filled));
+            tokens.extend([eos, what, job, qm, mark, you, grew, v, dot, eos]);
+            tokens
+        };
+        let mut tokens = Vec::new();
+        let mut runs = Vec::new();
+        for index in 0..48u32 {
+            let at = tokens.len();
+            tokens.extend(record(index % 2 == 1, 20 + index, (index as usize / 2) % 4));
+            runs.push([tokens.len() - 5, tokens.len()]);
+            assert_eq!(tokens[at], bos);
+        }
+        let ladder = Ladder::new(64, 2, &[3])?;
+        let mut asked = Asked::new(192, bos, eos);
+        for run in &runs {
+            asked.count(&tokens, run[0]);
+        }
+        asked.seal();
+        for run in &runs {
+            assert!(asked.write(&tokens, run[0], run[1]));
+        }
+        for changed in [false, true] {
+            let whole = record(changed, 14, 2);
+            let prompt = &whole[..whole.len() - 5];
+            assert_eq!(
+                asked.reply(&ladder, prompt, 8),
+                (vec![you, grew, 14, dot, eos], true),
+                "changed {changed}"
+            );
+        }
         Ok(())
     }
 
