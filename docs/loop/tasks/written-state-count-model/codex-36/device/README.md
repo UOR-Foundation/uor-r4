@@ -74,3 +74,13 @@ previous CUDA executable, the v0.2 witness, the candidate's
 manifests, FIT and GO must live in the stage. The GO also binds the candidate
 and audit identities as `candidate_sha256` and `witness_sha256`. The launcher
 releases the shared GPU lock before running the separate native witness.
+
+The C1 candidate passed the [separate FIT](FIT-C1.md) and [GO](GO-C1.json).
+Both fresh RTX 4090 processes matched every word across 198 order records
+from 18 probes, including 11 retained and seven dropped contexts, and
+produced identical tapes. The device processes took 0.13–0.15 seconds
+with 166,764 KiB maximum host RSS. The independent mmap comparisons took
+0.31–0.41 seconds with 239,008 KiB maximum RSS. The
+[primary receipt](evidence/c1/primary.json) and
+[Wick custody manifest](evidence/c1/receipts.sha256) record this bounded
+count-component replay.
