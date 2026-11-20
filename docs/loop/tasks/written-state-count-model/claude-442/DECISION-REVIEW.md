@@ -60,7 +60,7 @@ artifact no bar scores (L-008), and "never" gives up a real if tiny gain for 39 
 - **The 37‰ weight.** From `pick_arms.main.a1s.pick_weights`, weighting each bucket's `weight_q32` by
   its `fit_targets`: class 1 190‰ (6,001,324 fit targets), class 3 37‰ (53,736), class 4 10‰
   (9,884,404). These match the card and claude-441's REPORT.
-- **The charter.** §3.1 (`CHARTER.md` line 26), §3.7 (line 38: "Training and serving call the same
+- **The charter.** §3.1 (`CHARTER.md` line 26), §3.7 (line 35: "Training and serving call the same
   typed operator definitions and the same state-transition path"), and §5.1 item 1 (line 58: a scope
   choice goes ahead on the lab's own decision review, D68).
 - **claude-409's bar B.** Its card, lines 47-48: ≥ 1,000 tok/s warm at 2k context on one M1
