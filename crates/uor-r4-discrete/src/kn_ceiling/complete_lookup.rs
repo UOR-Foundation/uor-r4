@@ -249,7 +249,9 @@ mod tests {
         let adjusted = (0..=highest)
             .map(|order| oracle_adjusted(&train, order, highest))
             .collect::<Result<Vec<_>>>()?;
-        assert_ne!(raw[1].1, adjusted[1].1);
+        let (_, raw_triples, _) = &raw[1];
+        let (_, adjusted_triples, _) = &adjusted[1];
+        assert_ne!(raw_triples, adjusted_triples);
         let bytes = encode_complete_lookup(highest, [11; 32], &raw, &adjusted)?;
         let digest = Sha256::digest(&bytes).into();
         let loaded = CompleteCountLookup::from_bytes(&bytes, [11; 32], digest)?;
@@ -293,10 +295,12 @@ mod tests {
         let train = [0, 2, 3, 4, 2, 3, 1];
         let raw = vec![oracle_count(&train, 0)?];
         let mut wrong = raw.clone();
-        wrong[0].1.pop();
+        let (_, triples, _) = &mut wrong[0];
+        triples.pop();
         assert!(encode_complete_lookup(0, [11; 32], &wrong, &wrong).is_err());
         let mut wrong = raw.clone();
-        wrong[0].2[0].total += 1;
+        let (_, _, contexts) = &mut wrong[0];
+        contexts[0].total += 1;
         assert!(encode_complete_lookup(0, [11; 32], &wrong, &wrong).is_err());
         Ok(())
     }
