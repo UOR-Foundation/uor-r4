@@ -182,6 +182,75 @@ pub fn recover_attribute(entity: &str, address: &Element) -> Option<usize> {
         .map(|(i, _)| i)
 }
 
+/// A **dense** entity code: `+1` or `-1` on every one of the 64 blades, from the name's hash.
+///
+/// The sparse form (a single unit blade) is exact and invertible but its sign code is one bit, so it
+/// cannot be shortlisted by Hamming — measured: unrelated addresses landed within 1 bit. A dense code
+/// is what makes the 64-bit word informative; the exact check stays an equality on the element.
+pub fn dense_entity_code(name: &str) -> Element {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in name.to_ascii_lowercase().bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x100_0000_01b3);
+    }
+    let mut out = [0i32; DIM];
+    // One independently mixed hash per coefficient (splitmix64). The first version reused rotated
+    // 16-bit windows, which correlated the codes: unrelated addresses came within 7 bits.
+    for (k, cell) in out.iter_mut().enumerate() {
+        let mut z = hash ^ (k as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^= z >> 31;
+        *cell = if z & 1 == 1 { 1 } else { -1 };
+    }
+    out[0] = 1; // the scalar slot carries the sign of the whole code, keep it positive
+    Element(out)
+}
+
+/// A dense address: `entity * attribute_blade`, both dense, so the sign code is informative and the
+/// geometric product keeps the role order.
+pub fn dense_address(entity: &str, attribute: usize) -> Element {
+    let blades = attribute_blades();
+    let blade = blades.get(attribute).cloned().unwrap_or_else(|| blades[0].clone());
+    dense_entity_code(entity).mul(&blade)
+}
+
+/// The **sign code** of an element: bit `k` is set when coefficient `k` is negative.
+///
+/// This is the bridge between the two mechanisms. A Hamming head reads one 64-bit word, and Cl(0,6)
+/// has 64 basis blades for the same reason — six binary choices — so a 64-bit code *is* an element's
+/// sign pattern. That makes one read do both jobs: popcount for the shortlist, the algebra for the
+/// exact answer.
+pub fn sign_code(element: &Element) -> u64 {
+    let mut code = 0u64;
+    for (k, &coefficient) in element.0.iter().enumerate() {
+        if coefficient < 0 {
+            code |= 1 << k;
+        }
+    }
+    code
+}
+
+/// Hamming distance between two sign codes: `popcount(a xor b)`, two integer instructions.
+pub fn hamming_distance(a: u64, b: u64) -> u32 {
+    (a ^ b).count_ones()
+}
+
+/// The shortlist-then-verify read: the stored address nearest to `query` by Hamming over sign codes,
+/// returned **only** when it is exactly equal to the query's address.
+///
+/// This is the literature's "coarse code selects candidates, exact equality returns the value"
+/// (`GO-FORWARD` §4) in the form the project can serve: 64-bit popcount for the coarse step, the
+/// Clifford element for the exact one. `None` is a typed abstention.
+pub fn shortlist_exact(query: &Element, stored: &[Element]) -> Option<usize> {
+    let code = sign_code(query);
+    let best = stored
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, element)| hamming_distance(code, sign_code(element)))?;
+    (best.1 == query).then_some(best.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -230,6 +299,35 @@ mod tests {
             let a = address("alice", attribute);
             assert_eq!(recover_attribute("alice", &a), Some(attribute));
         }
+    }
+
+    #[test]
+    fn the_dense_sign_code_separates_the_exact_address_from_every_other() {
+        // Ten entities x eight attributes as DENSE addresses: the sign code must rank the exact one
+        // first, and unrelated addresses must sit far away rather than one bit apart.
+        let mut stored = Vec::new();
+        for e in 0..10 {
+            for a in 0..8 {
+                stored.push(dense_address(&format!("entity{e}"), a));
+            }
+        }
+        let mut nearest_other = 64u32;
+        for e in 0..10 {
+            for a in 0..8 {
+                let query = dense_address(&format!("entity{e}"), a);
+                let index = shortlist_exact(&query, &stored).expect("exact address is stored");
+                assert_eq!(stored[index], query);
+                let other = stored
+                    .iter()
+                    .filter(|s| **s != query)
+                    .map(|s| hamming_distance(sign_code(&query), sign_code(s)))
+                    .min()
+                    .expect("more than one stored");
+                nearest_other = nearest_other.min(other);
+            }
+        }
+        assert!(nearest_other >= 8, "unrelated dense addresses sat within {nearest_other} bits");
+        println!("nearest unrelated dense address: {nearest_other} of 64 bits");
     }
 
     #[test]
