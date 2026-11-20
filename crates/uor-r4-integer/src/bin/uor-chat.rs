@@ -366,12 +366,16 @@ fn print_usage() {
     );
     eprintln!("                              directly by the D11 integer stack engine");
     #[cfg(feature = "p1-count-serving")]
-    eprintln!("      --p1-state <PACKAGE>    Complete count and fitted A1 state bound to --discrete");
+    eprintln!(
+        "      --p1-state <PACKAGE>    Complete count and fitted A1 state bound to --discrete"
+    );
     #[cfg(feature = "p1-count-serving")]
     eprintln!("      --p1-trace              Record per-token Pick and count decisions and full mass hashes");
     eprintln!("      --discrete <ARTIFACT>   UORLUT01 discrete SpiralCore/FBS artifact; one-shot");
     eprintln!("      --ordered-role-trace   include full-prefix ordered-role candidate details");
-    eprintln!("                              greedy raw-ID or text serving through IntegerDiscreteModel");
+    eprintln!(
+        "                              greedy raw-ID or text serving through IntegerDiscreteModel"
+    );
     eprintln!(
         "      --tokenizer <PATH>      tokenizer.json for --stack or a token-bound discrete text turn"
     );
@@ -2018,7 +2022,10 @@ fn run_discrete_parity(cli: &CliArgs) -> Result<()> {
     #[cfg(feature = "p1-count-serving")]
     let p1_bytes = cli.p1_path.as_deref().map(std::fs::read).transpose()?;
     #[cfg(feature = "p1-count-serving")]
-    let p1 = p1_bytes.as_deref().map(|bytes| p1::P1::load(bytes, &model)).transpose()?;
+    let p1 = p1_bytes
+        .as_deref()
+        .map(|bytes| p1::P1::load(bytes, &model))
+        .transpose()?;
     let mut text_mode = None;
     let encoded;
     let prompt = if let (Some(text), Some(path)) = (&cli.say, &cli.tokenizer_path) {
@@ -2104,7 +2111,9 @@ fn run_discrete_parity(cli: &CliArgs) -> Result<()> {
         #[cfg(feature = "p1-count-serving")]
         let p1_winner = if let Some(engine) = &p1 {
             let (id, observation) = engine.next(&context, read_enabled, cli.p1_trace)?;
-            if let Some(step) = observation { p1_steps.push(step); }
+            if let Some(step) = observation {
+                p1_steps.push(step);
+            }
             Some(id)
         } else {
             None
@@ -2144,7 +2153,9 @@ fn run_discrete_parity(cli: &CliArgs) -> Result<()> {
         };
         generated_ids.push(prediction);
         #[cfg(feature = "p1-count-serving")]
-        if p1.is_some() && prediction == 1 { break; }
+        if p1.is_some() && prediction == 1 {
+            break;
+        }
         if text_mode
             .as_ref()
             .is_some_and(|(_, protocol, _)| prediction == protocol.eos_id)
@@ -2159,11 +2170,14 @@ fn run_discrete_parity(cli: &CliArgs) -> Result<()> {
     #[cfg(feature = "p1-count-serving")]
     if let (Some(open), Some(decode)) = (profile_start, decode_start) {
         let decode_ns = decode.elapsed().as_nanos();
-        eprintln!("{}", serde_json::json!({
-            "schema":"uor-r4.p1-client-timing/1",
-            "open_and_prefill_ns":decode.duration_since(open).as_nanos(),
-            "decode_ns":decode_ns,"tokens":generated_ids.len(),"traced":cli.p1_trace
-        }));
+        eprintln!(
+            "{}",
+            serde_json::json!({
+                "schema":"uor-r4.p1-client-timing/1",
+                "open_and_prefill_ns":decode.duration_since(open).as_nanos(),
+                "decode_ns":decode_ns,"tokens":generated_ids.len(),"traced":cli.p1_trace
+            })
+        );
     }
     let mut record = serde_json::json!({
         "schema": "uor-r4.uor-chat-discrete-parity/1",

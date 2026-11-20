@@ -37,6 +37,8 @@ The ordinary-client timing used a Ryzen 9 9950X under Linux, fresh one-shot proc
 
 ## Checks run at the head
 
+The sealed GPU measurements use the source archive identified by the count GO and the fit and client receipts. The Wick ordinary client was built from the implementation at `5ea09ea47`. The final review applied rustfmt to touched Rust blocks, including the host histogram launch and client argument and trace formatting. The measured executable and its source hashes remain in the receipts. The workspace still has formatting differences on the base revision.
+
 The device replay accepted the blinded original-ID prefixes. The final execution archive omitted the prompt TSV. An unused earlier source archive on the same instance included the public prompt TSV with its literal expected phrases. The executor received neither that TSV nor the ordinary client's replies as inputs. The full device archive was verified on Wick before the lease ended. [Custody manifests and lease costs](CUSTODY.md) · [Device replay entry point](client/device/replay-strict.sh)
 
 The discrete scalar suite compared full-vocabulary ranking to separate target-by-target lookup. The integer library passed 727 tests with one ignored. Synthetic grading accepted six exact versus zero exact replies in its planted arms. Deliberately changing one token was detected at step one. Removing a required decision word from both traces and substituting a different weight identity each failed grading. Corrupt count bytes, corrupt weights, a wrong component order, a truncated header and a closed causal record each failed in the ordinary client. [Independent replay](client/client-grade.jq) · [Ranking test](../../../../../crates/uor-r4-discrete/src/kn_ceiling/compact_lookup/ranking_tests.rs)
