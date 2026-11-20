@@ -43,4 +43,3 @@ P1(b) remains dependent on a full-dose pruned count carrier and R-only fit. P2 s
 ## Plain summary
 
 Preserving the blank at the start of Quentin's token sequence restored all eight previously missing requested or excluded spans with an exact factual witness. It recovered the requested person four times and the entire answer twice. The next two decisions with measured failures are excluding the right person and ranking the correct start of the answer among eligible source tokens.
-
