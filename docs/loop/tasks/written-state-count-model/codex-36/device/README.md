@@ -84,3 +84,19 @@ with 166,764 KiB maximum host RSS. The independent mmap comparisons took
 [primary receipt](evidence/c1/primary.json) and
 [Wick custody manifest](evidence/c1/receipts.sha256) record this bounded
 count-component replay.
+
+The full-C threshold-318 compact artifact passed the
+[full-C FIT](FIT-FULL-C.md) and [GO](GO-FULL-C.json). It occupies
+3,912,334,481 bytes, leaving 601,850 bytes under the compact cap.
+Threshold 317 would occupy 3,914,255,830 bytes. Adding the registered
+trunk, tokenizer and fit/envelope reserve gives 3,999,398,150 bytes.
+The actual fit and assembled deployment have their own measurement.
+[Cap ledger](evidence/full-c/cap.json)
+
+Both fresh Wick RTX 4090 processes produced identical tapes and matched
+the native reader on 198 order records from 18 probes. This included all
+11 retained and seven dropped-context controls. Device wall time was
+5.51–5.60 seconds with 166,076 KiB maximum host RSS. The native mmap
+witness took 4.82–9.89 seconds with 3,822,308 KiB maximum RSS.
+[Primary receipt](evidence/full-c/primary.json) ·
+[Wick custody manifest](evidence/full-c/receipts.sha256)
