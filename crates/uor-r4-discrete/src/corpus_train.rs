@@ -292,6 +292,36 @@ pub fn run(
     Ok(done)
 }
 
+/// `corpus-export`: writes a checkpoint's model as the D11 integer artifact
+/// the reply client loads. Host only: the stored snapshot is re-hashed against
+/// the checkpoint, then passed to `export_d11` unchanged.
+pub fn export(checkpoint_path: &Path, out: &Path) -> Result<serde_json::Value> {
+    use crate::training::DriverCheckpoint;
+    if out.exists() {
+        return Err(invalid("the artifact path already exists"));
+    }
+    let bytes = fs::read(checkpoint_path).map_err(|e| invalid(e.to_string()))?;
+    let checkpoint: DriverCheckpoint =
+        serde_json::from_slice(&bytes).map_err(|e| invalid(e.to_string()))?;
+    let stored = serde_json::to_vec(&checkpoint.model).map_err(|e| invalid(e.to_string()))?;
+    if crate::corpus::sha256(&stored) != checkpoint.model_sha256 {
+        return Err(invalid("the checkpoint's model differs from its hash"));
+    }
+    let snapshot: crate::snapshot::Snapshot =
+        serde_json::from_value(checkpoint.model).map_err(|e| invalid(e.to_string()))?;
+    let artifact = crate::d11_export::export_d11(&snapshot)?;
+    write_atomic(out, &artifact)?;
+    Ok(serde_json::json!({
+        "schema": "uor-r4.discrete-corpus-export/1",
+        "checkpoint_sha256": crate::corpus::sha256(&bytes),
+        "model_sha256": checkpoint.model_sha256,
+        "completed_batches": checkpoint.cursor.completed_batches,
+        "accepted_updates": checkpoint.cursor.accepted_updates,
+        "artifact_bytes": artifact.len(),
+        "artifact_sha256": crate::corpus::sha256(&artifact),
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

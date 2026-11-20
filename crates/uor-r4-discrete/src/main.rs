@@ -107,6 +107,10 @@ fn device_command(args: &[String]) -> Result<()> {
             println!("{done}");
             Ok(())
         }
+        Some("corpus-export") if args.len()==3=>{
+            println!("{}",uor_r4_discrete::corpus_train::export(Path::new(&args[1]),Path::new(&args[2]))?);
+            Ok(())
+        }
         Some("corpus-overlap") if args.len()==4=>{
             let n=args[3].parse::<usize>().map_err(|e|invalid(e.to_string()))?;
             println!("{}",uor_r4_discrete::corpus_overlap::run(Path::new(&args[1]),Path::new(&args[2]),n)?);
