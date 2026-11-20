@@ -293,12 +293,13 @@ impl<'a> CompactCountLookup<'a> {
                     .checked_mul(width)
                     .ok_or_else(|| invalid("compact count table length overflow"))
             };
+            let (discounts, _) = KnDiscounts::with_fallback(spectra[1])?;
             let table = CompactOrder {
                 contexts: take(&mut remaining, size(contexts, key_width + 4)?)?,
                 followers: take(&mut remaining, size(followers, follower_width(shared))?)?,
                 key_width,
                 shared,
-                discounts: KnDiscounts::with_fallback(spectra[1])?.0,
+                discounts,
             };
             table.validate(order, spectra[0], spectra[1])?;
             orders.push(table);

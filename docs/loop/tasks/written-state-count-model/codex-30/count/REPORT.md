@@ -29,3 +29,5 @@ The [receipt](RECEIPT.json) records input and trunk hashes, per-order digests, c
 | `ngram-count.cubin` | `9661ad0e8615062fd6b07a860b552a1931fe92d0b34c636569791a0b671e192f` |
 
 GPU job `20261120T025206Z-count30-c128-gpu0` completed with exit 0 at 02:52:10 UTC. The count files and build objects were copied to private local custody under `local/codex/context-swap-30/count/custody-v1/` and to private Wick custody under `/home/callard/uor-codex/20261120-context-swap-30/count/custody-v1/`. Both off-pod copies passed hash verification for both artifact pairs, both receipts, the build manifest, the authorization manifest and the staged input manifest. Both count files and receipts also compared byte-for-byte on each host. The lease was released and live status confirmed removal of `vast-61560708`.
+
+The measured overlay is preserved at commit `807bca6f655a291671857aadc2e8f6fa4946d22b`. The delivery change destructures the integer discount pair by name. The source scanner attributed a floating literal to the original Rust tuple field access. The original GPU receipt binds the pre-edit source. The compact decoder regression tests were run again on the delivery source.
