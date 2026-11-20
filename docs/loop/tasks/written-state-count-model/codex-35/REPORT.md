@@ -2,6 +2,8 @@
 
 ## What did not work, first
 
+Neither forward bank qualifies for promotion. The candidate-prefix arm improved from 6 to 14 exact on the 224 supported original prompts, but introduced wrong-source copies on 93 rows and unsupported copies on six. On the matched short objects, its ordinary exact count fell from 32 to 20 of 216 and its reversed control scored 33. All 216 short targets were eligible when the requested person and factual head were supplied. Under that intervention the candidate arm tied the baseline at 42, and its reversed orientation scored 48. Keep the baseline value policy.
+
 The original TRAIN generator produced 144 prompts in six families. After binding the supplied factual person, only 36 had both the complete keyed source and at least one eligible rival under the existing geometric source policy and copy writer. These came from two families, model railway (24) and conservation (12). All 108 omitted rows have an omission record. Both geometries used exactly the same admitted prompts, source endpoints and ordered rivals. The original primary evaluation retains all 246 sealed prompts.
 
 The frozen writer detects its eight-token cap **before** it tests the delimiter. It can copy eight token IDs, but exact delimiter-driven EOS at the next step requires a source of at most seven IDs. Source enumeration already calls that same cursor to completion, so this is an upstream eligibility limit as well as an output limit. Independently counting tokenized gold lengths found only 24 of 216 primary crossed prompts within seven tokens. They belong to the bookbinding and costume families. The fixture author examined lengths before observing any held replies. A separate matched short-object instrument preserves the nine families, wording, requested person, fact order, clause order and modifiers, and changes the two object phrases in each family. It has 216 crossed prompts within seven IDs plus 18 unsupported controls. The original test remains intact. Changing the objects can also change token geometry, eligible rivals and selection. Report both populations separately.
@@ -38,6 +40,22 @@ The ordinary selector recognized the requested mention on 165/246 and the explic
 
 The early projection FIT described the 24/216 crossed census as “at or below the frozen eight-token writer budget”. The executed original-token census resolves the wording. There are 24 crossed gold spans of at most seven IDs, 96 of exactly eight, and 96 of more than eight. Only the first 24 can receive delimiter-driven EOS. The eight keyed causal prompts fit within seven. No row, ranking or label changed.
 
+### Matched short objects
+
+Both original-token capture passes matched on all 2,250 transcripts. The short panel has 216 supported and 18 unsupported prompts in ordinary mode. Its 216 supplied prompts all have a unique fact and a complete eligible gold source. There is no supplied negative denominator. The device/native comparisons consumed 242 ordinary pools with 2,716 ordered pairs and 216 supplied pools with 2,480 ordered pairs, in both orientations and on both passes.
+
+| Rank | Ordinary exact /216 | Supplied exact /216 | Ordinary wrong source /216 | Supplied wrong source /216 | Ordinary unsupported copies /18 |
+|---|---:|---:|---:|---:|---:|
+| Historical baseline | 32 | 42 | 84 | 74 | 7 |
+| Fact prefix forward | 24 | 48 | 120 | 96 | 9 |
+| Fact prefix reversed | 40 | 56 | 92 | 76 | 7 |
+| Candidate prefix forward | 20 | 42 | 120 | 98 | 8 |
+| Candidate prefix reversed | 33 | 48 | 109 | 94 | 7 |
+
+Every keyed error again started at offset zero. Candidate-prefix forward versus baseline recovered 18 exact replies, retained two, lost 30, changed the wrong first ID on 120 and preserved the same first error on 46. It created 73 new wrong-source copies and three new unsupported copies. Fact-prefix forward recovered 22, lost 30, and created 76 new wrong-source and three new unsupported copies. With gold spans, candidate-prefix forward gained and lost 40 each; fact-prefix forward gained 46 and lost 40. Both introduced 68 new wrong-source copies. The reversed controls surpassed their forward counterparts in both modes. Reversed performance on these related families does not establish a deployable alternative.
+
+The ordinary role was correct on 144/216 supported prompts and 8/18 unsupported ones; no explicit excluded occurrence was correct on the 225 rows carrying one. In the 144 supported cases with correct ordinary binding, all gold value spans were eligible. The candidate rank selected the correct source on 20, a rival on 65 and withheld on 59. For example, on row 46001 it recovered original span [35,40), moving the first token from 1155 to the correct 924 and completing *blue glass tubes* as [924, 2537, 259, 1949, 382, 1]. The full [short token traces](evidence/short-rows.tsv) and [matched movement](evidence/short-first-error-counts.json) retain every failure. The contrast isolates separate limitations in ordinary role binding and within-fact value selection; changes in deployed copy behavior are visible in the no-answer rows.
+
 ## Checks run at the head
 
 The public token-only API now rejects a D35 carrier when read is enabled and the tokenizer-bound full-detached reader is unavailable. The historical parent and disabled read keep their previous behavior. On an exposed source, both geometries and both orientations produced byte-identical full client traces before and after this guard. Fresh measurements pin the original experimental executable. The guard does not change the explicitly selected full-detached reader.
@@ -60,4 +78,4 @@ For the independent count line, full C and the reserved R inputs were found on W
 
 ## Plain summary
 
-The hardware and native reader agree on the trained displacement bank. The ordinary-chat result requires matching each device decision to an actual client reply, preserving the first incorrect original token and EOS. The copy limit and two-family training support constrain the interpretation of this comparison.
+The writer copied the selected token IDs exactly. Changing the value rank changed which word the copy began at, and every remaining supported failure diverged at the first token. The primary gain did not transfer to matched short objects, and both forward arms made more harmful copies. Retain the baseline. The immediate model investigations are membership of requested/excluded/incidental roles before factual verification, and how to identify a value onset when every word in the assertion is a viable rival. The full-dose count and equal-byte persistent-state gates remain open.
