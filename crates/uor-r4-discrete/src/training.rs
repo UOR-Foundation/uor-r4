@@ -303,13 +303,25 @@ impl DriverConfig {
                 "coordinate_block > 1 requires the rows_v1 counterfactual path",
             ));
         }
+        // K = 1 keeps the 64-row lanes/baseline bound; the rows_v1 block path
+        // (K > 1) scores and commits up to `corpus::MAX_BATCH_ROWS` rows.
+        let max_rows = if self.coordinate_block.is_one() {
+            64
+        } else {
+            corpus::MAX_BATCH_ROWS
+        };
+        if !(1..=max_rows).contains(&self.batch_rows) {
+            return Err(invalid(format!(
+                "batch_rows must be 1..={max_rows} at coordinate_block {}",
+                self.coordinate_block.get()
+            )));
+        }
         if self.schema != DRIVER_SCHEMA
-            || !(1..=64).contains(&self.batch_rows)
             || self.train.split != Split::Train
             || self.dev.split != Split::Dev
         {
             return Err(invalid(
-                "driver needs current schema, rows1..64 and separate declared TRAIN/DEV roles",
+                "driver needs current schema and separate declared TRAIN/DEV roles",
             ));
         }
         for pin in [
@@ -2118,6 +2130,35 @@ mod tests {
                 }
             }
         }
+        Ok(())
+    }
+    #[test]
+    fn validate_batch_rows_4096_only_on_block_path() -> Result<()> {
+        let config = metadata_fixture(1, ReadSpec::Route)?.config.clone();
+        let mut block = config.clone();
+        block.coordinate_block = CoordinateBlock(8);
+        block.counterfactual_path = CounterfactualPath::RowsV1;
+        block.batch_rows = 4096;
+        block.validate()?;
+        block.batch_rows = 4097;
+        assert_eq!(
+            refusal(block.validate()),
+            "batch_rows must be 1..=4096 at coordinate_block 8"
+        );
+        block.batch_rows = 0;
+        assert_eq!(
+            refusal(block.validate()),
+            "batch_rows must be 1..=4096 at coordinate_block 8"
+        );
+        let mut single = config.clone();
+        assert!(single.coordinate_block.is_one());
+        single.batch_rows = 64;
+        single.validate()?;
+        single.batch_rows = 65;
+        assert_eq!(
+            refusal(single.validate()),
+            "batch_rows must be 1..=64 at coordinate_block 1"
+        );
         Ok(())
     }
     #[test]
