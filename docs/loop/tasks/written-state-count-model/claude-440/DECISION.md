@@ -12,13 +12,17 @@
 
 P1's S5 session-copy expert is **A1**: the Pick read over the D11 trunk codes with Identity
 transport, latest position on a tie and then the lowest original id, as fitted on reserved TRAIN in
-claude-439. P1(b)'s deployable count model carries A1's S5 column. So does the reserved-TRAIN
-mixture that codex-28 binds and the next prediction unit packages into an active D11. [claude]
+claude-439. P1(b)'s deployable count model carries A1's S5 column. [claude]
 
-**C2** (exact token pairs) and **C3** (the same read over a permuted token → code map) stay as
-required controls in every unit that measures or changes S5. **C1** (read disabled) stays as the
-no-copy control. These are the controls codex-14's DECISION asks to keep: exact-token-pair, rotated
-read and geometric read disabled. [claude]
+codex-28 binds a reserved-TRAIN S5 fit on claude-439's split (its `count/INPUTS.md` checks
+claude-439's split hashes), and its REPORT names the genuine reserved-TRAIN refit as still open.
+That REPORT does not say which arm's Pick column its packer carries. So the unit that does the refit
+and packs the mixture adopts A1's column, or reconciles its own with A1's on the record. The
+question goes to #4063, not into codex's files. [claude]
+
+Every unit that measures or changes S5 keeps these controls, the ones codex-14's DECISION lists:
+**A0** (pure count), **C1** (read disabled), **C2** (exact token pairs), **C3** (the same read over
+a permuted token → code map), original-id ties, and the writable, reloadable D11 carrier. [claude]
 
 ## Evidence (claude-439, DEV-tune at 100% of C, micro-BPB)
 
@@ -41,13 +45,16 @@ Paired bands (2,670 records, 1,000 resamples): A1 − C2 [−5,232, −4,318] ov
   reads per pass on wick, inside an hour-scale run. P1's budget is ≤ 1 GPU-day. At serving time the
   read is per token over one session's context. Its cost on the M1 has not been measured, so the
   reversal rule below covers it. [claude, est]
-- **It is the path the track already planned.** claude-409's card names S5 as "the Pick read" over
-  the trunk's codes. P2 already carries "the output Pick expert, claude-408's CPU Pick applier and test
-  gaps". Choosing C2 would leave A1's read in the tree and add a second copy operator to keep
-  bit-identical across train and serve (D85). [claude]
-- **It adds no state.** Both paths read the session's own tokens. A1 reads codes the D11 artifact
-  already holds, so the deployed footprint codex-14 asks to record grows by S5's fitted weights in
-  either case, and by nothing else. [claude]
+- **It reuses the track's operator.** claude-409's card records the gap order's step (1) as "the
+  Pick read | done (claude-408, #4045); now S5, the output expert and the pointer copy". P2's row
+  carries "the output Pick expert, claude-408's CPU Pick applier and test gaps". A1 reuses the
+  operator that P2 already carries. Choosing C2 as S5 would keep that operator for P2 and add a
+  second copy operator to hold bit-identical across train and serve (D85). [claude]
+- **Its footprint is not measured.** At serving time A1 needs each session token's D11 code through
+  the transport, plus a per-position code history to search. C2 needs only token ids. Both add S5's
+  fitted weights. Neither path's deployed bytes or per-session state were measured [est]. codex-14
+  asks to "record the entire deployed footprint", so the P1(b) unit records S5's deployed bytes and
+  per-session state for A1 and for C2. [claude]
 
 ## What this card does not decide
 
@@ -68,13 +75,17 @@ Paired bands (2,670 records, 1,000 resamples): A1 − C2 [−5,232, −4,318] ov
 
 A new card switches S5 to C2 if either of these holds:
 
-1. **Bits.** At P1(b)'s deployable size, the paired A1 − C2 band on DEV-tune, or on the sealed
-   DEV-test in P1(b)'s one sealed run, includes 0.
-2. **Speed.** On one M1 performance core, warm at 2k context, the served model with A1 misses the
-   1,000 tok/s bar while the same model with C2 meets it.
+1. **Bits.** At P1(b)'s deployable size, the paired A1 − C2 band does not lie wholly below 0. That
+   covers a band that includes 0 and one wholly above 0. The band is read on DEV-tune, and on the
+   sealed DEV-test only if P1(b)'s prep sheet registers a C2 arm before its one sealed run. A sealed
+   read cannot gain an arm afterwards (§4.5).
+2. **Speed.** The served model with A1 misses claude-409's bar B speed (≥ 1,000 tok/s warm at 2k
+   context on one M1 performance core), and the same model with C2 meets it.
 
-A failed D85 replay (the CPU Pick read differing from the CUDA read on any of ≥ 64 prompts) is a bug
-to fix, not a reason to switch. [claude]
+**Replay is required, not optional.** The unit that packs A1 into the D11 artifact carries a
+bit-identical CUDA-to-CPU Pick replay: route, tie and read choice, on ≥ 64 prompts, the count in
+claude-409's bar B. It also carries the gate negative that claude-439 left unrecorded (its REPORT,
+"Still open"). A failed replay is a bug to fix, not a reason to switch. [claude]
 
 ## Alternatives turned down
 
