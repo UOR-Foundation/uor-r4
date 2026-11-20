@@ -71,6 +71,10 @@ path = "src/bin/teacher-paraphrase.rs"
 required-features = ["historical-reference"]
 
 [[bin]]
+name = "slot-group-address"
+path = "src/bin/slot-group-address.rs"
+
+[[bin]]
 name = "slot-table-build"
 path = "src/bin/slot-table-build.rs"
 
