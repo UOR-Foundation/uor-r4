@@ -10,13 +10,22 @@
 use std::io::{BufRead, Write};
 
 use uor_r4_integer::slot_memory::{SlotMemory, SlotTagger, ATTRIBUTES};
+use uor_r4_integer::stack::{IntegerStackModel, StackChat};
 
 fn main() -> std::process::ExitCode {
     let mut table_path: Option<String> = None;
+    let mut artifact: Option<String> = None;
+    let mut tokenizer: Option<String> = None;
+    let mut protocol: u8 = 2;
+    let mut reply_tokens: usize = 24;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--table" => table_path = args.next(),
+            "--artifact" => artifact = args.next(),
+            "--tokenizer" => tokenizer = args.next(),
+            "--protocol" => protocol = args.next().and_then(|v| v.parse().ok()).unwrap_or(2),
+            "--reply-tokens" => reply_tokens = args.next().and_then(|v| v.parse().ok()).unwrap_or(24),
             other => {
                 eprintln!("unknown argument {other}");
                 return std::process::ExitCode::FAILURE;
@@ -42,6 +51,32 @@ fn main() -> std::process::ExitCode {
         }
     };
 
+    // The trunk half, when an artifact is given: memory answers first, the trunk answers the rest.
+    let model = match (&artifact, &tokenizer) {
+        (Some(artifact), Some(_)) => match IntegerStackModel::load(std::path::Path::new(artifact)) {
+            Ok(model) => Some(model),
+            Err(e) => {
+                eprintln!("{artifact}: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        },
+        _ => None,
+    };
+    let mut chat = match (&model, &tokenizer) {
+        (Some(model), Some(tokenizer)) => match StackChat::from_tokenizer_path(
+            model,
+            std::path::Path::new(tokenizer),
+            protocol,
+        ) {
+            Ok(chat) => Some(chat),
+            Err(e) => {
+                eprintln!("tokenizer {tokenizer}: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        },
+        _ => None,
+    };
+
     let mut memory = SlotMemory::default();
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
@@ -59,9 +94,19 @@ fn main() -> std::process::ExitCode {
                     let _ = writeln!(out, "assistant: {value}");
                     let _ = writeln!(out, "  [{entity} / {}]", attribute_name(&tagger, line));
                 }
-                None => {
-                    let _ = writeln!(out, "assistant: I don't know that.");
-                }
+                None => match chat.as_mut() {
+                    Some(chat) => match chat.reply(line, reply_tokens) {
+                        Ok(reply) => {
+                            let _ = writeln!(out, "assistant: {}", reply.text.trim());
+                        }
+                        Err(e) => {
+                            let _ = writeln!(out, "assistant: (trunk error: {e})");
+                        }
+                    },
+                    None => {
+                        let _ = writeln!(out, "assistant: I don't know that.");
+                    }
+                },
             }
         } else {
             match memory.write_statement(&tagger, line) {
@@ -72,9 +117,20 @@ fn main() -> std::process::ExitCode {
                         ATTRIBUTES[attribute as usize]
                     );
                 }
-                None => {
-                    let _ = writeln!(out, "assistant: I couldn't read a fact there.");
-                }
+                None => match chat.as_mut() {
+                    // Not a fact: the trunk answers, so a declarative turn is not dropped.
+                    Some(chat) => match chat.reply(line, reply_tokens) {
+                        Ok(reply) => {
+                            let _ = writeln!(out, "assistant: {}", reply.text.trim());
+                        }
+                        Err(e) => {
+                            let _ = writeln!(out, "assistant: (trunk error: {e})");
+                        }
+                    },
+                    None => {
+                        let _ = writeln!(out, "assistant: I couldn't read a fact there.");
+                    }
+                },
             }
         }
     }

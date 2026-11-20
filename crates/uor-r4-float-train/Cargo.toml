@@ -29,3 +29,10 @@ uor-r4-integer = { path = "../uor-r4-integer" }
 uor-r4-tokenizer = { path = "../uor-r4-tokenizer" }
 uor-r4-native-vector = { path = "../uor-r4-native-vector" }
 uor-r4-cpu-train = { path = "../uor-r4-cpu-train", optional = true }
+
+[[bin]]
+name = "first-token-probe"
+path = "src/bin/first-token-probe.rs"
+required-features = ["cuda"]
+
+

@@ -26593,3 +26593,78 @@ mod copy_longest_tests {
         assert_eq!(check_reply_marker("toy", &[1, 2], &[0, 0], [7, 8]).unwrap(), 0);
     }
 }
+
+/// The first-reply-token probe (20 Nov 2026): does the trunk condition on the prompt?
+///
+/// The generation collapse has two possible causes and they need different fixes: the trunk may
+/// ignore the prompt (its whole-table top-k is the same for every prompt), or the writer's pick may
+/// be constant while the trunk's ranking moves. This prints, for several prompts, the target, the
+/// trunk's top-5 and the writer's pick, so the cause is read rather than guessed.
+pub fn first_token_probe(checkpoint: &Path, prompts: usize) -> Result<String> {
+    let device = Device::cuda_if_available(0)?;
+    let mut model = StackModel::load(checkpoint, &device)?;
+    model.set_context(training_context(hs::SHEET_CONTEXT)?)?;
+    let (windows, mask) = load_dev(Path::new("."))?;
+    let table = table(&model)?;
+    let writer = model.native_vector_writer()?;
+
+    let stride = (windows.len() / prompts.max(1)).max(1);
+    let mut out = String::new();
+    let mut shown = 0usize;
+    let mut distinct_top1: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+    let mut distinct_writer: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+    for window in windows.iter().step_by(stride) {
+        if shown >= prompts {
+            break;
+        }
+        let (Some(&offset), Some(&position), Some(&target)) = (
+            window.scored_offsets.first(),
+            window.scored_corpus_positions.first(),
+            window.scored_targets.first(),
+        ) else {
+            continue;
+        };
+        if !opens_reply(&mask, position) {
+            continue;
+        }
+        let hidden = model.hidden(&window.input_ids, 1, window.input_ids.len())?;
+        let query = hidden.squeeze(0)?.narrow(0, offset, 1)?;
+        let scores = nearest_scores(&query, &table)?.squeeze(0)?.to_vec1::<f32>()?;
+        let mut order: Vec<(u32, f32)> = scores
+            .iter()
+            .enumerate()
+            .map(|(i, &s)| (i as u32, s))
+            .collect();
+        order.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        let top: Vec<u32> = order.iter().take(5).map(|&(t, _)| t).collect();
+        let chosen = writer
+            .write(&query)?
+            .flatten_all()?
+            .to_dtype(DType::U32)?
+            .to_vec1::<u32>()?
+            .first()
+            .copied()
+            .unwrap_or(u32::MAX);
+        distinct_top1.insert(top[0]);
+        distinct_writer.insert(chosen);
+        out.push_str(&format!(
+            "prompt {shown:2}: target {target:5}  trunk top-5 {top:?}  writer {chosen:5}\n"
+        ));
+        shown += 1;
+    }
+    out.push_str(&format!(
+        "\ndistinct trunk top-1: {} of {}   distinct writer picks: {} of {}\n",
+        distinct_top1.len(),
+        shown,
+        distinct_writer.len(),
+        shown
+    ));
+    out.push_str(if distinct_top1.len() <= 1 {
+        "CAUSE: the trunk ignores the prompt (one top-1 for every prompt). Capacity or objective; no readout change helps.\n"
+    } else if distinct_writer.len() <= 1 {
+        "CAUSE: the writer's pick is constant while the trunk's ranking moves. A readout defect.\n"
+    } else {
+        "CAUSE: neither is constant here; the collapse must come from a later decode step.\n"
+    });
+    Ok(out)
+}

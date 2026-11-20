@@ -118,6 +118,7 @@ required-features = ["serving-wasm"]
 [[bin]]
 name = "memory-chat"
 path = "src/bin/memory-chat.rs"
+required-features = ["serving-wasm"]
 
 [[bin]]
 name = "encode-dialogue"
