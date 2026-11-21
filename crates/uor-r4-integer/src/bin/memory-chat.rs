@@ -18,6 +18,7 @@ fn main() -> std::process::ExitCode {
     let mut tokenizer: Option<String> = None;
     let mut protocol: u8 = 2;
     let mut reply_tokens: usize = 24;
+    let mut batch: Option<(String, String)> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -26,6 +27,17 @@ fn main() -> std::process::ExitCode {
             "--tokenizer" => tokenizer = args.next(),
             "--protocol" => protocol = args.next().and_then(|v| v.parse().ok()).unwrap_or(2),
             "--reply-tokens" => reply_tokens = args.next().and_then(|v| v.parse().ok()).unwrap_or(24),
+            "--batch" => {
+                let input = args.next();
+                let output = args.next();
+                match (input, output) {
+                    (Some(i), Some(o)) => batch = Some((i, o)),
+                    _ => {
+                        eprintln!("--batch wants INPUT OUT");
+                        return std::process::ExitCode::FAILURE;
+                    }
+                }
+            }
             other => {
                 eprintln!("unknown argument {other}");
                 return std::process::ExitCode::FAILURE;
@@ -76,6 +88,49 @@ fn main() -> std::process::ExitCode {
         },
         _ => None,
     };
+
+    // Batch mode: generate one reply per prompt into JSONL, with the reference beside it, so the
+    // chat gate can be graded offline. The memory is not consulted here — this measures the trunk.
+    if let (Some((input, output)), Some(chat)) = (&batch, chat.as_mut()) {
+        let reader = match std::fs::File::open(input) {
+            Ok(file) => std::io::BufReader::new(file),
+            Err(e) => {
+                eprintln!("{input}: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        };
+        let mut out = match std::fs::File::create(output) {
+            Ok(file) => std::io::BufWriter::new(file),
+            Err(e) => {
+                eprintln!("{output}: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        };
+        for line in std::io::BufRead::lines(reader) {
+            let Ok(line) = line else { break };
+            let Ok(row) = serde_json::from_str::<serde_json::Value>(&line) else { continue };
+            let Some(prompt) = row.get("prompt").and_then(|p| p.as_str()) else { continue };
+            let reference = row.get("reference").and_then(|r| r.as_str()).unwrap_or("");
+            match chat.reply(prompt, reply_tokens) {
+                Ok(reply) => {
+                    let _ = writeln!(
+                        out,
+                        "{}",
+                        serde_json::json!({"prompt": prompt, "model": reply.text.trim(), "reference": reference})
+                    );
+                }
+                Err(e) => {
+                    let _ = writeln!(
+                        out,
+                        "{}",
+                        serde_json::json!({"prompt": prompt, "model": "", "reference": reference, "error": e.to_string()})
+                    );
+                }
+            }
+        }
+        let _ = out.flush();
+        return std::process::ExitCode::SUCCESS;
+    }
 
     let mut memory = SlotMemory::default();
     let stdin = std::io::stdin();
