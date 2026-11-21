@@ -36,6 +36,7 @@ pub mod flat;
 pub mod free;
 pub mod saved;
 pub mod trained;
+pub mod trunk_key;
 
 fn invalid(message: impl Into<String>) -> Error {
     Error::Invalid(format!("conjunction: {}", message.into()))
@@ -440,6 +441,9 @@ const CLASS_FORM: u8 = 0x80;
 /// and closing tokens with everything between left out (in `gap_len`, over the closing
 /// count).
 const OPEN_FORM: u8 = 0x40;
+/// Marks a form keyed by the trunk frame of its kept tokens; it never meets a
+/// form over tokens or class codes.
+const TRUNK_FORM: u8 = 0x20;
 /// Opening and closing tokens an open form may keep, and the fewest opening
 /// ones.
 pub const OPEN_HEAD: usize = 16;
@@ -466,9 +470,34 @@ pub struct Form {
 }
 
 impl Form {
-    fn of(turn: &[u32], gap_at: usize, gap_len: usize) -> Self {
+    /// The form keyed by the trunk: the frame the trunk holds after the
+    /// `count` kept tokens, under the count.
+    fn framed(
+        trunk: &trunk_key::TrunkKey,
+        kept: impl Iterator<Item = u32>,
+        count: usize,
+        gap_at: u8,
+        gap_len: u8,
+    ) -> Self {
+        let word = (1u128 << 40) | ((count as u128) << 24) | u128::from(trunk.frame(kept));
+        Self {
+            words: [word, 1, 1],
+            gap_at,
+            gap_len: gap_len | TRUNK_FORM,
+        }
+    }
+    fn of(
+        turn: &[u32],
+        gap_at: usize,
+        gap_len: usize,
+        trunk: Option<&trunk_key::TrunkKey>,
+    ) -> Self {
         let mut words = [1u128; 3];
         let kept = turn[..gap_at].iter().chain(&turn[gap_at + gap_len..]);
+        if let Some(trunk) = trunk {
+            let count = turn.len() - gap_len;
+            return Self::framed(trunk, kept.copied(), count, gap_at as u8, gap_len as u8);
+        }
         for (place, &token) in kept.enumerate() {
             let word = &mut words[place / 10];
             *word = (*word << 12) | u128::from(token);
@@ -480,16 +509,24 @@ impl Form {
         }
     }
     /// Every form of `turn`: the whole turn, then shorter gaps before longer.
-    fn each(turn: &[u32]) -> impl Iterator<Item = Self> + '_ {
-        let gaps = (1..=FORM_GAP.min(turn.len()))
-            .flat_map(move |len| (0..=turn.len() - len).map(move |at| Self::of(turn, at, len)));
-        std::iter::once(Self::of(turn, 0, 0)).chain(gaps)
+    fn each<'a>(
+        turn: &'a [u32],
+        trunk: Option<&'a trunk_key::TrunkKey>,
+    ) -> impl Iterator<Item = Self> + 'a {
+        let gaps = (1..=FORM_GAP.min(turn.len())).flat_map(move |len| {
+            (0..=turn.len() - len).map(move |at| Self::of(turn, at, len, trunk))
+        });
+        std::iter::once(Self::of(turn, 0, 0, trunk)).chain(gaps)
     }
     /// The form of a long turn that keeps its first `head` and last `tail`
     /// tokens: "Say exactly this: ▢" is one form whatever is to be said.
-    fn open(turn: &[u32], head: usize, tail: usize) -> Self {
+    fn open(turn: &[u32], head: usize, tail: usize, trunk: Option<&trunk_key::TrunkKey>) -> Self {
         let mut words = [1u128; 3];
         let kept = turn[..head].iter().chain(&turn[turn.len() - tail..]);
+        if let Some(trunk) = trunk {
+            let gap_len = OPEN_FORM | tail as u8;
+            return Self::framed(trunk, kept.copied(), head + tail, head as u8, gap_len);
+        }
         for (place, &token) in kept.enumerate() {
             let word = &mut words[place / 10];
             *word = (*word << 12) | u128::from(token);
@@ -502,14 +539,17 @@ impl Form {
     }
     /// Every open form of a long `turn`, those that keep most first (the
     /// longer opening on a tie).
-    fn each_open(turn: &[u32]) -> impl Iterator<Item = Self> + '_ {
+    fn each_open<'a>(
+        turn: &'a [u32],
+        trunk: Option<&'a trunk_key::TrunkKey>,
+    ) -> impl Iterator<Item = Self> + 'a {
         let mut kept: Vec<(usize, usize)> = (OPEN_HEAD_LEAST..=OPEN_HEAD)
             .flat_map(|head| (0..=OPEN_TAIL).map(move |tail| (head, tail)))
             .filter(|&(head, tail)| head + tail + FORM_GAP < turn.len())
             .collect();
         kept.sort_by_key(|&(head, tail)| std::cmp::Reverse((head + tail, head)));
         kept.into_iter()
-            .map(move |(head, tail)| Self::open(turn, head, tail))
+            .map(move |(head, tail)| Self::open(turn, head, tail, trunk))
     }
     /// The same form, marked as one over class codes: it never meets a form
     /// over tokens.
@@ -1038,6 +1078,9 @@ pub struct Asked {
     /// First-pass choice, not saved: turns are also counted under their
     /// open forms. A read uses whatever forms are kept.
     open: bool,
+    /// The trunk tables question forms are keyed by, or none: forms are then
+    /// keyed by their tokens.
+    trunk: Option<std::sync::Arc<trunk_key::TrunkKey>>,
     stand: std::sync::Arc<Stand>,
     seen: HashMap<Form, u32>,
     rows: HashMap<HeldKey, HeldRow>,
@@ -1053,6 +1096,7 @@ impl Asked {
             sharper: false,
             dump: false,
             open: false,
+            trunk: None,
             stand: Default::default(),
             seen: HashMap::new(),
             rows: HashMap::new(),
@@ -1075,6 +1119,18 @@ impl Asked {
         }
         self.codes = codes;
         Ok(self)
+    }
+    /// Keys question forms by the trunk frame of their kept tokens, before
+    /// the first pass. Class codes are not read beside a trunk key.
+    pub fn with_trunk(mut self, trunk: Option<trunk_key::TrunkKey>) -> Result<Self> {
+        if trunk.is_some() && !self.codes.is_empty() {
+            return Err(invalid("class codes are not read beside a trunk key"));
+        }
+        self.trunk = trunk.map(std::sync::Arc::new);
+        Ok(self)
+    }
+    pub fn trunk(&self) -> Option<&trunk_key::TrunkKey> {
+        self.trunk.as_deref()
     }
     /// Sets how pointers pick their stand, before the first pass. The
     /// octonion bind needs its table.
@@ -1189,17 +1245,18 @@ impl Asked {
     /// First pass: counts every form of the turn asked before `start`.
     pub fn count(&mut self, tokens: &[u32], start: usize) {
         let turn = self.turn(tokens, start);
-        for form in Form::each(turn) {
+        let trunk = self.trunk.clone();
+        for form in Form::each(turn, trunk.as_deref()) {
             *self.seen.entry(form).or_default() += 1;
         }
         if let Some(coded) = self.coded(turn) {
-            for form in Form::each(&coded) {
+            for form in Form::each(&coded, None) {
                 *self.seen.entry(form.classed()).or_default() += 1;
             }
         }
         if self.open {
             if let Some(long) = self.long_turn(tokens, start) {
-                for form in Form::each_open(long) {
+                for form in Form::each_open(long, trunk.as_deref()) {
                     *self.seen.entry(form).or_default() += 1;
                 }
             }
@@ -1218,7 +1275,7 @@ impl Asked {
     /// The kept forms of the turn asked before `start`, most specific first,
     /// at most [`FORMS_HELD`].
     fn held(&self, tokens: &[u32], start: usize) -> Vec<u32> {
-        Form::each(self.turn(tokens, start))
+        Form::each(self.turn(tokens, start), self.trunk.as_deref())
             .filter_map(|form| self.seen.get(&form).copied())
             .take(FORMS_HELD)
             .collect()
@@ -1229,7 +1286,7 @@ impl Asked {
         let Some(coded) = self.coded(self.turn(tokens, start)) else {
             return Vec::new();
         };
-        Form::each(&coded)
+        Form::each(&coded, None)
             .filter_map(|form| self.seen.get(&form.classed()).copied())
             .take(FORMS_HELD)
             .collect()
@@ -1240,7 +1297,7 @@ impl Asked {
         let Some(long) = self.long_turn(tokens, start) else {
             return Vec::new();
         };
-        Form::each_open(long)
+        Form::each_open(long, self.trunk.as_deref())
             .filter_map(|form| self.seen.get(&form).copied())
             .take(FORMS_HELD)
             .collect()
@@ -1270,11 +1327,11 @@ impl Asked {
     /// over tokens and over class codes (`None` where no form is kept).
     pub fn sharpest(&self, prompt: &[u32]) -> (usize, [Option<u8>; 2]) {
         let turn = self.turn(prompt, prompt.len());
-        let tokens = Form::each(turn)
+        let tokens = Form::each(turn, self.trunk.as_deref())
             .find(|form| self.seen.contains_key(form))
             .map(|form| form.gap_len);
         let classes = self.coded(turn).and_then(|coded| {
-            Form::each(&coded)
+            Form::each(&coded, None)
                 .find(|form| self.seen.contains_key(&form.classed()))
                 .map(|form| form.gap_len)
         });

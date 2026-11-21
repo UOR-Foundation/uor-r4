@@ -46,6 +46,35 @@ fn pack(parent_path: &str, reader_path: &str, out_path: &str) -> Result<String, 
     .to_string())
 }
 
+/// Writes the trunk tables a reader keys its forms by, for `conjunction-probe
+/// reader-save ... TRUNK_KEY_JSON`. It never overwrites OUT_JSON.
+fn trunk_key(artifact_path: &str, out_path: &str) -> Result<String, String> {
+    let artifact = read(artifact_path)?;
+    let model = IntegerDiscreteModel::from_bytes(&artifact).map_err(|e| e.to_string())?;
+    let key = model.question_trunk_key().map_err(|e| e.to_string())?;
+    let bytes = serde_json::to_vec(&key).map_err(|e| e.to_string())?;
+    let mut out = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(out_path)
+        .map_err(|e| format!("{out_path}: {e}"))?;
+    out.write_all(&bytes)
+        .and_then(|()| out.sync_all())
+        .map_err(|e| format!("{out_path}: {e}"))?;
+    let distinct: std::collections::BTreeSet<_> = key.roots.iter().collect();
+    let steps: std::collections::BTreeSet<_> = key.steps.iter().collect();
+    Ok(serde_json::json!({
+        "schema": "uor-r4.question-reader-trunk-key/1",
+        "artifact_sha256": sha(&artifact),
+        "trunk_key_sha256": hex::encode(key.sha256()),
+        "trunk_key_json_sha256": sha(&bytes),
+        "tokens": key.roots.len(),
+        "distinct_token_addresses": distinct.len(),
+        "distinct_step_frames": steps.len(),
+    })
+    .to_string())
+}
+
 fn words(artifact_path: &str, panel_path: &str, limit: &str) -> Result<String, String> {
     let limit: usize = limit.parse().map_err(|e| format!("LIMIT: {e}"))?;
     let artifact = read(artifact_path)?;
@@ -98,7 +127,8 @@ fn main() -> ExitCode {
     let done = match args.as_slice() {
         ["pack", parent, reader, out] => pack(parent, reader, out),
         ["words", artifact, panel, limit] => words(artifact, panel, limit),
-        _ => Err("usage: question-reader-d11 pack PARENT_D11 READER_FILE OUT_D11 | words D11 PANEL_JSON LIMIT".into()),
+        ["trunk-key", artifact, out] => trunk_key(artifact, out),
+        _ => Err("usage: question-reader-d11 pack PARENT_D11 READER_FILE OUT_D11 | words D11 PANEL_JSON LIMIT | trunk-key D11 OUT_JSON".into()),
     };
     match done {
         Ok(report) => {

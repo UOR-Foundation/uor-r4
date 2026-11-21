@@ -9,7 +9,8 @@
 //! served here are one definition.
 use super::*;
 use std::sync::Arc;
-use uor_r4_reader_runtime::conjunction::saved::Reader;
+use uor_r4_reader_runtime::conjunction::saved::{Reader, MAGIC_TRUNK};
+use uor_r4_reader_runtime::conjunction::trunk_key::TrunkKey;
 
 pub(super) const SCHEMA: &str = "uor-r4.lut-discrete-question-reader/1";
 
@@ -69,9 +70,16 @@ pub(super) fn read(
     {
         return Err(invalid("question reader or parent binding mismatch"));
     }
-    let reader = Reader::from_bytes(reader_file)
-        .map_err(|error| invalid(format!("question reader file: {error}")))?;
     let mut model = IntegerDiscreteModel::from_bytes(parent)?;
+    // A reader keyed by a trunk is read with this parent's own tables, and
+    // is refused unless they are the tables it was written beside.
+    let trunk = if reader_file.starts_with(MAGIC_TRUNK) {
+        Some(model.question_trunk_key()?)
+    } else {
+        None
+    };
+    let reader = Reader::from_bytes_beside(reader_file, trunk)
+        .map_err(|error| invalid(format!("question reader file: {error}")))?;
     if model.question_reader.is_some() {
         return Err(invalid("nested question reader carrier"));
     }
@@ -89,6 +97,27 @@ pub(super) fn read(
 }
 
 impl IntegerDiscreteModel {
+    /// The trunk tables a question reader keys its forms by: each token's
+    /// root in the four blocks, the step frame of each root and the
+    /// composition of two frames. They are this artifact's position
+    /// transport (`F_p = COMPOSE[step(b, root(p, b)), F_{p-1}]`).
+    pub fn question_trunk_key(&self) -> Result<TrunkKey> {
+        let trunk = self
+            .trunk
+            .as_ref()
+            .ok_or_else(|| invalid("this artifact has no trunk tables"))?;
+        if self.codebook_roots.len() != self.shape.vocabulary as usize {
+            return Err(invalid("this artifact has no root row for every token"));
+        }
+        TrunkKey {
+            roots: self.codebook_roots.clone(),
+            steps: trunk.step_candidates.to_vec(),
+            compose: COMPOSE.to_vec(),
+        }
+        .checked()
+        .map_err(|error| invalid(format!("trunk key: {error}")))
+    }
+
     /// The carried question reader, if this artifact has one.
     pub fn question_reader(&self) -> Option<&Reader> {
         self.question_reader.as_ref().map(|c| c.reader.as_ref())
@@ -115,7 +144,7 @@ impl IntegerDiscreteModel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uor_r4_reader_runtime::conjunction::{bind::BindTable, Reads, StandBy};
+    use uor_r4_reader_runtime::conjunction::{bind::BindTable, free::Update, Reads, StandBy};
 
     /// Told: BOS x IS v DOT EOS WHAT x QM MARK | YOU GREW v DOT EOS
     fn told(x: u32, v: u32) -> Vec<u32> {
@@ -123,6 +152,10 @@ mod tests {
     }
 
     fn reader_file() -> Vec<u8> {
+        reader_file_beside(None)
+    }
+
+    fn reader_file_beside(trunk: Option<TrunkKey>) -> Vec<u8> {
         let mut tokens = Vec::new();
         let mut eligible = Vec::new();
         for index in 0..12u32 {
@@ -130,7 +163,7 @@ mod tests {
             tokens.extend(told(20 + index, 40 + index));
             eligible.extend(at + 10..at + 15);
         }
-        let (reader, _) = Reader::train(
+        let (reader, _) = Reader::train_by(
             &tokens,
             &eligible,
             64,
@@ -145,6 +178,8 @@ mod tests {
             BindTable::default(),
             false,
             Reads::default(),
+            Update::InOrder,
+            trunk,
         )
         .unwrap();
         let (bytes, _) = reader.to_bytes(1);
@@ -153,6 +188,29 @@ mod tests {
 
     fn route_artifact(vocabulary: u32) -> Vec<u8> {
         super::super::tests::plain_artifact(vocabulary)
+    }
+
+    /// A reader keyed by a trunk is read with the parent's own tables, so a
+    /// parent that has none cannot carry it.
+    #[test]
+    fn a_trunk_keyed_reader_is_refused_behind_a_parent_without_its_trunk() {
+        let key = TrunkKey {
+            roots: (0..64usize).map(|token| [(token % 16) as u8; 4]).collect(),
+            steps: (0..64u8).collect(),
+            compose: COMPOSE.to_vec(),
+        }
+        .checked()
+        .unwrap();
+        let file = reader_file_beside(Some(key.clone()));
+        assert!(file.starts_with(MAGIC_TRUNK));
+        let prompt = told(60, 61)[..10].to_vec();
+        let beside = Reader::from_bytes_beside(&file, Some(key)).unwrap();
+        assert_eq!(beside.reply(&prompt, 8), vec![8, 9, 61, 3, 1]);
+        assert!(Reader::from_bytes(&file).is_err());
+        let parent = route_artifact(64);
+        let plain = IntegerDiscreteModel::from_bytes(&parent).unwrap();
+        assert!(plain.question_trunk_key().is_err());
+        assert!(pack_question_reader(&parent, &file).is_err());
     }
 
     #[test]

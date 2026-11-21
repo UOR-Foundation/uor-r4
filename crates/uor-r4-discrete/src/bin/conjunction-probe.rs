@@ -329,6 +329,13 @@ fn reader(args: &[String]) -> Result<(), String> {
         }
         Ok(())
     };
+    let trunk_key = |path: &str| -> Result<conjunction::trunk_key::TrunkKey, String> {
+        let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+        serde_json::from_slice::<conjunction::trunk_key::TrunkKey>(&bytes)
+            .map_err(|e| format!("{path}: {e}"))?
+            .checked()
+            .map_err(|e| e.to_string())
+    };
     if args[0] == "bind-census" {
         if args.len() != 2 {
             return Err("usage: conjunction-probe bind-census CODEBOOK_TABLE_JSON".into());
@@ -363,9 +370,9 @@ fn reader(args: &[String]) -> Result<(), String> {
         );
     }
     if args[0] == "reader-save" || replay {
-        if !replay && !(12..=16).contains(&args.len()) {
+        if !replay && !(12..=17).contains(&args.len()) {
             return Err(
-                "usage: conjunction-probe reader-save TOKENS_U16 MASK_U8 OUT_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST [CODEBOOK_TABLE_JSON|- [latest|pair|octonion:CODEBOOK_TABLE_JSON [open|- [READS_CSV(precise,explain,tail,across,agree; free|free2|free3 for the order-free TRAIN)]]]]"
+                "usage: conjunction-probe reader-save TOKENS_U16 MASK_U8 OUT_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST [CODEBOOK_TABLE_JSON|- [latest|pair|octonion:CODEBOOK_TABLE_JSON [open|- [READS_CSV(precise,explain,tail,across,agree; free|free2|free3 for the order-free TRAIN) [TRUNK_KEY_JSON|-]]]]]"
                     .into(),
             );
         }
@@ -456,6 +463,18 @@ fn reader(args: &[String]) -> Result<(), String> {
                 other => return Err(format!("unknown read choice {other}")),
             }
         }
+        // The trunk tables the question forms are keyed by, from
+        // `question-reader-d11 trunk-key`.
+        let trunk = match args.get(16).filter(|path| !replay && path.as_str() != "-") {
+            None => None,
+            Some(path) => Some(trunk_key(path)?),
+        };
+        let trunk_sha256 = trunk.as_ref().map(|key| {
+            key.sha256()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        });
         let started = Instant::now();
         let (reader, trained) = Reader::train_by(
             &tokens,
@@ -473,13 +492,14 @@ fn reader(args: &[String]) -> Result<(), String> {
             open,
             reads,
             update,
+            trunk.clone(),
         )
         .map_err(|e| e.to_string())?;
         let train_ms = started.elapsed().as_millis() as u64;
         let started = Instant::now();
         let (bytes, saved) = reader.to_bytes(number(&args[11])?);
         // The file must read back to the same bytes before it is kept.
-        let loaded = Reader::from_bytes(&bytes).map_err(|e| e.to_string())?;
+        let loaded = Reader::from_bytes_beside(&bytes, trunk).map_err(|e| e.to_string())?;
         let (again, resaved) = loaded.to_bytes(1);
         if again != bytes || resaved != saved {
             return Err("the saved reader does not read back to its own bytes".into());
@@ -521,6 +541,7 @@ fn reader(args: &[String]) -> Result<(), String> {
                 "tokens_sha256": sha(&stream),
                 "mask_sha256": sha(&mask),
                 "codebook_sha256": codebook_sha256,
+                "trunk_key_sha256": trunk_sha256,
                 "class_codes": codes.iter().collect::<std::collections::BTreeSet<_>>().len(),
                 "stand": stand,
                 "open_forms": open,
@@ -537,9 +558,13 @@ fn reader(args: &[String]) -> Result<(), String> {
     }
     let sharper = args.get(5).map(String::as_str) == Some("sharper");
     let rows = args.get(5).map(String::as_str) == Some("rows");
-    if args.len() != 5 && !(args.len() == 6 && (sharper || rows)) {
+    let beside = match args.get(5).and_then(|text| text.strip_prefix("trunk:")) {
+        None => None,
+        Some(path) => Some(trunk_key(path)?),
+    };
+    if args.len() != 5 && !(args.len() == 6 && (sharper || rows || beside.is_some())) {
         return Err(
-            "usage: conjunction-probe reader-replies READER_FILE PANEL_JSON OUT_JSON LIMIT [sharper|rows]"
+            "usage: conjunction-probe reader-replies READER_FILE PANEL_JSON OUT_JSON LIMIT [sharper|rows|trunk:TRUNK_KEY_JSON]"
                 .into(),
         );
     }
@@ -548,7 +573,7 @@ fn reader(args: &[String]) -> Result<(), String> {
     let panel_bytes = read(&args[2])?;
     let limit = number(&args[4])? as usize;
     let started = Instant::now();
-    let mut reader = Reader::from_bytes(&bytes).map_err(|e| e.to_string())?;
+    let mut reader = Reader::from_bytes_beside(&bytes, beside).map_err(|e| e.to_string())?;
     reader.asked.read_sharper_classes(sharper);
     reader.asked.trace_rows(rows);
     let load_ms = started.elapsed().as_millis() as u64;
@@ -906,6 +931,7 @@ fn reader_gpu_train(args: &[String]) -> Result<(), String> {
         true,
         READS,
         update,
+        None,
     )
     .map_err(|e| e.to_string())?;
     let host_ms = started.elapsed().as_millis() as u64;
@@ -930,7 +956,8 @@ fn reader_gpu_train(args: &[String]) -> Result<(), String> {
     let (control_bytes, _, control_found, _, _) = on_gpu(true)?;
     // Under the order-free count the control must write the same reader.
     let free = update != Update::InOrder;
-    let equal = bytes == file && found == Differences::default() && (!free || control_bytes == bytes);
+    let equal =
+        bytes == file && found == Differences::default() && (!free || control_bytes == bytes);
     std::fs::write(&args[10], &bytes).map_err(|e| format!("{}: {e}", args[10]))?;
     let report = serde_json::json!({
         "schema": "uor-r4.discrete-reader-gpu-train/1",

@@ -19,6 +19,7 @@
 //! everything before it.
 use super::bind::BindTable;
 use super::free::Update;
+use super::trunk_key::TrunkKey;
 use super::{
     invalid, window_at, Asked, Entry, Form, HeldKey, HeldRow, Ladder, Reads, Row, StandBy,
     FORMS_HELD, FORM_GAP, FORM_TOKENS, MAX_ORDER, MAX_SLOTS, NO_WORD, ROW_RIGHT, STEP_WORDS,
@@ -38,6 +39,10 @@ pub const MAGIC_STAND: &[u8; 8] = b"UORRDR03";
 /// 0 for the latest stand), then the choices as bits (1 precise, 2 explain,
 /// 4 tail row, 8 across forms, 16 agreed place), and after each held slot's count its wrong count.
 pub const MAGIC_READS: &[u8; 8] = b"UORRDR04";
+/// As `UORRDR04`, with the question forms keyed by a trunk frame: the read
+/// choices are followed by the SHA-256 of the trunk key the file was written
+/// beside, and the file is read only with that key.
+pub const MAGIC_TRUNK: &[u8; 8] = b"UORRDR05";
 
 /// The rows a reply is read from.
 #[derive(Debug)]
@@ -298,8 +303,22 @@ impl Reader {
         reads: Reads,
     ) -> Result<(Self, Trained)> {
         Self::train_by(
-            tokens, eligible, vocabulary, window, bos, eos, slots, orders, limit, codes, by, bind,
-            open, reads, Update::InOrder,
+            tokens,
+            eligible,
+            vocabulary,
+            window,
+            bos,
+            eos,
+            slots,
+            orders,
+            limit,
+            codes,
+            by,
+            bind,
+            open,
+            reads,
+            Update::InOrder,
+            None,
         )
     }
 
@@ -321,7 +340,14 @@ impl Reader {
         open: bool,
         reads: Reads,
         update: Update,
+        trunk: Option<TrunkKey>,
     ) -> Result<(Self, Trained)> {
+        if trunk
+            .as_ref()
+            .is_some_and(|key| key.roots.len() != vocabulary as usize)
+        {
+            return Err(invalid("the trunk key must hold one root row a token"));
+        }
         if !bind.words.is_empty() && bind.words.len() != vocabulary as usize {
             return Err(invalid("the bind table must hold one word a token"));
         }
@@ -350,6 +376,7 @@ impl Reader {
         }
         let mut asked = Asked::new(window, bos, eos)
             .with_codes(codes.to_vec())?
+            .with_trunk(trunk)?
             .with_stand(by, bind)?
             .with_open_forms(open)
             .with_reads(reads);
@@ -440,7 +467,12 @@ impl Reader {
         let reads = self.asked.reads();
         let ranked = reads != Reads::default();
         let bound = ranked || by != StandBy::Latest;
-        out.bytes.extend_from_slice(if ranked {
+        let trunk = self.asked.trunk();
+        let ranked = ranked || trunk.is_some();
+        let bound = bound || trunk.is_some();
+        out.bytes.extend_from_slice(if trunk.is_some() {
+            MAGIC_TRUNK
+        } else if ranked {
             MAGIC_READS
         } else if by != StandBy::Latest {
             MAGIC_STAND
@@ -493,6 +525,9 @@ impl Reader {
                     | u32::from(reads.across) << 3
                     | u32::from(reads.agree) << 4,
             );
+        }
+        if let Some(trunk) = trunk {
+            out.bytes.extend_from_slice(&trunk.sha256());
         }
 
         let mut forms: Vec<(&Form, &u32)> = self.asked.seen.iter().collect();
@@ -577,15 +612,33 @@ impl Reader {
     /// read constants, key order or slot kinds are not what this build
     /// writes.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        Self::from_bytes_beside(bytes, None)
+    }
+
+    /// As [`Reader::from_bytes`], for a file that may be keyed by a trunk:
+    /// a `UORRDR05` file is read only with the trunk key whose SHA-256 it
+    /// names, and a file of another kind only with none.
+    pub fn from_bytes_beside(bytes: &[u8], trunk: Option<TrunkKey>) -> Result<Self> {
         if bytes.len() < MAGIC.len() + 32 {
             return Err(invalid("not a reader file"));
         }
+        let keyed = &bytes[..MAGIC.len()] == MAGIC_TRUNK;
+        match (keyed, trunk.is_some()) {
+            (true, false) => {
+                return Err(invalid(
+                    "this reader file is keyed by a trunk and is read only beside it",
+                ))
+            }
+            (false, true) => return Err(invalid("this reader file is not keyed by a trunk")),
+            _ => {}
+        }
         let (coded, bound, ranked) = match &bytes[..MAGIC.len()] {
+            magic if magic == MAGIC_TRUNK => (false, true, true),
             magic if magic == MAGIC => (false, false, false),
             magic if magic == MAGIC_CODES => (true, false, false),
             magic if magic == MAGIC_STAND => (false, true, false),
             magic if magic == MAGIC_READS => (false, true, true),
-            _ => return Err(invalid("not a UORRDR01 to 04 reader file")),
+            _ => return Err(invalid("not a UORRDR01 to 05 reader file")),
         };
         let (body, digest) = bytes.split_at(bytes.len() - 32);
         if Sha256::digest(body).as_slice() != digest {
@@ -672,7 +725,7 @@ impl Reader {
         }
         if ranked {
             let bits = input.u32()?;
-            if bits == 0 || bits > 31 {
+            if (bits == 0 && !keyed) || bits > 31 {
                 return Err(invalid("unknown read choices"));
             }
             asked = asked.with_reads(Reads {
@@ -682,6 +735,16 @@ impl Reader {
                 across: bits & 8 != 0,
                 agree: bits & 16 != 0,
             });
+        }
+        if let Some(trunk) = trunk {
+            let trunk = trunk.checked()?;
+            let named: [u8; 32] = input.take()?;
+            if trunk.roots.len() != vocabulary as usize || trunk.sha256() != named {
+                return Err(invalid(
+                    "the reader file was written beside another trunk key",
+                ));
+            }
+            asked = asked.with_trunk(Some(trunk))?;
         }
 
         let form_count = input.u32()?;
@@ -784,6 +847,11 @@ mod tests {
     /// Told:   BOS x IS v DOT EOS WHAT x QM MARK | YOU GREW v DOT EOS
     /// Untold: BOS EOS WHAT x QM MARK | YOU NO EOS
     fn train() -> Result<(Reader, Vec<Vec<u32>>)> {
+        train_beside(None)
+    }
+
+    /// The same TRAIN with the question forms keyed by `trunk`.
+    fn train_beside(trunk: Option<TrunkKey>) -> Result<(Reader, Vec<Vec<u32>>)> {
         let [bos, eos, is, dot, what, qm, mark] = [0u32, 1, 2, 3, 4, 5, 6];
         let [no, you, grew] = [7u32, 8, 9];
         let told = |x: u32, v: u32| {
@@ -809,7 +877,7 @@ mod tests {
         tokens.extend([bos, 19, is, 39, dot, eos, what, 19, qm, mark]);
         tokens.extend([you, grew, 39, dot, 10, eos]);
         eligible.extend(at + 10..at + 16);
-        let (reader, trained) = Reader::train(
+        let (reader, trained) = Reader::train_by(
             &tokens,
             &eligible,
             64,
@@ -824,6 +892,8 @@ mod tests {
             BindTable::default(),
             false,
             Reads::default(),
+            Update::InOrder,
+            trunk,
         )?;
         assert_eq!(trained.replies, 22);
         assert_eq!(trained.replies_with_an_empty_read, 9);
@@ -853,6 +923,55 @@ mod tests {
         let (again, resaved) = loaded.to_bytes(1);
         assert_eq!(again, bytes);
         assert_eq!(resaved, saved);
+        Ok(())
+    }
+
+    /// Keyed by a trunk frame the reader gives the replies it gives keyed by
+    /// tokens, holds no token form, and its file is read only beside the
+    /// trunk key it was written beside.
+    #[test]
+    fn a_reader_keyed_by_the_trunk_replies_alike_and_is_read_only_beside_it() -> Result<()> {
+        let key = crate::conjunction::trunk_key::tests::toy(64);
+        let (plain, prompts) = train()?;
+        let (reader, _) = train_beside(Some(key.clone()))?;
+        assert_eq!(reader.asked.forms(), plain.asked.forms());
+        assert!(reader
+            .asked
+            .seen
+            .keys()
+            .all(|form| form.gap_len & 0x20 != 0));
+        assert!(plain.asked.seen.keys().all(|form| form.gap_len & 0x20 == 0));
+        assert_eq!(reader.reply(&prompts[0], 8), vec![8, 9, 61, 3, 1]);
+        for prompt in &prompts {
+            assert_eq!(reader.reply(prompt, 8), plain.reply(prompt, 8));
+        }
+        let (bytes, saved) = reader.to_bytes(1);
+        assert_eq!(&bytes[..8], MAGIC_TRUNK);
+        let loaded = Reader::from_bytes_beside(&bytes, Some(key.clone()))?;
+        for prompt in &prompts {
+            assert_eq!(loaded.reply(prompt, 8), reader.reply(prompt, 8));
+        }
+        let (again, resaved) = loaded.to_bytes(1);
+        assert_eq!(again, bytes);
+        assert_eq!(resaved, saved);
+        // Without the trunk, beside another trunk, and a token-keyed file
+        // beside a trunk: each is refused.
+        assert!(Reader::from_bytes(&bytes).is_err());
+        let mut other = key.clone();
+        // Token 4 is the question word every kept form holds.
+        other.roots[4][0] ^= 1;
+        assert!(Reader::from_bytes_beside(&bytes, Some(other.clone())).is_err());
+        let (plain_bytes, _) = plain.to_bytes(1);
+        assert!(Reader::from_bytes_beside(&plain_bytes, Some(key)).is_err());
+        // The GPU tables hold token forms and refuse this reader.
+        assert!(crate::conjunction::flat::Flat::of(&loaded).is_err());
+        // Beside another trunk the same TRAIN keys its forms otherwise.
+        let (moved, _) = train_beside(Some(other))?;
+        assert!(moved
+            .asked
+            .seen
+            .keys()
+            .any(|form| !reader.asked.seen.contains_key(form)));
         Ok(())
     }
 

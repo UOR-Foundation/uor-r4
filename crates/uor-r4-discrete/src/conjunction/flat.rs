@@ -78,6 +78,11 @@ impl Flat {
                 "flat tables are laid out for the pair stand read precise,across alone",
             ));
         }
+        if asked.trunk().is_some() {
+            return Err(invalid(
+                "flat tables hold token forms: a reader keyed by a trunk is not laid out here",
+            ));
+        }
         let mut by_id: Vec<(u32, [u32; FORM_WORDS])> = asked.forms_by_id().into_iter().collect();
         by_id.sort_by_key(|&(id, _)| id);
         let mut forms = Vec::with_capacity(by_id.len() * FORM_WORDS);
