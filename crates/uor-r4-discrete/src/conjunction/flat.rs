@@ -38,7 +38,19 @@ pub struct Flat {
     pub codes: Vec<u32>,
     /// The forms are keyed by the trunk code of each kept token.
     pub trunk: bool,
+    /// The ladder's pair rows that have an output, `4096 * a + b` for the
+    /// pair `a`, `b` (`b` the nearer token), rising.
+    pub pair_keys: Vec<u32>,
+    /// [`PAIR_READ_WORDS`] a pair row: its output and its two trust counts.
+    pub pair_reads: Vec<u32>,
+    /// The ladder is the pair row and the copy read alone (no suffix order
+    /// above the pair), so a place no held row answers can be read from
+    /// `pair_keys`.
+    pub ladder: bool,
 }
+
+/// A pair row as a read needs it: output, copy-read trust, row trust.
+pub const PAIR_READ_WORDS: usize = 3;
 
 fn quarters(word: u128) -> [u32; 4] {
     std::array::from_fn(|part| (word >> (96 - 32 * part)) as u32)
@@ -137,7 +149,28 @@ impl Flat {
             row_keys.extend(words);
             row_slots.extend(slots);
         }
-        if !rises(&forms, FORM_WORDS) || !rises(&row_keys, KEY_WORDS) {
+        // The pair rows by the pair itself: the host's address is a product
+        // of two primes, which a read here never needs. Every pair is asked
+        // for in key order, so the table rises as built.
+        let pair = &reader.ladder.pair;
+        let mut pair_keys = Vec::new();
+        let mut pair_reads = Vec::new();
+        if reader.vocabulary <= 4_096 {
+            for a in 0..reader.vocabulary {
+                for b in 0..reader.vocabulary {
+                    let Some(row) = pair.read(a, b) else {
+                        continue;
+                    };
+                    let Some(output) = row.output() else {
+                        continue;
+                    };
+                    pair_keys.push(4_096 * a + b);
+                    pair_reads.extend([output, row.trust[0], row.trust[1]]);
+                }
+            }
+        }
+        let ladder = reader.ladder.orders.is_empty() && reader.vocabulary <= 4_096;
+        if !rises(&forms, FORM_WORDS) || !rises(&row_keys, KEY_WORDS) || !rises(&pair_keys, 1) {
             return Err(invalid("flat tables must rise"));
         }
         Ok(Self {
@@ -154,7 +187,27 @@ impl Flat {
                 asked.codes().iter().map(|&code| u32::from(code)).collect()
             },
             trunk,
+            pair_keys,
+            pair_reads,
+            ladder,
         })
+    }
+    /// The ladder's next id after `window` from the pair table, as the read
+    /// kernel takes it (`ladder_next` of `reader_read.cu`): the pair row's
+    /// output, against the copy read where the two differ and the row trusts
+    /// the copy more; the copy read alone where the pair has no row.
+    pub fn ladder_next(&self, window: &[u32]) -> Option<u32> {
+        let copy = super::copy_at(window);
+        if let [.., a, b] = *window {
+            if let Some(found) = find(&self.pair_keys, 1, &[4_096 * a + b]) {
+                let row = &self.pair_reads[found * PAIR_READ_WORDS..][..PAIR_READ_WORDS];
+                return Some(match copy {
+                    Some(copy) if copy != row[0] && row[1] > row[2] => copy,
+                    _ => row[0],
+                });
+            }
+        }
+        copy
     }
     pub fn form_count(&self) -> usize {
         self.forms.len() / FORM_WORDS
@@ -271,6 +324,61 @@ mod tests {
             }
         }
         assert!(Flat::of(&train_beside(READS, StandBy::Pair, Some(toy(64)))?).is_err());
+        Ok(())
+    }
+
+    /// The pair table holds every ladder pair row that has an output, and
+    /// the next id read from it is the host ladder's at every window of a
+    /// stream that repeats pairs with different followers (so the copy read
+    /// and the row output differ at some places and the trust counts
+    /// decide). A table with its trust counts swapped reads another id
+    /// somewhere, so the comparison can fail.
+    #[test]
+    fn the_pair_table_reads_what_the_host_ladder_reads() -> Result<()> {
+        let reader = train(READS, StandBy::Pair)?;
+        let flat = Flat::of(&reader)?;
+        assert!(flat.ladder && !flat.pair_keys.is_empty());
+        assert_eq!(
+            flat.pair_reads.len(),
+            flat.pair_keys.len() * PAIR_READ_WORDS
+        );
+        let with_output = reader
+            .ladder
+            .pair
+            .rows
+            .values()
+            .filter(|row| row.output().is_some())
+            .count();
+        assert_eq!(flat.pair_keys.len(), with_output);
+        let mut stream = Vec::new();
+        for index in 0..40u32 {
+            let value = if index % 3 == 0 { 9 } else { 20 + index % 5 };
+            stream.extend([0, 2, 3, value, 4, 1, 5, 2, 6, value, 4, 1]);
+        }
+        for end in 0..=stream.len() {
+            let window = crate::conjunction::window_at(&stream, end, 192, 0);
+            let host = reader.ladder.next(window, true);
+            assert_eq!(flat.ladder_next(window), host, "window ending at {end}");
+        }
+        // The pair "name mark" has a row whose output is 9; here it stood
+        // earlier before 30, so the copy read names 30. TRAIN never saw the
+        // two differ, so the row has no trust count and its output stands.
+        let differs = [0u32, 2, 6, 30, 2, 6];
+        assert_eq!(crate::conjunction::copy_at(&differs), Some(30));
+        assert_eq!(reader.ladder.next(&differs, false), Some(9));
+        assert_eq!(reader.ladder.next(&differs, true), Some(9));
+        assert_eq!(flat.ladder_next(&differs), Some(9));
+        // The rule itself: the copy read answers only where the row trusts
+        // it more than its own output.
+        let at = find(&flat.pair_keys, 1, &[4_096 * 2 + 6]).expect("the pair row");
+        for (trust, next) in [([1, 0], 30), ([1, 1], 9), ([0, 1], 9)] {
+            let mut trusted = flat.clone();
+            trusted.pair_reads[at * PAIR_READ_WORDS + 1..][..2].copy_from_slice(&trust);
+            assert_eq!(trusted.ladder_next(&differs), Some(next));
+        }
+        // No pair row: the copy read alone, or nothing.
+        assert_eq!(flat.ladder_next(&[0, 40, 41, 42, 40, 41]), Some(42));
+        assert_eq!(flat.ladder_next(&[0, 40, 41]), None);
         Ok(())
     }
 

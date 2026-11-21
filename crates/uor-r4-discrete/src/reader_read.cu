@@ -6,9 +6,45 @@
 //
 // Laid out for the read choices of the saved M2 readers alone: the pair
 // stand, slots ranked precise, a place answered across its forms. A place no
-// held row answers (the host's suffix ladder) and a prompt with no kept form
-// are not read here: the thread stops and marks its status.
+// held row answers is read from the ladder's pair row and the copy read
+// (Ladder::next) when the ladder has no suffix order above the pair; with
+// such an order, and for a prompt with no kept form, the thread stops and
+// marks its status.
 #include "reader_common.cuh"
+
+#define PAIR_READ_WORDS 3u
+
+// The ladder's next id after tok[floor..len] (Ladder::next with no suffix
+// order, Flat::ladder_next): the pair row's output, against the copy read
+// where the two differ and the row trusts the copy more; the copy read alone
+// where the pair has no row; NONE where neither names an id.
+__device__ static u32 ladder_next(const u32* tok, u32 floor, u32 len, const u32* pair_keys,
+                                  const u32* pair_reads, u32 pair_count) {
+    u32 size = len - floor;
+    u32 copy = NONE;
+    if (size >= 3u) {
+        // The latest earlier place the last two ids stood together (copy_at).
+        u32 last = len - 1u;
+        for (u32 place = last - 1u; place > floor; --place) {
+            if (tok[place - 1u] == tok[last - 1u] && tok[place] == tok[last]) {
+                copy = tok[place + 1u];
+                break;
+            }
+        }
+    }
+    if (size >= 2u) {
+        u32 key = 4096u * tok[len - 2u] + tok[len - 1u];
+        u32 found = find(pair_keys, pair_count, 1u, &key);
+        if (found != NONE) {
+            const u32* row = pair_reads + (u64)found * PAIR_READ_WORDS;
+            if (copy != NONE && copy != row[0] && row[1] > row[2]) {
+                return copy;
+            }
+            return row[0];
+        }
+    }
+    return copy;
+}
 
 // The best-standing answer of the held forms' rows of one key; the earlier,
 // more specific form keeps a tie (Asked::answer, `first` under across).
@@ -48,12 +84,14 @@ __device__ static Answer rows_answer(const u32* row_keys, const u32* row_slots, 
 }
 
 // params: vocabulary, context, bos, eos, forms, rows, codes, limit, stride, prompts,
-// and whether the forms are keyed by the trunk code of each kept token.
+// whether the forms are keyed by the trunk code of each kept token, the pair
+// rows, and whether the ladder is the pair row and the copy read alone.
 // work: one row of `stride` ids a prompt, the prompt first; the reply is
 // written after it. out_meta: reply ids, status, read again from the rows for
 // an empty read, a read came up empty.
 extern "C" __global__ void reader_read(const u32* params, const u32* forms, const u32* row_keys,
-                                       const u32* row_slots, const u32* codes, u32* work,
+                                       const u32* row_slots, const u32* codes,
+                                       const u32* pair_keys, const u32* pair_reads, u32* work,
                                        const u32* prompt_len, u32* out_words, u32* out_meta) {
     u32 prompt = blockIdx.x * blockDim.x + threadIdx.x;
     if (prompt >= params[9]) {
@@ -191,15 +229,47 @@ extern "C" __global__ void reader_read(const u32* params, const u32* forms, cons
                     break;
                 }
             }
+            u32* step = words + (u64)(len - start) * STEP_WORDS;
             if (!answer.found) {
-                meta[0] = len - start;
-                meta[1] = STATUS_LADDER;
-                meta[2] = pass;
-                meta[3] = missed;
-                return;
+                if (params[12] == 0u) {
+                    meta[0] = len - start;
+                    meta[1] = STATUS_LADDER;
+                    meta[2] = pass;
+                    meta[3] = missed;
+                    return;
+                }
+                u32 token = ladder_next(tok, at.floor, len, pair_keys, pair_reads, params[11]);
+                if (token == NONE) {
+                    break;
+                }
+                // The words of a ladder step (step_words with no held row).
+                step[0] = 2u;
+                for (u32 word = 1u; word < 16u; ++word) {
+                    step[word] = NONE;
+                }
+                step[16] = pass;
+                step[17] = 0u;
+                step[18] = NONE;
+                for (u32 word = 0; word < 8u; ++word) {
+                    step[19u + word] = history[word];
+                }
+                step[27] = cursor;
+                step[28] = ahead;
+                for (u32 field = 0; field < 5u; ++field) {
+                    step[29u + field] = 0u;
+                }
+                step[34] = NONE;
+                step[35] = token;
+                cursor = NONE;
+                copied_from = NONE;
+                symbols[symbol_count++] = token;
+                tok[len++] = token;
+                if (token == eos) {
+                    break;
+                }
+                continue;
             }
 
-            u32* step = words + (u64)(len - start) * STEP_WORDS;
             const u32* form = forms + (u64)held[answer.index] * FORM_WORDS;
             step[0] = hit_own ? 0u : 1u;
             step[1] = answer.index;

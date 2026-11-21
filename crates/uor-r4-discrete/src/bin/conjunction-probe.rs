@@ -756,6 +756,31 @@ fn reader_gpu(args: &[String]) -> Result<(), String> {
         .zip(&control)
         .filter(|((_, words, _), read)| *words != read.words)
         .count();
+    // A control for the ladder steps: the same kernel over pair rows whose
+    // two trust counts are swapped, so the copy read and the row output
+    // change places wherever one was trusted more.
+    let mut swapped = flat.clone();
+    for row in swapped
+        .pair_reads
+        .chunks_exact_mut(conjunction::flat::PAIR_READ_WORDS)
+    {
+        row.swap(1, 2);
+    }
+    let (control, _) = device::read(&swapped, &prompts, limit).map_err(|e| e.to_string())?;
+    let swapped_differs = host
+        .iter()
+        .zip(&control)
+        .filter(|((_, words, _), read)| *words != read.words)
+        .count();
+    // Steps read from the ladder (kind 2), on the host and on the GPU.
+    let ladder_steps = |words: &[u32]| {
+        words
+            .chunks_exact(device::STEP_WORDS)
+            .filter(|step| step[0] == 2)
+            .count() as u64
+    };
+    let host_ladder_steps: u64 = host.iter().map(|(_, words, _)| ladder_steps(words)).sum();
+    let gpu_ladder_steps: u64 = gpu.iter().map(|read| ladder_steps(&read.words)).sum();
 
     let mut hashes = [Sha256::new(), Sha256::new(), Sha256::new(), Sha256::new()];
     let mut status = [0u64; 3];
@@ -838,6 +863,11 @@ fn reader_gpu(args: &[String]) -> Result<(), String> {
         "prompts_empty_mark_differs": differ[2],
         "prompts_read_on_the_gpu_that_differ": read_differ,
         "control_prompts_differ_with_wrong_counts_zeroed": control_differs,
+        "flat_pair_rows": flat.pair_keys.len(),
+        "ladder_is_the_pair_row_and_copy_read": flat.ladder,
+        "host_ladder_steps": host_ladder_steps,
+        "gpu_ladder_steps": gpu_ladder_steps,
+        "control_prompts_differ_with_pair_trust_swapped": swapped_differs,
         "first_difference": first,
         "host_words_sha256": hex(host_words),
         "gpu_words_sha256": hex(gpu_words),

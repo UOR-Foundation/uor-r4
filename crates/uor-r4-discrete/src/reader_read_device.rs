@@ -1,7 +1,7 @@
 //! Wick AOT kernel for the saved question reader's read (`reader_read.cu`):
 //! one thread a prompt replies from the flat tables of
 //! [`crate::conjunction::flat`] and writes the raw words of every step.
-use crate::conjunction::flat::{Flat, FORM_WORDS, KEY_WORDS, ROW_WORDS};
+use crate::conjunction::flat::{Flat, FORM_WORDS, KEY_WORDS, PAIR_READ_WORDS, ROW_WORDS};
 use crate::{Error, Result};
 use cudarc::driver::{CudaContext, LaunchConfig, Ptx, PushKernelArg};
 use sha2::{Digest, Sha256};
@@ -16,7 +16,8 @@ pub const STEP_WORDS: usize = 36;
 pub const MAX_LIMIT: usize = 128;
 /// Every place was read from a held row.
 pub const STATUS_READ: u32 = 0;
-/// A place no held row answers: the host reads its suffix ladder there.
+/// A place no held row answers, in a reader whose ladder has a suffix order
+/// above the pair: the host reads its suffix ladder there.
 pub const STATUS_LADDER: u32 = 1;
 /// The asked turn has no kept form.
 pub const STATUS_NO_FORM: u32 = 2;
@@ -64,6 +65,7 @@ pub fn read(flat: &Flat, prompts: &[&[u32]], limit: usize) -> Result<(Vec<Read>,
         || flat.row_slots.len() != flat.row_count() * ROW_WORDS
         || (!flat.codes.is_empty() && flat.codes.len() != flat.vocabulary as usize)
         || (flat.trunk && flat.codes.is_empty())
+        || flat.pair_reads.len() != flat.pair_keys.len() * PAIR_READ_WORDS
     {
         return Err(invalid("the flat tables are not of their stated shape"));
     }
@@ -85,6 +87,8 @@ pub fn read(flat: &Flat, prompts: &[&[u32]], limit: usize) -> Result<(Vec<Read>,
         small(stride)?,
         small(count)?,
         u32::from(flat.trunk),
+        small(flat.pair_keys.len())?,
+        u32::from(flat.ladder),
     ];
     let mut work = vec![0u32; count * stride];
     let mut lengths = Vec::with_capacity(count);
@@ -114,6 +118,8 @@ pub fn read(flat: &Flat, prompts: &[&[u32]], limit: usize) -> Result<(Vec<Read>,
     let keys_gpu = put(&flat.row_keys)?;
     let slots_gpu = put(&flat.row_slots)?;
     let codes_gpu = put(&flat.codes)?;
+    let pair_keys_gpu = put(&flat.pair_keys)?;
+    let pair_reads_gpu = put(&flat.pair_reads)?;
     let lengths_gpu = put(&lengths)?;
     let mut work_gpu = stream.clone_htod(&work).map_err(cuda)?;
     let mut words_gpu = stream
@@ -135,6 +141,8 @@ pub fn read(flat: &Flat, prompts: &[&[u32]], limit: usize) -> Result<(Vec<Read>,
             .arg(&keys_gpu)
             .arg(&slots_gpu)
             .arg(&codes_gpu)
+            .arg(&pair_keys_gpu)
+            .arg(&pair_reads_gpu)
             .arg(&mut work_gpu)
             .arg(&lengths_gpu)
             .arg(&mut words_gpu)
