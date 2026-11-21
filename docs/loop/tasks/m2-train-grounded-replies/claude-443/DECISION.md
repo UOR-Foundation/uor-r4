@@ -63,6 +63,23 @@ If the answer is no, the counts stay in the notebook as development research and
 
 **Answered, 21 Nov 2026 (UTC), Casey in chat, to the question "Do the reader's CPU-trained, CPU-scored counts stand as M2's headline (512 of 512 dev)?": "No, GPU first".** The proposed counts are withdrawn. `headline.current` and `secondary[0].current` stay 0. The counts above stay in the notebook as development research. The next unit is a GPU reader: the read, then TRAIN, as CUDA kernels on wick's 4090, each held bit for bit to the host word streams of [NATIVE-SPACE.md](NATIVE-SPACE.md) §3, and the M2 counts scored from it under a sheet with a non-author FIT (§4.5). [claude]
 
+## The GPU count, 21 Nov 2026 (UTC)
+
+What this does not show, first [claude]. `m2-reply512` is a development panel in the wording TRAIN is drawn from, and this reader line was developed on it; the host reader already answered it 512 of 512 and the GPU path was already equal to the host in finite kernel tests, so the count was expected and is not a blind result. It says nothing about fresh transfer: the fresh number stays 0 and `m2-fresh256` was not read. The trunk takes no part in the read. The GPU TRAIN is about 27 times slower than the host, and the host orders its launches. The two fitness readers are the same lab; no other lab has read the sheet.
+
+Sheet: [`m2-reply512-gpu-reader-2026-11-21.md`](../../../harness/prep/m2-reply512-gpu-reader-2026-11-21.md), FIT on its second non-author read, pushed (commit f526662d1) before the run. Run: wick, RTX 4090, `runs/conj/gpuscore1/`, binary `conjunction-probe-v39` (`d863d3e8…a6e1b8`), every input sha256 as pinned.
+
+| | Reader A (seed 1) | Reader B (seed 2) |
+|---|---|---|
+| GPU TRAIN: bytes are the host file; same on a second run | yes (`44574adb…972c3c`); yes | yes (`078dcfdc…810c2b`); yes |
+| GPU TRAIN kernel time; host TRAIN | 55.0 s; 2.0 s | 54.8 s; 2.0 s |
+| Prompts read on the GPU; GPU read equal to the host | 512 of 512; yes | 512 of 512; yes |
+| Replies equal to the reference, id for id (`gpu_count.exact`) | **512 of 512** | 512 of 512 |
+| Replies ending on EOS | 512 | 512 |
+| Control: each reply against the next prompt's reference | 0 of 512 | 0 of 512 |
+
+Result against the sheet's bar: PASS for reader A (bar 256 of 512); reader B agrees. Decision [claude]: the owner's condition ("No, GPU first") is met for the development count, so M2's `headline.current` is set to 512, reader A's count. `secondary[0].current` stays 0 and `status` stays in-progress. This is reversible by the owner; it is logged on #2030. A fresh-context decision review of this change (same lab) returned SURVIVES with no required fix. §4.3 asks for a fresh transfer number beside a development gain: the only fresh read of this reader line was scored on CPU and its panel is spent, so a GPU-scored read of a newly drawn panel is owed and is item 2 below.
+
 ## What M2 still needs before it can close
 
 1. The reader keyed by the trunk's transported state, so the artifact holds one state and not two tables (D85; M2's "one unified model").

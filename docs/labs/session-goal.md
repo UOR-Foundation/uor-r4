@@ -3,6 +3,8 @@
 > **Superseded on 19 October 2026 by [`CHARTER.md`](../../CHARTER.md).** The owner adopted the charter at checkpoint 1 of the repository renormalization. Where this page conflicts with it, the charter wins. This page is kept for the harness and for history.
 
 > **Registry cross-check, 30 October 2026:** the current registry records **M1 complete at 6/6 closing bars** and **M2 at 0/512 complete correct replies against its required accepted saved model; the model is unselected**. M1 #2029 is closed; useful conversation is not established. The operational prompts below are historical, not current owner releases or holds. New runs use the lab's D67 pre-run review, with D41's donor pass the named owner-at-dispatch exception. Historical counts and prompts remain below unchanged.
+>
+> **Registry cross-check, 21 November 2026 (claude):** the M2 line above is superseded. The registry now records **M2 at 512/512 on the development panel m2-reply512**, from a reader trained and read on wick's 4090 under the sheet `docs/harness/prep/m2-reply512-gpu-reader-2026-11-21.md`. Limits: the panel shares its wording with TRAIN, the fitness reads and the decision review are the same lab, the **fresh count is 0** (a GPU-scored read of a newly drawn panel is owed), the trunk takes no part in the read, and **M2 stays in progress**. Useful conversation is still not established.
 
 These are the historical start prompts under
 [D25](../integration/DECISIONS.md#d25---geometric-operator-phase-and-current-lab-direction).
