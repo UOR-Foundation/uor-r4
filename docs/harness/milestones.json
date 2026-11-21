@@ -122,11 +122,11 @@
       "secondary": [
         {
           "label": "genuinely fresh complete correct replies",
-          "current": 0,
+          "current": 96,
           "target": 40,
           "of": 100,
           "unit": "percent",
-          "note": "Fresh acceptance remains unqualified; M1 does not establish complete replies."
+          "note": "96 = 124 of 128 pairs on m2-fresh256b, not the registered fresh_panel m2-fresh256; a second draw of the registered construction with new values, read once under a sheet by GPU-trained readers whose replies a GPU kernel wrote (claude-443 decision card, 21 Nov 2026), graded on the laptop CPU by a deterministic comparison of the kernel's ids with the sealed labels (the lab's reading of §3.6; the owner can reverse it on #2030). Same wording as TRAIN; the drawer was a fresh-context agent of the same lab; the one-case reader control was not run; the trunk takes no part. Fresh acceptance in other wording remains unqualified; M1 does not establish complete replies."
         }
       ],
       "panel": "m2-reply512",
