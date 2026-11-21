@@ -329,7 +329,13 @@ pub struct FbsTrunkSnapshot {
     /// claude-231). The export then serves `head = "native_vector_nearest"`. False, and not
     /// written, for the writer's pick, so every earlier snapshot parses and exports as before.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub readout_nearest: bool,
+    pub readout_nearest: bool,    /// The ask heads, when the snapshot carries them (`fbs-export` reads them from the same key).
+    /// `fbs-compare` parses and ignores the field so an ask snapshot can still be compared; its
+    /// parity check does not yet apply the asks, which is why a comparison that includes them in the
+    /// reference is confounded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hamming_ask: Option<serde_json::Value>,
+
 }
 
 /// The readout a run's `config.json` trained for (integer-nearest-readout, claude-231): its
