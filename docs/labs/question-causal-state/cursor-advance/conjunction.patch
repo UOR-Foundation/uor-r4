@@ -85,7 +85,7 @@
              if let Some(words) = words.as_deref_mut() {
                  step_words(words, forms, held, empty, &history, &at, named);
              }
-@@ -1706,6 +1723,61 @@
+@@ -1706,5 +1723,60 @@
  /// address (eight words), the carried cursor, the token ahead of it, the
  /// slot (five words), the place the slot read and the token.
  pub const STEP_WORDS: usize = 23;
@@ -146,4 +146,3 @@
 +}
  /// Stands for "none" in a step's words.
  pub const NO_WORD: u32 = u32::MAX;
- 
