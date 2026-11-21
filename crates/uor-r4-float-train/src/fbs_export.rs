@@ -483,6 +483,7 @@ pub fn fbs_trunk_snapshot(model: &StackModel) -> Result<FbsTrunkSnapshot> {
         retain_rates: false,
         // Nor the readout: `fbs-snapshot` sets it from the run's objective (claude-231).
         readout_nearest: false,
+        hamming_ask: None,
     })
 }
 
