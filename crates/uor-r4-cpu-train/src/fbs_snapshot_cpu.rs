@@ -1109,6 +1109,7 @@ fn snapshot_and_asks_from_saved_checkpoint(
         memory: None,
         retain_rates,
         readout_nearest,
+        hamming_ask: None,
     };
     Ok((snapshot, asks))
 }
