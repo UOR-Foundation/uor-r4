@@ -700,9 +700,9 @@ fn reader_gpu(args: &[String]) -> Result<(), String> {
     use uor_r4_discrete::conjunction::{self, flat::Flat, saved::Reader};
     use uor_r4_discrete::reader_read_device as device;
 
-    if args.len() != 5 {
+    if args.len() != 5 && args.len() != 6 {
         return Err(
-            "usage: conjunction-probe reader-gpu READER_FILE PANEL_JSON LIMIT OUT_JSON".into(),
+            "usage: conjunction-probe reader-gpu READER_FILE PANEL_JSON LIMIT OUT_JSON [TRUNK_KEY_JSON]".into(),
         );
     }
     if std::path::Path::new(&args[4]).exists() {
@@ -723,7 +723,9 @@ fn reader_gpu(args: &[String]) -> Result<(), String> {
     let file = std::fs::read(&args[1]).map_err(|e| format!("{}: {e}", args[1]))?;
     let panel_bytes = std::fs::read(&args[2]).map_err(|e| format!("{}: {e}", args[2]))?;
     let limit: usize = args[3].parse().map_err(|e| format!("LIMIT: {e}"))?;
-    let reader = Reader::from_bytes(&file).map_err(|e| e.to_string())?;
+    // A reader keyed by a trunk is read beside that trunk's tables.
+    let beside = args.get(5).map(|path| trunk_key_file(path)).transpose()?;
+    let reader = Reader::from_bytes_beside(&file, beside).map_err(|e| e.to_string())?;
     let flat = Flat::of(&reader).map_err(|e| e.to_string())?;
     let panel: Vec<conjunction::PanelRow> =
         serde_json::from_slice(&panel_bytes).map_err(|e| e.to_string())?;
@@ -862,6 +864,24 @@ fn reader_gpu_train(_: &[String]) -> Result<(), String> {
     Err("reader-gpu-train needs the cuda feature".into())
 }
 
+/// The trunk tables of `question-reader-d11 trunk-key`; `path:` or `address:`
+/// before the file keys a form a kept token at a time, the bare file by the
+/// last frame.
+#[cfg(feature = "cuda")]
+fn trunk_key_file(text: &str) -> Result<uor_r4_discrete::conjunction::trunk_key::TrunkKey, String> {
+    use uor_r4_discrete::conjunction::trunk_key::{Keyed, TrunkKey};
+    let (by, path) = match text.split_once(':') {
+        Some(("path", rest)) => (Keyed::Path, rest),
+        Some(("address", rest)) => (Keyed::Address, rest),
+        _ => (Keyed::Frame, text),
+    };
+    let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+    serde_json::from_slice::<TrunkKey>(&bytes)
+        .map_err(|e| format!("{path}: {e}"))?
+        .keyed(by)
+        .map_err(|e| e.to_string())
+}
+
 /// `reader-gpu-train TOKENS_U16 MASK_U8 HOST_READER_FILE VOCABULARY WINDOW
 /// LIMIT BOS EOS SLOTS OUT_READER_FILE OUT_JSON`: TRAIN on the GPU with the
 /// choices of the saved M2 readers (`- 1 - pair open precise,across` of
@@ -878,9 +898,9 @@ fn reader_gpu_train(args: &[String]) -> Result<(), String> {
     use uor_r4_discrete::conjunction::{bind::BindTable, saved::Reader, StandBy};
     use uor_r4_discrete::reader_train_device as device;
 
-    if args.len() != 12 && args.len() != 13 {
+    if !(12..=14).contains(&args.len()) {
         return Err(
-            "usage: conjunction-probe reader-gpu-train TOKENS_U16 MASK_U8 HOST_READER_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS OUT_READER_FILE OUT_JSON [free|free2|free3]"
+            "usage: conjunction-probe reader-gpu-train TOKENS_U16 MASK_U8 HOST_READER_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS OUT_READER_FILE OUT_JSON [inorder|free|free2|free3] [path:TRUNK_KEY_JSON|address:TRUNK_KEY_JSON]"
                 .into(),
         );
     }
@@ -917,12 +937,21 @@ fn reader_gpu_train(args: &[String]) -> Result<(), String> {
     // The order-free count and its passes; the in-order TRAIN with none.
     use uor_r4_discrete::conjunction::free::Update;
     let update = match args.get(12).map(String::as_str) {
-        None => Update::InOrder,
+        None | Some("inorder") => Update::InOrder,
         Some("free") => Update::Free { passes: 1 },
         Some("free2") => Update::Free { passes: 2 },
         Some("free3") => Update::Free { passes: 3 },
         Some(other) => return Err(format!("unknown update {other}")),
     };
+    // The trunk tables the forms are keyed by, a kept token at a time.
+    let trunk = args.get(13).map(|path| trunk_key_file(path)).transpose()?;
+    let trunk_codes: Vec<u32> = trunk
+        .iter()
+        .flat_map(|key| key.codes.iter().map(|&code| u32::from(code)))
+        .collect();
+    if trunk.is_some() && trunk_codes.is_empty() {
+        return Err("the GPU keys forms by path: or address:, not by a single frame".into());
+    }
 
     let started = Instant::now();
     let (host, trained) = Reader::train_by(
@@ -941,7 +970,7 @@ fn reader_gpu_train(args: &[String]) -> Result<(), String> {
         true,
         READS,
         update,
-        None,
+        trunk.clone(),
     )
     .map_err(|e| e.to_string())?;
     let host_ms = started.elapsed().as_millis() as u64;
@@ -950,12 +979,23 @@ fn reader_gpu_train(args: &[String]) -> Result<(), String> {
     let on_gpu = |reversed: bool| -> Result<_, String> {
         let started = Instant::now();
         let (tables, stats) = device::train(
-            &tokens, &eligible, vocabulary, window, bos, eos, slots, limit, true, reversed, update,
+            &tokens,
+            &eligible,
+            vocabulary,
+            window,
+            bos,
+            eos,
+            slots,
+            limit,
+            true,
+            reversed,
+            update,
+            &trunk_codes,
         )
         .map_err(|e| e.to_string())?;
         let ms = started.elapsed().as_millis() as u64;
         let reader = tables
-            .reader(vocabulary, window, bos, eos, slots, true)
+            .reader(vocabulary, window, bos, eos, slots, true, trunk.clone())
             .map_err(|e| e.to_string())?;
         let found = differences(&reader, &host);
         let (bytes, saved) = reader.to_bytes(1);

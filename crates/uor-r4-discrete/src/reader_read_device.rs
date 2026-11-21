@@ -63,6 +63,7 @@ pub fn read(flat: &Flat, prompts: &[&[u32]], limit: usize) -> Result<(Vec<Read>,
         || flat.row_keys.len() != flat.row_count() * KEY_WORDS
         || flat.row_slots.len() != flat.row_count() * ROW_WORDS
         || (!flat.codes.is_empty() && flat.codes.len() != flat.vocabulary as usize)
+        || (flat.trunk && flat.codes.is_empty())
     {
         return Err(invalid("the flat tables are not of their stated shape"));
     }
@@ -83,6 +84,7 @@ pub fn read(flat: &Flat, prompts: &[&[u32]], limit: usize) -> Result<(Vec<Read>,
         small(limit)?,
         small(stride)?,
         small(count)?,
+        u32::from(flat.trunk),
     ];
     let mut work = vec![0u32; count * stride];
     let mut lengths = Vec::with_capacity(count);

@@ -33,8 +33,11 @@ pub struct Flat {
     pub forms: Vec<u32>,
     pub row_keys: Vec<u32>,
     pub row_slots: Vec<u32>,
-    /// One class code a token, or empty.
+    /// One class code a token, or empty; under `trunk`, one trunk code a
+    /// token.
     pub codes: Vec<u32>,
+    /// The forms are keyed by the trunk code of each kept token.
+    pub trunk: bool,
 }
 
 fn quarters(word: u128) -> [u32; 4] {
@@ -78,11 +81,21 @@ impl Flat {
                 "flat tables are laid out for the pair stand read precise,across alone",
             ));
         }
-        if asked.trunk().is_some() {
-            return Err(invalid(
-                "flat tables hold token forms: a reader keyed by a trunk is not laid out here",
-            ));
-        }
+        // A form keyed a kept token at a time is found by the kernel with the
+        // trunk codes in the place of token ids; one keyed by a single frame
+        // is not laid out here.
+        let trunk_codes: Vec<u32> = match asked.trunk() {
+            None => Vec::new(),
+            Some(trunk) if trunk.codes.len() == reader.vocabulary as usize => {
+                trunk.codes.iter().map(|&code| u32::from(code)).collect()
+            }
+            Some(_) => {
+                return Err(invalid(
+                    "flat tables hold forms keyed a token at a time: not a single trunk frame",
+                ))
+            }
+        };
+        let trunk = !trunk_codes.is_empty();
         let mut by_id: Vec<(u32, [u32; FORM_WORDS])> = asked.forms_by_id().into_iter().collect();
         by_id.sort_by_key(|&(id, _)| id);
         let mut forms = Vec::with_capacity(by_id.len() * FORM_WORDS);
@@ -135,7 +148,12 @@ impl Flat {
             forms,
             row_keys,
             row_slots,
-            codes: asked.codes().iter().map(|&code| u32::from(code)).collect(),
+            codes: if trunk {
+                trunk_codes
+            } else {
+                asked.codes().iter().map(|&code| u32::from(code)).collect()
+            },
+            trunk,
         })
     }
     pub fn form_count(&self) -> usize {
@@ -152,6 +170,14 @@ mod tests {
     use super::*;
 
     fn train(reads: Reads, by: StandBy) -> Result<Reader> {
+        train_beside(reads, by, None)
+    }
+
+    fn train_beside(
+        reads: Reads,
+        by: StandBy,
+        trunk: Option<crate::conjunction::trunk_key::TrunkKey>,
+    ) -> Result<Reader> {
         let [bos, eos, name, is, dot, what, mark] = [0u32, 1, 2, 3, 4, 5, 6];
         let mut tokens = Vec::new();
         let mut eligible = Vec::new();
@@ -162,7 +188,7 @@ mod tests {
             tokens.extend([value, dot, eos]);
             eligible.extend(at..at + 3);
         }
-        let (reader, _) = Reader::train(
+        let (reader, _) = Reader::train_by(
             &tokens,
             &eligible,
             64,
@@ -177,6 +203,8 @@ mod tests {
             BindTable::default(),
             false,
             reads,
+            crate::conjunction::free::Update::InOrder,
+            trunk,
         )?;
         Ok(reader)
     }
@@ -216,6 +244,33 @@ mod tests {
             other[2] ^= 0x4000_0000;
             assert_eq!(find(&flat.row_keys, KEY_WORDS, &other), None);
         }
+        Ok(())
+    }
+
+    /// A reader keyed a kept token at a time by the trunk is laid out with
+    /// one trunk code a token and every form marked; one keyed by a single
+    /// frame is refused.
+    #[test]
+    fn a_reader_keyed_by_trunk_codes_is_laid_out_with_them() -> Result<()> {
+        use crate::conjunction::trunk_key::{tests::toy, Keyed};
+        let plain = Flat::of(&train(READS, StandBy::Pair)?)?;
+        assert!(!plain.trunk && plain.codes.is_empty());
+        for by in [Keyed::Path, Keyed::Address] {
+            let key = toy(64).keyed(by)?;
+            let flat = Flat::of(&train_beside(READS, StandBy::Pair, Some(key.clone()))?)?;
+            assert!(flat.trunk);
+            assert_eq!(flat.codes.len(), 64);
+            assert_eq!(flat.codes[5], key.code(5).expect("a code"));
+            assert_eq!(flat.form_count(), plain.form_count());
+            assert!(flat
+                .forms
+                .chunks_exact(FORM_WORDS)
+                .all(|form| form[13] & 0x20 != 0));
+            for (index, form) in flat.forms.chunks_exact(FORM_WORDS).enumerate() {
+                assert_eq!(find(&flat.forms, FORM_WORDS, form), Some(index));
+            }
+        }
+        assert!(Flat::of(&train_beside(READS, StandBy::Pair, Some(toy(64)))?).is_err());
         Ok(())
     }
 

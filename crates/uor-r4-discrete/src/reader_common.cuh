@@ -22,6 +22,9 @@ typedef unsigned long long u64;
 #define ROW_RIGHT 2u
 #define CLASS_FORM 0x80u
 #define OPEN_FORM 0x40u
+// Marks a form keyed a kept token at a time by the trunk (TRUNK_FORM of
+// conjunction.rs): `codes` then holds a trunk code a token.
+#define TRUNK_FORM 0x20u
 #define OPEN_HEAD 16
 #define OPEN_TAIL 8
 #define OPEN_HEAD_LEAST 4
@@ -143,8 +146,8 @@ __device__ static u32 held_forms(const u32* turn, u32 len, const u32* codes, u32
 
 // Kept open forms of a long turn, those that keep most first, the longer
 // opening on a tie (Form::each_open).
-__device__ static u32 open_forms(const u32* turn, u32 len, const u32* forms, u32 form_count,
-                                 u32* held) {
+__device__ static u32 open_forms(const u32* turn, u32 len, const u32* codes, u32 mark,
+                                 const u32* forms, u32 form_count, u32* held) {
     u32 key[FORM_WORDS];
     u32 count = 0;
     for (int kept = OPEN_HEAD + OPEN_TAIL; kept >= OPEN_HEAD_LEAST && count < FORMS_HELD; --kept) {
@@ -157,8 +160,8 @@ __device__ static u32 open_forms(const u32* turn, u32 len, const u32* forms, u32
             if ((u32)kept + FORM_GAP >= len) {
                 continue;
             }
-            form_key(turn, (u32)head, len - (u32)tail, len, 0, (u32)head, OPEN_FORM | (u32)tail,
-                     key);
+            form_key(turn, (u32)head, len - (u32)tail, len, codes, (u32)head,
+                     OPEN_FORM | (u32)tail | mark, key);
             u32 id = find(forms, form_count, FORM_WORDS, key);
             if (id != NONE) {
                 held[count++] = id;

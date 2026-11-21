@@ -47,7 +47,8 @@ __device__ static Answer rows_answer(const u32* row_keys, const u32* row_slots, 
     return best;
 }
 
-// params: vocabulary, context, bos, eos, forms, rows, codes, limit, stride, prompts.
+// params: vocabulary, context, bos, eos, forms, rows, codes, limit, stride, prompts,
+// and whether the forms are keyed by the trunk code of each kept token.
 // work: one row of `stride` ids a prompt, the prompt first; the reply is
 // written after it. out_meta: reply ids, status, read again from the rows for
 // an empty read, a read came up empty.
@@ -94,8 +95,14 @@ extern "C" __global__ void reader_read(const u32* params, const u32* forms, cons
     }
     u32 turn_len = start - first;
     u32 held[FORMS_HELD];
-    u32 held_count = held_forms(tok + first, turn_len, 0, 0u, forms, form_count, held);
-    if (held_count == 0u && code_count > 0u) {
+    // Keyed by the trunk, every form is over the trunk codes and none over
+    // token ids or class codes.
+    bool trunk = params[10] != 0u;
+    const u32* form_codes = trunk ? codes : 0;
+    u32 form_mark = trunk ? TRUNK_FORM : 0u;
+    u32 held_count =
+        held_forms(tok + first, turn_len, form_codes, form_mark, forms, form_count, held);
+    if (held_count == 0u && code_count > 0u && !trunk) {
         bool coded = true;
         for (u32 place = first; place < start; ++place) {
             coded = coded && tok[place] < code_count;
@@ -118,7 +125,8 @@ extern "C" __global__ void reader_read(const u32* params, const u32* forms, cons
             ++long_first;
         }
         if (start - long_first > (u32)OPEN_HEAD_LEAST + FORM_GAP) {
-            held_count = open_forms(tok + long_first, start - long_first, forms, form_count, held);
+            held_count = open_forms(tok + long_first, start - long_first, form_codes, form_mark,
+                                    forms, form_count, held);
         }
     }
     if (held_count == 0u) {

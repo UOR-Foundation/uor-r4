@@ -39,6 +39,8 @@
 #define CFG_LADDER_SLOTS 8
 #define CFG_KEPT 9
 #define CFG_OPEN 10
+// Forms are keyed by the trunk code of each kept token (`codes`).
+#define CFG_TRUNK 11
 
 // flags: the form table is full, the row table is full, more forms were kept
 // than the buffer holds, a prompt is longer than its work row.
@@ -150,7 +152,8 @@ __device__ static void count_form(const u32* cfg, u32* state, u32* keys, u32* co
 
 // First pass (Asked::count): a thread a reply counts every form of its turn.
 extern "C" __global__ void train_count(const u32* cfg, const u32* tok, const u32* run_start,
-                                       u32* state, u32* keys, u32* counts, u32* flags, u32 runs) {
+                                       const u32* trunk_codes, u32* state, u32* keys, u32* counts,
+                                       u32* flags, u32 runs) {
     u32 run = blockIdx.x * blockDim.x + threadIdx.x;
     if (run >= runs) {
         return;
@@ -160,12 +163,14 @@ extern "C" __global__ void train_count(const u32* cfg, const u32* tok, const u32
     const u32* turn = tok + first;
     u32 len = start - first;
     u32 key[FORM_WORDS];
-    form_key(turn, 0u, 0u, len, 0, 0u, 0u, key);
+    const u32* codes = cfg[CFG_TRUNK] ? trunk_codes : 0;
+    u32 mark = cfg[CFG_TRUNK] ? TRUNK_FORM : 0u;
+    form_key(turn, 0u, 0u, len, codes, 0u, mark, key);
     count_form(cfg, state, keys, counts, flags, key);
     u32 longest = len < FORM_GAP ? len : FORM_GAP;
     for (u32 gap = 1; gap <= longest; ++gap) {
         for (u32 at = 0; at + gap <= len; ++at) {
-            form_key(turn, at, at + gap, len, 0, at, gap, key);
+            form_key(turn, at, at + gap, len, codes, at, gap | mark, key);
             count_form(cfg, state, keys, counts, flags, key);
         }
     }
@@ -180,7 +185,8 @@ extern "C" __global__ void train_count(const u32* cfg, const u32* tok, const u32
     for (u32 head = OPEN_HEAD_LEAST; head <= (u32)OPEN_HEAD; ++head) {
         for (u32 tail = 0; tail <= (u32)OPEN_TAIL; ++tail) {
             if (head + tail + FORM_GAP < all) {
-                form_key(tok + whole, head, all - tail, all, 0, head, OPEN_FORM | tail, key);
+                form_key(tok + whole, head, all - tail, all, codes, head, OPEN_FORM | tail | mark,
+                         key);
                 count_form(cfg, state, keys, counts, flags, key);
             }
         }
@@ -230,7 +236,8 @@ extern "C" __global__ void train_rank(const u32* kept, u32* forms, u32 kept_coun
 // The kept forms a reply is written under: its token forms (count, six ids)
 // and its open forms (count, six ids). Asked::held, Asked::held_open.
 extern "C" __global__ void train_forms(const u32* cfg, const u32* tok, const u32* run_start,
-                                       const u32* forms, u32* out, u32 form_count, u32 runs) {
+                                       const u32* trunk_codes, const u32* forms, u32* out,
+                                       u32 form_count, u32 runs) {
     u32 run = blockIdx.x * blockDim.x + threadIdx.x;
     if (run >= runs) {
         return;
@@ -238,10 +245,13 @@ extern "C" __global__ void train_forms(const u32* cfg, const u32* tok, const u32
     u32 start = run_start[run];
     u32* mine = out + (u64)run * RUN_WORDS;
     u32 first = turn_first(tok, start, cfg[CFG_CONTEXT], cfg[CFG_BOS], cfg[CFG_EOS]);
-    mine[0] = held_forms(tok + first, start - first, 0, 0u, forms, form_count, mine + 1);
+    const u32* codes = cfg[CFG_TRUNK] ? trunk_codes : 0;
+    u32 mark = cfg[CFG_TRUNK] ? TRUNK_FORM : 0u;
+    mine[0] = held_forms(tok + first, start - first, codes, mark, forms, form_count, mine + 1);
     u32 whole = long_first(tok, start, cfg[CFG_CONTEXT], cfg[CFG_BOS], cfg[CFG_EOS]);
     mine[7] = whole == NONE ? 0u
-                            : open_forms(tok + whole, start - whole, forms, form_count, mine + 8);
+                            : open_forms(tok + whole, start - whole, codes, mark, forms,
+                                         form_count, mine + 8);
 }
 
 struct Rows {

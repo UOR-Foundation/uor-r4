@@ -177,6 +177,7 @@ impl Tables {
         eos: u32,
         slots: usize,
         open: bool,
+        trunk: Option<super::trunk_key::TrunkKey>,
     ) -> Result<Reader> {
         if self.forms.len() % FORM_WORDS != 0
             || self.row_keys.len() % KEY_WORDS != 0
@@ -206,7 +207,8 @@ impl Tables {
         let mut asked = Asked::new(window, bos, eos)
             .with_stand(StandBy::Pair, BindTable::default())?
             .with_open_forms(open)
-            .with_reads(READS);
+            .with_reads(READS)
+            .with_trunk(trunk)?;
         for (id, words) in self.forms.chunks_exact(FORM_WORDS).enumerate() {
             let form = Form {
                 words: [wide(&words[..4]), wide(&words[4..8]), wide(&words[8..12])],
@@ -406,7 +408,7 @@ mod tests {
     fn tables_make_the_reader_they_were_taken_from() -> Result<()> {
         let host = train()?;
         let mut held = tables(&host);
-        let ours = held.reader(VOCABULARY, 192, 0, 1, 8, true)?;
+        let ours = held.reader(VOCABULARY, 192, 0, 1, 8, true, None)?;
         assert_eq!(differences(&ours, &host), Differences::default());
         let (ours_bytes, _) = ours.to_bytes(1);
         let (host_bytes, _) = host.to_bytes(1);
@@ -419,7 +421,7 @@ mod tests {
             .position(|slot| slot[5] >= 2)
             .ok_or_else(|| invalid("no read slot"))?;
         held.row_slots[slot * SLOT_WORDS + 5] += 1;
-        let other = held.reader(VOCABULARY, 192, 0, 1, 8, true)?;
+        let other = held.reader(VOCABULARY, 192, 0, 1, 8, true, None)?;
         let found = differences(&other, &host);
         assert_eq!(found.held_rows_of_other_slots, 1);
         assert_ne!(other.to_bytes(1), host.to_bytes(1));

@@ -86,7 +86,16 @@ pub fn train(
     open: bool,
     reversed: bool,
     update: Update,
+    trunk_codes: &[u32],
 ) -> Result<(Tables, Stats)> {
+    // One trunk code a token keys the forms by the trunk; none keys them by
+    // token ids.
+    if !trunk_codes.is_empty()
+        && (trunk_codes.len() != vocabulary as usize
+            || trunk_codes.iter().any(|&code| code > 4_095))
+    {
+        return Err(invalid("needs one twelve-bit trunk code a token"));
+    }
     if vocabulary > 4_096 || tokens.iter().any(|&token| token >= vocabulary) {
         return Err(invalid(
             "TRAIN ids must lie below a vocabulary of at most 4096",
@@ -140,7 +149,7 @@ pub fn train(
             .map_err(cuda)
     };
     let zeros = |words: usize| stream.alloc_zeros::<u32>(words.max(1)).map_err(cuda);
-    let cfg = |row_slots: usize| -> Result<[u32; 11]> {
+    let cfg = |row_slots: usize| -> Result<[u32; 12]> {
         Ok([
             vocabulary,
             small(window)?,
@@ -153,6 +162,7 @@ pub fn train(
             small(slots)?,
             small(KEPT)?,
             u32::from(open),
+            u32::from(!trunk_codes.is_empty()),
         ])
     };
     let mut stats = Stats {
@@ -166,6 +176,7 @@ pub fn train(
 
     let tokens_gpu = put(tokens)?;
     let run_start_gpu = put(&run_start)?;
+    let trunk_codes_gpu = put(trunk_codes)?;
     let pair_keys_gpu = put(&pairs.keys)?;
     let offsets_gpu = put(&pairs.offsets)?;
     let positions_gpu = put(&pairs.positions)?;
@@ -204,6 +215,7 @@ pub fn train(
             .arg(&cfg_gpu)
             .arg(&tokens_gpu)
             .arg(&run_start_gpu)
+            .arg(&trunk_codes_gpu)
             .arg(&mut form_state)
             .arg(&mut form_keys)
             .arg(&mut form_counts)
@@ -263,6 +275,7 @@ pub fn train(
             .arg(&cfg_gpu)
             .arg(&tokens_gpu)
             .arg(&run_start_gpu)
+            .arg(&trunk_codes_gpu)
             .arg(&forms_gpu)
             .arg(&mut run_forms_gpu)
             .arg(&kept_count)
