@@ -18,25 +18,21 @@
 
 use std::collections::BTreeMap;
 
+use crate::clifford_address::{dense_address, sign_code, Element};
+
 /// The closed attribute set. The tagger is a table, so its range is closed and stated.
 pub const ATTRIBUTES: [&str; 8] = [
     "colour", "city", "job", "pet", "drink", "car", "birthday", "sport",
 ];
 
-/// The canonical address of a slot: `(entity, attribute)` mixed into one `u64` by an integer code.
+/// The address of a slot: a **dense Clifford address**, `entity * attribute_blade`.
 ///
-/// It is a **code, not a product of primes**: the archive records that prime schemes are worse than
-/// hashed for a low-coherence codebook and that gcd admission lets a single-prime row shadow every
-/// pair sharing it (`GO-FORWARD-2026-11-16.md` §4).
-pub fn slot_address(entity: &str, attribute: u8) -> u64 {
-    // FNV-1a over the entity's bytes, then the attribute in the top byte. Integer throughout.
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in entity.to_ascii_lowercase().as_bytes() {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x100_0000_01b3);
-    }
-    hash ^= u64::from(attribute);
-    hash.wrapping_mul(0x100_0000_01b3).rotate_left(17) ^ 0x9e37_79b9_7f4a_7c15
+/// It replaced a hash pair on 20 Nov. The algebra gives what a hash cannot: fifteen mutually
+/// orthogonal role axes, so `colour` and `city` cannot collide even though their contexts are
+/// identical, and a 64-bit **sign code** that shortlists by popcount while the element itself
+/// verifies exactly (`clifford_address::shortlist_exact`).
+pub fn slot_address(entity: &str, attribute: u8) -> Element {
+    dense_address(entity, attribute as usize)
 }
 
 /// A word and, when it carries one, its simple stem: plural/third-person "s", "es", "ed", "ing".
@@ -111,7 +107,9 @@ impl SlotTagger {
 /// A conversation's exact memory: address -> value, latest write wins, and typed abstention.
 #[derive(Debug, Default)]
 pub struct SlotMemory {
-    slots: BTreeMap<u64, String>,
+    /// One bucket per 64-bit sign code; each entry is the exact address and its value, so a
+    /// shortlist collision is resolved by equality rather than by a distance.
+    slots: BTreeMap<u64, Vec<(Element, String)>>,
     mentioned: Vec<String>,
 }
 
@@ -119,8 +117,12 @@ impl SlotMemory {
     /// Write a fact. **Latest wins**: a second value for the same slot replaces the first, which is
     /// the "47 → 40" class the record names as a write-priority defect, not a read defect.
     pub fn write(&mut self, entity: &str, attribute: u8, value: &str) {
-        let key = slot_address(entity, attribute);
-        self.slots.insert(key, value.trim().to_owned());
+        let address = slot_address(entity, attribute);
+        let bucket = self.slots.entry(sign_code(&address)).or_default();
+        match bucket.iter_mut().find(|(stored, _)| *stored == address) {
+            Some((_, held)) => *held = value.trim().to_owned(),
+            None => bucket.push((address, value.trim().to_owned())),
+        }
         if !self.mentioned.iter().any(|e| e.eq_ignore_ascii_case(entity)) {
             self.mentioned.push(entity.to_owned());
         }
@@ -128,7 +130,12 @@ impl SlotMemory {
 
     /// Read a slot exactly. `None` is a typed abstention: the address was never written.
     pub fn read(&self, entity: &str, attribute: u8) -> Option<&str> {
-        self.slots.get(&slot_address(entity, attribute)).map(String::as_str)
+        let address = slot_address(entity, attribute);
+        self.slots
+            .get(&sign_code(&address))?
+            .iter()
+            .find(|(stored, _)| *stored == address)
+            .map(|(_, value)| value.as_str())
     }
 
     /// The entities this conversation has mentioned, in order.
