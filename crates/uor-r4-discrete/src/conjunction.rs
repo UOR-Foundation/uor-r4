@@ -448,6 +448,9 @@ const POINTERS_ADDED: usize = 3;
 /// place after a copied token whose own row is missing.
 const AT_START: u32 = u32::MAX;
 const AFTER_COPY: u32 = u32::MAX - 1;
+/// The history of the row a copy reads by the token ahead alone (no reply
+/// history is all zero: each word carries a leading one).
+const ANY_HISTORY: [u128; 2] = [0; 2];
 
 /// The asked turn with at most one run of tokens left out: up to thirty
 /// tokens in three words (twelve bits each under a leading one) and the gap's
@@ -563,11 +566,27 @@ pub enum StandBy {
     Octonion,
 }
 
+/// How held rows rank and gain their slots, and whether a copy has a row
+/// for the token ahead alone. All off is the reader as first written.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
+pub struct Reads {
+    /// Slots rank by how often they were right of the times they named
+    /// anything, a read before a token on a tie; off, by times right.
+    pub precise: bool,
+    /// A target only token slots named still adds the reads that name it,
+    /// and a trusted token a read of the row also names is read from there.
+    pub explain: bool,
+    /// After a copied token, a row keyed by the token ahead alone is read
+    /// between the place's own row and the row every copied token shares.
+    pub tail_row: bool,
+}
+
 /// The stand choice and, for the octonion bind, its table.
 #[derive(Debug, Clone, Default)]
 pub struct Stand {
     by: StandBy,
     bind: bind::BindTable,
+    reads: Reads,
 }
 
 /// A slot's answer and, for a copying slot, the place it read.
@@ -736,14 +755,30 @@ impl Entry {
 pub struct HeldRow {
     entry: [Entry; MAX_SLOTS],
     count: [u32; MAX_SLOTS],
+    /// Times a slot named a token that was not the target (kept under
+    /// [`Reads::precise`]).
+    wrong: [u32; MAX_SLOTS],
 }
 
 impl HeldRow {
     /// Live slots with their counts, most often right first (the lower slot
     /// on a tie).
-    fn ranked(&self) -> impl Iterator<Item = (Entry, u32)> + '_ {
+    fn ranked(&self, precise: bool) -> impl Iterator<Item = (Entry, u32)> + '_ {
         let mut slots: [usize; MAX_SLOTS] = std::array::from_fn(|slot| slot);
-        slots.sort_by(|a, b| self.count[*b].cmp(&self.count[*a]));
+        // Right of the times it named anything, with one doubt added so two
+        // lucky reads do not outrank a long record.
+        let named = |slot: usize| u64::from(self.count[slot]) + u64::from(self.wrong[slot]) + 1;
+        let is_token = |slot: usize| matches!(self.entry[slot], Entry::Token(_));
+        slots.sort_by(|&a, &b| {
+            let by_count = self.count[b].cmp(&self.count[a]);
+            if !precise {
+                return by_count;
+            }
+            (u64::from(self.count[b]) * named(a))
+                .cmp(&(u64::from(self.count[a]) * named(b)))
+                .then(is_token(a).cmp(&is_token(b)))
+                .then(by_count)
+        });
         slots
             .into_iter()
             .filter(|&slot| self.count[slot] > 0)
@@ -754,11 +789,17 @@ impl HeldRow {
     /// from, so a token slot a copy agrees with still carries the copy on.
     fn read(&self, at: &Place, least: u32) -> Option<Named> {
         let named = self
-            .ranked()
+            .ranked(at.stand.reads.precise)
             .filter(|&(_, count)| count >= least)
             .find_map(|(entry, _)| entry.name(at))?;
         Some(Named {
-            source: self.source_of(at, named.token, least),
+            // Under `explain` a read right even once that names the same
+            // token as the trusted slot is where the token was read.
+            source: self.source_of(
+                at,
+                named.token,
+                if at.stand.reads.explain { 1 } else { least },
+            ),
             ..named
         })
     }
@@ -766,7 +807,7 @@ impl HeldRow {
     /// or the copy read and it names nothing here: the row is about to
     /// answer from a lower slot for a fact the context does not hold.
     fn empty_read(&self, at: &Place, least: u32) -> bool {
-        self.ranked()
+        self.ranked(at.stand.reads.precise)
             .find(|&(_, count)| count >= least)
             .is_some_and(|(entry, _)| {
                 matches!(entry, Entry::Pointer { .. } | Entry::Copy) && entry.name(at).is_none()
@@ -775,7 +816,7 @@ impl HeldRow {
     /// The place the first ranked copying slot, right at least `least`
     /// times, read `target` from.
     fn source_of(&self, at: &Place, target: u32, least: u32) -> Option<usize> {
-        self.ranked()
+        self.ranked(at.stand.reads.precise)
             .filter(|&(_, count)| count >= least)
             .filter_map(|(entry, _)| entry.name(at))
             .find(|named| named.token == target && named.source.is_some())
@@ -785,6 +826,7 @@ impl HeldRow {
         if let Some(slot) = (0..MAX_SLOTS).find(|&slot| self.count[slot] == 0) {
             self.entry[slot] = entry;
             self.count[slot] = 1;
+            self.wrong[slot] = 0;
             return;
         }
         let weakest = (0..MAX_SLOTS)
@@ -795,40 +837,62 @@ impl HeldRow {
         if self.count[weakest] == 0 {
             self.entry[weakest] = entry;
             self.count[weakest] = 1;
+            self.wrong[weakest] = 0;
         }
     }
     /// Every slot that names `target` grows. When none does (the output
-    /// error), the token and each read that names it are added.
-    fn take(&mut self, at: &Place, target: u32) {
+    /// error), the token and each read that names it are added. Under
+    /// [`Reads::explain`] the reads are added too when only token slots
+    /// named it, so a row first met with one kind of value still learns
+    /// where values are read. `pointers` holds this place's pointers once
+    /// found: they are the same for every row written at it.
+    fn take(&mut self, at: &Place, target: u32, pointers: &mut Option<Vec<Entry>>) {
+        let reads = at.stand.reads;
         let right = |entry: Entry| entry.name(at).is_some_and(|named| named.token == target);
         let mut hit = false;
+        let mut read_hit = false;
         for slot in 0..MAX_SLOTS {
-            if self.count[slot] > 0 && right(self.entry[slot]) {
-                self.count[slot] = self.count[slot].saturating_add(1);
-                hit = true;
+            if self.count[slot] == 0 {
+                continue;
+            }
+            match self.entry[slot].name(at) {
+                Some(named) if named.token == target => {
+                    self.count[slot] = self.count[slot].saturating_add(1);
+                    hit = true;
+                    read_hit |= !matches!(self.entry[slot], Entry::Token(_));
+                }
+                Some(_) if reads.precise => {
+                    self.wrong[slot] = self.wrong[slot].saturating_add(1);
+                }
+                _ => {}
             }
         }
-        if hit {
+        if hit && (read_hit || !reads.explain) {
             return;
         }
-        self.insert(Entry::Token(target));
+        if !hit {
+            self.insert(Entry::Token(target));
+        }
         for entry in [Entry::Next, Entry::Copy] {
             if right(entry) {
                 self.insert(entry);
             }
         }
         // A wide pointer with no reach ahead is the narrow one; it is skipped.
-        let pointers = (0..POINTER_BACK)
-            .flat_map(|back| {
-                (0..=POINTER_AHEAD).flat_map(move |ahead| {
-                    [true, false].map(move |wide| (back as u8, ahead as u8, wide))
+        let found = pointers.get_or_insert_with(|| {
+            (0..POINTER_BACK)
+                .flat_map(|back| {
+                    (0..=POINTER_AHEAD).flat_map(move |ahead| {
+                        [true, false].map(move |wide| (back as u8, ahead as u8, wide))
+                    })
                 })
-            })
-            .filter(|&(_, ahead, wide)| !(ahead == 0 && wide))
-            .filter_map(|(back, ahead, wide)| Entry::pointer(at, back, ahead, wide, target))
-            .filter(|&entry| right(entry))
-            .take(POINTERS_ADDED);
-        for entry in pointers.collect::<Vec<_>>() {
+                .filter(|&(_, ahead, wide)| !(ahead == 0 && wide))
+                .filter_map(|(back, ahead, wide)| Entry::pointer(at, back, ahead, wide, target))
+                .filter(|&entry| right(entry))
+                .take(POINTERS_ADDED)
+                .collect()
+        });
+        for &entry in found.iter() {
             self.insert(entry);
         }
     }
@@ -962,8 +1026,20 @@ impl Asked {
         if by == StandBy::Octonion && bind.words.is_empty() {
             return Err(invalid("the octonion stand needs a bind table"));
         }
-        self.stand = std::sync::Arc::new(Stand { by, bind });
+        let reads = self.stand.reads;
+        self.stand = std::sync::Arc::new(Stand { by, bind, reads });
         Ok(self)
+    }
+    /// Sets how held rows rank and gain slots, before the first pass.
+    pub fn with_reads(mut self, reads: Reads) -> Self {
+        self.stand = std::sync::Arc::new(Stand {
+            reads,
+            ..(*self.stand).clone()
+        });
+        self
+    }
+    pub fn reads(&self) -> Reads {
+        self.stand.reads
     }
     pub fn stand_by(&self) -> StandBy {
         self.stand.by
@@ -1157,11 +1233,11 @@ impl Asked {
     ) -> Option<(Named, usize, bool)> {
         let (own, shared) = history.tails(at.ahead());
         let words = history.address();
-        let mut first = |tail: u32, is_own: bool, empty: bool| {
+        let mut first = |history: [u128; 2], tail: u32, is_own: bool, empty: bool| {
             forms.iter().enumerate().find_map(|(index, &form)| {
                 let key = HeldKey {
                     form,
-                    history: words,
+                    history,
                     tail,
                     empty,
                 };
@@ -1171,10 +1247,16 @@ impl Asked {
             })
         };
         let mut both = |empty: bool| {
-            if let Some(found) = first(own, true, empty) {
+            if let Some(found) = first(words, own, true, empty) {
                 return Some(found);
             }
-            first(shared?, false, empty)
+            let shared = shared?;
+            if at.stand.reads.tail_row {
+                if let Some(found) = first(ANY_HISTORY, own, false, empty) {
+                    return Some(found);
+                }
+            }
+            first(words, shared, false, empty)
         };
         if empty {
             if let Some(found) = both(true) {
@@ -1255,16 +1337,23 @@ impl Asked {
             let (own, shared) = history.tails(at.ahead());
             let words = history.address();
             let mut written = None;
+            let mut pointers = None;
+            let by_tail = (stand.reads.tail_row && shared.is_some()).then_some((ANY_HISTORY, own));
+            let keys = [
+                Some((words, own)),
+                shared.map(|tail| (words, tail)),
+                by_tail,
+            ];
             for &form in forms {
-                for tail in [Some(own), shared].into_iter().flatten() {
+                for (history, tail) in keys.into_iter().flatten() {
                     let key = HeldKey {
                         form,
-                        history: words,
+                        history,
                         tail,
                         empty,
                     };
                     let row = self.rows.entry(key).or_default();
-                    row.take(&at, target);
+                    row.take(&at, target, &mut pointers);
                     written = written.or_else(|| row.source_of(&at, target, 1));
                 }
             }
@@ -2138,6 +2227,32 @@ mod tests {
         assert_eq!(memory.output(2, 1, Some(9)), Some(7));
         assert_eq!(memory.write(5, 5, None, 7), Written::NoAddress);
         Ok(())
+    }
+
+    /// A token right half the times it spoke loses to a read right every
+    /// time, though the token was right more often; two lucky reads do not
+    /// outrank a long record; a read goes before a token of the same record.
+    #[test]
+    fn slots_rank_by_how_often_they_were_right_when_they_spoke() {
+        let read = Entry::Next;
+        let row = |token: [u32; 2], other: [u32; 2]| {
+            let mut row = HeldRow::default();
+            row.entry[0] = Entry::Token(7);
+            row.entry[1] = read;
+            [row.count[0], row.wrong[0]] = token;
+            [row.count[1], row.wrong[1]] = other;
+            row
+        };
+        let first =
+            |row: &HeldRow, precise: bool| row.ranked(precise).next().map(|(entry, _)| entry);
+        let half = row([10, 10], [6, 0]);
+        assert_eq!(first(&half, false), Some(Entry::Token(7)));
+        assert_eq!(first(&half, true), Some(read));
+        let lucky = row([500, 10], [2, 0]);
+        assert_eq!(first(&lucky, true), Some(Entry::Token(7)));
+        let level = row([9, 1], [9, 1]);
+        assert_eq!(first(&level, false), Some(Entry::Token(7)));
+        assert_eq!(first(&level, true), Some(read));
     }
 
     #[test]

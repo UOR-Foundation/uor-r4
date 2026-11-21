@@ -19,8 +19,8 @@
 //! everything before it.
 use super::bind::BindTable;
 use super::{
-    invalid, window_at, Asked, Entry, Form, HeldKey, HeldRow, Ladder, Row, StandBy, FORMS_HELD,
-    FORM_GAP, FORM_TOKENS, MAX_ORDER, MAX_SLOTS, ROW_RIGHT,
+    invalid, window_at, Asked, Entry, Form, HeldKey, HeldRow, Ladder, Reads, Row, StandBy,
+    FORMS_HELD, FORM_GAP, FORM_TOKENS, MAX_ORDER, MAX_SLOTS, ROW_RIGHT,
 };
 use crate::Result;
 use sha2::{Digest, Sha256};
@@ -32,6 +32,10 @@ pub const MAGIC_CODES: &[u8; 8] = b"UORRDR02";
 /// orders it holds the class code count and codes, the stand choice (1 the
 /// pair, 2 its octonion bind address) and the bind table.
 pub const MAGIC_STAND: &[u8; 8] = b"UORRDR03";
+/// A file with any of the [`Reads`] choices on: the 03 layout (stand choice
+/// 0 for the latest stand), then the choices as bits (1 precise, 2 explain,
+/// 4 tail row), and after each held slot's count its wrong count.
+pub const MAGIC_READS: &[u8; 8] = b"UORRDR04";
 
 /// One class code per token from an address-cells codebook table (`blocks`
 /// blocks of eight coordinates a token): the writer cell, sixteen times the
@@ -228,6 +232,7 @@ impl Reader {
         by: StandBy,
         bind: BindTable,
         open: bool,
+        reads: Reads,
     ) -> Result<(Self, Trained)> {
         if !bind.words.is_empty() && bind.words.len() != vocabulary as usize {
             return Err(invalid("the bind table must hold one word a token"));
@@ -258,7 +263,8 @@ impl Reader {
         let mut asked = Asked::new(window, bos, eos)
             .with_codes(codes.to_vec())?
             .with_stand(by, bind)?
-            .with_open_forms(open);
+            .with_open_forms(open)
+            .with_reads(reads);
         for run in &runs {
             asked.count(tokens, run[0]);
         }
@@ -296,13 +302,24 @@ impl Reader {
         reply
     }
 
+    /// As [`Reader::reply`], with what named each token.
+    pub fn reply_traced(&self, prompt: &[u32], limit: usize) -> (Vec<u32>, Vec<String>) {
+        let (reply, _, trace) = self.asked.reply_traced(&self.ladder, prompt, limit);
+        (reply, trace)
+    }
+
     /// The reader as bytes. Suffix rows written fewer than `ladder_least`
     /// times are left out (1 keeps all of them).
     pub fn to_bytes(&self, ladder_least: u32) -> (Vec<u8>, Saved) {
         let mut out = Out { bytes: Vec::new() };
         let mut saved = Saved::default();
         let by = self.asked.stand_by();
-        out.bytes.extend_from_slice(if by != StandBy::Latest {
+        let reads = self.asked.reads();
+        let ranked = reads != Reads::default();
+        let bound = ranked || by != StandBy::Latest;
+        out.bytes.extend_from_slice(if ranked {
+            MAGIC_READS
+        } else if by != StandBy::Latest {
             MAGIC_STAND
         } else if self.asked.codes().is_empty() {
             MAGIC
@@ -327,19 +344,30 @@ impl Reader {
         for &order in &self.ladder.orders {
             out.u32(order as u32);
         }
-        if by != StandBy::Latest {
+        if bound {
             out.u32(self.asked.codes().len() as u32);
         }
         for &code in self.asked.codes() {
             out.bytes.extend_from_slice(&code.to_le_bytes());
         }
-        if by != StandBy::Latest {
+        if bound {
             let bind = self.asked.bind();
-            out.u32(if by == StandBy::Pair { 1 } else { 2 });
+            out.u32(match by {
+                StandBy::Latest => 0,
+                StandBy::Pair => 1,
+                StandBy::Octonion => 2,
+            });
             out.u32(bind.count as u32);
             for &word in bind.words.iter().chain(&bind.of) {
                 out.bytes.extend_from_slice(&word.to_le_bytes());
             }
+        }
+        if ranked {
+            out.u32(
+                u32::from(reads.precise)
+                    | u32::from(reads.explain) << 1
+                    | u32::from(reads.tail_row) << 2,
+            );
         }
 
         let mut forms: Vec<(&Form, &u32)> = self.asked.seen.iter().collect();
@@ -379,6 +407,9 @@ impl Reader {
                 }
                 out.u32(value);
                 out.u32(row.count[slot]);
+                if ranked {
+                    out.u32(row.wrong[slot]);
+                }
                 saved.held_slots += 1;
             }
             saved.held_rows += 1;
@@ -424,11 +455,12 @@ impl Reader {
         if bytes.len() < MAGIC.len() + 32 {
             return Err(invalid("not a reader file"));
         }
-        let (coded, bound) = match &bytes[..MAGIC.len()] {
-            magic if magic == MAGIC => (false, false),
-            magic if magic == MAGIC_CODES => (true, false),
-            magic if magic == MAGIC_STAND => (false, true),
-            _ => return Err(invalid("not a UORRDR01, 02 or 03 reader file")),
+        let (coded, bound, ranked) = match &bytes[..MAGIC.len()] {
+            magic if magic == MAGIC => (false, false, false),
+            magic if magic == MAGIC_CODES => (true, false, false),
+            magic if magic == MAGIC_STAND => (false, true, false),
+            magic if magic == MAGIC_READS => (false, true, true),
+            _ => return Err(invalid("not a UORRDR01 to 04 reader file")),
         };
         let (body, digest) = bytes.split_at(bytes.len() - 32);
         if Sha256::digest(body).as_slice() != digest {
@@ -490,6 +522,7 @@ impl Reader {
         let mut asked = Asked::new(context, bos, eos).with_codes(codes)?;
         if bound {
             let by = match input.u32()? {
+                0 if ranked => StandBy::Latest,
                 1 => StandBy::Pair,
                 2 => StandBy::Octonion,
                 _ => return Err(invalid("an unknown stand choice")),
@@ -511,6 +544,17 @@ impl Reader {
                 }
             }
             asked = asked.with_stand(by, bind.checked()?)?;
+        }
+        if ranked {
+            let bits = input.u32()?;
+            if bits == 0 || bits > 7 {
+                return Err(invalid("unknown read choices"));
+            }
+            asked = asked.with_reads(Reads {
+                precise: bits & 1 != 0,
+                explain: bits & 2 != 0,
+                tail_row: bits & 4 != 0,
+            });
         }
 
         let form_count = input.u32()?;
@@ -566,6 +610,9 @@ impl Reader {
                 row.count[slot] = input.u32()?;
                 if row.count[slot] < ROW_RIGHT {
                     return Err(invalid("a held slot below the read count"));
+                }
+                if ranked {
+                    row.wrong[slot] = input.u32()?;
                 }
             }
             asked.rows.insert(key, row);
@@ -649,6 +696,7 @@ mod tests {
             StandBy::Latest,
             BindTable::default(),
             false,
+            Reads::default(),
         )?;
         assert_eq!(trained.replies, 22);
         assert_eq!(trained.replies_with_an_empty_read, 9);
@@ -724,6 +772,7 @@ mod tests {
                 StandBy::Latest,
                 BindTable::default(),
                 false,
+                Reads::default(),
             )
         };
         let (plain, _) = train(&[])?;
@@ -817,6 +866,7 @@ mod tests {
                 by,
                 bind,
                 false,
+                Reads::default(),
             )
         };
 
@@ -903,6 +953,7 @@ mod tests {
                 StandBy::Latest,
                 BindTable::default(),
                 open,
+                Reads::default(),
             )
         };
         let (closed, _) = train(false)?;
@@ -927,6 +978,63 @@ mod tests {
             assert!(reader.asked.reads_open(&prompt));
             assert_eq!(reader.reply(&prompt, 48), right, "{length}");
             assert_eq!(loaded.reply(&prompt, 48), right, "{length} loaded");
+        }
+        Ok(())
+    }
+
+    /// A reader with read choices on is written as an 04 file with its
+    /// wrong counts and reads back to the same bytes and replies; with none
+    /// on the file is the 01 file it always was.
+    #[test]
+    fn read_choices_are_saved_with_the_wrong_counts() -> Result<()> {
+        let [bos, eos, name, is, dot, what, mark] = [0u32, 1, 2, 3, 4, 5, 6];
+        let mut tokens = Vec::new();
+        let mut eligible = Vec::new();
+        for index in 0..16u32 {
+            // Half the values are one fixed token, so its token slot is right
+            // half the times it speaks.
+            let value = if index % 2 == 0 { 9 } else { 20 + index };
+            tokens.extend([bos, name, is, value, dot, eos, what, name, mark]);
+            let at = tokens.len();
+            tokens.extend([value, dot, eos]);
+            eligible.extend(at..at + 3);
+        }
+        let prompt = vec![bos, name, is, 50, dot, eos, what, name, mark];
+        let train = |reads: Reads| {
+            Reader::train(
+                &tokens,
+                &eligible,
+                64,
+                192,
+                bos,
+                eos,
+                2,
+                &[],
+                8,
+                &[],
+                StandBy::Latest,
+                BindTable::default(),
+                false,
+                reads,
+            )
+        };
+        let (plain, _) = train(Reads::default())?;
+        let (plain_bytes, _) = plain.to_bytes(1);
+        assert_eq!(&plain_bytes[..8], MAGIC);
+        for bits in 1..8u32 {
+            let reads = Reads {
+                precise: bits & 1 != 0,
+                explain: bits & 2 != 0,
+                tail_row: bits & 4 != 0,
+            };
+            let (reader, _) = train(reads)?;
+            assert_eq!(reader.reply(&prompt, 8), vec![50, dot, eos], "{reads:?}");
+            let (bytes, saved) = reader.to_bytes(1);
+            assert_eq!(&bytes[..8], MAGIC_READS);
+            let loaded = Reader::from_bytes(&bytes)?;
+            assert_eq!(loaded.asked.reads(), reads);
+            assert_eq!(loaded.reply(&prompt, 8), vec![50, dot, eos]);
+            assert_eq!(loaded.to_bytes(1), (bytes, saved));
         }
         Ok(())
     }

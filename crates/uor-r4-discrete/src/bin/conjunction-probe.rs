@@ -356,9 +356,9 @@ fn reader(args: &[String]) -> Result<(), String> {
         return Ok(());
     }
     if args[0] == "reader-save" {
-        if !(12..=15).contains(&args.len()) {
+        if !(12..=16).contains(&args.len()) {
             return Err(
-                "usage: conjunction-probe reader-save TOKENS_U16 MASK_U8 OUT_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST [CODEBOOK_TABLE_JSON|- [latest|pair|octonion:CODEBOOK_TABLE_JSON [open]]]"
+                "usage: conjunction-probe reader-save TOKENS_U16 MASK_U8 OUT_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST [CODEBOOK_TABLE_JSON|- [latest|pair|octonion:CODEBOOK_TABLE_JSON [open|- [READS_CSV(precise,explain,tail)]]]]"
                     .into(),
             );
         }
@@ -408,6 +408,7 @@ fn reader(args: &[String]) -> Result<(), String> {
         let stand = format!("{by:?}");
         let open = match args.get(14).map(String::as_str) {
             None => false,
+            Some("-") => false,
             Some("open") => true,
             Some(other) => return Err(format!("unknown form choice {other}")),
         };
@@ -431,6 +432,16 @@ fn reader(args: &[String]) -> Result<(), String> {
                 .map_err(|e| e.to_string())?
             }
         };
+        let mut reads = uor_r4_discrete::conjunction::Reads::default();
+        for choice in args.get(15).map(String::as_str).unwrap_or("").split(',') {
+            match choice {
+                "" => {}
+                "precise" => reads.precise = true,
+                "explain" => reads.explain = true,
+                "tail" => reads.tail_row = true,
+                other => return Err(format!("unknown read choice {other}")),
+            }
+        }
         let started = Instant::now();
         let (reader, trained) = Reader::train(
             &tokens,
@@ -446,6 +457,7 @@ fn reader(args: &[String]) -> Result<(), String> {
             by,
             bind,
             open,
+            reads,
         )
         .map_err(|e| e.to_string())?;
         let train_ms = started.elapsed().as_millis() as u64;
@@ -467,6 +479,7 @@ fn reader(args: &[String]) -> Result<(), String> {
                 "class_codes": codes.iter().collect::<std::collections::BTreeSet<_>>().len(),
                 "stand": stand,
                 "open_forms": open,
+                "reads": reads,
                 "trained": trained,
                 "saved": saved,
                 "reader_sha256": sha(&bytes),
@@ -567,6 +580,14 @@ fn reader(args: &[String]) -> Result<(), String> {
     });
     let mut report = summary.clone();
     report["replies"] = serde_json::json!(replies);
+    let traces: Vec<Vec<String>> = panel
+        .iter()
+        .map(|row| {
+            let (_, trace) = reader.reply_traced(&row.prompt, limit);
+            trace
+        })
+        .collect();
+    report["trace"] = serde_json::json!(traces);
     std::fs::write(
         &args[3],
         serde_json::to_vec(&report).map_err(|e| e.to_string())?,
