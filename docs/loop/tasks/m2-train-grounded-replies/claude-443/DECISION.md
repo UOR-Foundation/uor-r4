@@ -88,6 +88,42 @@ Under the sheet [`m2-reply512-gpu-free-reader-2026-11-21.md`](../../../../harnes
 
 Result against the sheet's bar: PASS. Decision [claude]: the order-free TRAIN (two passes) is the GPU trainer of the M2 reader from here on, and reader A's order-free file is the saved reader that later sheets train and read. The in-order reader of the section above remains the reader the 512 was first counted on; both give 512 of 512. Reason: the in-order rule's launch count grows with the stream and it gave no result on the corpus-worded stream, where the order-free rule wrote the host's file in 9.5 s. Cost to undo: none; the in-order kernels and their sheet are unchanged. This choice changes no bar, status or scope.
 
+### The fresh number from a second draw, 21 Nov 2026 (UTC)
+
+What this does not show, first [claude]. The panel read here, `m2-fresh256b`, is not the panel `milestones.json` names (`m2-fresh256`); that one was read once by this reader line on a CPU and is spent. `m2-fresh256b` is a second draw from the same instrument and construction: new literals, drawn by a fresh-context agent of this lab, not by another lab. The values are new; the wording is the wording TRAIN is drawn from, so transfer to other wording is unmeasured. The reader control (reader N, a TRAIN of one case) was not run: its GPU TRAIN stopped on "no form was seen eight times". The trunk takes no part in the read, so this is not one unified model. The host still finds the reply runs and pair positions for TRAIN, and reads every prompt as the parity reference. The 4 and 2 incomplete rows were not read by cause, because the panel stays sealed from the reader's author; the grader's counters say only that every reply ends on EOS and carries its opening. The sheet's fitness read was same-lab.
+
+Under the sheet [`m2-fresh256b-gpu-reader-read-2026-11-21.md`](../../../../harness/prep/m2-fresh256b-gpu-reader-read-2026-11-21.md), committed before the run (commit `6348d3858420c242999dda9ef60eebfcd99eb192`), run `runs/conj/gpufresh1/` on wick, binary v43 [claude]:
+
+| Measure | Bar | Reader A (`9db7e834…e1227b`) | Reader B (`ce961568…b89578`) |
+|---|---|---|---|
+| `m2-fresh256b`, pairs both complete and distinct, GPU-written replies | 52 of 128 | 124 of 128 | 126 of 128 |
+| `m2-fresh256b`, rows complete | 104 of 256 | 252 of 256 | 254 of 256 |
+| GPU TRAIN bytes are the pinned file, and the same on a second run | true | true | true |
+| `reader-gpu` exit 0, `equal` true, prompts read on the GPU | 256 of 256 | 256 of 256 | 256 of 256 |
+| Grade output's reader, inputs, labels, panel and literals sha256 against the pins | equal | equal | equal |
+| Swapped-pair check of the grading path | 0 of 128 | 0 of 128 | 0 of 128 |
+| Reader control N | under 13 of 128 | not run | not run |
+
+Result against the sheet's bar: PASS, reader control not run. The reported numbers are the lower of the two readers: 124 of 128 pairs, 252 of 256 rows.
+
+Why this is not a CPU-scored count under the owner's "No, GPU first" [claude]. The tables were written by the GPU TRAIN kernels and are byte for byte the pinned reader file. Every reply id was written by the GPU read kernel, and all 256 prompts were read to their end on the GPU. The laptop's CPU ran the panel instrument only: it removes the asked role's fixed opening and compares each reply's ids with the sealed labels. It computes no part of a reply. The host read that `reader-gpu` also runs is the parity reference; the graded replies are the kernel's.
+
+The decision [claude]. The sheet says a PASS unlocks this question and does not answer it. The change to `docs/harness/milestones.json`, M2:
+
+| Field | Now | Set to |
+|---|---|---|
+| `secondary[0].current` (fresh, percent) | 0 | 96 (124 of 128 pairs, the lower reader, rounded down) |
+| `secondary[0].note` | "Fresh acceptance remains unqualified; M1 does not establish complete replies." | "96 = 124 of 128 pairs on m2-fresh256b, a second draw of the registered construction with new values, read once under a sheet by GPU-trained readers whose replies a GPU kernel wrote (claude-443 decision card, 21 Nov 2026). Same wording as TRAIN; the drawer was a fresh-context agent of the same lab; the one-case reader control was not run; the trunk takes no part. Fresh acceptance in other wording remains unqualified; M1 does not establish complete replies." |
+| `fresh_panel` | m2-fresh256 | m2-fresh256 (unchanged; the registered panel stays the registered panel) |
+| `headline.current` | 512 | 512 (unchanged) |
+| `status` | in-progress | in-progress (unchanged) |
+
+- **Reason.** The fresh number has stood at 0 since the previous candidate fell from 437 of 512 to 0 of 128 on a fresh draw. This reader was fixed first, the panel was drawn after, by an agent that never saw the reader, and it was read once. The bar is the one the owner registered for `m2-fresh256` (#2030, comment 6350135678). The count comes from the GPU path the owner asked for. The number is recorded with its limits in the field's own note, so the field does not claim more than the run shows.
+- **Turned down.** Leaving the field at 0 until another lab draws a panel: the number would misstate what was measured, and another lab's draw remains open as an audit (§5.5) with a new draw, which this card invites. Setting 100 or the row percentage (98): the registered bar is the pair count, and the lower reader's pair count is 124. Changing `fresh_panel` to the second draw: the registered name is the owner's record of which panel the bar was set on. Closing M2: items 1, 3, 4 and 5 of the list below are open, and wording transfer is unmeasured.
+- **Cost to undo.** Low: one number and one note. No run depends on either. Casey can reverse it on #2030.
+
+What changes in the list below: item 2 is met in part (a panel drawn fresh, read on the GPU, with the panel's four heuristic controls and the pair metric as the shuffled-role control); the wording half of item 2 and a reader control that can train remain open.
+
 ## What M2 still needs before it can close
 
 1. The reader keyed by the trunk's transported state, so the artifact holds one state and not two tables (D85; M2's "one unified model").
