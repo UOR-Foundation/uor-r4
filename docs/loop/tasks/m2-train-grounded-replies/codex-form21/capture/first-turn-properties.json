@@ -1,0 +1,226 @@
+[
+  {
+    "first_user": "I currently live in amber compass.",
+    "rows": 2,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "I currently live in amber compass. My current job is indigo harbor.",
+    "rows": 4,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "I currently live in copper lantern.",
+    "rows": 2,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "I currently live in copper lantern. My current job is silver meadow.",
+    "rows": 4,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "I currently live in emerald river.",
+    "rows": 2,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "I currently live in emerald river. My current job is ivory mountain.",
+    "rows": 4,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "I currently live in golden valley.",
+    "rows": 2,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "I currently live in golden valley. My current job is scarlet garden.",
+    "rows": 4,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "I currently live in indigo harbor.",
+    "rows": 2,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "I currently live in indigo harbor. My current job is amber compass.",
+    "rows": 4,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "I currently live in ivory mountain.",
+    "rows": 2,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "I currently live in ivory mountain. My current job is emerald river.",
+    "rows": 4,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "I currently live in scarlet garden.",
+    "rows": 2,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "I currently live in scarlet garden. My current job is golden valley.",
+    "rows": 4,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "I currently live in silver meadow.",
+    "rows": 2,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "I currently live in silver meadow. My current job is copper lantern.",
+    "rows": 4,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "My current job is amber compass.",
+    "rows": 2,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "My current job is amber compass. I currently live in indigo harbor.",
+    "rows": 4,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "My current job is copper lantern.",
+    "rows": 2,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "My current job is copper lantern. I currently live in silver meadow.",
+    "rows": 4,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "My current job is emerald river.",
+    "rows": 2,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "My current job is emerald river. I currently live in ivory mountain.",
+    "rows": 4,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "My current job is golden valley.",
+    "rows": 2,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "My current job is golden valley. I currently live in scarlet garden.",
+    "rows": 4,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "My current job is indigo harbor.",
+    "rows": 2,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "My current job is indigo harbor. I currently live in amber compass.",
+    "rows": 4,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "My current job is ivory mountain.",
+    "rows": 2,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "My current job is ivory mountain. I currently live in emerald river.",
+    "rows": 4,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "My current job is scarlet garden.",
+    "rows": 2,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "My current job is scarlet garden. I currently live in golden valley.",
+    "rows": 4,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "My current job is silver meadow.",
+    "rows": 2,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  },
+  {
+    "first_user": "My current job is silver meadow. I currently live in copper lantern.",
+    "rows": 4,
+    "same_first_prompt": true,
+    "same_first_reply": true,
+    "same_first_stop": true
+  }
+]

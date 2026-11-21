@@ -1,0 +1,226 @@
+[
+  {
+    "id": "bridge-p0-a0-familiar-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "transcript": "transcripts/bridge-p0-a0-familiar-job.json"
+  },
+  {
+    "id": "bridge-p0-a0-familiar-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "transcript": "transcripts/bridge-p0-a0-familiar-home.json"
+  },
+  {
+    "id": "bridge-p0-a0-paraphrased-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "transcript": "transcripts/bridge-p0-a0-paraphrased-job.json"
+  },
+  {
+    "id": "bridge-p0-a0-paraphrased-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "transcript": "transcripts/bridge-p0-a0-paraphrased-home.json"
+  },
+  {
+    "id": "bridge-p0-a1-familiar-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "transcript": "transcripts/bridge-p0-a1-familiar-job.json"
+  },
+  {
+    "id": "bridge-p0-a1-familiar-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "transcript": "transcripts/bridge-p0-a1-familiar-home.json"
+  },
+  {
+    "id": "bridge-p0-a1-paraphrased-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "transcript": "transcripts/bridge-p0-a1-paraphrased-job.json"
+  },
+  {
+    "id": "bridge-p0-a1-paraphrased-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "transcript": "transcripts/bridge-p0-a1-paraphrased-home.json"
+  },
+  {
+    "id": "bridge-p1-a0-familiar-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "transcript": "transcripts/bridge-p1-a0-familiar-job.json"
+  },
+  {
+    "id": "bridge-p1-a0-familiar-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "transcript": "transcripts/bridge-p1-a0-familiar-home.json"
+  },
+  {
+    "id": "bridge-p1-a0-paraphrased-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "transcript": "transcripts/bridge-p1-a0-paraphrased-job.json"
+  },
+  {
+    "id": "bridge-p1-a0-paraphrased-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "transcript": "transcripts/bridge-p1-a0-paraphrased-home.json"
+  },
+  {
+    "id": "bridge-p1-a1-familiar-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "transcript": "transcripts/bridge-p1-a1-familiar-job.json"
+  },
+  {
+    "id": "bridge-p1-a1-familiar-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "transcript": "transcripts/bridge-p1-a1-familiar-home.json"
+  },
+  {
+    "id": "bridge-p1-a1-paraphrased-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "transcript": "transcripts/bridge-p1-a1-paraphrased-job.json"
+  },
+  {
+    "id": "bridge-p1-a1-paraphrased-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "transcript": "transcripts/bridge-p1-a1-paraphrased-home.json"
+  },
+  {
+    "id": "bridge-p2-a0-familiar-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "transcript": "transcripts/bridge-p2-a0-familiar-job.json"
+  },
+  {
+    "id": "bridge-p2-a0-familiar-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "transcript": "transcripts/bridge-p2-a0-familiar-home.json"
+  },
+  {
+    "id": "bridge-p2-a0-paraphrased-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "transcript": "transcripts/bridge-p2-a0-paraphrased-job.json"
+  },
+  {
+    "id": "bridge-p2-a0-paraphrased-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "transcript": "transcripts/bridge-p2-a0-paraphrased-home.json"
+  },
+  {
+    "id": "bridge-p2-a1-familiar-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "transcript": "transcripts/bridge-p2-a1-familiar-job.json"
+  },
+  {
+    "id": "bridge-p2-a1-familiar-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "transcript": "transcripts/bridge-p2-a1-familiar-home.json"
+  },
+  {
+    "id": "bridge-p2-a1-paraphrased-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "transcript": "transcripts/bridge-p2-a1-paraphrased-job.json"
+  },
+  {
+    "id": "bridge-p2-a1-paraphrased-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "transcript": "transcripts/bridge-p2-a1-paraphrased-home.json"
+  },
+  {
+    "id": "bridge-p3-a0-familiar-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "transcript": "transcripts/bridge-p3-a0-familiar-job.json"
+  },
+  {
+    "id": "bridge-p3-a0-familiar-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "transcript": "transcripts/bridge-p3-a0-familiar-home.json"
+  },
+  {
+    "id": "bridge-p3-a0-paraphrased-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "transcript": "transcripts/bridge-p3-a0-paraphrased-job.json"
+  },
+  {
+    "id": "bridge-p3-a0-paraphrased-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "transcript": "transcripts/bridge-p3-a0-paraphrased-home.json"
+  },
+  {
+    "id": "bridge-p3-a1-familiar-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "transcript": "transcripts/bridge-p3-a1-familiar-job.json"
+  },
+  {
+    "id": "bridge-p3-a1-familiar-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "transcript": "transcripts/bridge-p3-a1-familiar-home.json"
+  },
+  {
+    "id": "bridge-p3-a1-paraphrased-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "transcript": "transcripts/bridge-p3-a1-paraphrased-job.json"
+  },
+  {
+    "id": "bridge-p3-a1-paraphrased-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "transcript": "transcripts/bridge-p3-a1-paraphrased-home.json"
+  }
+]

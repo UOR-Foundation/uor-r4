@@ -1,0 +1,26 @@
+[
+  {
+    "decoded_prompt": "<|bos|>User:My current job is azure orchard.\nAssistant:<|eos|>\nUser:I currently live in violet hillside.\nAssistant:<|eos|>\nUser:What is my current job?\nAssistant:",
+    "decoded_reply": " Your job is azure orchard.<|eos|>",
+    "id": "development-0",
+    "role": "job"
+  },
+  {
+    "decoded_prompt": "<|bos|>User:My current job is azure orchard.\nAssistant:<|eos|>\nUser:I currently live in violet hillside.\nAssistant:<|eos|>\nUser:Where do I currently live?\nAssistant:",
+    "decoded_reply": " You live in violet hillside.<|eos|>",
+    "id": "development-1",
+    "role": "home"
+  },
+  {
+    "decoded_prompt": "<|bos|>User:I currently live in violet hillside.\nAssistant:<|eos|>\nUser:My current job is azure orchard.\nAssistant:<|eos|>\nUser:What is my current job?\nAssistant:",
+    "decoded_reply": " Your job is azure orchard.<|eos|>",
+    "id": "development-2",
+    "role": "job"
+  },
+  {
+    "decoded_prompt": "<|bos|>User:I currently live in violet hillside.\nAssistant:<|eos|>\nUser:My current job is azure orchard.\nAssistant:<|eos|>\nUser:Where do I currently live?\nAssistant:",
+    "decoded_reply": " You live in violet hillside.<|eos|>",
+    "id": "development-3",
+    "role": "home"
+  }
+]

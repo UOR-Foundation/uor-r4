@@ -1,0 +1,16 @@
+[
+  {
+    "cohort": "dual",
+    "rows": 64,
+    "reached": 20,
+    "unreachable": 44,
+    "first_eos": 20
+  },
+  {
+    "cohort": "single",
+    "rows": 32,
+    "reached": 18,
+    "unreachable": 14,
+    "first_eos": 18
+  }
+]

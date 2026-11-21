@@ -1,0 +1,866 @@
+[
+  {
+    "id": "dual-p0-a0-o0-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p0-a0-o0-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p0-a0-o0-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p0-a0-o0-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p0-a0-o1-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p0-a0-o1-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p0-a0-o1-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p0-a0-o1-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p0-a1-o0-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p0-a1-o0-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p0-a1-o0-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p0-a1-o0-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p0-a1-o1-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p0-a1-o1-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p0-a1-o1-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p0-a1-o1-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p1-a0-o0-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p1-a0-o0-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p1-a0-o0-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p1-a0-o0-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p1-a0-o1-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p1-a0-o1-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p1-a0-o1-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p1-a0-o1-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p1-a1-o0-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p1-a1-o0-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p1-a1-o0-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p1-a1-o0-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p1-a1-o1-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p1-a1-o1-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p1-a1-o1-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p1-a1-o1-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p2-a0-o0-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p2-a0-o0-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p2-a0-o0-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p2-a0-o0-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p2-a0-o1-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p2-a0-o1-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p2-a0-o1-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p2-a0-o1-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p2-a1-o0-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p2-a1-o0-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p2-a1-o0-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p2-a1-o0-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p2-a1-o1-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p2-a1-o1-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p2-a1-o1-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p2-a1-o1-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p3-a0-o0-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p3-a0-o0-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p3-a0-o0-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p3-a0-o0-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "dual-p3-a0-o1-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p3-a0-o1-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p3-a0-o1-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p3-a0-o1-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p3-a1-o0-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p3-a1-o0-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p3-a1-o0-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p3-a1-o0-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p3-a1-o1-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p3-a1-o1-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p3-a1-o1-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "dual-p3-a1-o1-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p0-v0-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "single-p0-v0-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "single-p0-v0-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p0-v0-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p0-v1-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "single-p0-v1-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "single-p0-v1-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p0-v1-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p1-v0-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "single-p1-v0-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "single-p1-v0-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p1-v0-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p1-v1-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "single-p1-v1-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "single-p1-v1-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p1-v1-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p2-v0-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "single-p2-v0-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "single-p2-v0-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p2-v0-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p2-v1-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "single-p2-v1-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "single-p2-v1-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p2-v1-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p3-v0-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p3-v0-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p3-v0-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p3-v0-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p3-v1-home-familiar",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "single-p3-v1-home-paraphrased",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 0,
+    "observed_turns": 1,
+    "first_stop": "max_tokens",
+    "reached_target": false
+  },
+  {
+    "id": "single-p3-v1-job-familiar",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "single-p3-v1-job-paraphrased",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  }
+]

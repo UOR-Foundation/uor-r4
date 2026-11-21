@@ -1,0 +1,386 @@
+[
+  {
+    "id": "bridge-p0-a0-familiar-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "value": "bronze willow",
+    "turns": [
+      "My current job is bronze willow.",
+      "I currently live in crimson forest. What is my current job?"
+    ],
+    "answer": " Your job is bronze willow."
+  },
+  {
+    "id": "bridge-p0-a0-familiar-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "value": "crimson forest",
+    "turns": [
+      "My current job is bronze willow.",
+      "I currently live in crimson forest. Where do I currently live?"
+    ],
+    "answer": " You live in crimson forest."
+  },
+  {
+    "id": "bridge-p0-a0-paraphrased-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "value": "bronze willow",
+    "turns": [
+      "My current job is bronze willow.",
+      "I currently live in crimson forest. What work do I currently do?"
+    ],
+    "answer": " Your job is bronze willow."
+  },
+  {
+    "id": "bridge-p0-a0-paraphrased-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "value": "crimson forest",
+    "turns": [
+      "My current job is bronze willow.",
+      "I currently live in crimson forest. What is my present home location?"
+    ],
+    "answer": " You live in crimson forest."
+  },
+  {
+    "id": "bridge-p0-a1-familiar-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "value": "crimson forest",
+    "turns": [
+      "My current job is crimson forest.",
+      "I currently live in bronze willow. What is my current job?"
+    ],
+    "answer": " Your job is crimson forest."
+  },
+  {
+    "id": "bridge-p0-a1-familiar-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "value": "bronze willow",
+    "turns": [
+      "My current job is crimson forest.",
+      "I currently live in bronze willow. Where do I currently live?"
+    ],
+    "answer": " You live in bronze willow."
+  },
+  {
+    "id": "bridge-p0-a1-paraphrased-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "value": "crimson forest",
+    "turns": [
+      "My current job is crimson forest.",
+      "I currently live in bronze willow. What work do I currently do?"
+    ],
+    "answer": " Your job is crimson forest."
+  },
+  {
+    "id": "bridge-p0-a1-paraphrased-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "value": "bronze willow",
+    "turns": [
+      "My current job is crimson forest.",
+      "I currently live in bronze willow. What is my present home location?"
+    ],
+    "answer": " You live in bronze willow."
+  },
+  {
+    "id": "bridge-p1-a0-familiar-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "value": "cobalt vessel",
+    "turns": [
+      "My current job is cobalt vessel.",
+      "I currently live in marble prairie. What is my current job?"
+    ],
+    "answer": " Your job is cobalt vessel."
+  },
+  {
+    "id": "bridge-p1-a0-familiar-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "value": "marble prairie",
+    "turns": [
+      "My current job is cobalt vessel.",
+      "I currently live in marble prairie. Where do I currently live?"
+    ],
+    "answer": " You live in marble prairie."
+  },
+  {
+    "id": "bridge-p1-a0-paraphrased-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "value": "cobalt vessel",
+    "turns": [
+      "My current job is cobalt vessel.",
+      "I currently live in marble prairie. What work do I currently do?"
+    ],
+    "answer": " Your job is cobalt vessel."
+  },
+  {
+    "id": "bridge-p1-a0-paraphrased-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "value": "marble prairie",
+    "turns": [
+      "My current job is cobalt vessel.",
+      "I currently live in marble prairie. What is my present home location?"
+    ],
+    "answer": " You live in marble prairie."
+  },
+  {
+    "id": "bridge-p1-a1-familiar-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "value": "marble prairie",
+    "turns": [
+      "My current job is marble prairie.",
+      "I currently live in cobalt vessel. What is my current job?"
+    ],
+    "answer": " Your job is marble prairie."
+  },
+  {
+    "id": "bridge-p1-a1-familiar-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "value": "cobalt vessel",
+    "turns": [
+      "My current job is marble prairie.",
+      "I currently live in cobalt vessel. Where do I currently live?"
+    ],
+    "answer": " You live in cobalt vessel."
+  },
+  {
+    "id": "bridge-p1-a1-paraphrased-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "value": "marble prairie",
+    "turns": [
+      "My current job is marble prairie.",
+      "I currently live in cobalt vessel. What work do I currently do?"
+    ],
+    "answer": " Your job is marble prairie."
+  },
+  {
+    "id": "bridge-p1-a1-paraphrased-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "value": "cobalt vessel",
+    "turns": [
+      "My current job is marble prairie.",
+      "I currently live in cobalt vessel. What is my present home location?"
+    ],
+    "answer": " You live in cobalt vessel."
+  },
+  {
+    "id": "bridge-p2-a0-familiar-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "value": "saffron tower",
+    "turns": [
+      "My current job is saffron tower.",
+      "I currently live in pearl island. What is my current job?"
+    ],
+    "answer": " Your job is saffron tower."
+  },
+  {
+    "id": "bridge-p2-a0-familiar-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "value": "pearl island",
+    "turns": [
+      "My current job is saffron tower.",
+      "I currently live in pearl island. Where do I currently live?"
+    ],
+    "answer": " You live in pearl island."
+  },
+  {
+    "id": "bridge-p2-a0-paraphrased-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "value": "saffron tower",
+    "turns": [
+      "My current job is saffron tower.",
+      "I currently live in pearl island. What work do I currently do?"
+    ],
+    "answer": " Your job is saffron tower."
+  },
+  {
+    "id": "bridge-p2-a0-paraphrased-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "value": "pearl island",
+    "turns": [
+      "My current job is saffron tower.",
+      "I currently live in pearl island. What is my present home location?"
+    ],
+    "answer": " You live in pearl island."
+  },
+  {
+    "id": "bridge-p2-a1-familiar-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "value": "pearl island",
+    "turns": [
+      "My current job is pearl island.",
+      "I currently live in saffron tower. What is my current job?"
+    ],
+    "answer": " Your job is pearl island."
+  },
+  {
+    "id": "bridge-p2-a1-familiar-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "value": "saffron tower",
+    "turns": [
+      "My current job is pearl island.",
+      "I currently live in saffron tower. Where do I currently live?"
+    ],
+    "answer": " You live in saffron tower."
+  },
+  {
+    "id": "bridge-p2-a1-paraphrased-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "value": "pearl island",
+    "turns": [
+      "My current job is pearl island.",
+      "I currently live in saffron tower. What work do I currently do?"
+    ],
+    "answer": " Your job is pearl island."
+  },
+  {
+    "id": "bridge-p2-a1-paraphrased-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "value": "saffron tower",
+    "turns": [
+      "My current job is pearl island.",
+      "I currently live in saffron tower. What is my present home location?"
+    ],
+    "answer": " You live in saffron tower."
+  },
+  {
+    "id": "bridge-p3-a0-familiar-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "value": "cerulean bridge",
+    "turns": [
+      "My current job is cerulean bridge.",
+      "I currently live in russet canyon. What is my current job?"
+    ],
+    "answer": " Your job is cerulean bridge."
+  },
+  {
+    "id": "bridge-p3-a0-familiar-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "value": "russet canyon",
+    "turns": [
+      "My current job is cerulean bridge.",
+      "I currently live in russet canyon. Where do I currently live?"
+    ],
+    "answer": " You live in russet canyon."
+  },
+  {
+    "id": "bridge-p3-a0-paraphrased-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "value": "cerulean bridge",
+    "turns": [
+      "My current job is cerulean bridge.",
+      "I currently live in russet canyon. What work do I currently do?"
+    ],
+    "answer": " Your job is cerulean bridge."
+  },
+  {
+    "id": "bridge-p3-a0-paraphrased-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "value": "russet canyon",
+    "turns": [
+      "My current job is cerulean bridge.",
+      "I currently live in russet canyon. What is my present home location?"
+    ],
+    "answer": " You live in russet canyon."
+  },
+  {
+    "id": "bridge-p3-a1-familiar-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "value": "russet canyon",
+    "turns": [
+      "My current job is russet canyon.",
+      "I currently live in cerulean bridge. What is my current job?"
+    ],
+    "answer": " Your job is russet canyon."
+  },
+  {
+    "id": "bridge-p3-a1-familiar-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "familiar",
+    "value": "cerulean bridge",
+    "turns": [
+      "My current job is russet canyon.",
+      "I currently live in cerulean bridge. Where do I currently live?"
+    ],
+    "answer": " You live in cerulean bridge."
+  },
+  {
+    "id": "bridge-p3-a1-paraphrased-job",
+    "role": "job",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "value": "russet canyon",
+    "turns": [
+      "My current job is russet canyon.",
+      "I currently live in cerulean bridge. What work do I currently do?"
+    ],
+    "answer": " Your job is russet canyon."
+  },
+  {
+    "id": "bridge-p3-a1-paraphrased-home",
+    "role": "home",
+    "cohort": "bridge",
+    "wording": "paraphrased",
+    "value": "cerulean bridge",
+    "turns": [
+      "My current job is russet canyon.",
+      "I currently live in cerulean bridge. What is my present home location?"
+    ],
+    "answer": " You live in cerulean bridge."
+  }
+]
