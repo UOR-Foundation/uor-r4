@@ -1,0 +1,130 @@
+[
+  {
+    "id": "supp-p0-w0",
+    "first_prompt_equal": true,
+    "first_reply_equal": true,
+    "first_stop": "eos",
+    "turns": 2,
+    "second_stop": "max_tokens"
+  },
+  {
+    "id": "supp-p0-w1",
+    "first_prompt_equal": true,
+    "first_reply_equal": true,
+    "first_stop": "eos",
+    "turns": 2,
+    "second_stop": "max_tokens"
+  },
+  {
+    "id": "supp-p0-w2",
+    "first_prompt_equal": true,
+    "first_reply_equal": true,
+    "first_stop": "eos",
+    "turns": 2,
+    "second_stop": "eos"
+  },
+  {
+    "id": "supp-p0-w3",
+    "first_prompt_equal": true,
+    "first_reply_equal": true,
+    "first_stop": "eos",
+    "turns": 2,
+    "second_stop": "eos"
+  },
+  {
+    "id": "supp-p1-w0",
+    "first_prompt_equal": true,
+    "first_reply_equal": true,
+    "first_stop": "eos",
+    "turns": 2,
+    "second_stop": "eos"
+  },
+  {
+    "id": "supp-p1-w1",
+    "first_prompt_equal": true,
+    "first_reply_equal": true,
+    "first_stop": "eos",
+    "turns": 2,
+    "second_stop": "eos"
+  },
+  {
+    "id": "supp-p1-w2",
+    "first_prompt_equal": true,
+    "first_reply_equal": true,
+    "first_stop": "eos",
+    "turns": 2,
+    "second_stop": "eos"
+  },
+  {
+    "id": "supp-p1-w3",
+    "first_prompt_equal": true,
+    "first_reply_equal": true,
+    "first_stop": "eos",
+    "turns": 2,
+    "second_stop": "eos"
+  },
+  {
+    "id": "supp-p2-w0",
+    "first_prompt_equal": true,
+    "first_reply_equal": true,
+    "first_stop": "eos",
+    "turns": 2,
+    "second_stop": "eos"
+  },
+  {
+    "id": "supp-p2-w1",
+    "first_prompt_equal": true,
+    "first_reply_equal": true,
+    "first_stop": "eos",
+    "turns": 2,
+    "second_stop": "eos"
+  },
+  {
+    "id": "supp-p2-w2",
+    "first_prompt_equal": true,
+    "first_reply_equal": true,
+    "first_stop": "eos",
+    "turns": 2,
+    "second_stop": "eos"
+  },
+  {
+    "id": "supp-p2-w3",
+    "first_prompt_equal": true,
+    "first_reply_equal": true,
+    "first_stop": "eos",
+    "turns": 2,
+    "second_stop": "eos"
+  },
+  {
+    "id": "supp-p3-w0",
+    "first_prompt_equal": true,
+    "first_reply_equal": true,
+    "first_stop": "eos",
+    "turns": 2,
+    "second_stop": "eos"
+  },
+  {
+    "id": "supp-p3-w1",
+    "first_prompt_equal": true,
+    "first_reply_equal": true,
+    "first_stop": "eos",
+    "turns": 2,
+    "second_stop": "eos"
+  },
+  {
+    "id": "supp-p3-w2",
+    "first_prompt_equal": true,
+    "first_reply_equal": true,
+    "first_stop": "eos",
+    "turns": 2,
+    "second_stop": "eos"
+  },
+  {
+    "id": "supp-p3-w3",
+    "first_prompt_equal": true,
+    "first_reply_equal": true,
+    "first_stop": "eos",
+    "turns": 2,
+    "second_stop": "eos"
+  }
+]

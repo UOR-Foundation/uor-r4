@@ -1,0 +1,1142 @@
+{
+  "attempted": 16,
+  "reached": 16,
+  "rows": [
+    {
+      "id": "supp-p0-w0",
+      "role": "job",
+      "cohort": "historical-dual-enriched",
+      "baseline": {
+        "first": 3,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 4,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 51,
+            "step": 3,
+            "to": 52,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 51,
+            "step": 3,
+            "to": 52,
+            "triggered": true,
+            "token": 2874,
+            "next_cursor": 52
+          }
+        ]
+      },
+      "original": {
+        "first": 3,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 51,
+            "step": 3,
+            "to": 25,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 51,
+            "step": 3,
+            "to": 25,
+            "triggered": true,
+            "token": 313,
+            "next_cursor": 25
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "same",
+      "original_vs_current": "earlier",
+      "same_token_different_source": false
+    },
+    {
+      "id": "supp-p0-w1",
+      "role": "job",
+      "cohort": "historical-dual-enriched",
+      "baseline": {
+        "first": 3,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 4,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 51,
+            "step": 3,
+            "to": 52,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 51,
+            "step": 3,
+            "to": 52,
+            "triggered": true,
+            "token": 2874,
+            "next_cursor": 52
+          }
+        ]
+      },
+      "original": {
+        "first": 3,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 51,
+            "step": 3,
+            "to": 25,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 51,
+            "step": 3,
+            "to": 25,
+            "triggered": true,
+            "token": 313,
+            "next_cursor": 25
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "same",
+      "original_vs_current": "earlier",
+      "same_token_different_source": false
+    },
+    {
+      "id": "supp-p0-w2",
+      "role": "job",
+      "cohort": "historical-dual-enriched",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "supp-p0-w3",
+      "role": "home",
+      "cohort": "historical-dual-enriched",
+      "baseline": {
+        "first": 8,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 8,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 8,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "supp-p1-w0",
+      "role": "job",
+      "cohort": "historical-dual-enriched",
+      "baseline": {
+        "first": 3,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 49,
+            "step": 3,
+            "to": 50,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 49,
+            "step": 3,
+            "to": 50,
+            "triggered": true,
+            "token": 223,
+            "next_cursor": 50
+          }
+        ]
+      },
+      "original": {
+        "first": 3,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 49,
+            "step": 3,
+            "to": 26,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 49,
+            "step": 3,
+            "to": 26,
+            "triggered": true,
+            "token": 2852,
+            "next_cursor": 26
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "same",
+      "original_vs_current": "earlier",
+      "same_token_different_source": false
+    },
+    {
+      "id": "supp-p1-w1",
+      "role": "job",
+      "cohort": "historical-dual-enriched",
+      "baseline": {
+        "first": 3,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 49,
+            "step": 3,
+            "to": 50,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 49,
+            "step": 3,
+            "to": 50,
+            "triggered": true,
+            "token": 223,
+            "next_cursor": 50
+          }
+        ]
+      },
+      "original": {
+        "first": 3,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 49,
+            "step": 3,
+            "to": 26,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 49,
+            "step": 3,
+            "to": 26,
+            "triggered": true,
+            "token": 2852,
+            "next_cursor": 26
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "same",
+      "original_vs_current": "earlier",
+      "same_token_different_source": false
+    },
+    {
+      "id": "supp-p1-w2",
+      "role": "job",
+      "cohort": "historical-dual-enriched",
+      "baseline": {
+        "first": null,
+        "exact": true,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": null,
+        "exact": true,
+        "eos": true,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": null,
+        "exact": true,
+        "eos": true,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "both_exact",
+      "original_movement": "both_exact",
+      "original_vs_current": "both_exact",
+      "same_token_different_source": false
+    },
+    {
+      "id": "supp-p1-w3",
+      "role": "home",
+      "cohort": "historical-dual-enriched",
+      "baseline": {
+        "first": 8,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 8,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 8,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "supp-p2-w0",
+      "role": "job",
+      "cohort": "historical-dual-enriched",
+      "baseline": {
+        "first": 3,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 50,
+            "step": 3,
+            "to": 51,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 50,
+            "step": 3,
+            "to": 51,
+            "triggered": true,
+            "token": 2346,
+            "next_cursor": 51
+          }
+        ]
+      },
+      "original": {
+        "first": 3,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 50,
+            "step": 3,
+            "to": 26,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 50,
+            "step": 3,
+            "to": 26,
+            "triggered": true,
+            "token": 2211,
+            "next_cursor": 26
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "same",
+      "original_vs_current": "earlier",
+      "same_token_different_source": false
+    },
+    {
+      "id": "supp-p2-w1",
+      "role": "job",
+      "cohort": "historical-dual-enriched",
+      "baseline": {
+        "first": 3,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 50,
+            "step": 3,
+            "to": 51,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 50,
+            "step": 3,
+            "to": 51,
+            "triggered": true,
+            "token": 2346,
+            "next_cursor": 51
+          }
+        ]
+      },
+      "original": {
+        "first": 3,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 50,
+            "step": 3,
+            "to": 26,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 50,
+            "step": 3,
+            "to": 26,
+            "triggered": true,
+            "token": 2211,
+            "next_cursor": 26
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "same",
+      "original_vs_current": "earlier",
+      "same_token_different_source": false
+    },
+    {
+      "id": "supp-p2-w2",
+      "role": "job",
+      "cohort": "historical-dual-enriched",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "supp-p2-w3",
+      "role": "home",
+      "cohort": "historical-dual-enriched",
+      "baseline": {
+        "first": 9,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 9,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 9,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "supp-p3-w0",
+      "role": "job",
+      "cohort": "historical-dual-enriched",
+      "baseline": {
+        "first": 3,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 23,
+            "step": 3,
+            "to": 24,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 23,
+            "step": 3,
+            "to": 24,
+            "triggered": true,
+            "token": 1643,
+            "next_cursor": 24
+          }
+        ]
+      },
+      "original": {
+        "first": 3,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 23,
+            "step": 3,
+            "to": 25,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 23,
+            "step": 3,
+            "to": 25,
+            "triggered": true,
+            "token": 2458,
+            "next_cursor": 25
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "same",
+      "original_vs_current": "earlier",
+      "same_token_different_source": false
+    },
+    {
+      "id": "supp-p3-w1",
+      "role": "job",
+      "cohort": "historical-dual-enriched",
+      "baseline": {
+        "first": 3,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 23,
+            "step": 3,
+            "to": 24,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 23,
+            "step": 3,
+            "to": 24,
+            "triggered": true,
+            "token": 1643,
+            "next_cursor": 24
+          }
+        ]
+      },
+      "original": {
+        "first": 3,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 23,
+            "step": 3,
+            "to": 25,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 23,
+            "step": 3,
+            "to": 25,
+            "triggered": true,
+            "token": 2458,
+            "next_cursor": 25
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "same",
+      "original_vs_current": "earlier",
+      "same_token_different_source": false
+    },
+    {
+      "id": "supp-p3-w2",
+      "role": "job",
+      "cohort": "historical-dual-enriched",
+      "baseline": {
+        "first": 8,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 8,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 8,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "supp-p3-w3",
+      "role": "home",
+      "cohort": "historical-dual-enriched",
+      "baseline": {
+        "first": null,
+        "exact": true,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": null,
+        "exact": true,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": null,
+        "exact": true,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "both_exact",
+      "original_movement": "both_exact",
+      "original_vs_current": "both_exact",
+      "same_token_different_source": false
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+ccc61ab89978f4d5dd5f9681495a09ff50635d8c319c62065fa852503049009b  tool/main.rs
+1fc02d7f90a5e9dd508c339f38f40a31bea0b7617ca2ae053b0aa0de5832d643  source/crates/uor-r4-discrete/src/conjunction.rs
+66d0df0fb84693165e4fe8af8e004958d8eac85e3aca6708b260f9abf29ec0f7  source/crates/uor-r4-discrete/src/conjunction/free.rs
+ea6b766ccbb0723a120f7390d095c192d70cd5a69bc1db55b851756f6db15380  target/release/supplied-form-trace
