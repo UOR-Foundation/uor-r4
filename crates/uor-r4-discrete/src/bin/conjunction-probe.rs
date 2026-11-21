@@ -647,8 +647,10 @@ fn reader_gpu(_: &[String]) -> Result<(), String> {
 /// prompt twice, by the host reader read from its file and by the CUDA read
 /// kernel over the same reader's flat tables, and compares reply ids and the
 /// raw words of every step. The hashes are those of `reader-replay`
-/// (`served_words_sha256`) and `question-reader-d11 words`. No reply is
-/// graded here. Fails when any prompt differs or was not read on the GPU.
+/// (`served_words_sha256`) and `question-reader-d11 words`. The replies
+/// the kernel wrote are counted against the panel's references as
+/// `reader-replies` counts the host's. Fails when any prompt differs or was
+/// not read on the GPU.
 #[cfg(feature = "cuda")]
 fn reader_gpu(args: &[String]) -> Result<(), String> {
     use sha2::{Digest, Sha256};
@@ -751,6 +753,24 @@ fn reader_gpu(args: &[String]) -> Result<(), String> {
             }));
         }
     }
+    // The count `reader-replies` reports (`count_replies_by`), over the ids
+    // the kernel wrote and over the host's. A control the count must fail
+    // on: each GPU reply against the next prompt's reference.
+    let counted = |replies: Vec<&Vec<u32>>, references: &[conjunction::PanelRow]| {
+        let next = std::cell::Cell::new(0usize);
+        let (count, _) = conjunction::count_replies_by(references, reader.asked.eos(), &|_| {
+            let at = next.get();
+            next.set(at + 1);
+            replies[at].clone()
+        });
+        count
+    };
+    let gpu_count = counted(gpu.iter().map(|read| &read.reply).collect(), &panel);
+    let host_count = counted(host.iter().map(|(reply, _, _)| reply).collect(), &panel);
+    let mut shifted = panel.clone();
+    let turn = usize::from(!shifted.is_empty());
+    shifted.rotate_left(turn);
+    let shifted_count = counted(gpu.iter().map(|read| &read.reply).collect(), &shifted);
     let [host_words, gpu_words, host_ids, gpu_ids] = hashes;
     let equal = differ == [0; 3] && status[1] == 0 && status[2] == 0;
     let report = serde_json::json!({
@@ -777,6 +797,9 @@ fn reader_gpu(args: &[String]) -> Result<(), String> {
         "gpu_words_sha256": hex(gpu_words),
         "host_reply_ids_sha256": hex(host_ids),
         "gpu_reply_ids_sha256": hex(gpu_ids),
+        "gpu_count": gpu_count,
+        "host_count": host_count,
+        "control_gpu_count_against_the_next_prompts_reference": shifted_count,
         "equal": equal,
         "host_ms": host_ms,
         "gpu_ms_with_context_and_table_load": gpu_ms,
