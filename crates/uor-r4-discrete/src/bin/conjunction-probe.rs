@@ -841,9 +841,9 @@ fn reader_gpu_train(args: &[String]) -> Result<(), String> {
     use uor_r4_discrete::conjunction::{bind::BindTable, saved::Reader, StandBy};
     use uor_r4_discrete::reader_train_device as device;
 
-    if args.len() != 12 {
+    if args.len() != 12 && args.len() != 13 {
         return Err(
-            "usage: conjunction-probe reader-gpu-train TOKENS_U16 MASK_U8 HOST_READER_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS OUT_READER_FILE OUT_JSON"
+            "usage: conjunction-probe reader-gpu-train TOKENS_U16 MASK_U8 HOST_READER_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS OUT_READER_FILE OUT_JSON [free|free2|free3]"
                 .into(),
         );
     }
@@ -877,9 +877,18 @@ fn reader_gpu_train(args: &[String]) -> Result<(), String> {
     let bos = number(&args[7])?;
     let eos = number(&args[8])?;
     let slots = number(&args[9])? as usize;
+    // The order-free count and its passes; the in-order TRAIN with none.
+    use uor_r4_discrete::conjunction::free::Update;
+    let update = match args.get(12).map(String::as_str) {
+        None => Update::InOrder,
+        Some("free") => Update::Free { passes: 1 },
+        Some("free2") => Update::Free { passes: 2 },
+        Some("free3") => Update::Free { passes: 3 },
+        Some(other) => return Err(format!("unknown update {other}")),
+    };
 
     let started = Instant::now();
-    let (host, trained) = Reader::train(
+    let (host, trained) = Reader::train_by(
         &tokens,
         &eligible,
         vocabulary,
@@ -894,6 +903,7 @@ fn reader_gpu_train(args: &[String]) -> Result<(), String> {
         BindTable::default(),
         true,
         READS,
+        update,
     )
     .map_err(|e| e.to_string())?;
     let host_ms = started.elapsed().as_millis() as u64;
@@ -902,7 +912,7 @@ fn reader_gpu_train(args: &[String]) -> Result<(), String> {
     let on_gpu = |reversed: bool| -> Result<_, String> {
         let started = Instant::now();
         let (tables, stats) = device::train(
-            &tokens, &eligible, vocabulary, window, bos, eos, slots, limit, true, reversed,
+            &tokens, &eligible, vocabulary, window, bos, eos, slots, limit, true, reversed, update,
         )
         .map_err(|e| e.to_string())?;
         let ms = started.elapsed().as_millis() as u64;
@@ -916,7 +926,9 @@ fn reader_gpu_train(args: &[String]) -> Result<(), String> {
     let (bytes, saved, found, stats, gpu_ms) = on_gpu(false)?;
     let (again_bytes, _, _, _, _) = on_gpu(false)?;
     let (control_bytes, _, control_found, _, _) = on_gpu(true)?;
-    let equal = bytes == file && found == Differences::default();
+    // Under the order-free count the control must write the same reader.
+    let free = update != Update::InOrder;
+    let equal = bytes == file && found == Differences::default() && (!free || control_bytes == bytes);
     std::fs::write(&args[10], &bytes).map_err(|e| format!("{}: {e}", args[10]))?;
     let report = serde_json::json!({
         "schema": "uor-r4.discrete-reader-gpu-train/1",
@@ -931,6 +943,7 @@ fn reader_gpu_train(args: &[String]) -> Result<(), String> {
         "gpu_against_host_every_row_and_slot": found,
         "control_replies_written_last_first_sha256": sha(&control_bytes),
         "control_bytes_differ_from_the_file": control_bytes != file,
+        "update": update,
         "control_against_host_every_row_and_slot": control_found,
         "kernel_sha256": device::kernel_hash(),
         "target": format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS),

@@ -807,3 +807,248 @@ extern "C" __global__ void train_missed(const u32* cfg, const u32* tok, const u3
     }
     out[mine] = missed;
 }
+
+// ---------------------------------------------------------------------------
+// The order-free TRAIN (conjunction/free.rs). Every reply of a pass is counted
+// against the held rows of the pass before, so no launch depends on the order
+// of its threads: a slot is offered by atomic adds, a row keeps the eight
+// slots offered most often by atomic maxima, and kept slots are counted right
+// and wrong by atomic adds.
+
+// An offer's key: the row's key, then the slot's five entry words.
+#define OFFER_WORDS 16u
+#define CODE_BITS 22u
+#define CODE_MOST 0x3FFFFFu
+
+// The order of slots offered equally often (free.rs `rank`): pointers by
+// back, ahead, width and the id before, the next-id read, the copy read,
+// then ids. Ids and the id before lie below 4096.
+__device__ static u32 entry_code(const u32* entry) {
+    u32 kind = entry[0];
+    if (kind == 2u) {
+        return (entry[1] << 16) | (entry[2] << 13) | (entry[3] << 12) | entry[4];
+    }
+    if (kind == 3u) {
+        return 1u << 20;
+    }
+    if (kind == 4u) {
+        return 2u << 20;
+    }
+    return (3u << 20) | entry[4];
+}
+
+// Larger for the slot that stands first: more counts, then the lower code.
+// Two slots of one row never share it.
+__device__ static u64 standing(u32 count, const u32* entry) {
+    return ((u64)count << CODE_BITS) | (u64)(CODE_MOST - entry_code(entry));
+}
+
+// A thread a job walks its reply as train_write does, reading the rows of the
+// pass before (`old_*`) and writing none of them. mode 0 offers the target
+// and each read that names it to every row of the place (`data`: one count an
+// offer). mode 1 counts every kept slot of those rows right or wrong (`data`:
+// the new rows).
+extern "C" __global__ void free_walk(const u32* cfg, const u32* tok, const u32* jobs,
+                                     const u32* order, u32* old_state, u32* old_keys,
+                                     u32* old_slots, u32* state, u32* keys, u32* data, u32* flags,
+                                     u32 old_capacity, u32 capacity, u32 count, u32 empty,
+                                     u32 mode) {
+    u32 mine = blockIdx.x * blockDim.x + threadIdx.x;
+    if (mine >= count) {
+        return;
+    }
+    const u32* job = jobs + (u64)order[mine] * JOB_WORDS;
+    u32 start = job[0];
+    u32 end = job[1];
+    u32 held_count = job[2];
+    const u32* held = job + 3;
+    Rows old;
+    old.state = old_state;
+    old.keys = old_keys;
+    old.slots = old_slots;
+    old.capacity = old_capacity;
+    Hist hist;
+    hist.count = 0u;
+    hist.last = NONE;
+    u32 cursor = NONE;
+    for (u32 position = start; position < end; ++position) {
+        u32 target = tok[position];
+        Place at;
+        at.tok = tok;
+        at.len = position;
+        at.floor = window_floor(tok, position, cfg[CFG_CONTEXT], cfg[CFG_BOS]);
+        at.start = start;
+        at.cursor = cursor;
+        u32 own;
+        u32 shared;
+        bool has_shared;
+        tails(hist, at, &own, &shared, &has_shared);
+        u32 history[8];
+        hist_address(hist, history);
+        u32 unused = 0u;
+        Answer read = place_answer(old, held, held_count, history, own, shared, has_shared,
+                                   empty, at, &unused);
+        // The id, then the reads that name it: next, copy, the first pointers.
+        u32 offers[3u + POINTERS_ADDED][5];
+        u32 offered = 1u;
+        offers[0][0] = 1u;
+        offers[0][1] = 0u;
+        offers[0][2] = 0u;
+        offers[0][3] = 0u;
+        offers[0][4] = target;
+        for (u32 kind = 3u; kind <= 4u; ++kind) {
+            u32 entry[5] = {kind, 0u, 0u, 0u, 0u};
+            if (names(entry, at, target)) {
+                for (u32 field = 0; field < 5u; ++field) {
+                    offers[offered][field] = entry[field];
+                }
+                ++offered;
+            }
+        }
+        Pointers pointers;
+        pointers_at(at, target, pointers);
+        for (u32 index = 0; index < pointers.count; ++index) {
+            for (u32 field = 0; field < 5u; ++field) {
+                offers[offered][field] = pointers.entry[index][field];
+            }
+            ++offered;
+        }
+        u32 written = offered > 1u ? name(offers[1], at).source : NONE;
+        u32 key[OFFER_WORDS];
+        for (u32 index = 0; index < held_count; ++index) {
+            for (u32 which = 0; which < (has_shared ? 2u : 1u); ++which) {
+                row_key(held[index], empty, which ? shared : own, history, key);
+                if (mode == 0u) {
+                    for (u32 offer = 0; offer < offered; ++offer) {
+                        for (u32 field = 0; field < 5u; ++field) {
+                            key[KEY_WORDS + field] = offers[offer][field];
+                        }
+                        u32 slot = slot_of(state, keys, capacity, OFFER_WORDS, key, true);
+                        if (slot == NONE) {
+                            flags[FLAG_ROWS] = 1u;
+                            return;
+                        }
+                        atomicAdd(data + slot, 1u);
+                    }
+                    continue;
+                }
+                u32 slot = slot_of(state, keys, capacity, KEY_WORDS, key, false);
+                if (slot == NONE) {
+                    continue;
+                }
+                u32* row = data + (u64)slot * ROW_WORDS;
+                for (u32 kept = 0; kept < MAX_SLOTS; ++kept) {
+                    u32* entry = row + kept * SLOT_WORDS;
+                    if (entry[0] == 0u) {
+                        continue;
+                    }
+                    Named named = name(entry, at);
+                    if (named.ok) {
+                        atomicAdd(entry + (named.token == target ? 5u : 6u), 1u);
+                    }
+                }
+            }
+        }
+        cursor = read.found && read.named.token == target ? read.named.source : written;
+        hist_push(hist, target, cursor);
+    }
+}
+
+// A thread an offer slot: the offer's row gets a slot in the new row table.
+extern "C" __global__ void free_rows(const u32* offer_state, const u32* offer_keys,
+                                     u32* row_state, u32* row_keys, u32* offer_row, u32* flags,
+                                     u32 offer_capacity, u32 row_capacity) {
+    u32 slot = blockIdx.x * blockDim.x + threadIdx.x;
+    if (slot >= offer_capacity || offer_state[slot] != SLOT_READY) {
+        return;
+    }
+    u32 key[KEY_WORDS];
+    for (u32 word = 0; word < KEY_WORDS; ++word) {
+        key[word] = offer_keys[(u64)slot * OFFER_WORDS + word];
+    }
+    u32 row = slot_of(row_state, row_keys, row_capacity, KEY_WORDS, key, true);
+    if (row == NONE) {
+        flags[FLAG_ROWS] = 1u;
+    }
+    offer_row[slot] = row;
+}
+
+// Round `round` of eight: among a row's offers that stand below the one the
+// round before kept, the one that stands first. best: eight words a row.
+extern "C" __global__ void free_best(const u32* offer_state, const u32* offer_keys,
+                                     const u32* offer_counts, const u32* offer_row, u64* best,
+                                     u32 offer_capacity, u32 round) {
+    u32 slot = blockIdx.x * blockDim.x + threadIdx.x;
+    if (slot >= offer_capacity || offer_state[slot] != SLOT_READY || offer_row[slot] == NONE) {
+        return;
+    }
+    u64 mine = standing(offer_counts[slot], offer_keys + (u64)slot * OFFER_WORDS + KEY_WORDS);
+    u64* row = best + (u64)offer_row[slot] * MAX_SLOTS;
+    if (round > 0u && mine >= row[round - 1u]) {
+        return;
+    }
+    atomicMax(row + round, mine);
+}
+
+// The offers the eight rounds kept become their row's slots, counts at zero.
+extern "C" __global__ void free_keep(const u32* offer_state, const u32* offer_keys,
+                                     const u32* offer_counts, const u32* offer_row,
+                                     const u64* best, u32* row_slots, u32 offer_capacity) {
+    u32 slot = blockIdx.x * blockDim.x + threadIdx.x;
+    if (slot >= offer_capacity || offer_state[slot] != SLOT_READY || offer_row[slot] == NONE) {
+        return;
+    }
+    const u32* entry = offer_keys + (u64)slot * OFFER_WORDS + KEY_WORDS;
+    u64 mine = standing(offer_counts[slot], entry);
+    const u64* row = best + (u64)offer_row[slot] * MAX_SLOTS;
+    for (u32 round = 0; round < MAX_SLOTS; ++round) {
+        if (row[round] != mine) {
+            continue;
+        }
+        u32* kept = row_slots + (u64)offer_row[slot] * ROW_WORDS + round * SLOT_WORDS;
+        for (u32 field = 0; field < 5u; ++field) {
+            kept[field] = entry[field];
+        }
+        kept[5] = 0u;
+        kept[6] = 0u;
+        return;
+    }
+}
+
+// A thread a row: its counted slots in standing order, most often right
+// first; a slot never right is dropped.
+extern "C" __global__ void free_sort(const u32* row_state, u32* row_slots, u32 row_capacity) {
+    u32 slot = blockIdx.x * blockDim.x + threadIdx.x;
+    if (slot >= row_capacity || row_state[slot] != SLOT_READY) {
+        return;
+    }
+    u32* row = row_slots + (u64)slot * ROW_WORDS;
+    u32 sorted[ROW_WORDS];
+    for (u32 word = 0; word < ROW_WORDS; ++word) {
+        sorted[word] = 0u;
+    }
+    u32 live = 0u;
+    for (u32 kept = 0; kept < MAX_SLOTS; ++kept) {
+        const u32* entry = row + kept * SLOT_WORDS;
+        if (entry[0] == 0u || entry[5] == 0u) {
+            continue;
+        }
+        u64 mine = standing(entry[5], entry);
+        u32 at = live;
+        while (at > 0u &&
+               standing(sorted[(at - 1u) * SLOT_WORDS + 5u], sorted + (at - 1u) * SLOT_WORDS) <
+                   mine) {
+            for (u32 field = 0; field < SLOT_WORDS; ++field) {
+                sorted[at * SLOT_WORDS + field] = sorted[(at - 1u) * SLOT_WORDS + field];
+            }
+            --at;
+        }
+        for (u32 field = 0; field < SLOT_WORDS; ++field) {
+            sorted[at * SLOT_WORDS + field] = entry[field];
+        }
+        ++live;
+    }
+    for (u32 word = 0; word < ROW_WORDS; ++word) {
+        row[word] = sorted[word];
+    }
+}

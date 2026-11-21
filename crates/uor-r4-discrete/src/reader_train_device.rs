@@ -3,10 +3,11 @@
 //! the held rows are computed on device 0; the host lays the work out
 //! ([`crate::conjunction::trained`]) and reads the tables back.
 use crate::conjunction::flat::{FORM_WORDS, KEY_WORDS, ROW_WORDS};
+use crate::conjunction::free::Update;
 use crate::conjunction::trained::{self, Tables, FORMS_A_TURN, JOB_WORDS, PAIR_WORDS, RUN_WORDS};
 use crate::conjunction::MAX_SLOTS;
 use crate::{Error, Result};
-use cudarc::driver::{CudaContext, LaunchConfig, Ptx, PushKernelArg};
+use cudarc::driver::{CudaContext, CudaSlice, LaunchConfig, Ptx, PushKernelArg};
 use sha2::{Digest, Sha256};
 
 const CUBIN: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/reader-train.cubin"));
@@ -19,6 +20,9 @@ const ROW_SLOTS: usize = 1 << 21;
 const ROW_SLOTS_MOST: usize = 1 << 25;
 const FORM_SLOTS_MOST: usize = 1 << 26;
 const SLOT_READY: u32 = 2;
+/// Words of an offer in the order-free count: a row key and a slot entry.
+const OFFER_WORDS: usize = KEY_WORDS + 5;
+const OFFER_SLOTS_MOST: usize = 1 << 26;
 
 /// What one TRAIN on the device did.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
@@ -34,6 +38,11 @@ pub struct Stats {
     pub third_pass_levels: u64,
     pub row_slots: u64,
     pub held_rows: u64,
+    /// The order-free count: its passes, the most distinct offers of a pass
+    /// and the offer table that held them (all 0 for the in-order TRAIN).
+    pub passes: u64,
+    pub offers: u64,
+    pub offer_slots: u64,
     pub launches: u64,
     /// Launch to end of every kernel, with the host's levelling between
     /// them left out; no context, module or table load, no readback.
@@ -62,7 +71,8 @@ fn grid(threads: usize, block: u32) -> LaunchConfig {
 /// TRAIN on device 0 with the choices of the saved M2 readers (no class
 /// codes, no suffix orders, the pair stand, `precise,across`). `reversed`
 /// writes the replies last first: a control whose reader must differ where
-/// the order of writing matters.
+/// the order of writing matters, and must not differ under
+/// [`Update::Free`], whose passes count the replies in no order.
 #[allow(clippy::too_many_arguments)]
 pub fn train(
     tokens: &[u32],
@@ -75,6 +85,7 @@ pub fn train(
     limit: usize,
     open: bool,
     reversed: bool,
+    update: Update,
 ) -> Result<(Tables, Stats)> {
     if vocabulary > 4_096 || tokens.iter().any(|&token| token >= vocabulary) {
         return Err(invalid(
@@ -98,10 +109,12 @@ pub fn train(
     let run_start: Vec<u32> = runs.iter().map(|run| run[0] as u32).collect();
     let pairs = trained::pairs(tokens, eligible, window, bos);
     let stride = window + limit;
-    let form_slots = (runs.len() * FORMS_A_TURN).next_power_of_two().max(1 << 16);
-    if form_slots > FORM_SLOTS_MOST {
-        return Err(invalid("more replies than the form table is sized for"));
-    }
+    // Room for every form every turn could have, up to the largest table.
+    // Turns share most of their forms, so a longer stream is tried in the
+    // largest table; the count kernel raises its flag if that fills.
+    let form_slots = (runs.len() * FORMS_A_TURN)
+        .next_power_of_two()
+        .clamp(1 << 16, FORM_SLOTS_MOST);
 
     let ctx = CudaContext::new(0).map_err(cuda)?;
     let (major, minor) = ctx.compute_capability().map_err(cuda)?;
@@ -301,6 +314,294 @@ pub fn train(
         return Err(invalid("no reply stands under a kept form"));
     }
     let every: Vec<u32> = (0..small(job_count)?).collect();
+    if let Update::Free { passes } = update {
+        // The order-free count (conjunction/free.rs): no levels. Each pass
+        // offers, keeps and counts in thirteen launches whatever the order of
+        // the jobs.
+        struct Held {
+            state: CudaSlice<u32>,
+            keys: CudaSlice<u32>,
+            rows: CudaSlice<u32>,
+            capacity: usize,
+        }
+        let walk_kernel = load("free_walk")?;
+        let rows_kernel = load("free_rows")?;
+        let best_kernel = load("free_best")?;
+        let kept_kernel = load("free_keep")?;
+        let sort_kernel = load("free_sort")?;
+        let jobs_gpu = put(&jobs)?;
+        stats.jobs = job_count as u64;
+        stats.passes = passes.max(1) as u64;
+        let mut launches = 0u64;
+        let mut micros = 0u64;
+        let mut offers_most = 0u64;
+        let mut offer_slots_most = 0u64;
+        let mut pass = |old: &Held, order: &[u32], empty: u32| -> Result<Held> {
+            // Most offers and rows these jobs can make: a place is written
+            // under each form's own row and at most one shared row, and is
+            // offered its id, two reads and three pointers.
+            let places: usize = order
+                .iter()
+                .map(|&job| {
+                    let job = &jobs[job as usize * JOB_WORDS..][..JOB_WORDS];
+                    (job[1] - job[0]) as usize * job[2] as usize * 2
+                })
+                .sum();
+            let offer_slots = (places * 6)
+                .next_power_of_two()
+                .clamp(1 << 12, OFFER_SLOTS_MOST);
+            let order_gpu = put(order)?;
+            let count = small(order.len())?;
+            let mut flags_gpu = zeros(4)?;
+            let mut offer_state = zeros(offer_slots)?;
+            let mut offer_keys = zeros(offer_slots * OFFER_WORDS)?;
+            let mut offer_counts = zeros(offer_slots)?;
+            let old_capacity = small(old.capacity)?;
+            let offer_capacity = small(offer_slots)?;
+            ctx.synchronize().map_err(cuda)?;
+            let started = std::time::Instant::now();
+            // SAFETY: the old rows are only read; an offer's slot is claimed
+            // by compare-and-swap before its key is written, and its count
+            // grows by atomic adds.
+            unsafe {
+                stream
+                    .launch_builder(&walk_kernel)
+                    .arg(&cfg_gpu)
+                    .arg(&tokens_gpu)
+                    .arg(&jobs_gpu)
+                    .arg(&order_gpu)
+                    .arg(&old.state)
+                    .arg(&old.keys)
+                    .arg(&old.rows)
+                    .arg(&mut offer_state)
+                    .arg(&mut offer_keys)
+                    .arg(&mut offer_counts)
+                    .arg(&mut flags_gpu)
+                    .arg(&old_capacity)
+                    .arg(&offer_capacity)
+                    .arg(&count)
+                    .arg(&empty)
+                    .arg(&0u32)
+                    .launch(grid(order.len(), 64))
+            }
+            .map_err(cuda)?;
+            ctx.synchronize().map_err(cuda)?;
+            micros += started.elapsed().as_micros() as u64;
+            launches += 1;
+            if stream.clone_dtoh(&flags_gpu).map_err(cuda)?[1] != 0 {
+                return Err(invalid("the offers do not fit the largest offer table"));
+            }
+            let offers = stream
+                .clone_dtoh(&offer_state)
+                .map_err(cuda)?
+                .iter()
+                .filter(|&&state| state == SLOT_READY)
+                .count();
+            offers_most = offers_most.max(offers as u64);
+            offer_slots_most = offer_slots_most.max(offer_slots as u64);
+            // A row has at least one offer.
+            let row_slots = (offers.min(places) * 2)
+                .next_power_of_two()
+                .clamp(1 << 12, ROW_SLOTS_MOST);
+            if offers.min(places) > row_slots {
+                return Err(invalid(
+                    "the held rows do not fit the largest row table",
+                ));
+            }
+            let mut new = Held {
+                state: zeros(row_slots)?,
+                keys: zeros(row_slots * KEY_WORDS)?,
+                rows: zeros(row_slots * ROW_WORDS)?,
+                capacity: row_slots,
+            };
+            let mut offer_row = zeros(offer_slots)?;
+            let mut best = stream
+                .alloc_zeros::<u64>(row_slots * MAX_SLOTS)
+                .map_err(cuda)?;
+            let row_capacity = small(row_slots)?;
+            ctx.synchronize().map_err(cuda)?;
+            let started = std::time::Instant::now();
+            // SAFETY: a thread an offer slot; a row's slot is claimed by
+            // compare-and-swap and each thread writes its own word of
+            // `offer_row`.
+            unsafe {
+                stream
+                    .launch_builder(&rows_kernel)
+                    .arg(&offer_state)
+                    .arg(&offer_keys)
+                    .arg(&mut new.state)
+                    .arg(&mut new.keys)
+                    .arg(&mut offer_row)
+                    .arg(&mut flags_gpu)
+                    .arg(&offer_capacity)
+                    .arg(&row_capacity)
+                    .launch(grid(offer_slots, 256))
+            }
+            .map_err(cuda)?;
+            for round in 0..MAX_SLOTS as u32 {
+                // SAFETY: a row's eight words of `best` grow by atomic
+                // maxima; round `round` reads the word of the round before,
+                // which no thread of this launch writes.
+                unsafe {
+                    stream
+                        .launch_builder(&best_kernel)
+                        .arg(&offer_state)
+                        .arg(&offer_keys)
+                        .arg(&offer_counts)
+                        .arg(&offer_row)
+                        .arg(&mut best)
+                        .arg(&offer_capacity)
+                        .arg(&round)
+                        .launch(grid(offer_slots, 256))
+                }
+                .map_err(cuda)?;
+            }
+            // SAFETY: two offers of one row never stand equal, so each kept
+            // slot of a row is written by one thread.
+            unsafe {
+                stream
+                    .launch_builder(&kept_kernel)
+                    .arg(&offer_state)
+                    .arg(&offer_keys)
+                    .arg(&offer_counts)
+                    .arg(&offer_row)
+                    .arg(&best)
+                    .arg(&mut new.rows)
+                    .arg(&offer_capacity)
+                    .launch(grid(offer_slots, 256))
+            }
+            .map_err(cuda)?;
+            // SAFETY: the old rows and the new rows' keys and entries are
+            // only read; the new rows' counts grow by atomic adds.
+            unsafe {
+                stream
+                    .launch_builder(&walk_kernel)
+                    .arg(&cfg_gpu)
+                    .arg(&tokens_gpu)
+                    .arg(&jobs_gpu)
+                    .arg(&order_gpu)
+                    .arg(&old.state)
+                    .arg(&old.keys)
+                    .arg(&old.rows)
+                    .arg(&mut new.state)
+                    .arg(&mut new.keys)
+                    .arg(&mut new.rows)
+                    .arg(&mut flags_gpu)
+                    .arg(&old_capacity)
+                    .arg(&row_capacity)
+                    .arg(&count)
+                    .arg(&empty)
+                    .arg(&1u32)
+                    .launch(grid(order.len(), 64))
+            }
+            .map_err(cuda)?;
+            // SAFETY: a thread a row sorts its own fifty-six words.
+            unsafe {
+                stream
+                    .launch_builder(&sort_kernel)
+                    .arg(&new.state)
+                    .arg(&mut new.rows)
+                    .arg(&row_capacity)
+                    .launch(grid(row_slots, 256))
+            }
+            .map_err(cuda)?;
+            ctx.synchronize().map_err(cuda)?;
+            micros += started.elapsed().as_micros() as u64;
+            launches += 3 + MAX_SLOTS as u64 + 1;
+            if stream.clone_dtoh(&flags_gpu).map_err(cuda)?[1] != 0 {
+                return Err(invalid("the held rows do not fit their row table"));
+            }
+            Ok(new)
+        };
+        let order: Vec<u32> = if reversed {
+            every.iter().rev().copied().collect()
+        } else {
+            every.clone()
+        };
+        // No row before the first pass: a table of empty slots.
+        let mut held = Held {
+            state: zeros(16)?,
+            keys: zeros(16 * KEY_WORDS)?,
+            rows: zeros(16 * ROW_WORDS)?,
+            capacity: 16,
+        };
+        for _ in 0..passes.max(1) {
+            held = pass(&held, &order, 0)?;
+        }
+        let missed_cfg = put(&cfg(held.capacity)?)?;
+        let mut work_gpu = zeros(job_count * stride)?;
+        let mut missed_gpu = zeros(job_count)?;
+        let job_count_word = small(job_count)?;
+        ctx.synchronize().map_err(cuda)?;
+        let started = std::time::Instant::now();
+        // SAFETY: the held rows are only read here; each job's thread writes
+        // its own work row of `stride` ids and its own word of `missed`.
+        unsafe {
+            stream
+                .launch_builder(&missed_kernel)
+                .arg(&missed_cfg)
+                .arg(&tokens_gpu)
+                .arg(&jobs_gpu)
+                .arg(&held.state)
+                .arg(&held.keys)
+                .arg(&held.rows)
+                .arg(&pair_keys_gpu)
+                .arg(&pair_rows_gpu)
+                .arg(&mut work_gpu)
+                .arg(&mut missed_gpu)
+                .arg(&mut flags_gpu)
+                .arg(&pair_count)
+                .arg(&job_count_word)
+                .launch(grid(job_count, 64))
+        }
+        .map_err(cuda)?;
+        ctx.synchronize().map_err(cuda)?;
+        let missed_micros = started.elapsed().as_micros() as u64;
+        if stream.clone_dtoh(&flags_gpu).map_err(cuda)?[3] != 0 {
+            return Err(invalid("a TRAIN prompt is longer than its work row"));
+        }
+        let missed = stream.clone_dtoh(&missed_gpu).map_err(cuda)?;
+        let again: Vec<u32> = order
+            .iter()
+            .copied()
+            .filter(|&job| missed[job as usize] != 0)
+            .collect();
+        let for_empty = if again.is_empty() {
+            None
+        } else {
+            Some(pass(&held, &again, 1)?)
+        };
+        stats.jobs_with_an_empty_read = again.len() as u64;
+        stats.row_slots = held.capacity as u64;
+        stats.offers = offers_most;
+        stats.offer_slots = offer_slots_most;
+        stats.launches += launches + 1;
+        stats.kernel_micros = kernel_micros + micros + missed_micros;
+        let mut tables = Tables {
+            forms,
+            pair_keys: pairs.keys,
+            pair_rows: stream.clone_dtoh(&pair_rows_gpu).map_err(cuda)?,
+            ..Tables::default()
+        };
+        if tables.pair_keys.is_empty() {
+            tables.pair_rows.clear();
+        }
+        for table in std::iter::once(&held).chain(for_empty.as_ref()) {
+            let state = stream.clone_dtoh(&table.state).map_err(cuda)?;
+            let keys = stream.clone_dtoh(&table.keys).map_err(cuda)?;
+            let rows = stream.clone_dtoh(&table.rows).map_err(cuda)?;
+            for slot in (0..table.capacity).filter(|&slot| state[slot] == SLOT_READY) {
+                tables
+                    .row_keys
+                    .extend(&keys[slot * KEY_WORDS..(slot + 1) * KEY_WORDS]);
+                tables
+                    .row_slots
+                    .extend(&rows[slot * ROW_WORDS..(slot + 1) * ROW_WORDS]);
+            }
+        }
+        stats.held_rows = (tables.row_keys.len() / KEY_WORDS) as u64;
+        return Ok((tables, stats));
+    }
     let (order, bounds) = trained::levels(&jobs, &every, kept)?;
     stats.jobs = job_count as u64;
     stats.second_pass_levels = bounds.len() as u64;

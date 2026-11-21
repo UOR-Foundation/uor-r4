@@ -560,6 +560,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "train_write",
             "train_pairs",
             "train_missed",
+            "free_walk",
+            "free_rows",
+            "free_best",
+            "free_keep",
+            "free_sort",
         ],
     )?;
     // An independent module: the ordinary source, nvcc invocation and PTX stay
