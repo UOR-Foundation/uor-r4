@@ -14,7 +14,7 @@ use uor_r4_discrete::kn_ceiling::{
 use uor_r4_integer::lawful_likelihood::bits_q12;
 
 mod controls;
-#[cfg(feature = "cuda")]
+mod exact;
 #[path = "../../../../../labs/kn-reference/instrument/src/pick_device.rs"]
 mod pick_device;
 #[cfg(feature = "cuda")]
@@ -391,6 +391,10 @@ fn main() -> Result<(), Failure> {
         [mode, dir] if mode == Path::new("verify-finite") => finite(dir, true, false),
         [mode, dir] if mode == Path::new("finite-masked") => finite(dir, false, true),
         [mode, dir] if mode == Path::new("verify-finite-masked") => finite(dir, true, true),
+        [mode, path] if mode == Path::new("finite-c2") => exact::finite(path, None),
+        [mode, path, tape] if mode == Path::new("verify-finite-c2") => {
+            exact::finite(path, Some(tape))
+        }
         [mode, dir, pick, arm] if mode == Path::new("seal") => seal(
             dir,
             pick.to_str()
@@ -415,11 +419,34 @@ fn main() -> Result<(), Failure> {
                 pin.to_str()
                     .ok_or_else(|| fail("feature tape pin must be UTF-8"))?,
                 out,
+                None,
+            )
+        }
+        #[cfg(feature = "cuda")]
+        [command, r, trunk, compact, tape, pin, exact_tape, exact_pin, out]
+            if command == Path::new("prepare-c2") =>
+        {
+            prepare::run(
+                "exact",
+                r,
+                trunk,
+                compact,
+                tape,
+                pin.to_str()
+                    .ok_or_else(|| fail("count tape pin must be UTF-8"))?,
+                out,
+                Some((
+                    exact_tape,
+                    exact_pin
+                        .to_str()
+                        .ok_or_else(|| fail("C2 tape pin must be UTF-8"))?,
+                )),
             )
         }
         _ => Err(fail(concat!(
             "usage: d37-r-fit finite DIR | verify-finite DIR | ",
             "prepare PICK_MODE R_UORT TRUNK COMPACT FEATURES FEATURES_SHA256 NEW_DIR | ",
+            "prepare-c2 R_UORT TRUNK COMPACT FEATURES FEATURES_SHA256 C2_TAPE C2_SHA256 NEW_DIR | ",
             "prepare-masked SEALED_IDENTITY_DIR IDENTITY_PREP_SHA256 NEW_DIR | ",
             "seal DIR PICK_MODE ARM"
         ))),

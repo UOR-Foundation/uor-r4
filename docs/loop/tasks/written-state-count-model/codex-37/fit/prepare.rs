@@ -153,6 +153,7 @@ pub fn run(
     tape: &Path,
     tape_sha: &str,
     out: &Path,
+    exact_input: Option<(&Path, &str)>,
 ) -> Result<(), Failure> {
     if !["identity", "permuted", "exact", "disabled"].contains(&mode) {
         return Err(fail("unknown Pick preparation mode"));
@@ -165,6 +166,14 @@ pub fn run(
             "feature tape differs from the admitted capture SHA-256",
         ));
     }
+    if (mode == "exact") != exact_input.is_some() {
+        return Err(fail(
+            "C2 requires the GPU selector tape and its independently pinned SHA-256",
+        ));
+    }
+    let exact_rows = exact_input
+        .map(|(file, sha)| crate::exact::read(file, REAL_ROWS, sha))
+        .transpose()?;
     let mut count_tape = CountTape::open(tape)?;
     if fs::metadata(compact)?.len() != COMPACT_BYTES {
         return Err(fail("wrong deployed compact byte length"));
@@ -244,8 +253,9 @@ pub fn run(
                     } = rows[ordinal];
                     (pick.map(|p| p as usize), distance, Some(hit))
                 }
-                None if mode == "exact" => {
-                    let pick = exact_pair_pick(prefix);
+                None if exact_rows.is_some() => {
+                    let p = exact_rows.as_ref().ok_or_else(|| fail("missing C2 rows"))?[ordinal];
+                    let pick = (p != u32::MAX).then_some(p as usize);
                     (pick, pick.map(|_| 0), None)
                 }
                 None => (None, None, None),
@@ -283,6 +293,11 @@ pub fn run(
                 if (native, a, b) != (mass, raw, total) {
                     return Err(fail(format!(
                         "native compact row differs at R ordinal {ordinal}"
+                    )));
+                }
+                if mode == "exact" && exact_pair_pick(prefix) != predecessor {
+                    return Err(fail(format!(
+                        "native exact Pick differs at R ordinal {ordinal}"
                     )));
                 }
                 let mut blocks = None;
@@ -370,7 +385,9 @@ pub fn run(
         "format": PREPARED, "rows": REAL_ROWS, "records": RECORDS,
         "c_sha256": C_SHA, "r_sha256": R_SHA, "trunk_sha256": TRUNK_SHA,
         "compact_sha256": COMPACT_SHA, "count_tape_sha256": tape_sha,
-        "pick_mode": mode, "permutation_seed": (mode == "permuted").then_some(C3_SEED),
+        "pick_mode": mode, "exact_tape_sha256": exact_input.map(|(_, sha)| sha),
+        "exact_device_source_sha256": exact_input.map(|_| digest(include_bytes!("pick_exact.cu"))),
+        "permutation_seed": (mode == "permuted").then_some(C3_SEED),
         "pick_tape_sha256": file_digest(&pick_path)?, "arms": arms,
         "probes_sha256": digest(&probes), "probe_ordinals_sha256": digest(&ordinals),
         "cuda_pick_batch": READ_BATCH, "count_capture_batch": CAPTURE_BATCH,
