@@ -33,6 +33,7 @@ use std::collections::HashMap;
 
 pub mod bind;
 pub mod flat;
+pub mod free;
 pub mod saved;
 pub mod trained;
 
@@ -519,7 +520,7 @@ impl Form {
 }
 
 /// How a held row's slot names the next token.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum Entry {
     #[default]
     Empty,

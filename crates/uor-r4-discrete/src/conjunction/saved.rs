@@ -18,6 +18,7 @@
 //! the held rows, the suffix rows, the pair rows, then the SHA-256 of
 //! everything before it.
 use super::bind::BindTable;
+use super::free::Update;
 use super::{
     invalid, window_at, Asked, Entry, Form, HeldKey, HeldRow, Ladder, Reads, Row, StandBy,
     FORMS_HELD, FORM_GAP, FORM_TOKENS, MAX_ORDER, MAX_SLOTS, NO_WORD, ROW_RIGHT, STEP_WORDS,
@@ -296,6 +297,31 @@ impl Reader {
         open: bool,
         reads: Reads,
     ) -> Result<(Self, Trained)> {
+        Self::train_by(
+            tokens, eligible, vocabulary, window, bos, eos, slots, orders, limit, codes, by, bind,
+            open, reads, Update::InOrder,
+        )
+    }
+
+    /// As [`Reader::train`], with the held rows written by `update`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn train_by(
+        tokens: &[u32],
+        eligible: &[usize],
+        vocabulary: u32,
+        window: usize,
+        bos: u32,
+        eos: u32,
+        slots: usize,
+        orders: &[usize],
+        limit: usize,
+        codes: &[u16],
+        by: StandBy,
+        bind: BindTable,
+        open: bool,
+        reads: Reads,
+        update: Update,
+    ) -> Result<(Self, Trained)> {
         if !bind.words.is_empty() && bind.words.len() != vocabulary as usize {
             return Err(invalid("the bind table must hold one word a token"));
         }
@@ -331,14 +357,21 @@ impl Reader {
             asked.count(tokens, run[0]);
         }
         asked.seal();
-        let mut written = 0u64;
-        for run in &runs {
-            written += u64::from(asked.write(tokens, run[0], run[1]));
-        }
-        let mut empty_reads = 0u64;
-        for run in &runs {
-            empty_reads += u64::from(asked.write_empty(&ladder, tokens, run[0], run[1], limit));
-        }
+        let (written, empty_reads) = match update {
+            Update::InOrder => {
+                let mut written = 0u64;
+                for run in &runs {
+                    written += u64::from(asked.write(tokens, run[0], run[1]));
+                }
+                let mut empty_reads = 0u64;
+                for run in &runs {
+                    empty_reads +=
+                        u64::from(asked.write_empty(&ladder, tokens, run[0], run[1], limit));
+                }
+                (written, empty_reads)
+            }
+            Update::Free { passes } => asked.write_free(&ladder, tokens, &runs, limit, passes),
+        };
         let trained = Trained {
             targets: eligible.len() as u64,
             replies: runs.len() as u64,

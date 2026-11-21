@@ -365,7 +365,7 @@ fn reader(args: &[String]) -> Result<(), String> {
     if args[0] == "reader-save" || replay {
         if !replay && !(12..=16).contains(&args.len()) {
             return Err(
-                "usage: conjunction-probe reader-save TOKENS_U16 MASK_U8 OUT_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST [CODEBOOK_TABLE_JSON|- [latest|pair|octonion:CODEBOOK_TABLE_JSON [open|- [READS_CSV(precise,explain,tail,across,agree)]]]]"
+                "usage: conjunction-probe reader-save TOKENS_U16 MASK_U8 OUT_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST [CODEBOOK_TABLE_JSON|- [latest|pair|octonion:CODEBOOK_TABLE_JSON [open|- [READS_CSV(precise,explain,tail,across,agree; free|free2|free3 for the order-free TRAIN)]]]]"
                     .into(),
             );
         }
@@ -440,6 +440,8 @@ fn reader(args: &[String]) -> Result<(), String> {
             }
         };
         let mut reads = uor_r4_discrete::conjunction::Reads::default();
+        // A TRAIN choice, not saved: the order-free count and its passes.
+        let mut update = conjunction::free::Update::InOrder;
         for choice in args.get(15).map(String::as_str).unwrap_or("").split(',') {
             match choice {
                 "" => {}
@@ -448,11 +450,14 @@ fn reader(args: &[String]) -> Result<(), String> {
                 "tail" => reads.tail_row = true,
                 "across" => reads.across = true,
                 "agree" => reads.agree = true,
+                "free" => update = conjunction::free::Update::Free { passes: 1 },
+                "free2" => update = conjunction::free::Update::Free { passes: 2 },
+                "free3" => update = conjunction::free::Update::Free { passes: 3 },
                 other => return Err(format!("unknown read choice {other}")),
             }
         }
         let started = Instant::now();
-        let (reader, trained) = Reader::train(
+        let (reader, trained) = Reader::train_by(
             &tokens,
             &eligible,
             number(&args[4])?,
@@ -467,6 +472,7 @@ fn reader(args: &[String]) -> Result<(), String> {
             bind,
             open,
             reads,
+            update,
         )
         .map_err(|e| e.to_string())?;
         let train_ms = started.elapsed().as_millis() as u64;
@@ -519,6 +525,7 @@ fn reader(args: &[String]) -> Result<(), String> {
                 "stand": stand,
                 "open_forms": open,
                 "reads": reads,
+                "update": update,
                 "trained": trained,
                 "saved": saved,
                 "reader_sha256": sha(&bytes),
