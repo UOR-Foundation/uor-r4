@@ -790,12 +790,143 @@ fn reader_gpu(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(feature = "cuda"))]
+fn reader_gpu_train(_: &[String]) -> Result<(), String> {
+    Err("reader-gpu-train needs the cuda feature".into())
+}
+
+/// `reader-gpu-train TOKENS_U16 MASK_U8 HOST_READER_FILE VOCABULARY WINDOW
+/// LIMIT BOS EOS SLOTS OUT_READER_FILE OUT_JSON`: TRAIN on the GPU with the
+/// choices of the saved M2 readers (`- 1 - pair open precise,across` of
+/// `reader-save`), against the host's TRAIN of the same stream held in
+/// memory and against the file `reader-save` wrote. Both readers are
+/// compared map for map, every slot of every row, and byte for byte. A
+/// control writes the replies last first. No reply is read or graded here.
+/// Fails when the GPU reader's bytes are not the file's.
+#[cfg(feature = "cuda")]
+fn reader_gpu_train(args: &[String]) -> Result<(), String> {
+    use sha2::{Digest, Sha256};
+    use std::time::Instant;
+    use uor_r4_discrete::conjunction::trained::{differences, Differences, READS};
+    use uor_r4_discrete::conjunction::{bind::BindTable, saved::Reader, StandBy};
+    use uor_r4_discrete::reader_train_device as device;
+
+    if args.len() != 12 {
+        return Err(
+            "usage: conjunction-probe reader-gpu-train TOKENS_U16 MASK_U8 HOST_READER_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS OUT_READER_FILE OUT_JSON"
+                .into(),
+        );
+    }
+    for path in [&args[10], &args[11]] {
+        if std::path::Path::new(path).exists() {
+            return Err(format!("{path} already exists"));
+        }
+    }
+    let sha = |bytes: &[u8]| {
+        Sha256::digest(bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    let read = |path: &String| std::fs::read(path).map_err(|e| format!("{path}: {e}"));
+    let number = |text: &String| text.parse::<u32>().map_err(|e| format!("{text}: {e}"));
+    let stream = read(&args[1])?;
+    let mask = read(&args[2])?;
+    let file = read(&args[3])?;
+    let tokens: Vec<u32> = uor_r4_discrete::w2_capacity::parse_uort_tokens(&stream)?
+        .into_iter()
+        .map(u32::from)
+        .collect();
+    if mask.len() != tokens.len() || mask.iter().any(|&bit| bit > 1) {
+        return Err("the mask must hold one 0 or 1 for each token".into());
+    }
+    let eligible: Vec<usize> = (0..mask.len()).filter(|&place| mask[place] == 1).collect();
+    let vocabulary = number(&args[4])?;
+    let window = number(&args[5])? as usize;
+    let limit = number(&args[6])? as usize;
+    let bos = number(&args[7])?;
+    let eos = number(&args[8])?;
+    let slots = number(&args[9])? as usize;
+
+    let started = Instant::now();
+    let (host, trained) = Reader::train(
+        &tokens,
+        &eligible,
+        vocabulary,
+        window,
+        bos,
+        eos,
+        slots,
+        &[],
+        limit,
+        &[],
+        StandBy::Pair,
+        BindTable::default(),
+        true,
+        READS,
+    )
+    .map_err(|e| e.to_string())?;
+    let host_ms = started.elapsed().as_millis() as u64;
+    let (host_bytes, _) = host.to_bytes(1);
+
+    let on_gpu = |reversed: bool| -> Result<_, String> {
+        let started = Instant::now();
+        let (tables, stats) = device::train(
+            &tokens, &eligible, vocabulary, window, bos, eos, slots, limit, true, reversed,
+        )
+        .map_err(|e| e.to_string())?;
+        let ms = started.elapsed().as_millis() as u64;
+        let reader = tables
+            .reader(vocabulary, window, bos, eos, slots, true)
+            .map_err(|e| e.to_string())?;
+        let found = differences(&reader, &host);
+        let (bytes, saved) = reader.to_bytes(1);
+        Ok((bytes, saved, found, stats, ms))
+    };
+    let (bytes, saved, found, stats, gpu_ms) = on_gpu(false)?;
+    let (again_bytes, _, _, _, _) = on_gpu(false)?;
+    let (control_bytes, _, control_found, _, _) = on_gpu(true)?;
+    let equal = bytes == file && found == Differences::default();
+    std::fs::write(&args[10], &bytes).map_err(|e| format!("{}: {e}", args[10]))?;
+    let report = serde_json::json!({
+        "schema": "uor-r4.discrete-reader-gpu-train/1",
+        "tokens_sha256": sha(&stream),
+        "mask_sha256": sha(&mask),
+        "host_reader_file_sha256": sha(&file),
+        "host_trained_in_memory_sha256": sha(&host_bytes),
+        "host_trained_bytes_are_the_file": host_bytes == file,
+        "gpu_reader_sha256": sha(&bytes),
+        "gpu_reader_bytes_are_the_file": bytes == file,
+        "gpu_reader_bytes_are_the_same_on_a_second_run": bytes == again_bytes,
+        "gpu_against_host_every_row_and_slot": found,
+        "control_replies_written_last_first_sha256": sha(&control_bytes),
+        "control_bytes_differ_from_the_file": control_bytes != file,
+        "control_against_host_every_row_and_slot": control_found,
+        "kernel_sha256": device::kernel_hash(),
+        "target": format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS),
+        "host_trained": trained,
+        "gpu_saved": saved,
+        "gpu": stats,
+        "equal": equal,
+        "host_train_ms": host_ms,
+        "gpu_ms_with_context_table_load_and_readback": gpu_ms,
+    });
+    std::fs::write(&args[11], report.to_string()).map_err(|e| format!("{}: {e}", args[11]))?;
+    println!("{report}");
+    if !equal {
+        return Err("the GPU-trained reader is not the host-trained reader".into());
+    }
+    Ok(())
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let done = if args.first().map(String::as_str) == Some("m2-format") {
         m2_format(&args)
     } else if args.first().map(String::as_str) == Some("reader-gpu") {
         reader_gpu(&args)
+    } else if args.first().map(String::as_str) == Some("reader-gpu-train") {
+        reader_gpu_train(&args)
     } else if matches!(
         args.first().map(String::as_str),
         Some("reader-save" | "reader-replies" | "reader-replay" | "bind-census")

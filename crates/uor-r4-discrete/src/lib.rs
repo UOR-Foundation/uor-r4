@@ -49,6 +49,8 @@ pub mod equal_count;
 pub mod equal_count_device;
 #[cfg(feature = "cuda")]
 pub mod reader_read_device;
+#[cfg(feature = "cuda")]
+pub mod reader_train_device;
 pub mod kn_ceiling;
 pub mod kn_pick;
 pub mod kn_filter;

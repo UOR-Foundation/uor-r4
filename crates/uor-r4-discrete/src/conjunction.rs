@@ -34,6 +34,7 @@ use std::collections::HashMap;
 pub mod bind;
 pub mod flat;
 pub mod saved;
+pub mod trained;
 
 fn invalid(message: impl Into<String>) -> Error {
     Error::Invalid(format!("conjunction: {}", message.into()))

@@ -167,7 +167,7 @@ pub(super) fn entry_fields(entry: Entry) -> [u32; 5] {
     }
 }
 
-fn entry_of(fields: [u32; 5], vocabulary: u32) -> Result<Entry> {
+pub(super) fn entry_of(fields: [u32; 5], vocabulary: u32) -> Result<Entry> {
     let small = |value: u32| u8::try_from(value).map_err(|_| invalid("a saved slot field"));
     Ok(match fields {
         [1, 0, 0, 0, token] if token < vocabulary => Entry::Token(token),
