@@ -1,0 +1,11 @@
+--- a/crates/uor-r4-discrete/src/conjunction/free.rs
++++ b/crates/uor-r4-discrete/src/conjunction/free.rs
+@@ -319,7 +319,7 @@
+                     let seen = window_at(tokens, job.start, this.context, this.bos).len();
+                     let prompt = &tokens[job.start - seen..job.start];
+                     let (_, _, missed) =
+-                        this.generate(ladder, &job.forms, prompt, limit, false, None);
++                        this.generate(ladder, &job.forms, prompt, limit, false, None, None);
+                     missed
+                 })
+                 .cloned()

@@ -1,0 +1,16 @@
+     Running unittests ../src/reader_runtime.rs (/mnt/plexpool/uor-r4-corpus/runs/20261121-codex-cursor-advance/finite-target/debug/deps/uor_r4_reader_runtime-f8f0974ee7bbe502)
+
+running 2 tests
+test conjunction::cursor_diagnostic_tests::equal_token_ids_preserve_distinct_occurrences ... ok
+test conjunction::cursor_diagnostic_tests::causal_read_controls ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 33 filtered out; finished in 0.00s
+
+e31ed501ed9bf6de56bcb6025924e8e5015006e82346979cf4a11f8c6c1312dc  finite-source/same-token-control.patch
+278ea82fb9ea22f36e2664a7abf3734093dd826ed83fa411ee4737236fa819bc  finite-source/crates/uor-r4-discrete/src/conjunction.rs
+8ae2d25a6c24b1c76792ba48f864b5c650cebc8215c970596721dd9593953707  package-replay/capture.json
+95bfbf70ca8e2f673cb9849aef171e2789e57e34569fadfcb090ad9a352a5aa2  package-replay/supplemental.json
+tool/main.rs: OK
+source/crates/uor-r4-discrete/src/conjunction.rs: OK
+source/crates/uor-r4-discrete/src/conjunction/free.rs: OK
+target/release/supplied-form-trace: OK

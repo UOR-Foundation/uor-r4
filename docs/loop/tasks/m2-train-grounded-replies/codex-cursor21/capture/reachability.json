@@ -1,0 +1,50 @@
+[
+  {
+    "cohort": "bridge",
+    "role": "home",
+    "wording": "familiar",
+    "completed": 1,
+    "stop": "eos",
+    "n": 16
+  },
+  {
+    "cohort": "bridge",
+    "role": "job",
+    "wording": "familiar",
+    "completed": 1,
+    "stop": "eos",
+    "n": 4
+  },
+  {
+    "cohort": "bridge",
+    "role": "job",
+    "wording": "familiar",
+    "completed": 2,
+    "stop": "eos",
+    "n": 12
+  },
+  {
+    "cohort": "bridge",
+    "role": "job",
+    "wording": "paraphrased",
+    "completed": 1,
+    "stop": "eos",
+    "n": 16
+  },
+  {
+    "cohort": "primary",
+    "role": "job",
+    "wording": "familiar",
+    "completed": 0,
+    "stop": "max_tokens",
+    "n": 32
+  },
+  {
+    "cohort": "primary",
+    "role": "job",
+    "wording": "paraphrased",
+    "completed": 0,
+    "stop": "max_tokens",
+    "n": 32
+  }
+]

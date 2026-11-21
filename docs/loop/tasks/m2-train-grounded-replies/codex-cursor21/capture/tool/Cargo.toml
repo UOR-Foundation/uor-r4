@@ -1,0 +1,14 @@
+[package]
+name = "supplied-form-trace"
+version = "0.1.0"
+edition = "2021"
+publish = false
+[workspace]
+[[bin]]
+name = "supplied-form-trace"
+path = "main.rs"
+[dependencies]
+uor-r4-integer = { path = "/mnt/plexpool/uor-r4-corpus/runs/20261121-orderfree-trunk/integrated-client-v1/source/crates/uor-r4-integer", features = ["reader-serving"] }
+serde_json = "1"
+uor-r4-reader-runtime = { path = "/mnt/plexpool/uor-r4-corpus/runs/20261121-orderfree-trunk/integrated-client-v1/source/crates/uor-r4-discrete/reader-runtime" }
+uor-r4-tokenizer = { path = "/mnt/plexpool/uor-r4-corpus/runs/20261121-orderfree-trunk/integrated-client-v1/source/crates/uor-r4-tokenizer" }

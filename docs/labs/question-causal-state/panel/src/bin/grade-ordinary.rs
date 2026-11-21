@@ -46,8 +46,14 @@ fn origin(at: usize, first_prompt: usize, first_reply: usize, prompt: usize) -> 
 }
 fn main() -> Result<()> {
     let a: Vec<_> = env::args().skip(1).collect();
-    let [tok, manifest, transcripts, pred, out] = a.as_slice() else {
-        return Err("TOKENIZER MANIFEST TRANSCRIPTS PRED OUT".into());
+    let (args, stock) = match a.as_slice() {
+        [flag, path, rest @ ..] if flag == "--cursor" => (rest, Some(load(Path::new(path))?)),
+        rest => (rest, None),
+    };
+    let [tok, manifest, transcripts, pred, out] = args else {
+        return Err(
+            "[--cursor STOCK_PROMOTED_REPLAY] TOKENIZER MANIFEST TRANSCRIPTS PRED OUT".into(),
+        );
     };
     let tb = fs::read(tok)?;
     if format!("{:x}", Sha256::digest(&tb))
@@ -58,6 +64,17 @@ fn main() -> Result<()> {
     let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&tb).ok_or("invalid tokenizer")?;
     let cases = load(Path::new(manifest))?;
     let predictions = load(Path::new(pred))?;
+    let mut original_by_id = BTreeMap::new();
+    if let Some(stock) = &stock {
+        for row in stock.as_array().ok_or("invalid independent baseline")? {
+            if original_by_id
+                .insert(row["id"].as_str().ok_or("missing original ID")?, row)
+                .is_some()
+            {
+                return Err("duplicate original ID".into());
+            }
+        }
+    }
     let mut by_id = BTreeMap::new();
     for row in predictions.as_array().ok_or("predictions shape")? {
         if by_id
@@ -128,14 +145,55 @@ fn main() -> Result<()> {
         gold.push(1);
         let mut result = json!({"id":id,"cohort":cohort,"role":role,"wording":case["wording"],"value":case["value"],"answer":answer,"gold":gold,"reached":true});
         let mut baseline = None;
-        for arm in ["lexical", "oracle", "promoted"] {
+        let arms = if stock.is_some() {
+            let original = original_by_id
+                .remove(id)
+                .ok_or("missing independent promoted trajectory")?;
+            let old = &original["promoted"];
+            let measured = &p["promoted"];
+            if original["prompt"] != p["prompt"]
+                || original["lexical"]["reply"] != turns[1]["reply_ids"]
+                || old["reply"] != measured["reply"]
+                || old
+                    .get("empty_read_retry")
+                    .ok_or("missing original retry")?
+                    != measured
+                        .get("empty_read_retry")
+                        .ok_or("missing measured retry")?
+            {
+                return Err(
+                    format!("independent promoted or client trajectory differs on {id}").into(),
+                );
+            }
+            let raw = |arm: &Value| -> Result<Vec<Vec<u32>>> {
+                arm["steps"]
+                    .as_array()
+                    .ok_or("steps missing")?
+                    .iter()
+                    .map(|step| {
+                        let words = ids(&step["raw"])?;
+                        if words.len() != 23 {
+                            return Err("wrong step word stride".into());
+                        }
+                        Ok(words)
+                    })
+                    .collect()
+            };
+            if raw(old)? != raw(measured)? {
+                return Err(format!("promoted raw-word divergence on {id}").into());
+            }
+            ["promoted", "current", "original"]
+        } else {
+            ["lexical", "oracle", "promoted"]
+        };
+        for arm in arms {
             let ar = &p[arm];
             let reply = ids(&ar["reply"])?;
             if arm == "lexical" && reply != ids(&turns[1]["reply_ids"])? {
                 return Err("lexical client diverged".into());
             }
             let err = (0..reply.len().max(gold.len())).find(|&i| reply.get(i) != gold.get(i));
-            if arm == "lexical" {
+            if arm == arms[0] {
                 baseline = err;
             }
             let steps = ar["steps"].as_array().ok_or("missing steps")?;
@@ -143,12 +201,14 @@ fn main() -> Result<()> {
                 return Err("trace length".into());
             }
             let mut context = prompt.clone();
+            let mut last_source = None;
             let mut repeats = Vec::new();
             let mut first_trace = Value::Null;
             for (i, s) in steps.iter().enumerate() {
                 let cursor = position(s.get("cursor").ok_or("cursor field absent")?)?;
                 let source = position(s.get("source").ok_or("source field absent")?)?;
-                if s["emitted"] != reply[i]
+                if (stock.is_some() && cursor != last_source)
+                    || s["emitted"] != reply[i]
                     || source.is_some_and(|at| context.get(at) != Some(&reply[i]))
                 {
                     return Err("recorded read mismatch".into());
@@ -160,6 +220,7 @@ fn main() -> Result<()> {
                 if Some(i) == err {
                     first_trace = event;
                 }
+                last_source = source;
                 context.push(reply[i]);
             }
             let r_at_err = repeats
@@ -197,7 +258,7 @@ fn main() -> Result<()> {
         }
         graded.push(result);
     }
-    if !by_id.is_empty() {
+    if !by_id.is_empty() || !original_by_id.is_empty() {
         return Err("unknown prediction IDs".into());
     }
     let f = fs::File::options().create_new(true).write(true).open(out)?;

@@ -1,0 +1,148 @@
+--- a/crates/uor-r4-discrete/src/conjunction.rs
++++ b/crates/uor-r4-discrete/src/conjunction.rs
+@@ -1416,7 +1416,7 @@
+                 continue;
+             }
+             let (_, _, missed) =
+-                self.generate(ladder, &forms, &tokens[floor..start], limit, false, None);
++                self.generate(ladder, &forms, &tokens[floor..start], limit, false, None, None);
+             if missed {
+                 self.write_forms(&forms, tokens, start, end, true);
+                 wrote = true;
+@@ -1516,11 +1516,11 @@
+             let reply = ladder.reply(prompt, true, self.context, self.bos, self.eos, limit);
+             return (reply, false, Vec::new());
+         }
+-        let (reply, trace, missed) = self.generate(ladder, forms, prompt, limit, false, None);
++        let (reply, trace, missed) = self.generate(ladder, forms, prompt, limit, false, None, None);
+         if !missed {
+             return (reply, true, trace);
+         }
+-        let (reply, mut trace, _) = self.generate(ladder, forms, prompt, limit, true, None);
++        let (reply, mut trace, _) = self.generate(ladder, forms, prompt, limit, true, None, None);
+         trace.insert(0, "empty read".into());
+         (reply, true, trace)
+     }
+@@ -1571,12 +1571,12 @@
+             return (reply, words, false);
+         }
+         let (reply, _, missed) =
+-            self.generate(ladder, forms, prompt, limit, false, Some(&mut words));
++            self.generate(ladder, forms, prompt, limit, false, Some(&mut words), None);
+         if !missed {
+             return (reply, words, false);
+         }
+         words.clear();
+-        let (reply, _, _) = self.generate(ladder, forms, prompt, limit, true, Some(&mut words));
++        let (reply, _, _) = self.generate(ladder, forms, prompt, limit, true, Some(&mut words), None);
+         (reply, words, true)
+     }
+     /// The read half of a TRAIN pass over `reply` given after `prompt`, with
+@@ -1619,6 +1619,19 @@
+             tokens.push(target);
+         }
+         (words, unread)
++    }
++    /// Isolated causal diagnostic: first prompt-source reread per generation pass.
++    /// `original_start` selects the original-start successor; None selects cursor successor.
++    pub fn cursor_diagnostic(&self, ladder: &Ladder, prompt: &[u32], limit: usize, forms: &[u32], original_start: Option<usize>) -> (Vec<u32>, Vec<u32>, bool, Vec<CursorIntervention>) {
++        let mut words = Vec::new();
++        let mut first = CursorIntervention::new(original_start);
++        let (reply, _, missed) = self.generate(ladder, forms, prompt, limit, false, Some(&mut words), Some(&mut first));
++        if !missed { return (reply, words, false, vec![first]); }
++        first.discarded = true;
++        words.clear();
++        let mut second = CursorIntervention::new(original_start);
++        let (reply, _, _) = self.generate(ladder, forms, prompt, limit, true, Some(&mut words), Some(&mut second));
++        (reply, words, true, vec![first, second])
+     }
+     /// Every kept form's own words by its id: three key words as twelve
+     /// u32, then the gap's place and length. A saved file numbers forms
+@@ -1649,6 +1662,7 @@
+         limit: usize,
+         empty: bool,
+         mut words: Option<&mut Vec<u32>>,
++        mut intervention: Option<&mut CursorIntervention>,
+     ) -> (Vec<u32>, Vec<String>, bool) {
+         let start = prompt.len();
+         let mut trace = Vec::new();
+@@ -1662,7 +1676,7 @@
+                 trace.extend(self.rows_at(forms, &history, &at, empty));
+             }
+             let held = self.answer(forms, &history, &at, empty, &mut missed);
+-            let named = match held {
++            let mut named = match held {
+                 Some((named, index, hit)) => {
+                     let row = if hit.own { "own" } else { "shared" };
+                     trace.push(format!(
+@@ -1685,6 +1699,9 @@
+                     }
+                 }
+             };
++            if let Some(intervention) = intervention.as_deref_mut() {
++                intervention.apply(&mut named, cursor, prompt, tokens.len() - start);
++            }
+             if let Some(words) = words.as_deref_mut() {
+                 step_words(words, forms, held, empty, &history, &at, named);
+             }
+@@ -1706,5 +1723,60 @@
+ /// address (eight words), the carried cursor, the token ahead of it, the
+ /// slot (five words), the place the slot read and the token.
+ pub const STEP_WORDS: usize = 23;
++#[derive(Debug)]
++pub struct CursorIntervention {
++    pub original_start: Option<usize>,
++    pub triggered: bool,
++    pub applied: bool,
++    pub discarded: bool,
++    pub step: Option<usize>,
++    pub from: Option<usize>,
++    pub to: Option<usize>,
++}
++impl CursorIntervention {
++    fn new(original_start: Option<usize>) -> Self {
++        Self { original_start, triggered: false, applied: false, discarded: false, step: None, from: None, to: None }
++    }
++    fn apply(&mut self, named: &mut Named, cursor: Option<usize>, prompt: &[u32], step: usize) {
++        let Some(source) = named.source else { return; };
++        if self.triggered || cursor != Some(source) || source >= prompt.len() { return; }
++        self.triggered = true;
++        self.step = Some(step);
++        self.from = Some(source);
++        let base = self.original_start.unwrap_or(source);
++        let Some(next) = base.checked_add(1) else { return; };
++        self.to = Some(next);
++        if let Some(&token) = prompt.get(next) {
++            named.source = Some(next);
++            named.token = token;
++            self.applied = true;
++        }
++    }
++}
++#[cfg(test)]
++mod cursor_diagnostic_tests {
++    use super::*;
++    fn named(source: usize) -> Named { Named { token: 1, source: Some(source), by: Entry::Copy } }
++    #[test]
++    fn causal_read_controls() {
++        let prompt = [10, 11, 12, 13, 14];
++        let mut a = CursorIntervention::new(None);
++        let mut b = CursorIntervention::new(Some(0));
++        let mut an = named(2); let mut bn = an;
++        a.apply(&mut an, Some(2), &prompt, 3); b.apply(&mut bn, Some(2), &prompt, 3);
++        assert_eq!((an.source, an.token), (Some(3), 13));
++        assert_eq!((bn.source, bn.token), (Some(1), 11));
++        let mut same = CursorIntervention::new(Some(2)); let mut sn = named(2);
++        same.apply(&mut sn, Some(2), &prompt, 0); assert_eq!(sn, an);
++        let mut absent = CursorIntervention::new(None); let mut n = named(2);
++        absent.apply(&mut n, Some(1), &prompt, 0); assert!(!absent.triggered);
++        n.source = None; absent.apply(&mut n, Some(2), &prompt, 0); assert!(!absent.triggered);
++        let mut end = CursorIntervention::new(None); let mut en = named(4);
++        end.apply(&mut en, Some(4), &prompt, 0); assert!(end.triggered && !end.applied); assert_eq!(en.source, Some(4));
++        let mut invalid = CursorIntervention::new(Some(usize::MAX)); let mut inv = named(2);
++        invalid.apply(&mut inv, Some(2), &prompt, 0); assert!(invalid.triggered && !invalid.applied); assert_eq!(inv.source, Some(2));
++        let mut no_op = named(2); a.apply(&mut no_op, Some(2), &prompt, 4); assert_eq!(no_op.source, Some(2));
++    }
++}
+ /// Stands for "none" in a step's words.
+ pub const NO_WORD: u32 = u32::MAX;
