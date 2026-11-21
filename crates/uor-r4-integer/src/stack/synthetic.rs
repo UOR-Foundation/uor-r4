@@ -160,6 +160,7 @@ pub fn synthetic_fbs_trunk_with(seed: u64, s: FbsSynth) -> FbsTrunkSnapshot {
         layers,
         hamming: None,
         memory: None,
+        hamming_ask: None,
     }
 }
 
