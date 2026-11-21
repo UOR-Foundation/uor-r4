@@ -433,8 +433,8 @@ pub const FORMS_HELD: usize = 6;
 pub const ROW_RIGHT: u32 = 2;
 /// Marks a form taken over class codes in place of tokens (in `gap_len`).
 const CLASS_FORM: u8 = 0x80;
-/// Marks a form of a turn too long to hold whole: its opening and closing
-/// tokens with everything between left out (in `gap_len`, over the closing
+/// Marks a form of a turn with more left out than a gap holds: its opening
+/// and closing tokens with everything between left out (in `gap_len`, over the closing
 /// count).
 const OPEN_FORM: u8 = 0x40;
 /// Opening and closing tokens an open form may keep, and the fewest opening
@@ -499,7 +499,7 @@ impl Form {
     fn each_open(turn: &[u32]) -> impl Iterator<Item = Self> + '_ {
         let mut kept: Vec<(usize, usize)> = (OPEN_HEAD_LEAST..=OPEN_HEAD)
             .flat_map(|head| (0..=OPEN_TAIL).map(move |tail| (head, tail)))
-            .filter(|&(head, tail)| head + tail <= turn.len())
+            .filter(|&(head, tail)| head + tail + FORM_GAP < turn.len())
             .collect();
         kept.sort_by_key(|&(head, tail)| std::cmp::Reverse((head + tail, head)));
         kept.into_iter()
@@ -916,8 +916,8 @@ pub struct Asked {
     /// shorter gap than its most specific token form is read under its class
     /// forms.
     sharper: bool,
-    /// First-pass choice, not saved: turns longer than [`FORM_TOKENS`] are
-    /// counted under their open forms. A read uses whatever forms are kept.
+    /// First-pass choice, not saved: turns are also counted under their
+    /// open forms. A read uses whatever forms are kept.
     open: bool,
     stand: std::sync::Arc<Stand>,
     seen: HashMap<Form, u32>,
@@ -1003,7 +1003,8 @@ impl Asked {
         &tokens[first..start]
     }
     /// The whole asked turn before a reply that starts at `start`, when it is
-    /// longer than [`FORM_TOKENS`]: the tokens after the latest EOS in the
+    /// long enough to keep an opening and leave out more than a gap holds:
+    /// the tokens after the latest EOS in the
     /// window (after the BOS where there is none).
     fn long_turn<'a>(&self, tokens: &'a [u32], start: usize) -> Option<&'a [u32]> {
         let floor = start - window_at(tokens, start, self.context, self.bos).len();
@@ -1012,7 +1013,7 @@ impl Asked {
             .find(|&place| tokens[place] == self.eos)
             .map_or(floor, |place| place + 1);
         let first = first + usize::from(first < start && tokens[first] == self.bos);
-        (start - first > FORM_TOKENS).then(|| &tokens[first..start])
+        (start - first > OPEN_HEAD_LEAST + FORM_GAP).then(|| &tokens[first..start])
     }
     /// First pass: counts every form of the turn asked before `start`.
     pub fn count(&mut self, tokens: &[u32], start: usize) {

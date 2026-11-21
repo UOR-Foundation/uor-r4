@@ -877,7 +877,11 @@ mod tests {
         let mut tokens = Vec::new();
         let mut eligible = Vec::new();
         for index in 0..24usize {
-            let payload = said(28 + index % 9);
+            let payload = said(if index % 6 == 5 {
+                13 + index % 5
+            } else {
+                28 + index % 9
+            });
             tokens.extend(asked(&payload, index % 2 == 1));
             let at = tokens.len();
             tokens.extend(&payload);
@@ -907,7 +911,13 @@ mod tests {
         assert_eq!(&bytes[..8], MAGIC);
         let loaded = Reader::from_bytes(&bytes)?;
         assert_eq!(loaded.to_bytes(1), (bytes, saved));
-        for (length, after_a_turn) in [(30, false), (33, true), (36, false), (29, true)] {
+        for (length, after_a_turn) in [
+            (30, false),
+            (33, true),
+            (36, false),
+            (29, true),
+            (14, false),
+        ] {
             let payload = said(length);
             let prompt = asked(&payload, after_a_turn);
             let mut right = payload.clone();
