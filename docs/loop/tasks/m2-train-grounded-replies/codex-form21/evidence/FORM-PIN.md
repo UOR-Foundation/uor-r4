@@ -1,0 +1,3 @@
+# Fixed form pin, before fresh predictions
+
+Canonical development-0 and 2 select form 1223 for home; development-1 and 3 select form 1553 for job. Their singleton replies exactly equal the pre-existing original-ID replay and each selected singleton appears in every emitted held-row step. Opposite-role control differs from expected IDs in all four cases and actively selects the opposite form. See dev-traces.json and dev-opposite.json. form-identities.json binds both 14-word form identities to D11 and reader digests. The same singleton and promoted controls apply to capture and supplemental capture-bridge, independently analyzed.

@@ -31,3 +31,5 @@ A row needs a fixed bar, the exact saved model and panel identities, the number 
 - [Format and verdict words](./README.md).
 - [`CHARTER.md`](../../../CHARTER.md), sections 3.10, 4.3 and 5.6.
 | 2026-11-21 | Order-free D11, lexical and pre-gate Relation form choices, fixed writer. Codex. | Exact through EOS on 128 unseen prompts: lexical 8, live state 2, opposite-role donor 2, knockout 8. | More exact replies than lexical, knockout and opposite-role donor. | **negative** for this selector. Both of its exact replies used the fallback. | [Evidence and first mismatches](../../loop/tasks/m2-train-grounded-replies/codex-orderfree21/REPORT.md) |
+
+| 2026-11-21 | Ordinary Wick job/home form intervention with genuine generated history. Codex. | Exact through EOS on 38/96 reached primary questions: lexical 6, supplied form 3, promotion 3. Bridge 32/32 reached: 3, 0, 9. | Exact original IDs through EOS and per-token native cursor evidence. | **negative** for the singleton; six additional bridge home replies with promotion. | [Report](../../loop/tasks/m2-train-grounded-replies/codex-form21/REPORT.md) |

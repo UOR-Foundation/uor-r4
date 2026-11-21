@@ -1,0 +1,290 @@
+[
+  {
+    "id": "bridge-p0-a0-familiar-home",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p0-a0-familiar-job",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p0-a0-paraphrased-home",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p0-a0-paraphrased-job",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p0-a1-familiar-home",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p0-a1-familiar-job",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p0-a1-paraphrased-home",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p0-a1-paraphrased-job",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p1-a0-familiar-home",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p1-a0-familiar-job",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p1-a0-paraphrased-home",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p1-a0-paraphrased-job",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p1-a1-familiar-home",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p1-a1-familiar-job",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p1-a1-paraphrased-home",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p1-a1-paraphrased-job",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 1,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p2-a0-familiar-home",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p2-a0-familiar-job",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p2-a0-paraphrased-home",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p2-a0-paraphrased-job",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p2-a1-familiar-home",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p2-a1-familiar-job",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p2-a1-paraphrased-home",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p2-a1-paraphrased-job",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p3-a0-familiar-home",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p3-a0-familiar-job",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p3-a0-paraphrased-home",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p3-a0-paraphrased-job",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p3-a1-familiar-home",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p3-a1-familiar-job",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p3-a1-paraphrased-home",
+    "role": "home",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  },
+  {
+    "id": "bridge-p3-a1-paraphrased-job",
+    "role": "job",
+    "requested_turns": 2,
+    "completed_turns": 2,
+    "observed_turns": 2,
+    "first_stop": "eos",
+    "reached_target": true
+  }
+]

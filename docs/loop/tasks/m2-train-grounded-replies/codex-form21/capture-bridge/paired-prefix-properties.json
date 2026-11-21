@@ -1,0 +1,178 @@
+[
+  {
+    "pair": "p0-a0-familiar",
+    "job_first_eos": true,
+    "home_first_eos": true,
+    "same_first_prompt": true,
+    "same_actual_reply": true,
+    "first_history_length": 36,
+    "second_prompt_common_prefix_length": 54,
+    "common_prefix_contains_history": true,
+    "second_prompt_different": true
+  },
+  {
+    "pair": "p0-a0-paraphrased",
+    "job_first_eos": true,
+    "home_first_eos": true,
+    "same_first_prompt": true,
+    "same_actual_reply": true,
+    "first_history_length": 36,
+    "second_prompt_common_prefix_length": 55,
+    "common_prefix_contains_history": true,
+    "second_prompt_different": true
+  },
+  {
+    "pair": "p0-a1-familiar",
+    "job_first_eos": true,
+    "home_first_eos": true,
+    "same_first_prompt": true,
+    "same_actual_reply": true,
+    "first_history_length": 36,
+    "second_prompt_common_prefix_length": 54,
+    "common_prefix_contains_history": true,
+    "second_prompt_different": true
+  },
+  {
+    "pair": "p0-a1-paraphrased",
+    "job_first_eos": true,
+    "home_first_eos": true,
+    "same_first_prompt": true,
+    "same_actual_reply": true,
+    "first_history_length": 36,
+    "second_prompt_common_prefix_length": 55,
+    "common_prefix_contains_history": true,
+    "second_prompt_different": true
+  },
+  {
+    "pair": "p1-a0-familiar",
+    "job_first_eos": true,
+    "home_first_eos": true,
+    "same_first_prompt": true,
+    "same_actual_reply": true,
+    "first_history_length": 38,
+    "second_prompt_common_prefix_length": 56,
+    "common_prefix_contains_history": true,
+    "second_prompt_different": true
+  },
+  {
+    "pair": "p1-a0-paraphrased",
+    "job_first_eos": true,
+    "home_first_eos": true,
+    "same_first_prompt": true,
+    "same_actual_reply": true,
+    "first_history_length": 38,
+    "second_prompt_common_prefix_length": 57,
+    "common_prefix_contains_history": true,
+    "second_prompt_different": true
+  },
+  {
+    "pair": "p1-a1-familiar",
+    "job_first_eos": true,
+    "home_first_eos": true,
+    "same_first_prompt": true,
+    "same_actual_reply": true,
+    "first_history_length": 36,
+    "second_prompt_common_prefix_length": 56,
+    "common_prefix_contains_history": true,
+    "second_prompt_different": true
+  },
+  {
+    "pair": "p1-a1-paraphrased",
+    "job_first_eos": true,
+    "home_first_eos": true,
+    "same_first_prompt": true,
+    "same_actual_reply": true,
+    "first_history_length": 36,
+    "second_prompt_common_prefix_length": 57,
+    "common_prefix_contains_history": true,
+    "second_prompt_different": true
+  },
+  {
+    "pair": "p2-a0-familiar",
+    "job_first_eos": true,
+    "home_first_eos": true,
+    "same_first_prompt": true,
+    "same_actual_reply": true,
+    "first_history_length": 36,
+    "second_prompt_common_prefix_length": 52,
+    "common_prefix_contains_history": true,
+    "second_prompt_different": true
+  },
+  {
+    "pair": "p2-a0-paraphrased",
+    "job_first_eos": true,
+    "home_first_eos": true,
+    "same_first_prompt": true,
+    "same_actual_reply": true,
+    "first_history_length": 36,
+    "second_prompt_common_prefix_length": 53,
+    "common_prefix_contains_history": true,
+    "second_prompt_different": true
+  },
+  {
+    "pair": "p2-a1-familiar",
+    "job_first_eos": true,
+    "home_first_eos": true,
+    "same_first_prompt": true,
+    "same_actual_reply": true,
+    "first_history_length": 34,
+    "second_prompt_common_prefix_length": 52,
+    "common_prefix_contains_history": true,
+    "second_prompt_different": true
+  },
+  {
+    "pair": "p2-a1-paraphrased",
+    "job_first_eos": true,
+    "home_first_eos": true,
+    "same_first_prompt": true,
+    "same_actual_reply": true,
+    "first_history_length": 34,
+    "second_prompt_common_prefix_length": 53,
+    "common_prefix_contains_history": true,
+    "second_prompt_different": true
+  },
+  {
+    "pair": "p3-a0-familiar",
+    "job_first_eos": true,
+    "home_first_eos": true,
+    "same_first_prompt": true,
+    "same_actual_reply": true,
+    "first_history_length": 37,
+    "second_prompt_common_prefix_length": 56,
+    "common_prefix_contains_history": true,
+    "second_prompt_different": true
+  },
+  {
+    "pair": "p3-a0-paraphrased",
+    "job_first_eos": true,
+    "home_first_eos": true,
+    "same_first_prompt": true,
+    "same_actual_reply": true,
+    "first_history_length": 37,
+    "second_prompt_common_prefix_length": 57,
+    "common_prefix_contains_history": true,
+    "second_prompt_different": true
+  },
+  {
+    "pair": "p3-a1-familiar",
+    "job_first_eos": true,
+    "home_first_eos": true,
+    "same_first_prompt": true,
+    "same_actual_reply": true,
+    "first_history_length": 37,
+    "second_prompt_common_prefix_length": 56,
+    "common_prefix_contains_history": true,
+    "second_prompt_different": true
+  },
+  {
+    "pair": "p3-a1-paraphrased",
+    "job_first_eos": true,
+    "home_first_eos": true,
+    "same_first_prompt": true,
+    "same_actual_reply": true,
+    "first_history_length": 37,
+    "second_prompt_common_prefix_length": 57,
+    "common_prefix_contains_history": true,
+    "second_prompt_different": true
+  }
+]
