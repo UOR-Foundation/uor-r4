@@ -3894,6 +3894,20 @@ impl IntegerDiscreteModel {
         sum
     }
 
+    /// Observe the native geometric read of ordinary prediction before
+    /// the joint pointer gate rewrites it using the count/pointer selector.
+    pub fn question_causal_state(&self, prefix: &[u32]) -> Result<Vec<i32>> {
+        if !self.is_trunk_d11()
+            || prefix.is_empty()
+            || prefix.len() > self.shape.context as usize
+            || prefix.iter().any(|&id| id >= self.shape.vocabulary)
+        {
+            return Err(invalid("invalid causal prefix or missing trunk"));
+        }
+        let (blocks, _, _) = self.causal_geometric_pre_gate(prefix, None)?;
+        Ok(blocks.into_iter().flatten().collect())
+    }
+
     /// Evaluate a causal token prefix (`1..=context`) and return the read vector,
     /// admitted cells, top-8 ranked tokens, and top-1 prediction.
     pub fn evaluate_prefix(&self, prefix: &[u32]) -> Result<DiscretePrefixEvaluation> {
@@ -3928,8 +3942,23 @@ impl IntegerDiscreteModel {
         prefix: &[u32],
         trace: Option<&mut Vec<u32>>,
     ) -> Result<FlockReadParts> {
+        let (mut blocks, relation_scores, relation_trace) =
+            self.causal_geometric_pre_gate(prefix, trace)?;
+        if !self.state_transport_knockout {
+            if let Some(ref trunk) = self.trunk {
+                trunk.apply_joint_pointer_gate(prefix, &mut blocks, &self.codebook_roots)?;
+            }
+        }
+        Ok((blocks, relation_scores, relation_trace))
+    }
+
+    fn causal_geometric_pre_gate(
+        &self,
+        prefix: &[u32],
+        trace: Option<&mut Vec<u32>>,
+    ) -> Result<FlockReadParts> {
         let plan = build_row_plan(prefix.len())?;
-        let (mut blocks, relation_scores, relation_trace) = match self.read_mode {
+        Ok(match self.read_mode {
             DiscreteReadMode::Route => (self.route_read(prefix, &plan, trace)?, None, None),
             DiscreteReadMode::Flock { kept } => {
                 self.flock_or_relation_read(prefix, &plan, kept as usize, 0, false, trace)?
@@ -3938,13 +3967,7 @@ impl IntegerDiscreteModel {
                 self.flock_or_relation_read(prefix, &plan, kept as usize, sweeps, true, trace)?
             }
             DiscreteReadMode::Pick => (self.pick_row(prefix)?.blocks, None, None),
-        };
-        if !self.state_transport_knockout {
-            if let Some(ref trunk) = self.trunk {
-                trunk.apply_joint_pointer_gate(prefix, &mut blocks, &self.codebook_roots)?;
-            }
-        }
-        Ok((blocks, relation_scores, relation_trace))
+        })
     }
 
     fn evaluate_prefix_internal(

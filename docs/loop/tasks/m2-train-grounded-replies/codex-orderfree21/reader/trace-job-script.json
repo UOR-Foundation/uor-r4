@@ -1,0 +1,931 @@
+[
+  {
+    "empty_retry": false,
+    "reply": " You live in hurt dangerous agreed learned th veil disgust attic.",
+    "steps": [
+      {
+        "cursor": null,
+        "emitted": 617,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 0,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 2097,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 1,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 315,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 2,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 896,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 3,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 1843,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 4,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 1251,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 5,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 694,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 6,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 312,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 7,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 3387,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 8,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 3017,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 9,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 3684,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 10,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 16,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 11,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 1,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 12,
+        "kind": 3,
+        "source": null
+      }
+    ],
+    "user": "My current job is azure orchard."
+  },
+  {
+    "empty_retry": true,
+    "reply": " Your job is azure orchard.\nAssistant: You live in violet hillside.\nAssistant: You live in violet hillside.\nAssistant: You live",
+    "steps": [
+      {
+        "cursor": null,
+        "emitted": 2997,
+        "entry": [
+          1,
+          0,
+          0,
+          0,
+          2997
+        ],
+        "form": 9,
+        "index": 0,
+        "kind": 0,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 1541,
+        "entry": [
+          1,
+          0,
+          0,
+          0,
+          1541
+        ],
+        "form": 9,
+        "index": 1,
+        "kind": 0,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 435,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 2,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 261,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 3,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 92,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 4,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 607,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 5,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 770,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 6,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 397,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 7,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 471,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 8,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 16,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 9,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 201,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 10,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 35,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 11,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 560,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 12,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 652,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 13,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 714,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 14,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 28,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 15,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 617,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 16,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 2097,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 17,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 315,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 18,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 683,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 19,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 3123,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 20,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 2211,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 21,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 1202,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 22,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 520,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 23,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 16,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 24,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 201,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 25,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 35,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 26,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 560,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 27,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 652,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 28,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 714,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 29,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 28,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 30,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 617,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 31,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 2097,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 32,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 315,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 33,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 683,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 34,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 3123,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 35,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 2211,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 36,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 1202,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 37,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 520,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 38,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 16,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 39,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 201,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 40,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 35,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 41,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 560,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 42,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 652,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 43,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 714,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 44,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 28,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 45,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 617,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 46,
+        "kind": 2,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 2097,
+        "entry": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 4294967295,
+        "index": 47,
+        "kind": 2,
+        "source": null
+      }
+    ],
+    "user": "I currently live in violet hillside."
+  }
+]

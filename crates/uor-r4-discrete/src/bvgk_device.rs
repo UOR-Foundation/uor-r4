@@ -78,6 +78,7 @@ impl Device {
             position_steps: copy_u32(&self.position_steps)?,
             metadata: self.metadata.clone(),
             kernels: Kernels {
+                question_state_matches: None,
                 init: k.init.clone(),
                 encode: k.encode.clone(),
                 export_token_cells: k.export_token_cells.clone(),

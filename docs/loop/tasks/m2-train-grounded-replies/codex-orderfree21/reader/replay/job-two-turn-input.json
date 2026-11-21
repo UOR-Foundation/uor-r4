@@ -1,0 +1,11 @@
+{
+  "schema": "uor-r4.chat-script/1",
+  "turns": [
+    {
+      "user": "My current job is azure orchard."
+    },
+    {
+      "user": "What is my current job?"
+    }
+  ]
+}

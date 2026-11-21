@@ -24,11 +24,12 @@ mod wider_carrier_source;
 #[path = "src/within_cell_writer_source.rs"]
 mod within_cell_writer_source;
 
-const ENTRIES: [&str; 13] = [
+const ENTRIES: [&str; 14] = [
     "discrete_init",
     "discrete_encode",
     "discrete_export_token_cells",
     "discrete_forward",
+    "discrete_question_state_matches",
     "discrete_counterfactual",
     "discrete_choose",
     "discrete_apply",

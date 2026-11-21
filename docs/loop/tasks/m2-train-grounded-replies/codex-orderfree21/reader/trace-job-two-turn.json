@@ -1,0 +1,391 @@
+[
+  {
+    "empty_retry": false,
+    "reply": " You live in hurt dangerous agreed learned th veil disgust attic.",
+    "steps": [
+      {
+        "cursor": null,
+        "emitted": 617,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 0,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 2097,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 1,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 315,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 2,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 896,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 3,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 1843,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 4,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 1251,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 5,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 694,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 6,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 312,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 7,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 3387,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 8,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 3017,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 9,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 3684,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 10,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 16,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 11,
+        "kind": 3,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 1,
+        "entry": [
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295,
+          4294967295
+        ],
+        "form": 4294967295,
+        "index": 12,
+        "kind": 3,
+        "source": null
+      }
+    ],
+    "user": "My current job is azure orchard."
+  },
+  {
+    "empty_retry": true,
+    "reply": " Your job is a azure orchard. You",
+    "steps": [
+      {
+        "cursor": null,
+        "emitted": 2997,
+        "entry": [
+          1,
+          0,
+          0,
+          0,
+          2997
+        ],
+        "form": 945,
+        "index": 0,
+        "kind": 0,
+        "source": null
+      },
+      {
+        "cursor": null,
+        "emitted": 1541,
+        "entry": [
+          2,
+          7,
+          0,
+          0,
+          0
+        ],
+        "form": 945,
+        "index": 1,
+        "kind": 0,
+        "source": 48
+      },
+      {
+        "cursor": 48,
+        "emitted": 435,
+        "entry": [
+          2,
+          7,
+          1,
+          0,
+          1541
+        ],
+        "form": 945,
+        "index": 2,
+        "kind": 0,
+        "source": 10
+      },
+      {
+        "cursor": 10,
+        "emitted": 261,
+        "entry": [
+          2,
+          7,
+          2,
+          0,
+          435
+        ],
+        "form": 945,
+        "index": 3,
+        "kind": 1,
+        "source": 11
+      },
+      {
+        "cursor": 11,
+        "emitted": 261,
+        "entry": [
+          2,
+          7,
+          2,
+          0,
+          435
+        ],
+        "form": 945,
+        "index": 4,
+        "kind": 1,
+        "source": 11
+      },
+      {
+        "cursor": 11,
+        "emitted": 92,
+        "entry": [
+          3,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 945,
+        "index": 5,
+        "kind": 1,
+        "source": 12
+      },
+      {
+        "cursor": 12,
+        "emitted": 607,
+        "entry": [
+          3,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 945,
+        "index": 6,
+        "kind": 1,
+        "source": 13
+      },
+      {
+        "cursor": 13,
+        "emitted": 770,
+        "entry": [
+          3,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 945,
+        "index": 7,
+        "kind": 1,
+        "source": 14
+      },
+      {
+        "cursor": 14,
+        "emitted": 397,
+        "entry": [
+          3,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 945,
+        "index": 8,
+        "kind": 1,
+        "source": 15
+      },
+      {
+        "cursor": 15,
+        "emitted": 471,
+        "entry": [
+          3,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 945,
+        "index": 9,
+        "kind": 1,
+        "source": 16
+      },
+      {
+        "cursor": 16,
+        "emitted": 16,
+        "entry": [
+          3,
+          0,
+          0,
+          0,
+          0
+        ],
+        "form": 945,
+        "index": 10,
+        "kind": 0,
+        "source": 17
+      },
+      {
+        "cursor": 17,
+        "emitted": 617,
+        "entry": [
+          2,
+          0,
+          1,
+          1,
+          28
+        ],
+        "form": 945,
+        "index": 11,
+        "kind": 0,
+        "source": 24
+      }
+    ],
+    "user": "What is my current job?"
+  }
+]

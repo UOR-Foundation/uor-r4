@@ -1,0 +1,10 @@
+[package]
+name = "orderfree-wording-panel"
+version = "0.1.0"
+edition = "2021"
+publish = false
+[workspace]
+[dependencies]
+uor-r4-tokenizer = { path = "../../../../crates/uor-r4-tokenizer" }
+serde_json = "1"
+sha2 = "0.10"
