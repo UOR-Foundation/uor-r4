@@ -1856,9 +1856,151 @@ pub fn grade_generated_replies_with_evaluator_oracle(
     Ok((complete, pairs_both_complete_distinct))
 }
 
+/// The fixed opening of a chat-form reply for each asked role (job, home),
+/// with the space that follows it. The panel's labels accept the bare value
+/// (`VALUE.`); a reader that replies ` Your job is VALUE.` is graded on the
+/// text after its role's opening. The openings name no value.
+pub const READER_REPLY_OPENINGS: [&str; 2] = [" Your job is ", " You live in "];
+
+/// The registered grade of a chat-form reader's replies, with the counts
+/// that say how the replies were read.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ReaderGrade {
+    pub rows: usize,
+    pub complete: usize,
+    pub pairs: usize,
+    pub pairs_both_complete_distinct: usize,
+    /// Replies that do not end on EOS (never complete).
+    pub no_eos: usize,
+    /// Replies that do not start with the asked role's opening; they are
+    /// graded whole, unchanged.
+    pub opening_absent: usize,
+}
+
+/// Grades one reply per case, in the order of `inputs.json`, with
+/// [`grade_generated_replies_with_evaluator_oracle`] unchanged. Before
+/// grading, a reply that starts with the asked role's opening
+/// ([`READER_REPLY_OPENINGS`], the role read from the case id) has the
+/// opening removed and the rest encoded again; every other reply is graded
+/// as it stands.
+pub fn grade_reader_replies(
+    tok: &ByteBpeTokenizer,
+    bundle: &Fresh256Bundle,
+    replies: &[Vec<u32>],
+) -> Result<ReaderGrade, String> {
+    let inputs: ProbeInputs =
+        serde_json::from_slice(&bundle.inputs_json).map_err(|e| format!("inputs.json: {e}"))?;
+    let labels: ProbeLabels =
+        serde_json::from_slice(&bundle.labels_json).map_err(|e| format!("labels.json: {e}"))?;
+    if replies.len() != inputs.cases.len() {
+        return Err(format!(
+            "{} replies for {} cases",
+            replies.len(),
+            inputs.cases.len()
+        ));
+    }
+    let mut graded = Vec::with_capacity(replies.len());
+    let (mut no_eos, mut opening_absent) = (0usize, 0usize);
+    for (case, reply) in inputs.cases.iter().zip(replies) {
+        let role = if case.id.ends_with("-job") {
+            0
+        } else if case.id.ends_with("-home") {
+            1
+        } else {
+            return Err(format!("{}: no asked role in the case id", case.id));
+        };
+        let eos = reply.last().copied() == Some(EOS_TOKEN_ID);
+        no_eos += usize::from(!eos);
+        let body = &reply[..reply.len() - usize::from(eos)];
+        let bytes = tok.decode_bytes(body);
+        let rest = std::str::from_utf8(&bytes)
+            .ok()
+            .and_then(|text| text.strip_prefix(READER_REPLY_OPENINGS[role]));
+        match rest {
+            Some(rest) => {
+                let mut ids = tok.encode(rest);
+                if eos {
+                    ids.push(EOS_TOKEN_ID);
+                }
+                graded.push(ids);
+            }
+            None => {
+                opening_absent += 1;
+                graded.push(reply.clone());
+            }
+        }
+    }
+    let (complete, pairs_both_complete_distinct) =
+        grade_generated_replies_with_evaluator_oracle(tok, &inputs, &labels, &graded)?;
+    Ok(ReaderGrade {
+        rows: replies.len(),
+        complete,
+        pairs: replies.len() / 2,
+        pairs_both_complete_distinct,
+        no_eos,
+        opening_absent,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A chat-form reply is graded on the text after its role's opening,
+    /// and on nothing else: no EOS, the other role's opening or the other
+    /// role's value all score nothing.
+    #[test]
+    fn a_chat_form_reply_is_graded_after_its_role_opening() {
+        let root = repo_root();
+        let tok = load_pinned_byte_bpe_tokenizer(&root).expect("tokenizer");
+        let bundle = generate_m2_fresh256_panel().expect("bundle");
+        let labels: ProbeLabels = serde_json::from_slice(&bundle.labels_json).expect("labels");
+        let role = |id: &str| usize::from(id.ends_with("-home"));
+        let replies = |opening: &dyn Fn(usize) -> &'static str, eos: bool, other: bool| {
+            labels
+                .cases
+                .iter()
+                .enumerate()
+                .map(|(at, case)| {
+                    // The pair's other case sits beside it.
+                    let from = if other { at ^ 1 } else { at };
+                    let value = &labels.cases[from].answers.accepted[0];
+                    let mut ids = tok.encode(&format!("{}{value}", opening(role(&case.id))));
+                    if eos {
+                        ids.push(EOS_TOKEN_ID);
+                    }
+                    ids
+                })
+                .collect::<Vec<_>>()
+        };
+        let own = |role: usize| READER_REPLY_OPENINGS[role];
+        let grade = |replies: &[Vec<u32>]| grade_reader_replies(&tok, &bundle, replies).expect("grade");
+
+        let right = grade(&replies(&own, true, false));
+        assert_eq!(
+            (right.rows, right.complete, right.pairs_both_complete_distinct),
+            (256, 256, 128)
+        );
+        assert_eq!((right.no_eos, right.opening_absent), (0, 0));
+
+        let unended = grade(&replies(&own, false, false));
+        assert_eq!((unended.complete, unended.no_eos), (0, 256));
+
+        let swapped = grade(&replies(&|role| READER_REPLY_OPENINGS[1 - role], true, false));
+        assert_eq!((swapped.complete, swapped.opening_absent), (0, 256));
+
+        let other_value = grade(&replies(&own, true, true));
+        assert_eq!(
+            (other_value.complete, other_value.pairs_both_complete_distinct),
+            (0, 0)
+        );
+
+        // The bare value, the form the labels hold, is graded as it stands.
+        let bare = grade(&replies(&|_| "", true, false));
+        assert_eq!((bare.complete, bare.opening_absent), (256, 256));
+
+        assert!(grade_reader_replies(&tok, &bundle, &[]).is_err());
+    }
 
     fn repo_root() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))

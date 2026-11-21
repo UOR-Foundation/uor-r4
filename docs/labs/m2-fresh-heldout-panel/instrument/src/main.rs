@@ -1,7 +1,8 @@
 //! CLI entry point for the M2 fresh held-out panel (`m2-fresh256`) and `dev512` noise audit.
 
 use m2_fresh_heldout_panel_instrument::{
-    analyze_saved437_dev512_spread, generate_m2_fresh256_panel, verify_m2_fresh256_panel,
+    analyze_saved437_dev512_spread, generate_m2_fresh256_panel, grade_reader_replies,
+    load_pinned_byte_bpe_tokenizer, sha256_hex, verify_m2_fresh256_panel, READER_REPLY_OPENINGS,
 };
 use std::path::Path;
 
@@ -29,6 +30,39 @@ fn main() -> Result<(), String> {
             .map_err(|e| e.to_string())?;
         std::fs::write(out_dir.join("manifest.json"), &bundle.manifest_json)
             .map_err(|e| e.to_string())?;
+    }
+
+    // `--grade REPORT_JSON`: grades a `conjunction-probe reader-replies`
+    // report (its `replies`, one per case in `inputs.json` order) and prints
+    // the grade alone.
+    if let Some(pos) = args.iter().position(|a| a == "--grade") {
+        let path = args
+            .get(pos + 1)
+            .ok_or_else(|| "--grade requires a report path".to_string())?;
+        let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+        let report: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|e| format!("{path}: {e}"))?;
+        let replies: Vec<Vec<u32>> = serde_json::from_value(report["replies"].clone())
+            .map_err(|e| format!("{path}: replies: {e}"))?;
+        let tok = load_pinned_byte_bpe_tokenizer(repo_root)?;
+        let grade = grade_reader_replies(&tok, &bundle, &replies)?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "schema": "uor-r4.m2-fresh256-reader-grade/1",
+                "report_sha256": sha256_hex(&bytes),
+                "reader_sha256": report["reader_sha256"],
+                "panel_sha256": report["panel_sha256"],
+                "inputs_sha256": bundle.inputs_sha256,
+                "labels_sha256": bundle.labels_sha256,
+                "openings": READER_REPLY_OPENINGS,
+                "grade": grade,
+                "bar_pairs": 52,
+                "bar_met": grade.pairs_both_complete_distinct >= 52 && grade.complete >= 104,
+            }))
+            .map_err(|e| e.to_string())?
+        );
+        return Ok(());
     }
 
     let summary = serde_json::json!({
