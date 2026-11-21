@@ -80,6 +80,14 @@ Sheet: [`m2-reply512-gpu-reader-2026-11-21.md`](../../../harness/prep/m2-reply51
 
 Result against the sheet's bar: PASS for reader A (bar 256 of 512); reader B agrees. Decision [claude]: the owner's condition ("No, GPU first") is met for the development count, so M2's `headline.current` is set to 512, reader A's count. `secondary[0].current` stays 0 and `status` stays in-progress. This is reversible by the owner; it is logged on #2030. A fresh-context decision review of this change (same lab) returned SURVIVES with no required fix. §4.3 asks for a fresh transfer number beside a development gain: the only fresh read of this reader line was scored on CPU and its panel is spent, so a GPU-scored read of a newly drawn panel is owed and is item 2 below.
 
+### The order-free TRAIN as the GPU trainer, 21 Nov 2026 (UTC)
+
+What this does not show, first [claude]. No milestone number moved: the headline was 512 and is 512. The panel is the same development panel, and this reader had read it twice under no sheet before the sheet was written, so the count was known. Nothing here is a fresh read. The host still finds the reply runs and pair positions.
+
+Under the sheet [`m2-reply512-gpu-free-reader-2026-11-21.md`](../../../../harness/prep/m2-reply512-gpu-free-reader-2026-11-21.md) (FIT with notes on one non-author read, same lab), run `runs/conj/gpuscore2/` on wick, binary v42 [claude]: reader A's order-free file written on the GPU is the host's order-free file byte for byte (`9db7e834…e1227b`), the same on a second run and with the replies reversed; `512 / 512` replies equal the reference, `512 / 512` prompts read on the GPU, GPU read equal to the host, control `0 / 512`. Reader B (`ce961568…b89578`): the same counts. GPU TRAIN kernel time 1.15 s and 1.16 s in 48 launches each (the in-order rule: 55 s, 8,042 launches). Every input and both host files carried the sheet's pins.
+
+Result against the sheet's bar: PASS. Decision [claude]: the order-free TRAIN (two passes) is the GPU trainer of the M2 reader from here on, and reader A's order-free file is the saved reader that later sheets train and read. The in-order reader of the section above remains the reader the 512 was first counted on; both give 512 of 512. Reason: the in-order rule's launch count grows with the stream and it gave no result on the corpus-worded stream, where the order-free rule wrote the host's file in 9.5 s. Cost to undo: none; the in-order kernels and their sheet are unchanged. This choice changes no bar, status or scope.
+
 ## What M2 still needs before it can close
 
 1. The reader keyed by the trunk's transported state, so the artifact holds one state and not two tables (D85; M2's "one unified model").
