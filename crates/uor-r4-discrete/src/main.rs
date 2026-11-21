@@ -100,6 +100,29 @@ fn device_command(args: &[String]) -> Result<()> {
         Some("qualify-relation") if args.len()==2=>uor_r4_discrete::relation_qualification::run(Path::new(&args[1])),
         Some("qualify-driver") if args.len()==2=>uor_r4_discrete::driver_qualification::run(Path::new(&args[1])),
         Some("measure-cost") if args.len()==2=>uor_r4_discrete::measurement::run(Path::new(&args[1])),
+        Some("corpus-train") if args.len()>=3=>{
+            let (config_path,out,options)=uor_r4_discrete::corpus_train::parse(&args[1..])?;
+            let config=read_json::<uor_r4_discrete::training::DriverConfig>(&config_path.to_string_lossy())?;
+            let done=uor_r4_discrete::corpus_train::run(config,&out,&options)?;
+            println!("{done}");
+            Ok(())
+        }
+        Some("corpus-export") if args.len()==3=>{
+            println!("{}",uor_r4_discrete::corpus_train::export(Path::new(&args[1]),Path::new(&args[2]))?);
+            Ok(())
+        }
+        Some("corpus-overlap") if args.len()==4=>{
+            let n=args[3].parse::<usize>().map_err(|e|invalid(e.to_string()))?;
+            println!("{}",uor_r4_discrete::corpus_overlap::run(Path::new(&args[1]),Path::new(&args[2]),n)?);
+            Ok(())
+        }
+        Some("corpus-slice") if args.len()==7=>{
+            let limit=args[3].parse::<u64>().map_err(|e|invalid(e.to_string()))?;
+            let bos=args[4].parse::<u16>().map_err(|e|invalid(e.to_string()))?;
+            let report=uor_r4_discrete::corpus_slice::run(Path::new(&args[1]),Path::new(&args[2]),limit,bos,&args[5],Path::new(&args[6]))?;
+            println!("{report}");
+            Ok(())
+        }
         Some("init-corpus") if args.len()==3=>{
             let config=read_json::<uor_r4_discrete::training::DriverConfig>(&args[1])?;
             config.validate()?;

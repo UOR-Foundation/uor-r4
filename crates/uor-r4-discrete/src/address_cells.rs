@@ -769,6 +769,30 @@ pub fn table_file_bytes(spec: Spec, placed: &AddressCells) -> Result<Vec<u8>> {
     serde_json::to_vec(&table).map_err(|e| invalid(e.to_string()))
 }
 
+/// One class code per token from an address-cells codebook table (`blocks`
+/// blocks of eight coordinates a token): the writer cell, sixteen times the
+/// root of the first block plus the root of the last. The question reader
+/// (`conjunction`) keys its class forms by these.
+pub fn cell_codes(table: &[i32], vocabulary: usize, blocks: usize) -> Result<Vec<u16>> {
+    let invalid = |message: &str| Error::Invalid(format!("address cells: {message}"));
+    if blocks < 2 || table.len() != vocabulary * blocks * 8 {
+        return Err(invalid("the codebook table is not vocabulary x blocks x 8"));
+    }
+    let root = |block: &[i32]| {
+        (0..16usize)
+            .find(|&root| block_l1(block, root) == 0)
+            .ok_or_else(|| invalid("a codebook block is not a root"))
+    };
+    table
+        .chunks_exact(blocks * 8)
+        .map(|token| {
+            let first = root(&token[..8])?;
+            let last = root(&token[(blocks - 1) * 8..])?;
+            Ok((first * 16 + last) as u16)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

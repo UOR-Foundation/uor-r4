@@ -14,7 +14,60 @@ pub(super) const ROWSK_RESOURCE_REPORT: &str =
 /// Largest coordinate block one launch admits (BVG-K control V6 bound).
 pub const MAX_COORDINATE_BLOCK: usize = 64;
 
+/// Diagnostic wall time of the scoring launches, filled only when the
+/// `UOR_ROWSK_PROFILE` variable is set: index build, baseline, eval, reduce
+/// and the joint forward, in microseconds, then the joint forward count.
+static SCORE_PHASE_MICROS: [std::sync::atomic::AtomicU64; 6] =
+    [const { std::sync::atomic::AtomicU64::new(0) }; 6];
+
+pub fn score_phase_micros() -> [u64; 6] {
+    std::array::from_fn(|i| SCORE_PHASE_MICROS[i].load(std::sync::atomic::Ordering::Relaxed))
+}
+
+fn profiling() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("UOR_ROWSK_PROFILE").is_some())
+}
+
+/// Synchronize and add the time since `clock` to `phase`; nothing unless profiling.
+pub(super) fn profile_mark(
+    stream: &Arc<CudaStream>,
+    clock: &mut Instant,
+    phase: usize,
+    count: bool,
+) -> Result<()> {
+    if profiling() {
+        stream.synchronize().map_err(cuda)?;
+        let spent = u64::try_from(clock.elapsed().as_micros()).unwrap_or(u64::MAX);
+        SCORE_PHASE_MICROS[phase].fetch_add(spent, std::sync::atomic::Ordering::Relaxed);
+        if count {
+            SCORE_PHASE_MICROS[5].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        *clock = Instant::now();
+    }
+    Ok(())
+}
+
+pub(super) const ROWSKB_SOURCE: &str = include_str!(concat!(env!("OUT_DIR"), "/rowskb.cu"));
+pub(super) const ROWSKB_CUBIN: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/rowskb.cubin"));
+
+/// The bucketed twins of the baseline and eval kernels, with the index build.
+struct BucketKernels {
+    build: CudaFunction,
+    baseline: CudaFunction,
+    eval: CudaFunction,
+}
+
+/// The CSR token-cell index of one table state, device-resident.
+struct BucketIndex {
+    offsets: CudaSlice<u32>,
+    members: CudaSlice<u32>,
+    cells: CudaSlice<u32>,
+    absent_count: CudaSlice<u32>,
+}
+
 pub struct RowsKScoring {
+    bucket: Option<BucketKernels>,
     baseline: CudaFunction,
     eval: CudaFunction,
     reduce: CudaFunction,
@@ -41,11 +94,79 @@ impl Device {
             .map_err(cuda)?;
         let load = |name: &str| module.load_function(name).map_err(cuda);
         Ok(RowsKScoring {
+            bucket: None,
             baseline: load(crate::rowsk_source::ENTRIES[0])?,
             eval: load(crate::rowsk_source::ENTRIES[3])?,
             reduce: load(crate::rowsk_source::ENTRIES[4])?,
             binding: self.binding.clone(),
             stream: Arc::clone(&self.stream),
+        })
+    }
+
+    /// The K-coordinate handle with the baseline and eval kernels on the CSR
+    /// bucketed writer (exact `IdOrder` walk, #2840). Losses and statuses are
+    /// those of `rowsk_scoring`; only the writer's token walk differs. A Pick
+    /// read or a non-outer address metric, which the bucket text does not
+    /// carry, keeps the full-scan kernels.
+    pub fn rowsk_scoring_bucketed(&self) -> Result<RowsKScoring> {
+        let mut scoring = self.rowsk_scoring()?;
+        if !self.binding.address_metric.is_outer() {
+            return Ok(scoring);
+        }
+        let expected = crate::rowskb_source::generate(super::writer_bucket_device::BUCKET_SOURCE, include_str!("discrete.cu"))
+            .map_err(invalid)?;
+        if ROWSKB_SOURCE != expected {
+            return Err(invalid(
+                "embedded rowskb.cu differs from rowskb_source::generate(bucket.cu)",
+            ));
+        }
+        let module = self
+            .context
+            .load_module(Ptx::from_binary(ROWSKB_CUBIN.to_vec()))
+            .map_err(cuda)?;
+        let load = |name: &str| module.load_function(name).map_err(cuda);
+        scoring.bucket = Some(BucketKernels {
+            build: load(crate::rowskb_source::ENTRIES[0])?,
+            baseline: load(crate::rowskb_source::ENTRIES[7])?,
+            eval: load(crate::rowskb_source::ENTRIES[8])?,
+        });
+        Ok(scoring)
+    }
+
+    /// Build the token-cell index of the current table on this stream.
+    fn rowsk_bucket_index(&self, kernels: &BucketKernels) -> Result<BucketIndex> {
+        let vocabulary = self.spec().vocabulary as usize;
+        let spec = self.gpu_spec(1)?;
+        let mut offsets = self.stream.alloc_zeros::<u32>(257).map_err(cuda)?;
+        let mut members = self.stream.alloc_zeros::<u32>(vocabulary).map_err(cuda)?;
+        let mut cells = self.stream.alloc_zeros::<u32>(vocabulary).map_err(cuda)?;
+        let mut absent_count = self.stream.alloc_zeros::<u32>(1).map_err(cuda)?;
+        let mut status = self.stream.alloc_zeros::<u32>(1).map_err(cuda)?;
+        let mut launch = self.stream.launch_builder(&kernels.build);
+        launch
+            .arg(&self.table)
+            .arg(&self.geometry)
+            .arg(&spec)
+            .arg(&mut offsets)
+            .arg(&mut members)
+            .arg(&mut cells)
+            .arg(&mut absent_count)
+            .arg(&mut status);
+        let config = LaunchConfig {
+            grid_dim: (1, 1, 1),
+            block_dim: (256, 1, 1),
+            shared_mem_bytes: 0,
+        };
+        // SAFETY: 257 offsets, vocabulary members and cells, one absent count
+        // and one status word; the build kernel runs in one 256-thread block,
+        // the launch shape `m1-faster-writer` qualified.
+        unsafe { launch.launch(config) }.map_err(cuda)?;
+        check_status(&self.stream, &status, "K-coordinate bucket build")?;
+        Ok(BucketIndex {
+            offsets,
+            members,
+            cells,
+            absent_count,
         })
     }
 
@@ -147,45 +268,113 @@ impl Device {
             .alloc_zeros::<u32>(parameters.len())
             .map_err(cuda)?;
 
-        let mut launch = self.stream.launch_builder(&scoring.baseline);
-        launch
-            .arg(&self.table)
-            .arg(&self.routes)
-            .arg(&self.gates)
-            .arg(&batch.ids)
-            .arg(&batch.vectors)
-            .arg(&targets)
-            .arg(plan)
-            .arg(&self.geometry)
-            .arg(&spec)
-            .arg(&self.position_steps)
-            .arg(&mut base);
-        // SAFETY: rows*2 base words; one thread per admitted row, as in the
-        // row-parallel baseline (the identical kernel text).
-        unsafe { launch.launch(launch_config(batch.rows)) }.map_err(cuda)?;
+        // The index lives until this function returns; the launches that read
+        // it are queued on this stream before it is released.
+        let mut clock = Instant::now();
+        let index = match &scoring.bucket {
+            Some(kernels) => Some(self.rowsk_bucket_index(kernels)?),
+            None => None,
+        };
+        profile_mark(&self.stream, &mut clock, 0, false)?;
+        if let (Some(kernels), Some(index)) = (&scoring.bucket, &index) {
+            // Each row's baseline read, stored once and reused by every lane
+            // whose candidate cannot change that row's read.
+            let mut qbase = self
+                .stream
+                .alloc_zeros::<i32>(row_count * self.spec().blocks as usize * 8)
+                .map_err(cuda)?;
+            let mut launch = self.stream.launch_builder(&kernels.baseline);
+            launch
+                .arg(&self.table)
+                .arg(&self.routes)
+                .arg(&self.gates)
+                .arg(&batch.ids)
+                .arg(&batch.vectors)
+                .arg(&targets)
+                .arg(plan)
+                .arg(&self.geometry)
+                .arg(&spec)
+                .arg(&self.position_steps)
+                .arg(&index.offsets)
+                .arg(&index.members)
+                .arg(&index.cells)
+                .arg(&index.absent_count)
+                .arg(&mut base)
+                .arg(&mut qbase);
+            // SAFETY: rows*2 base words and rows*blocks*8 baseline read words;
+            // one thread per admitted row; the index holds 257 offsets and
+            // vocabulary members and cells.
+            unsafe { launch.launch(launch_config(batch.rows)) }.map_err(cuda)?;
+            profile_mark(&self.stream, &mut clock, 1, false)?;
 
-        let mut launch = self.stream.launch_builder(&scoring.eval);
-        launch
-            .arg(&self.table)
-            .arg(&self.routes)
-            .arg(&self.gates)
-            .arg(&batch.ids)
-            .arg(&batch.vectors)
-            .arg(&targets)
-            .arg(plan)
-            .arg(&self.geometry)
-            .arg(&spec)
-            .arg(&self.position_steps)
-            .arg(&kind)
-            .arg(&indices_device)
-            .arg(&block)
-            .arg(&base)
-            .arg(&mut cost)
-            .arg(&mut flag);
-        // SAFETY: block*rows*16 cost and flag words; one thread per
-        // (coordinate, row, lane), ordered after the baseline on this stream.
-        unsafe { launch.launch(launch_config(triples)) }.map_err(cuda)?;
+            let mut launch = self.stream.launch_builder(&kernels.eval);
+            launch
+                .arg(&self.table)
+                .arg(&self.routes)
+                .arg(&self.gates)
+                .arg(&batch.ids)
+                .arg(&batch.vectors)
+                .arg(&targets)
+                .arg(plan)
+                .arg(&self.geometry)
+                .arg(&spec)
+                .arg(&self.position_steps)
+                .arg(&index.offsets)
+                .arg(&index.members)
+                .arg(&index.cells)
+                .arg(&index.absent_count)
+                .arg(&kind)
+                .arg(&indices_device)
+                .arg(&block)
+                .arg(&base)
+                .arg(&qbase)
+                .arg(&mut cost)
+                .arg(&mut flag);
+            // SAFETY: block*rows*16 cost and flag words; one thread per
+            // (coordinate, row, lane), ordered after the baseline on this stream.
+            unsafe { launch.launch(launch_config(triples)) }.map_err(cuda)?;
+        } else {
+            let mut launch = self.stream.launch_builder(&scoring.baseline);
+            launch
+                .arg(&self.table)
+                .arg(&self.routes)
+                .arg(&self.gates)
+                .arg(&batch.ids)
+                .arg(&batch.vectors)
+                .arg(&targets)
+                .arg(plan)
+                .arg(&self.geometry)
+                .arg(&spec)
+                .arg(&self.position_steps)
+                .arg(&mut base);
+            // SAFETY: rows*2 base words; one thread per admitted row, as in the
+            // row-parallel baseline (the identical kernel text).
+            unsafe { launch.launch(launch_config(batch.rows)) }.map_err(cuda)?;
 
+            let mut launch = self.stream.launch_builder(&scoring.eval);
+            launch
+                .arg(&self.table)
+                .arg(&self.routes)
+                .arg(&self.gates)
+                .arg(&batch.ids)
+                .arg(&batch.vectors)
+                .arg(&targets)
+                .arg(plan)
+                .arg(&self.geometry)
+                .arg(&spec)
+                .arg(&self.position_steps)
+                .arg(&kind)
+                .arg(&indices_device)
+                .arg(&block)
+                .arg(&base)
+                .arg(&mut cost)
+                .arg(&mut flag);
+            // SAFETY: block*rows*16 cost and flag words; one thread per
+            // (coordinate, row, lane), ordered after the baseline on this stream.
+            unsafe { launch.launch(launch_config(triples)) }.map_err(cuda)?;
+        }
+
+        profile_mark(&self.stream, &mut clock, 2, false)?;
         let reducers = block * 16;
         let mut launch = self.stream.launch_builder(&scoring.reduce);
         launch
@@ -201,6 +390,7 @@ impl Device {
         // SAFETY: block*16 loss words and block status words; one thread per
         // (coordinate, lane), ordered after both producers on this stream.
         unsafe { launch.launch(launch_config(reducers)) }.map_err(cuda)?;
+        profile_mark(&self.stream, &mut clock, 3, false)?;
         Ok(DeviceScores {
             kind,
             indices: indices_device,

@@ -84,6 +84,88 @@ pub const FRESH256_LEN8: [&str; 10] = [
     "a flint wheel turns below the arched gate",
 ];
 
+/// One panel's literals: 10 two-word, 10 four-word and 10 eight-word targets
+/// and 4 two-word update-initial literals. The constants above are one set;
+/// another can be read from a JSON file kept outside git.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LiteralSet {
+    pub len2: Vec<String>,
+    pub len4: Vec<String>,
+    pub len8: Vec<String>,
+    pub update_init: Vec<String>,
+}
+
+impl LiteralSet {
+    /// The 34 `FRESH256_*` constants of the registered `m2-fresh256` panel.
+    pub fn fresh256() -> Self {
+        let own = |pool: &[&str]| pool.iter().map(|s| s.to_string()).collect();
+        Self {
+            len2: own(&FRESH256_LEN2),
+            len4: own(&FRESH256_LEN4),
+            len8: own(&FRESH256_LEN8),
+            update_init: own(&FRESH256_UPDATE_INIT),
+        }
+    }
+
+    /// Reads a set from a JSON file and checks its shape; returns the set and
+    /// the file's SHA-256.
+    pub fn load(path: &Path) -> Result<(Self, String), String> {
+        let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let set: Self = serde_json::from_slice(&bytes)
+            .map_err(|e| format!("{}: literal set: {e}", path.display()))?;
+        set.check_shape()?;
+        Ok((set, sha256_hex(&bytes)))
+    }
+
+    /// Pool sizes 10/10/10/4, word counts 2/4/8/2, lower-case ASCII words
+    /// joined by single spaces, and no literal twice.
+    pub fn check_shape(&self) -> Result<(), String> {
+        let pools = [
+            ("len2", &self.len2, 10usize, 2usize),
+            ("len4", &self.len4, 10, 4),
+            ("len8", &self.len8, 10, 8),
+            ("update_init", &self.update_init, 4, 2),
+        ];
+        for (name, pool, count, words) in pools {
+            if pool.len() != count {
+                return Err(format!("{name}: {} literals, expected {count}", pool.len()));
+            }
+            for (at, lit) in pool.iter().enumerate() {
+                let parts: Vec<&str> = lit.split(' ').collect();
+                if parts.len() != words
+                    || parts
+                        .iter()
+                        .any(|w| w.is_empty() || !w.bytes().all(|b| b.is_ascii_lowercase()))
+                {
+                    return Err(format!(
+                        "{name}[{at}]: not {words} lower-case words joined by single spaces"
+                    ));
+                }
+            }
+        }
+        if self.all().len() != 34 {
+            return Err("a literal appears twice in the set".to_string());
+        }
+        Ok(())
+    }
+
+    /// Every literal of the set, once.
+    pub fn all(&self) -> BTreeSet<String> {
+        self.len2
+            .iter()
+            .chain(&self.len4)
+            .chain(&self.len8)
+            .chain(&self.update_init)
+            .cloned()
+            .collect()
+    }
+}
+
+/// An encoder from text to pinned-tokenizer ids: [`encode_pinned_bpe`] for
+/// the constants, the real tokenizer for a file-supplied set.
+pub type Encoder<'a> = &'a dyn Fn(&str) -> Result<Vec<u32>, String>;
+
 /// All 74 historical curriculum and transfer literals from
 /// `crates/uor-r4-training/examples/geometric_native_compiler/curriculum.rs` (64 literals)
 /// and `crates/uor-r4-training/examples/geometric-native-bank-observation-plan.rs` (10 literals).
@@ -950,15 +1032,30 @@ pub fn analyze_saved437_dev512_spread(repo_root: &Path) -> Result<Dev512SpreadRe
 
 /// Generate the frozen 256-row held-out reply panel (`m2-fresh256`) and its sealed oracle labels.
 pub fn generate_m2_fresh256_panel() -> Result<Fresh256Bundle, String> {
+    generate_m2_fresh256_panel_from(&LiteralSet::fresh256(), &encode_pinned_bpe, None)
+}
+
+/// [`generate_m2_fresh256_panel`] over any literal set and encoder. With
+/// `literals_sha256` the manifest names the panel `m2-fresh256-b` and records
+/// that hash; without it the manifest is the registered one.
+pub fn generate_m2_fresh256_panel_from(
+    set: &LiteralSet,
+    encode: Encoder,
+    literals_sha256: Option<&str>,
+) -> Result<Fresh256Bundle, String> {
+    set.check_shape()?;
     let mut histories = Vec::new();
     let mut used_unordered: BTreeSet<(String, String)> = BTreeSet::new();
 
+    let len2: Vec<&str> = set.len2.iter().map(String::as_str).collect();
+    let len4: Vec<&str> = set.len4.iter().map(String::as_str).collect();
+    let len8: Vec<&str> = set.len8.iter().map(String::as_str).collect();
     let strata_specs: [(&str, &[&str], usize); 5] = [
-        ("length2", &FRESH256_LEN2, 4),
-        ("length4", &FRESH256_LEN4, 4),
-        ("length8", &FRESH256_LEN8, 4),
-        ("update", &FRESH256_LEN4, 2),
-        ("reassert", &FRESH256_LEN2[..8], 2),
+        ("length2", &len2, 4),
+        ("length4", &len4, 4),
+        ("length8", &len8, 4),
+        ("update", &len4, 2),
+        ("reassert", &len2[..8], 2),
     ];
 
     for (stratum, values, target_blocks) in strata_specs {
@@ -985,7 +1082,7 @@ pub fn generate_m2_fresh256_panel() -> Result<Fresh256Bundle, String> {
                 let mut after = Vec::new();
                 if stratum == "update" {
                     let role = if swapped { "home" } else { "job" };
-                    let init_val = FRESH256_UPDATE_INIT[selected % 4];
+                    let init_val = set.update_init[selected % 4].as_str();
                     let initial = supported_wire(role, "assert", init_val, 0)?;
                     if swapped {
                         h = initial;
@@ -1085,8 +1182,8 @@ pub fn generate_m2_fresh256_panel() -> Result<Fresh256Bundle, String> {
 
         let mut segments = Vec::new();
         for (event, rel_id, w, lit) in &records {
-            let cue_ids = encode_pinned_bpe(&w.text)?;
-            let val_ids = encode_pinned_bpe(lit)?;
+            let cue_ids = encode(&w.text)?;
+            let val_ids = encode(lit)?;
             // In StackStore::write_from (`geometric-native-bank-observation-panel.rs:948`),
             // each write event `0, 1, ...` assigns `record = (event + 1) as u64` and `commit = (event + 1) as u64`.
             let record_and_commit = (*event as u64) + 1;
@@ -1114,7 +1211,7 @@ pub fn generate_m2_fresh256_panel() -> Result<Fresh256Bundle, String> {
         sorted_queries.sort_by_key(|q| if q.relation == "job" { 0usize } else { 1usize });
         for q in sorted_queries {
             let case_id = format!("fresh-{}-{}", h.id, q.relation);
-            let query_ids = encode_pinned_bpe(&q.text)?;
+            let query_ids = encode(&q.text)?;
             runtime_cases.push(json!({
                 "id": case_id,
                 "segments": segments,
@@ -1153,7 +1250,7 @@ pub fn generate_m2_fresh256_panel() -> Result<Fresh256Bundle, String> {
     let labels_json = serde_json::to_vec_pretty(&labels_val).map_err(|e| e.to_string())?;
     let labels_sha256 = sha256_hex(&labels_json);
 
-    let manifest_val = json!({
+    let mut manifest_val = json!({
         "schema": "uor-r4.m2-fresh256-panel-manifest/1",
         "panel_id": "m2-fresh256",
         "milestone": "m2",
@@ -1198,6 +1295,12 @@ pub fn generate_m2_fresh256_panel() -> Result<Fresh256Bundle, String> {
         },
         "model_predictions": "NOT_RUN"
     });
+    if let Some(literals_sha256) = literals_sha256 {
+        manifest_val["panel_id"] = json!("m2-fresh256-b");
+        manifest_val["literals_sha256"] = json!(literals_sha256);
+        manifest_val["excluded_historical_exposures"]["fresh256_literals"] =
+            json!(LiteralSet::fresh256().all().len());
+    }
     let manifest_json = serde_json::to_vec_pretty(&manifest_val).map_err(|e| e.to_string())?;
     let manifest_sha256 = sha256_hex(&manifest_json);
 
@@ -1404,6 +1507,26 @@ pub fn verify_m2_fresh256_panel(
     repo_root: &Path,
     bundle: &Fresh256Bundle,
 ) -> Result<OverlapAndSealAudit, String> {
+    verify_m2_fresh256_panel_from(
+        repo_root,
+        bundle,
+        &LiteralSet::fresh256(),
+        &encode_pinned_bpe,
+        &[],
+    )
+}
+
+/// [`verify_m2_fresh256_panel`] over any literal set and encoder. Every
+/// literal used by the panel and every literal of `set` is checked for
+/// overlap against the 74 historical literals and the `also_excluded` ones.
+pub fn verify_m2_fresh256_panel_from(
+    repo_root: &Path,
+    bundle: &Fresh256Bundle,
+    set: &LiteralSet,
+    encode: Encoder,
+    also_excluded: &[&str],
+) -> Result<OverlapAndSealAudit, String> {
+    set.check_shape()?;
     if sha256_hex(&bundle.plan_json) != bundle.plan_sha256
         || sha256_hex(&bundle.inputs_json) != bundle.inputs_sha256
         || sha256_hex(&bundle.labels_json) != bundle.labels_sha256
@@ -1417,6 +1540,8 @@ pub fn verify_m2_fresh256_panel(
     }
 
     let historical_from_disk = load_historical_exposed_literals_from_repo(repo_root)?;
+    let mut excluded: Vec<String> = historical_from_disk.clone();
+    excluded.extend(also_excluded.iter().map(|s| s.to_string()));
 
     // Check consumer schema compatibility under #[serde(deny_unknown_fields)].
     let parsed_inputs: ProbeInputs = serde_json::from_slice(&bundle.inputs_json)
@@ -1554,7 +1679,9 @@ pub fn verify_m2_fresh256_panel(
 
     // Check exact, content-word, n-gram, and edit-distance disjointness against all 74 historical
     // literals parsed from disk, plus pairwise content-word disjointness across all 34 fresh literals.
-    let hist_set: BTreeSet<&str> = historical_from_disk.iter().map(String::as_str).collect();
+    let hist_set: BTreeSet<&str> = excluded.iter().map(String::as_str).collect();
+    let mut checked_literals = fresh_literals_used.clone();
+    checked_literals.extend(set.all());
     let mut exact_literal_overlaps = 0usize;
     let mut content_word_overlaps = 0usize;
     let mut ngram_overlaps = 0usize;
@@ -1562,7 +1689,7 @@ pub fn verify_m2_fresh256_panel(
     let mut seen_fresh_content_words: BTreeSet<String> = BTreeSet::new();
     let mut min_same_stratum_edit_distance = usize::MAX;
 
-    for fresh_lit in &fresh_literals_used {
+    for fresh_lit in &checked_literals {
         if hist_set.contains(fresh_lit.as_str()) {
             exact_literal_overlaps += 1;
         }
@@ -1574,7 +1701,7 @@ pub fn verify_m2_fresh256_panel(
         }
         let f_bi = word_ngrams(fresh_lit, 2);
         let f_len = fresh_lit.split_whitespace().count();
-        for hist_lit in &historical_from_disk {
+        for hist_lit in &excluded {
             let h_words = content_words(hist_lit);
             if !f_words.is_disjoint(&h_words) {
                 content_word_overlaps += 1;
@@ -1629,7 +1756,7 @@ pub fn verify_m2_fresh256_panel(
         let last_lit = extract_literal(h.turns.last().ok_or("empty turns")?)?.to_string();
         let mut current: BTreeMap<&str, (&Wire, String)> = BTreeMap::new();
         for w in &h.turns {
-            let encoded = encode_pinned_bpe(&w.text)?;
+            let encoded = encode(&w.text)?;
             if encoded != tok.encode(&w.text) {
                 return Err(format!("turn BPE mismatch on {:?}", w.text));
             }
@@ -1639,9 +1766,9 @@ pub fn verify_m2_fresh256_panel(
         let mut replay_tokens = 0usize;
         let mut alphabet = BTreeSet::from([PERIOD_TOKEN_ID, EOS_TOKEN_ID]);
         for (w, lit) in current.values() {
-            let cue_ids = encode_pinned_bpe(&w.text)?;
+            let cue_ids = encode(&w.text)?;
             let spaced_lit = format!(" {lit}");
-            let emitted_ids = encode_pinned_bpe(&spaced_lit)?;
+            let emitted_ids = encode(&spaced_lit)?;
             if emitted_ids != tok.encode(&spaced_lit) {
                 return Err(format!("literal BPE mismatch on {spaced_lit:?}"));
             }
@@ -1652,7 +1779,7 @@ pub fn verify_m2_fresh256_panel(
         let mut sorted_queries: Vec<&Wire> = h.queries.iter().collect();
         sorted_queries.sort_by_key(|q| if q.relation == "job" { 0usize } else { 1usize });
         for q in sorted_queries {
-            let q_ids = encode_pinned_bpe(&q.text)?;
+            let q_ids = encode(&q.text)?;
             if q_ids != tok.encode(&q.text) {
                 return Err(format!("query BPE mismatch on {:?}", q.text));
             }
@@ -1665,7 +1792,7 @@ pub fn verify_m2_fresh256_panel(
                 .get(other_role)
                 .ok_or_else(|| "missing other role".to_string())?;
             let target_str = format!(" {expected_lit}.");
-            let mut target_ids = encode_pinned_bpe(&target_str)?;
+            let mut target_ids = encode(&target_str)?;
             if target_ids != tok.encode(&target_str) {
                 return Err(format!("target BPE mismatch on {target_str:?}"));
             }
@@ -1856,9 +1983,417 @@ pub fn grade_generated_replies_with_evaluator_oracle(
     Ok((complete, pairs_both_complete_distinct))
 }
 
+/// The fixed opening of a chat-form reply for each asked role (job, home),
+/// with the space that follows it. The panel's labels accept the bare value
+/// (`VALUE.`); a reader that replies ` Your job is VALUE.` is graded on the
+/// text after its role's opening. The openings name no value.
+pub const READER_REPLY_OPENINGS: [&str; 2] = [" Your job is ", " You live in "];
+
+/// The registered grade of a chat-form reader's replies, with the counts
+/// that say how the replies were read.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ReaderGrade {
+    pub rows: usize,
+    pub complete: usize,
+    pub pairs: usize,
+    pub pairs_both_complete_distinct: usize,
+    /// Replies that do not end on EOS (never complete).
+    pub no_eos: usize,
+    /// Replies that do not start with the asked role's opening; they are
+    /// graded whole, unchanged.
+    pub opening_absent: usize,
+}
+
+/// Grades one reply per case, in the order of `inputs.json`, with
+/// [`grade_generated_replies_with_evaluator_oracle`] unchanged. Before
+/// grading, a reply that starts with the asked role's opening
+/// ([`READER_REPLY_OPENINGS`], the role read from the case id) has the
+/// opening removed and the rest encoded again; every other reply is graded
+/// as it stands.
+pub fn grade_reader_replies(
+    tok: &ByteBpeTokenizer,
+    bundle: &Fresh256Bundle,
+    replies: &[Vec<u32>],
+) -> Result<ReaderGrade, String> {
+    let inputs: ProbeInputs =
+        serde_json::from_slice(&bundle.inputs_json).map_err(|e| format!("inputs.json: {e}"))?;
+    let labels: ProbeLabels =
+        serde_json::from_slice(&bundle.labels_json).map_err(|e| format!("labels.json: {e}"))?;
+    if replies.len() != inputs.cases.len() {
+        return Err(format!(
+            "{} replies for {} cases",
+            replies.len(),
+            inputs.cases.len()
+        ));
+    }
+    let mut graded = Vec::with_capacity(replies.len());
+    let (mut no_eos, mut opening_absent) = (0usize, 0usize);
+    for (case, reply) in inputs.cases.iter().zip(replies) {
+        let role = if case.id.ends_with("-job") {
+            0
+        } else if case.id.ends_with("-home") {
+            1
+        } else {
+            return Err(format!("{}: no asked role in the case id", case.id));
+        };
+        let eos = reply.last().copied() == Some(EOS_TOKEN_ID);
+        no_eos += usize::from(!eos);
+        let body = &reply[..reply.len() - usize::from(eos)];
+        let bytes = tok.decode_bytes(body);
+        let rest = std::str::from_utf8(&bytes)
+            .ok()
+            .and_then(|text| text.strip_prefix(READER_REPLY_OPENINGS[role]));
+        match rest {
+            Some(rest) => {
+                let mut ids = tok.encode(rest);
+                if eos {
+                    ids.push(EOS_TOKEN_ID);
+                }
+                graded.push(ids);
+            }
+            None => {
+                opening_absent += 1;
+                graded.push(reply.clone());
+            }
+        }
+    }
+    let (complete, pairs_both_complete_distinct) =
+        grade_generated_replies_with_evaluator_oracle(tok, &inputs, &labels, &graded)?;
+    Ok(ReaderGrade {
+        rows: replies.len(),
+        complete,
+        pairs: replies.len() / 2,
+        pairs_both_complete_distinct,
+        no_eos,
+        opening_absent,
+    })
+}
+
+/// A control: exchanges the two replies of each opposite-query pair, so each
+/// reply is graded against the other role's question. Cases sit in pairs in
+/// `inputs.json` order (job, then home); an odd count is an error.
+pub fn swap_pair_replies(replies: &[Vec<u32>]) -> Result<Vec<Vec<u32>>, String> {
+    if replies.len() % 2 != 0 {
+        return Err(format!("{} replies do not form pairs", replies.len()));
+    }
+    Ok(replies
+        .chunks(2)
+        .flat_map(|pair| [pair[1].clone(), pair[0].clone()])
+        .collect())
+}
+
+/// Counts the cases outside the forms `conjunction-probe m2-format` accepts
+/// (`reader-grammar.json`): two statements, each one of the grammar's
+/// published openings before a value and the period, and a question the
+/// grammar holds under the role the case id names.
+pub fn cases_outside_reader_grammar(
+    grammar: &Value,
+    bundle: &Fresh256Bundle,
+) -> Result<usize, String> {
+    let lists = |value: &Value| -> Result<Vec<Vec<u32>>, String> {
+        serde_json::from_value(value.clone()).map_err(|e| format!("reader grammar: {e}"))
+    };
+    let queries = [lists(&grammar["queries"][0])?, lists(&grammar["queries"][1])?];
+    let statements = [
+        lists(&grammar["statements"][0])?,
+        lists(&grammar["statements"][1])?,
+    ];
+    let inputs: ProbeInputs =
+        serde_json::from_slice(&bundle.inputs_json).map_err(|e| format!("inputs.json: {e}"))?;
+    let mut outside = 0usize;
+    for case in &inputs.cases {
+        let role = usize::from(case.id.ends_with("-home"));
+        let asked = queries[role].contains(&case.query_ids);
+        let contexts: Vec<&Vec<u32>> = case
+            .segments
+            .iter()
+            .filter_map(|segment| match segment {
+                ProbeSegment::Context { token_ids, .. } => Some(token_ids),
+                ProbeSegment::Source { .. } => None,
+            })
+            .collect();
+        let relations: Vec<u32> = case
+            .segments
+            .iter()
+            .filter_map(|segment| match segment {
+                ProbeSegment::Source { relation, .. } => Some(*relation),
+                ProbeSegment::Context { .. } => None,
+            })
+            .collect();
+        let stated = contexts.len() == 2
+            && relations.len() == 2
+            && relations.contains(&(role as u32 + 1))
+            && contexts.iter().zip(&relations).all(|(context, &relation)| {
+                (1..=2).contains(&relation)
+                    && statements[relation as usize - 1].iter().any(|opening| {
+                        context.strip_prefix(opening.as_slice()).is_some_and(|rest| {
+                            rest.len() > 1 && rest.last() == Some(&PERIOD_TOKEN_ID)
+                        })
+                    })
+            });
+        outside += usize::from(!(asked && stated));
+    }
+    Ok(outside)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn real_encoder(tok: &ByteBpeTokenizer) -> impl Fn(&str) -> Result<Vec<u32>, String> + '_ {
+        move |text: &str| Ok(tok.encode(text))
+    }
+
+    /// The general path fed the constants writes the registered panel's bytes.
+    #[test]
+    fn the_general_path_with_the_constants_reproduces_the_registered_seals() {
+        let bundle =
+            generate_m2_fresh256_panel_from(&LiteralSet::fresh256(), &encode_pinned_bpe, None)
+                .expect("bundle");
+        let root = repo_root();
+        let registered = std::fs::read_to_string(root.join("docs/harness/panels/m2-fresh256.json"))
+            .expect("registered panel");
+        for sha in [
+            &bundle.plan_sha256,
+            &bundle.inputs_sha256,
+            &bundle.labels_sha256,
+            &bundle.manifest_sha256,
+        ] {
+            assert!(registered.contains(sha.as_str()), "{sha} not registered");
+        }
+        assert_eq!(
+            bundle.inputs_sha256,
+            "1de2fc28607eff6bc412eee41a259d806ee1479b7c925059f00e9d3b54afa99a"
+        );
+        let tok = load_pinned_byte_bpe_tokenizer(&root).expect("tokenizer");
+        let real = real_encoder(&tok);
+        let through_tokenizer =
+            generate_m2_fresh256_panel_from(&LiteralSet::fresh256(), &real, None).expect("bundle");
+        assert_eq!(through_tokenizer.inputs_sha256, bundle.inputs_sha256);
+    }
+
+    /// Exchanging the replies of each pair turns a fully right reply set into
+    /// zero pairs and zero complete rows; the exchange is its own inverse.
+    #[test]
+    fn swapped_pair_replies_score_no_pair() {
+        let root = repo_root();
+        let tok = load_pinned_byte_bpe_tokenizer(&root).expect("tokenizer");
+        let bundle = generate_m2_fresh256_panel().expect("bundle");
+        let labels: ProbeLabels = serde_json::from_slice(&bundle.labels_json).expect("labels");
+        let replies: Vec<Vec<u32>> = labels
+            .cases
+            .iter()
+            .map(|case| {
+                let role = usize::from(case.id.ends_with("-home"));
+                let text = format!("{}{}", READER_REPLY_OPENINGS[role], case.answers.accepted[0]);
+                let mut ids = tok.encode(&text);
+                ids.push(EOS_TOKEN_ID);
+                ids
+            })
+            .collect();
+        let right = grade_reader_replies(&tok, &bundle, &replies).expect("grade");
+        assert_eq!(right.pairs_both_complete_distinct, 128);
+        let swapped = swap_pair_replies(&replies).expect("swap");
+        assert_eq!(swap_pair_replies(&swapped).expect("swap"), replies);
+        let control = grade_reader_replies(&tok, &bundle, &swapped).expect("grade");
+        assert_eq!((control.complete, control.pairs_both_complete_distinct), (0, 0));
+        assert!(swap_pair_replies(&replies[1..]).is_err());
+    }
+
+    /// A set given as a file is checked through the real tokenizer against
+    /// the old fresh literals as well as the historical ones. The old set
+    /// stands in for a file here: it passes while the old literals are not
+    /// excluded, and is rejected once they are, or once one of its literals
+    /// is a historical one. A new set passing every check is shown by the
+    /// CLI on the drawn file, not by this test.
+    #[test]
+    fn a_file_set_overlapping_an_old_literal_is_rejected() {
+        let root = repo_root();
+        let tok = load_pinned_byte_bpe_tokenizer(&root).expect("tokenizer");
+        let real = real_encoder(&tok);
+        let old: Vec<String> = LiteralSet::fresh256().all().into_iter().collect();
+        let old_refs: Vec<&str> = old.iter().map(String::as_str).collect();
+        let check_against = |set: &LiteralSet, excluded: &[&str]| {
+            let bundle = generate_m2_fresh256_panel_from(set, &real, Some("test"))?;
+            verify_m2_fresh256_panel_from(&root, &bundle, set, &real, excluded)?;
+            Ok::<_, String>(bundle)
+        };
+        let check = |set: &LiteralSet| check_against(set, &old_refs);
+        let set = LiteralSet::fresh256();
+        let bundle = check_against(&set, &[]).expect("the old set passes with nothing more excluded");
+        let grammar: Value = serde_json::from_slice(
+            &std::fs::read(root.join("docs/labs/m2-fresh-heldout-panel/reader-grammar.json"))
+                .expect("grammar"),
+        )
+        .expect("json");
+        assert_eq!(cases_outside_reader_grammar(&grammar, &bundle), Ok(0));
+
+        assert!(check(&set).unwrap_err().contains("overlap exclusion failed"));
+        let mut historical = set.clone();
+        historical.len4[9] = HISTORICAL_EXPOSED_LITERALS[16].to_string();
+        assert!(check_against(&historical, &[])
+            .unwrap_err()
+            .contains("overlap exclusion failed"));
+        let mut short = set;
+        short.len8.pop();
+        assert!(check(&short).is_err());
+    }
+
+    /// The library check finds the registered panel inside the grammar.
+    #[test]
+    fn the_registered_panel_is_inside_the_reader_grammar() {
+        let root = repo_root();
+        let grammar: Value = serde_json::from_slice(
+            &std::fs::read(root.join("docs/labs/m2-fresh-heldout-panel/reader-grammar.json"))
+                .expect("grammar"),
+        )
+        .expect("json");
+        let bundle = generate_m2_fresh256_panel().expect("bundle");
+        assert_eq!(cases_outside_reader_grammar(&grammar, &bundle), Ok(0));
+    }
+
+    /// A chat-form reply is graded on the text after its role's opening,
+    /// and on nothing else: no EOS, the other role's opening or the other
+    /// role's value all score nothing.
+    #[test]
+    fn a_chat_form_reply_is_graded_after_its_role_opening() {
+        let root = repo_root();
+        let tok = load_pinned_byte_bpe_tokenizer(&root).expect("tokenizer");
+        let bundle = generate_m2_fresh256_panel().expect("bundle");
+        let labels: ProbeLabels = serde_json::from_slice(&bundle.labels_json).expect("labels");
+        let role = |id: &str| usize::from(id.ends_with("-home"));
+        let replies = |opening: &dyn Fn(usize) -> &'static str, eos: bool, other: bool| {
+            labels
+                .cases
+                .iter()
+                .enumerate()
+                .map(|(at, case)| {
+                    // The pair's other case sits beside it.
+                    let from = if other { at ^ 1 } else { at };
+                    let value = &labels.cases[from].answers.accepted[0];
+                    let mut ids = tok.encode(&format!("{}{value}", opening(role(&case.id))));
+                    if eos {
+                        ids.push(EOS_TOKEN_ID);
+                    }
+                    ids
+                })
+                .collect::<Vec<_>>()
+        };
+        let own = |role: usize| READER_REPLY_OPENINGS[role];
+        let grade = |replies: &[Vec<u32>]| grade_reader_replies(&tok, &bundle, replies).expect("grade");
+
+        let right = grade(&replies(&own, true, false));
+        assert_eq!(
+            (right.rows, right.complete, right.pairs_both_complete_distinct),
+            (256, 256, 128)
+        );
+        assert_eq!((right.no_eos, right.opening_absent), (0, 0));
+
+        let unended = grade(&replies(&own, false, false));
+        assert_eq!((unended.complete, unended.no_eos), (0, 256));
+
+        let swapped = grade(&replies(&|role| READER_REPLY_OPENINGS[1 - role], true, false));
+        assert_eq!((swapped.complete, swapped.opening_absent), (0, 256));
+
+        let other_value = grade(&replies(&own, true, true));
+        assert_eq!(
+            (other_value.complete, other_value.pairs_both_complete_distinct),
+            (0, 0)
+        );
+
+        // The bare value, the form the labels hold, is graded as it stands.
+        let bare = grade(&replies(&|_| "", true, false));
+        assert_eq!((bare.complete, bare.opening_absent), (256, 256));
+
+        assert!(grade_reader_replies(&tok, &bundle, &[]).is_err());
+    }
+
+    /// Every case is in the forms `conjunction-probe m2-format` accepts: two
+    /// statements, each one of the grammar's published openings before a
+    /// value and the period, and a question the grammar holds under the
+    /// role the case id names. Only pass or fail is reported.
+    #[test]
+    fn every_case_is_in_the_reader_grammars_published_forms() {
+        let root = repo_root();
+        let path = root.join("docs/labs/m2-fresh-heldout-panel/reader-grammar.json");
+        let grammar: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).expect("grammar")).expect("json");
+        let lists = |value: &serde_json::Value| -> Vec<Vec<u32>> {
+            serde_json::from_value(value.clone()).expect("id lists")
+        };
+        let bundle = generate_m2_fresh256_panel().expect("bundle");
+        let inputs: ProbeInputs = serde_json::from_slice(&bundle.inputs_json).expect("inputs");
+        let mut outside = 0usize;
+        for case in &inputs.cases {
+            let role = usize::from(case.id.ends_with("-home"));
+            let asked = lists(&grammar["queries"][role]).contains(&case.query_ids);
+            let contexts: Vec<&Vec<u32>> = case
+                .segments
+                .iter()
+                .filter_map(|segment| match segment {
+                    ProbeSegment::Context { token_ids, .. } => Some(token_ids),
+                    ProbeSegment::Source { .. } => None,
+                })
+                .collect();
+            let relations: Vec<u32> = case
+                .segments
+                .iter()
+                .filter_map(|segment| match segment {
+                    ProbeSegment::Source { relation, .. } => Some(*relation),
+                    ProbeSegment::Context { .. } => None,
+                })
+                .collect();
+            let stated = contexts.len() == 2
+                && relations.len() == 2
+                && relations.contains(&(role as u32 + 1))
+                && contexts.iter().zip(&relations).all(|(context, &relation)| {
+                    lists(&grammar["statements"][relation as usize - 1])
+                        .iter()
+                        .any(|opening| {
+                            context.strip_prefix(opening.as_slice()).is_some_and(|rest| {
+                                rest.len() > 1 && rest.last() == Some(&PERIOD_TOKEN_ID)
+                            })
+                        })
+                });
+            outside += usize::from(!(asked && stated));
+        }
+        assert_eq!((inputs.cases.len(), outside), (256, 0));
+    }
+
+    /// The reader writes its reply opening as the token ids of
+    /// `reader-grammar.json`; the grader removes a string. The two must be
+    /// the same text, or every reply would be graded whole and fail.
+    #[test]
+    fn the_reader_grammar_openings_are_the_strings_the_grader_removes() {
+        let root = repo_root();
+        let tok = load_pinned_byte_bpe_tokenizer(&root).expect("tokenizer");
+        let path = root.join("docs/labs/m2-fresh-heldout-panel/reader-grammar.json");
+        let bytes = std::fs::read(&path).expect("reader-grammar.json");
+        assert_eq!(
+            sha256_hex(&bytes),
+            "90429301dccbf2e1b9c1594fb9869c7b285e61f137beffe6008392e5a4ba32c4"
+        );
+        let grammar: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+        let ids = |value: &serde_json::Value| -> Vec<u32> {
+            serde_json::from_value(value.clone()).expect("token ids")
+        };
+        let pool = ids(&grammar["pool"]);
+        let period: u32 = serde_json::from_value(grammar["period"].clone()).expect("period");
+        assert_eq!(period, PERIOD_TOKEN_ID);
+        for role in 0..2 {
+            let opening = ids(&grammar["replies"][role]);
+            // Every pool token starts a value: the opening and one of them
+            // must read as the opening string and a word.
+            for &word in &pool {
+                let mut reply = opening.clone();
+                reply.extend([word, period]);
+                let text = String::from_utf8(tok.decode_bytes(&reply)).expect("utf8");
+                let rest = text
+                    .strip_prefix(READER_REPLY_OPENINGS[role])
+                    .unwrap_or_else(|| panic!("role {role}: {text:?}"));
+                assert!(!rest.starts_with(' ') && rest.ends_with('.'), "{text:?}");
+            }
+        }
+    }
 
     fn repo_root() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))

@@ -2500,6 +2500,7 @@ dependencies = [
  "sha2",
  "uor-r4-count-runtime",
  "uor-r4-native-vector",
+ "uor-r4-reader-runtime",
  "uor-r4-tokenizer",
  "uor-r4-vision",
  "wasm-bindgen",
@@ -2563,6 +2564,15 @@ dependencies = [
  "uor-r4-graph-compiler",
  "uor-r4-graph-format",
  "uor-r4-graph-runtime",
+]
+
+[[package]]
+name = "uor-r4-reader-runtime"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

@@ -107,6 +107,7 @@ fn compare_block(
     device: &Device,
     rows: &RowsCounterfactual,
     rowsk: &RowsKScoring,
+    bucketed: &RowsKScoring,
     windows: &[Vec<Identity>],
     targets: &[u32],
     block: &[Parameter],
@@ -117,6 +118,14 @@ fn compare_block(
         device.score_rows_k(&input, targets, block, rowsk)
     })?;
     require(scores.len() == block.len(), "one score per coordinate")?;
+    // The bucketed-writer handle returns the same statuses and losses.
+    let on_buckets = unchanged(device, || {
+        device.score_rows_k(&input, targets, block, bucketed)
+    })?;
+    require(
+        on_buckets == scores,
+        "bucketed K-coordinate scoring differs from the full-scan kernels",
+    )?;
     tally.blocks += 1;
     let distinct = scores
         .iter()
@@ -226,6 +235,7 @@ fn scoring_parity(tally: &mut Tally) -> Result<()> {
         for model_seed in [7u32, 11] {
             let device = Device::new_with_objective(spec, read, objective, model_seed, 0)?;
             let rows = device.rows_counterfactual()?;
+            let bucketed = device.rowsk_scoring_bucketed()?;
             let rowsk = device.rowsk_scoring()?;
             let snapshot = device.snapshot()?;
             let mut rng = Lcg(0x5eed ^ u64::from(model_seed) ^ u64::from(blocks));
@@ -259,7 +269,7 @@ fn scoring_parity(tally: &mut Tally) -> Result<()> {
                         let extra = (k > 1 && short > 0).then(|| &inventory[..short]);
                         for block in inventory.chunks(k).chain(extra) {
                             let distinct = compare_block(
-                                &device, &rows, &rowsk, &batch, &targets, block, tally,
+                                &device, &rows, &rowsk, &bucketed, &batch, &targets, block, tally,
                             )?;
                             if block.len() < k {
                                 tally.short_blocks += 1;

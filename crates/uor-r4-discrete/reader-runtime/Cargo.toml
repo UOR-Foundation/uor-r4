@@ -1,0 +1,21 @@
+[package]
+name = "uor-r4-reader-runtime"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "Portable build of the discrete crate's question reader (conjunction rows) for the integer client"
+
+[lib]
+path = "../src/reader_runtime.rs"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10.8"
+
+# The shared source marks its trainer-only functions (they need the GPU
+# model) with `cfg(feature = "cuda")`. This crate has no such feature, so
+# they are never compiled here.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cuda"))'] }

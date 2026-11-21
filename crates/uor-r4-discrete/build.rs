@@ -17,6 +17,8 @@ mod decomposition_source;
 mod rows_source;
 #[path = "src/rowsk_source.rs"]
 mod rowsk_source;
+#[path = "src/rowskb_source.rs"]
+mod rowskb_source;
 #[path = "src/wider_carrier_source.rs"]
 mod wider_carrier_source;
 #[path = "src/within_cell_writer_source.rs"]
@@ -405,6 +407,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=src/baseline_reuse_source.rs");
     println!("cargo:rerun-if-changed=src/rows_source.rs");
     println!("cargo:rerun-if-changed=src/rowsk_source.rs");
+    println!("cargo:rerun-if-changed=src/rowskb_source.rs");
+    println!("cargo:rerun-if-changed=src/rowskb_ordinary_sweep.txt");
     println!("cargo:rerun-if-changed=src/bvgk_source.rs");
     println!("cargo:rerun-if-changed=src/bucket_source.rs");
     println!("cargo:rerun-if-changed=src/wider_carrier_source.rs");
@@ -415,6 +419,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=src/kn_score_division.cuh");
     println!("cargo:rerun-if-changed=src/kn_lookup.cu");
     println!("cargo:rerun-if-changed=src/equal_count.cu");
+    println!("cargo:rerun-if-changed=src/reader_read.cu");
+    println!("cargo:rerun-if-changed=src/reader_common.cuh");
+    println!("cargo:rerun-if-changed=src/reader_train.cu");
     println!("cargo:rerun-if-env-changed=NVCC");
     println!("cargo:rerun-if-env-changed=UOR_NVCC_ARCH");
     let out = PathBuf::from(env::var_os("OUT_DIR").ok_or("Cargo did not supply OUT_DIR")?);
@@ -517,6 +524,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "equal_count_train",
             "equal_count_freeze",
             "equal_count_score",
+        ],
+    )?;
+    let status = Command::new(env::var("NVCC").unwrap_or_else(|_| "nvcc".into()))
+        .args(["-ptx", "-std=c++17"])
+        .arg(format!("-arch={arch}"))
+        .arg("-o")
+        .arg(out.join("reader-read.ptx"))
+        .arg("src/reader_read.cu")
+        .status()?;
+    if !status.success() {
+        return Err(format!("reader-read PTX build failed: {status}").into());
+    }
+    admit_ptx_inventory(
+        &fs::read_to_string(out.join("reader-read.ptx"))?,
+        &["reader_read"],
+    )?;
+    let status = Command::new(env::var("NVCC").unwrap_or_else(|_| "nvcc".into()))
+        .args(["-ptx", "-std=c++17"])
+        .arg(format!("-arch={arch}"))
+        .arg("-o")
+        .arg(out.join("reader-train.ptx"))
+        .arg("src/reader_train.cu")
+        .status()?;
+    if !status.success() {
+        return Err(format!("reader-train PTX build failed: {status}").into());
+    }
+    admit_ptx_inventory(
+        &fs::read_to_string(out.join("reader-train.ptx"))?,
+        &[
+            "train_count",
+            "train_keep",
+            "train_rank",
+            "train_forms",
+            "train_write",
+            "train_pairs",
+            "train_missed",
+            "free_walk",
+            "free_rows",
+            "free_best",
+            "free_keep",
+            "free_sort",
         ],
     )?;
     // An independent module: the ordinary source, nvcc invocation and PTX stay
@@ -632,6 +680,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &fs::read_to_string(out.join("bucket.ptx"))?,
         &bucket_source::ENTRIES,
     )?;
+    // K-coordinate scoring on the bucketed writer: the generated bucket text
+    // plus two entries, its own admitted nine-entry PTX and cubin. The bucket
+    // and rows-K images above are unchanged; this is a separate module.
+    let rowskb = rowskb_source::generate(&fs::read_to_string(out.join("bucket.cu"))?, &fs::read_to_string("src/discrete.cu")?)?;
+    fs::write(out.join("rowskb.cu"), rowskb)?;
+    let status = Command::new(&nvcc)
+        .args(["-ptx", "-std=c++17"])
+        .arg(format!("-arch={arch}"))
+        .arg("-o")
+        .arg(out.join("rowskb.ptx"))
+        .arg(out.join("rowskb.cu"))
+        .status()?;
+    if !status.success() {
+        return Err(format!("K-coordinate bucket PTX build failed: {status}").into());
+    }
+    admit_ptx_inventory(
+        &fs::read_to_string(out.join("rowskb.ptx"))?,
+        &rowskb_source::ENTRIES,
+    )?;
     // Opt-in wider code carrier qualification & inspection (m1-wider-code-carrier,
     // #2847): separate generated source, admitted two-entry PTX and cubin. Earlier
     // images stay untouched.
@@ -683,6 +750,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("rowsk", out.join("rowsk.ptx")),
         ("bvgk", out.join("bvgk.ptx")),
         ("bucket", out.join("bucket.ptx")),
+        ("rowskb", out.join("rowskb.ptx")),
         ("wider-carrier", out.join("wider-carrier.ptx")),
         ("within-cell-writer", out.join("within-cell-writer.ptx")),
         ("native-vector", out.join("native-vector.ptx")),
@@ -690,6 +758,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("kn-score", out.join("kn-score.ptx")),
         ("kn-lookup", out.join("kn-lookup.ptx")),
         ("equal-count", out.join("equal-count.ptx")),
+        ("reader-read", out.join("reader-read.ptx")),
+        ("reader-train", out.join("reader-train.ptx")),
     ] {
         let mut resource_command = Command::new(&nvcc);
         // PTX input needs assembly, not C++ preprocessing or a new resource cap.

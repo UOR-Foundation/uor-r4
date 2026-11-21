@@ -16,8 +16,12 @@ pub mod bvgk_source;
 pub mod carrier;
 pub mod carrier_arms;
 pub mod carrier_fresh;
+pub mod conjunction;
 pub mod controller;
 pub mod corpus;
+pub mod corpus_overlap;
+pub mod corpus_slice;
+pub mod corpus_train;
 pub mod coverage_census;
 #[cfg(all(test, feature = "cuda"))]
 mod cpu_oracle_parity;
@@ -43,6 +47,10 @@ pub mod native_vector_device;
 pub mod equal_count;
 #[cfg(feature = "cuda")]
 pub mod equal_count_device;
+#[cfg(feature = "cuda")]
+pub mod reader_read_device;
+#[cfg(feature = "cuda")]
+pub mod reader_train_device;
 pub mod kn_ceiling;
 pub mod kn_pick;
 pub mod kn_filter;
@@ -72,6 +80,7 @@ pub mod proposal_timing;
 pub mod q4_import;
 pub mod rows_source;
 pub mod rowsk_source;
+pub mod rowskb_source;
 pub mod snapshot;
 pub mod stage_t;
 pub use objective::ObjectivePolicy;

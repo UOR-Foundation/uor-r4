@@ -154,6 +154,7 @@ impl Device {
             .try_into()
             .map_err(|_| invalid("BVG-K summary must hold three words"))?;
 
+        let mut joint_clock = Instant::now();
         let l_joint = if summary_words[0] >= 2 {
             Some(self.joint_loss(
                 batch,
@@ -169,6 +170,9 @@ impl Device {
         } else {
             None
         };
+        if l_joint.is_some() {
+            super::rowsk_device::profile_mark(&self.stream, &mut joint_clock, 4, true)?;
+        }
         let joint_words = [u64::from(l_joint.is_some()), l_joint.unwrap_or(0)];
         let joint = self.stream.clone_htod(&joint_words).map_err(cuda)?;
         let mut commit = self.stream.alloc_zeros::<u32>(block.len()).map_err(cuda)?;
