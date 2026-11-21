@@ -579,6 +579,12 @@ pub struct Reads {
     /// After a copied token, a row keyed by the token ahead alone is read
     /// between the place's own row and the row every copied token shares.
     pub tail_row: bool,
+    /// A place is answered by the best-standing slot of any held form's
+    /// row; off, by the first form (most specific first) whose row answers.
+    pub across: bool,
+    /// A token answered with no place it was read from takes the place a
+    /// read in another held form's row names the same token from.
+    pub agree: bool,
 }
 
 /// The stand choice and, for the octonion bind, its table.
@@ -749,6 +755,25 @@ impl Entry {
     }
 }
 
+/// An answering slot's record: times right, and times it named anything
+/// plus one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Standing {
+    right: u64,
+    named: u64,
+    token: bool,
+}
+
+impl Standing {
+    /// Right more often of the times it spoke; level, a read before a token.
+    fn beats(self, other: Self) -> bool {
+        (self.right * other.named)
+            .cmp(&(other.right * self.named))
+            .then(other.token.cmp(&self.token))
+            .is_gt()
+    }
+}
+
 /// A row held under a question form: slots that name the next token, ranked
 /// by how often each was right.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -802,6 +827,21 @@ impl HeldRow {
             ),
             ..named
         })
+    }
+    /// The row's answer with the record of the slot that gave it.
+    fn best(&self, at: &Place, least: u32) -> Option<(Named, Standing)> {
+        let named = self.read(at, least)?;
+        let slot =
+            (0..MAX_SLOTS).find(|&slot| self.count[slot] > 0 && self.entry[slot] == named.by)?;
+        let right = u64::from(self.count[slot]);
+        Some((
+            named,
+            Standing {
+                right,
+                named: right + u64::from(self.wrong[slot]) + 1,
+                token: matches!(named.by, Entry::Token(_)),
+            },
+        ))
     }
     /// True when the best slot (right at least `least` times) is a pointer
     /// or the copy read and it names nothing here: the row is about to
@@ -980,6 +1020,9 @@ pub struct Asked {
     /// shorter gap than its most specific token form is read under its class
     /// forms.
     sharper: bool,
+    /// Read choice, not saved: the trace also lists every row consulted,
+    /// each slot with its right and wrong counts and what it names.
+    dump: bool,
     /// First-pass choice, not saved: turns are also counted under their
     /// open forms. A read uses whatever forms are kept.
     open: bool,
@@ -996,6 +1039,7 @@ impl Asked {
             context,
             codes: Vec::new(),
             sharper: false,
+            dump: false,
             open: false,
             stand: Default::default(),
             seen: HashMap::new(),
@@ -1051,6 +1095,45 @@ impl Asked {
     pub fn with_open_forms(mut self, on: bool) -> Self {
         self.open = on;
         self
+    }
+    pub fn trace_rows(&mut self, on: bool) {
+        self.dump = on;
+    }
+    /// Every row a place could read under `forms`, slot by slot.
+    fn rows_at(&self, forms: &[u32], history: &History, at: &Place, empty: bool) -> Vec<String> {
+        let (own, shared) = history.tails(at.ahead());
+        let words = history.address();
+        let mut lines = Vec::new();
+        for (index, &form) in forms.iter().enumerate() {
+            for (label, tail) in [("own", Some(own)), ("shared", shared)] {
+                let Some(tail) = tail else { continue };
+                let key = HeldKey {
+                    form,
+                    history: words,
+                    tail,
+                    empty,
+                };
+                let Some(row) = self.rows.get(&key) else {
+                    continue;
+                };
+                let slots: Vec<String> = row
+                    .ranked(at.stand.reads.precise)
+                    .enumerate()
+                    .map(|(slot, (entry, count))| {
+                        let wrong = (0..MAX_SLOTS)
+                            .find(|&s| row.entry[s] == entry && row.count[s] == count)
+                            .map_or(0, |s| row.wrong[s]);
+                        let names = entry.name(at).map(|named| named.token);
+                        format!("{slot}: {entry:?} right {count} wrong {wrong} names {names:?}")
+                    })
+                    .collect();
+                lines.push(format!(
+                    "  rows: form {index} {label} [{}]",
+                    slots.join("; ")
+                ));
+            }
+        }
+        lines
     }
     pub fn read_sharper_classes(&mut self, on: bool) {
         self.sharper = on;
@@ -1233,18 +1316,40 @@ impl Asked {
     ) -> Option<(Named, usize, bool)> {
         let (own, shared) = history.tails(at.ahead());
         let words = history.address();
+        let reads = at.stand.reads;
         let mut first = |history: [u128; 2], tail: u32, is_own: bool, empty: bool| {
-            forms.iter().enumerate().find_map(|(index, &form)| {
-                let key = HeldKey {
+            let row_of = |form: u32| {
+                self.rows.get(&HeldKey {
                     form,
                     history,
                     tail,
                     empty,
-                };
-                let row = self.rows.get(&key)?;
+                })
+            };
+            let mut found: Option<(Named, usize, Standing)> = None;
+            for (index, &form) in forms.iter().enumerate() {
+                let Some(row) = row_of(form) else { continue };
                 *missed |= row.empty_read(at, ROW_RIGHT);
-                Some((row.read(at, ROW_RIGHT)?, index, is_own))
-            })
+                let Some((named, standing)) = row.best(at, ROW_RIGHT) else {
+                    continue;
+                };
+                if !reads.across {
+                    found = Some((named, index, standing));
+                    break;
+                }
+                // The earlier, more specific form keeps a tie.
+                if found.is_none_or(|(_, _, held)| standing.beats(held)) {
+                    found = Some((named, index, standing));
+                }
+            }
+            let (mut named, index, _) = found?;
+            if reads.agree && named.source.is_none() {
+                named.source = forms
+                    .iter()
+                    .filter_map(|&form| row_of(form))
+                    .find_map(|row| row.source_of(at, named.token, ROW_RIGHT));
+            }
+            Some((named, index, is_own))
         };
         let mut both = |empty: bool| {
             if let Some(found) = first(words, own, true, empty) {
@@ -1411,6 +1516,9 @@ impl Asked {
         let mut history = History::default();
         while tokens.len() - start < limit {
             let at = self.place(&self.stand, &tokens, start, cursor);
+            if self.dump {
+                trace.extend(self.rows_at(forms, &history, &at, empty));
+            }
             let held = self.answer(forms, &history, &at, empty, &mut missed);
             let named = match held {
                 Some((named, index, is_own)) => {
@@ -2253,6 +2361,65 @@ mod tests {
         let level = row([9, 1], [9, 1]);
         assert_eq!(first(&level, false), Some(Entry::Token(7)));
         assert_eq!(first(&level, true), Some(read));
+    }
+
+    /// A sparse row under the most specific form holds only a token; a
+    /// broader form's row holds a read with a long clean record that names
+    /// the same token from the context. Read form by form, the token comes
+    /// with no place and no copy can follow it.
+    #[test]
+    fn a_sparse_specific_row_does_not_hide_a_read_under_another_form() {
+        let (bos, eos) = (0u32, 1u32);
+        let mut asked = Asked::new(192, bos, eos);
+        let history = History::default();
+        let key = |form: u32| HeldKey {
+            form,
+            history: history.address(),
+            tail: AT_START,
+            empty: false,
+        };
+        let row = |slots: &[(Entry, u32, u32)]| {
+            let mut row = HeldRow::default();
+            for (slot, &(entry, right, wrong)) in slots.iter().enumerate() {
+                row.entry[slot] = entry;
+                row.count[slot] = right;
+                row.wrong[slot] = wrong;
+            }
+            row
+        };
+        asked.rows.insert(key(10), row(&[(Entry::Token(7), 3, 1)]));
+        asked.rows.insert(
+            key(11),
+            row(&[(Entry::Next, 50, 0), (Entry::Token(7), 5, 6)]),
+        );
+        asked
+            .rows
+            .insert(key(12), row(&[(Entry::Token(8), 400, 0)]));
+        // The copy last read place 1, so `Next` reads place 2: token 7.
+        let tokens = [bos, 5, 7, 9, 2];
+        let answer = |reads: Reads, forms: &[u32]| {
+            let stand = Stand {
+                reads,
+                ..Default::default()
+            };
+            let at = asked.place(&stand, &tokens, tokens.len(), Some(1));
+            asked
+                .answer(forms, &history, &at, false, &mut false)
+                .map(|(named, index, _)| (named.token, named.source, index))
+        };
+        let off = Reads::default();
+        assert_eq!(answer(off, &[10, 11]), Some((7, None, 0)));
+        let agree = Reads { agree: true, ..off };
+        assert_eq!(answer(agree, &[10, 11]), Some((7, Some(2), 0)));
+        let across = Reads {
+            across: true,
+            ..off
+        };
+        assert_eq!(answer(across, &[10, 11]), Some((7, Some(2), 1)));
+        // Across forms a better record may also change the token; an agreed
+        // place never does.
+        assert_eq!(answer(across, &[10, 12]), Some((8, None, 1)));
+        assert_eq!(answer(agree, &[10, 12]), Some((7, None, 0)));
     }
 
     #[test]

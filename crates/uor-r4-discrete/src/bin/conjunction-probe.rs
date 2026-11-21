@@ -358,7 +358,7 @@ fn reader(args: &[String]) -> Result<(), String> {
     if args[0] == "reader-save" {
         if !(12..=16).contains(&args.len()) {
             return Err(
-                "usage: conjunction-probe reader-save TOKENS_U16 MASK_U8 OUT_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST [CODEBOOK_TABLE_JSON|- [latest|pair|octonion:CODEBOOK_TABLE_JSON [open|- [READS_CSV(precise,explain,tail)]]]]"
+                "usage: conjunction-probe reader-save TOKENS_U16 MASK_U8 OUT_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST [CODEBOOK_TABLE_JSON|- [latest|pair|octonion:CODEBOOK_TABLE_JSON [open|- [READS_CSV(precise,explain,tail,across,agree)]]]]"
                     .into(),
             );
         }
@@ -439,6 +439,8 @@ fn reader(args: &[String]) -> Result<(), String> {
                 "precise" => reads.precise = true,
                 "explain" => reads.explain = true,
                 "tail" => reads.tail_row = true,
+                "across" => reads.across = true,
+                "agree" => reads.agree = true,
                 other => return Err(format!("unknown read choice {other}")),
             }
         }
@@ -490,9 +492,10 @@ fn reader(args: &[String]) -> Result<(), String> {
         return Ok(());
     }
     let sharper = args.get(5).map(String::as_str) == Some("sharper");
-    if args.len() != 5 && !(args.len() == 6 && sharper) {
+    let rows = args.get(5).map(String::as_str) == Some("rows");
+    if args.len() != 5 && !(args.len() == 6 && (sharper || rows)) {
         return Err(
-            "usage: conjunction-probe reader-replies READER_FILE PANEL_JSON OUT_JSON LIMIT [sharper]"
+            "usage: conjunction-probe reader-replies READER_FILE PANEL_JSON OUT_JSON LIMIT [sharper|rows]"
                 .into(),
         );
     }
@@ -503,6 +506,7 @@ fn reader(args: &[String]) -> Result<(), String> {
     let started = Instant::now();
     let mut reader = Reader::from_bytes(&bytes).map_err(|e| e.to_string())?;
     reader.asked.read_sharper_classes(sharper);
+    reader.asked.trace_rows(rows);
     let load_ms = started.elapsed().as_millis() as u64;
     let panel: Vec<conjunction::PanelRow> =
         serde_json::from_slice(&panel_bytes).map_err(|e| e.to_string())?;

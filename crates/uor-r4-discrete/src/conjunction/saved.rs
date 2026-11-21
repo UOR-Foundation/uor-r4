@@ -34,7 +34,7 @@ pub const MAGIC_CODES: &[u8; 8] = b"UORRDR02";
 pub const MAGIC_STAND: &[u8; 8] = b"UORRDR03";
 /// A file with any of the [`Reads`] choices on: the 03 layout (stand choice
 /// 0 for the latest stand), then the choices as bits (1 precise, 2 explain,
-/// 4 tail row), and after each held slot's count its wrong count.
+/// 4 tail row, 8 across forms, 16 agreed place), and after each held slot's count its wrong count.
 pub const MAGIC_READS: &[u8; 8] = b"UORRDR04";
 
 /// One class code per token from an address-cells codebook table (`blocks`
@@ -366,7 +366,9 @@ impl Reader {
             out.u32(
                 u32::from(reads.precise)
                     | u32::from(reads.explain) << 1
-                    | u32::from(reads.tail_row) << 2,
+                    | u32::from(reads.tail_row) << 2
+                    | u32::from(reads.across) << 3
+                    | u32::from(reads.agree) << 4,
             );
         }
 
@@ -547,13 +549,15 @@ impl Reader {
         }
         if ranked {
             let bits = input.u32()?;
-            if bits == 0 || bits > 7 {
+            if bits == 0 || bits > 31 {
                 return Err(invalid("unknown read choices"));
             }
             asked = asked.with_reads(Reads {
                 precise: bits & 1 != 0,
                 explain: bits & 2 != 0,
                 tail_row: bits & 4 != 0,
+                across: bits & 8 != 0,
+                agree: bits & 16 != 0,
             });
         }
 
@@ -1021,11 +1025,13 @@ mod tests {
         let (plain, _) = train(Reads::default())?;
         let (plain_bytes, _) = plain.to_bytes(1);
         assert_eq!(&plain_bytes[..8], MAGIC);
-        for bits in 1..8u32 {
+        for bits in 1..32u32 {
             let reads = Reads {
                 precise: bits & 1 != 0,
                 explain: bits & 2 != 0,
                 tail_row: bits & 4 != 0,
+                across: bits & 8 != 0,
+                agree: bits & 16 != 0,
             };
             let (reader, _) = train(reads)?;
             assert_eq!(reader.reply(&prompt, 8), vec![50, dot, eos], "{reads:?}");
