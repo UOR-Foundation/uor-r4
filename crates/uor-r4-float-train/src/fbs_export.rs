@@ -717,9 +717,14 @@ fn hamming_snapshot(
     layers: usize,
     width: usize,
 ) -> Result<FbsHammingSnapshot> {
-    if layers != HAMMING_READOUT_DEPTH {
+    // The read sits at its own depth inside the trunk; the only requirement is that the trunk is
+    // deep enough to contain it. Requiring exactly `HAMMING_READOUT_DEPTH` layers was a guard from
+    // when only 6-layer trunks existed, and it blocked exporting a 12-layer run whose read is at
+    // depth 6 — the served session reads the depth from the artifact's hamming image, so it applies
+    // the read where it was trained.
+    if layers <= HAMMING_READOUT_DEPTH {
         return Err(invalid(format!(
-            "the Hamming readout read runs at depth {HAMMING_READOUT_DEPTH}, but this trunk has {layers} layers; the export serves it only on a trunk of {HAMMING_READOUT_DEPTH}"
+            "the Hamming readout read runs at depth {HAMMING_READOUT_DEPTH}, but this trunk has {layers} layers; the trunk must be deeper than the read"
         )));
     }
     if reads.reads.len() != HAMMING_DEPTHS.len() || width == 0 || !width.is_multiple_of(4) {

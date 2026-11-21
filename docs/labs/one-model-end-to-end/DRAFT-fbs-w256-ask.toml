@@ -1,0 +1,158 @@
+# DRAFT, not yet valid: still missing readings/probes and the ask-carry placement is unresolved.
+# Move into conformance/stack/ only when `cargo xtask stack-contract-hash` passes.
+spec = "uor-r4.stack-contract/2"
+id = "fbs-w256-ask"
+title = "FBS width 256 with the served Hamming ask-head"
+lane = "fbs"
+state = "candidate"
+revision = 1
+decision = "docs/labs/one-model-end-to-end/MECHANISM-exact-address-2026-11-20.md#the-mechanism"
+source_pin = "70d50ee0897535bd619f006d1a75a3fc4ce8984f"
+summary = "A 12-layer, 256-wide FBS trunk with four Hamming heads and the ask head (relative-offset question carry). Measured against its own no-read baseline at the same width and seeds: nearest 26,917/27,431 against 16,688/16,733, bits 5.242/5.259 against 6.250/6.268, openings 67/99 against 41/8 at 8,192 steps."
+
+[model]
+tokenizer_sha256 = "7d1d0ce286ad0ed190272410d6add285a2d74f3be09ce05342b3d3ef8547603b"
+vocab = 8192
+width = 256
+layers = 12
+training_context = 512
+context = 512
+objective = "nearest"
+training = "float32 on CUDA, token margin 0.02, centroid writer address"
+serving = "integer UORLUT01 artifact; Hamming reads at depth 6 with the ask head"
+
+[artifact]
+family = "uor-r4.lut-stack"
+provenance = "legacy-grandfathered"
+grandfathered_by = "docs/labs/one-model-end-to-end/MECHANISM-exact-address-2026-11-20.md#the-mechanism"
+schema = "uor-r4.lut-stack/6"
+
+[[artifact.sections]]
+id = "trunk"
+required = true
+owner = "fbs-trunk"
+format = "4-bit matrices, scales and integer tables"
+description = "The SpiralCore/FBS trunk, 12 layers at width 256."
+
+[[artifact.sections]]
+id = "hamming-reads"
+required = true
+owner = "hamming-copy-read"
+format = "Q24 rotations and weights, Q16 margins"
+exponent = -24
+description = "Four Hamming heads covering 256 lanes, with the ask head's relative-offset question carry."
+
+[[inputs]]
+id = "tokenizer"
+source = "local:tokenizer-8k.json"
+sha256 = "7d1d0ce286ad0ed190272410d6add285a2d74f3be09ce05342b3d3ef8547603b"
+
+[[inputs]]
+id = "train-tokens"
+source = "pool:tokens-8k-clean-2026-11-17/tokens.u16"
+sha256 = "f24371893ff98bde8b1b7e1233ebe19a6c0ca05f42cd1d1ccf7ac35e29a33d26"
+
+[[inputs]]
+id = "train-mask"
+source = "pool:tokens-8k-clean-2026-11-17/response_mask.u8"
+sha256 = "452941dbca9990af971d9ecd0926d5ba7e001bd0c98e04535642c3780b5fe0ce"
+
+[[evidence]]
+id = "source"
+kind = "authority"
+locator = "docs/labs/one-model-end-to-end/MECHANISM-exact-address-2026-11-20.md"
+result = "pass"
+scope = "source and run identity"
+statement = "The mechanism record pins the width-256 ask-head run at 70d50ee08 and the two-seed comparison against its own baseline."
+mechanisms = ["tokenizer", "fbs-trunk", "hamming-copy-read", "integer-export"]
+
+[[evidence]]
+id = "negative"
+kind = "report"
+locator = "docs/labs/one-model-end-to-end/MECHANISM-exact-address-2026-11-20.md"
+result = "pass"
+scope = "two-seed width-256 comparison"
+mechanisms = ["hamming-copy-read", "fbs-trunk"]
+statement = "The ask-head beat its own no-read baseline at the same width and seeds: nearest 26,917/27,431 against 16,688/16,733 and bits 5.242/5.259 against 6.250/6.268 at 8,192 steps."
+
+[[evidence]]
+id = "artifact-not-exported"
+kind = "artifact"
+locator = "docs/labs/one-model-end-to-end/COSTS.md"
+result = "not-run"
+scope = "integer artifact"
+mechanisms = ["integer-export"]
+statement = "The snapshot is converted at 70d50ee08; the artifact hash is recorded when the export completes."
+
+[[mechanisms]]
+id = "tokenizer"
+status = "integrated"
+implementation = "crates/uor-r4-tokenizer/src/lib.rs"
+evidence = ["crates/uor-r4-tokenizer/src/lib.rs"]
+evidence_ids = ["source"]
+flags = []
+conflicts_with = []
+depends_on = []
+sidecars = []
+load_order = 10
+cleanup_order = 80
+sections = []
+invariants = ["The tokenizer hash is 7d1d0ce286ad0ed190272410d6add285a2d74f3be09ce05342b3d3ef8547603b."]
+non_claims = ["Tokenizer agreement is not capability."]
+[[mechanisms]]
+id = "fbs-trunk"
+status = "integrated"
+implementation = "crates/uor-r4-float-train/src/geometric_stack_native.rs"
+evidence = ["crates/uor-r4-float-train/src/geometric_stack_native.rs"]
+evidence_ids = ["source"]
+conflicts_with = []
+depends_on = ["tokenizer"]
+sidecars = ["model.safetensors", "config.json"]
+load_order = 20
+cleanup_order = 70
+sections = ["trunk"]
+invariants = ["All projections are SpiralCore/FBS route maps."]
+non_claims = ["The negative closes this configuration, not the trunk."]
+
+[[mechanisms.flags]]
+name = "--objective"
+value = "cell"
+required = true
+[[mechanisms]]
+id = "hamming-copy-read"
+status = "integrated"
+implementation = "crates/uor-r4-float-train/src/flock_read_hamming.rs"
+evidence = ["crates/uor-r4-float-train/src/flock_read_hamming.rs"]
+evidence_ids = ["source", "negative"]
+conflicts_with = []
+depends_on = ["fbs-trunk"]
+sidecars = ["hamming_read.safetensors"]
+load_order = 30
+cleanup_order = 60
+sections = ["hamming-reads"]
+invariants = ["Copy head 0 uses a one-token key and copy head 1 uses a two-token key.", "Both heads use latest-exact selection."]
+non_claims = ["This negative does not close two-token keys by themselves."]
+
+[[mechanisms.flags]]
+name = "--hamming-read"
+value = "4"
+required = true
+
+[[mechanisms.flags]]
+name = "--hamming-copy-latest"
+value = "true"
+required = true
+
+[[mechanisms.flags]]
+name = "--hamming-copy-keys"
+value = "1,2"
+required = true
+
+[[commands]]
+id = "train"
+role = "train"
+program = "cargo"
+args = ["run", "--release", "--locked", "-p", "uor-r4-float-train", "--features", "cuda", "--bin", "train-in-space", "--", "--objective", "nearest", "--fast-rivals", "1", "--writer-address", "centroids", "--token-margin", "0.02", "--context", "512", "--width", "256", "--layers", "12", "--vocab-size", "8192", "--hamming-read", "4", "--hamming-ask", "1", "--hamming-carry-question", "2", "--batch", "24", "--steps", "8192", "--eval-every", "2048", "--lr", "0.001", "--lr-end", "0", "--seed", "1", "--out", "runs/w256-ask-s1"]
+env = []
+inputs = ["train-tokens", "train-mask", "tokenizer"]
+outputs = ["model.safetensors", "hamming_read.safetensors", "config.json"]
