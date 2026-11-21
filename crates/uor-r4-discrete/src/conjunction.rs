@@ -595,6 +595,15 @@ pub struct Stand {
     reads: Reads,
 }
 
+/// The held row that answered a place: its key apart from the form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Hit {
+    own: bool,
+    history: [u128; 2],
+    tail: u32,
+    empty: bool,
+}
+
 /// A slot's answer and, for a copying slot, the place it read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Named {
@@ -1313,7 +1322,7 @@ impl Asked {
         at: &Place,
         empty: bool,
         missed: &mut bool,
-    ) -> Option<(Named, usize, bool)> {
+    ) -> Option<(Named, usize, Hit)> {
         let (own, shared) = history.tails(at.ahead());
         let words = history.address();
         let reads = at.stand.reads;
@@ -1349,7 +1358,13 @@ impl Asked {
                     .filter_map(|&form| row_of(form))
                     .find_map(|row| row.source_of(at, named.token, ROW_RIGHT));
             }
-            Some((named, index, is_own))
+            let hit = Hit {
+                own: is_own,
+                history,
+                tail,
+                empty,
+            };
+            Some((named, index, hit))
         };
         let mut both = |empty: bool| {
             if let Some(found) = first(words, own, true, empty) {
@@ -1397,7 +1412,8 @@ impl Asked {
             if forms.is_empty() {
                 continue;
             }
-            let (_, _, missed) = self.generate(ladder, &forms, &tokens[floor..start], limit, false);
+            let (_, _, missed) =
+                self.generate(ladder, &forms, &tokens[floor..start], limit, false, None);
             if missed {
                 self.write_forms(&forms, tokens, start, end, true);
                 wrote = true;
@@ -1490,13 +1506,102 @@ impl Asked {
             let reply = ladder.reply(prompt, true, self.context, self.bos, self.eos, limit);
             return (reply, false, Vec::new());
         }
-        let (reply, trace, missed) = self.generate(ladder, &forms, prompt, limit, false);
+        let (reply, trace, missed) = self.generate(ladder, &forms, prompt, limit, false, None);
         if !missed {
             return (reply, true, trace);
         }
-        let (reply, mut trace, _) = self.generate(ladder, &forms, prompt, limit, true);
+        let (reply, mut trace, _) = self.generate(ladder, &forms, prompt, limit, true, None);
         trace.insert(0, "empty read".into());
         (reply, true, trace)
+    }
+    /// As [`Asked::reply`], with the raw words of every step
+    /// ([`STEP_WORDS`] a reply token) and whether the reply was read again
+    /// from the rows for an empty read. The words are what a replay
+    /// compares: the row's address, the slot read, the carried cursor and
+    /// the token.
+    pub fn reply_words(
+        &self,
+        ladder: &Ladder,
+        prompt: &[u32],
+        limit: usize,
+    ) -> (Vec<u32>, Vec<u32>, bool) {
+        let forms = self.read_under(prompt, prompt.len());
+        let mut words = Vec::new();
+        if forms.is_empty() {
+            let reply = ladder.reply(prompt, true, self.context, self.bos, self.eos, limit);
+            for &token in &reply {
+                no_form_words(&mut words, token);
+            }
+            return (reply, words, false);
+        }
+        let (reply, _, missed) =
+            self.generate(ladder, &forms, prompt, limit, false, Some(&mut words));
+        if !missed {
+            return (reply, words, false);
+        }
+        words.clear();
+        let (reply, _, _) = self.generate(ladder, &forms, prompt, limit, true, Some(&mut words));
+        (reply, words, true)
+    }
+    /// The read half of a TRAIN pass over `reply` given after `prompt`, with
+    /// nothing written: at each place the held answer is read as
+    /// [`Asked::write`] reads it before its write, and the given token is
+    /// carried on. The words are those of [`Asked::reply_words`]; the count
+    /// is of places whose held answer was absent or another token.
+    pub fn forced_words(&self, prompt: &[u32], reply: &[u32], empty: bool) -> (Vec<u32>, u64) {
+        let start = prompt.len();
+        let forms = self.read_under(prompt, start);
+        let mut words = Vec::new();
+        if forms.is_empty() {
+            for &token in reply {
+                no_form_words(&mut words, token);
+            }
+            return (words, 0);
+        }
+        let mut unread = 0u64;
+        let mut tokens = prompt.to_vec();
+        let mut cursor = None;
+        let mut history = History::default();
+        for &target in reply {
+            let at = self.place(&self.stand, &tokens, start, cursor);
+            let read = self.answer(&forms, &history, &at, empty, &mut false);
+            let held = read.filter(|(named, _, _)| named.token == target);
+            let named = match held {
+                Some((named, _, _)) => named,
+                None => {
+                    unread += 1;
+                    Named {
+                        token: target,
+                        source: None,
+                        by: Entry::Empty,
+                    }
+                }
+            };
+            step_words(&mut words, &forms, held, empty, &history, &at, named);
+            cursor = named.source;
+            history.push(target, cursor);
+            tokens.push(target);
+        }
+        (words, unread)
+    }
+    /// Every kept form's own words by its id: three key words as twelve
+    /// u32, then the gap's place and length. A saved file numbers forms
+    /// anew, so a replay compares these and never the id.
+    pub fn forms_by_id(&self) -> HashMap<u32, [u32; 14]> {
+        self.seen
+            .iter()
+            .map(|(form, &id)| {
+                let mut words = [0u32; 14];
+                for (place, word) in form.words.iter().enumerate() {
+                    for part in 0..4 {
+                        words[place * 4 + part] = (word >> (96 - 32 * part)) as u32;
+                    }
+                }
+                words[12] = u32::from(form.gap_at);
+                words[13] = u32::from(form.gap_len);
+                (id, words)
+            })
+            .collect()
     }
     /// One greedy reply under `forms`, its trace and whether any place met
     /// an empty read.
@@ -1507,6 +1612,7 @@ impl Asked {
         prompt: &[u32],
         limit: usize,
         empty: bool,
+        mut words: Option<&mut Vec<u32>>,
     ) -> (Vec<u32>, Vec<String>, bool) {
         let start = prompt.len();
         let mut trace = Vec::new();
@@ -1521,8 +1627,8 @@ impl Asked {
             }
             let held = self.answer(forms, &history, &at, empty, &mut missed);
             let named = match held {
-                Some((named, index, is_own)) => {
-                    let row = if is_own { "own" } else { "shared" };
+                Some((named, index, hit)) => {
+                    let row = if hit.own { "own" } else { "shared" };
                     trace.push(format!(
                         "form {index} {row} {:?} ahead {:?}",
                         named.by,
@@ -1543,6 +1649,9 @@ impl Asked {
                     }
                 }
             };
+            if let Some(words) = words.as_deref_mut() {
+                step_words(words, forms, held, empty, &history, &at, named);
+            }
             cursor = named.source;
             history.push(named.token, cursor);
             tokens.push(named.token);
@@ -1552,6 +1661,54 @@ impl Asked {
         }
         (tokens.split_off(start), trace, missed)
     }
+}
+
+/// Words a reply step is replayed by: the kind (0 a place's own row, 1 a
+/// shared row, 2 the ladder, 3 no form held), the form's index among the
+/// held forms and its id, whether the pass read the rows for an empty read
+/// and whether the row was one of them, the row's tail and its history
+/// address (eight words), the carried cursor, the token ahead of it, the
+/// slot (five words), the place the slot read and the token.
+pub const STEP_WORDS: usize = 23;
+/// Stands for "none" in a step's words.
+pub const NO_WORD: u32 = u32::MAX;
+
+fn step_words(
+    out: &mut Vec<u32>,
+    forms: &[u32],
+    held: Option<(Named, usize, Hit)>,
+    empty: bool,
+    history: &History,
+    at: &Place,
+    named: Named,
+) {
+    let place = |place: Option<usize>| place.map_or(NO_WORD, |place| place as u32);
+    let (kind, index, form, row_empty, tail, address) = match held {
+        Some((_, index, hit)) => (
+            u32::from(!hit.own),
+            index as u32,
+            forms[index],
+            u32::from(hit.empty),
+            hit.tail,
+            hit.history,
+        ),
+        None => (2, NO_WORD, NO_WORD, 0, NO_WORD, history.address()),
+    };
+    out.extend([kind, index, form, u32::from(empty), row_empty, tail]);
+    for word in address {
+        for part in 0..4 {
+            out.push((word >> (96 - 32 * part)) as u32);
+        }
+    }
+    out.extend([place(at.cursor), at.ahead().unwrap_or(NO_WORD)]);
+    out.extend(saved::entry_fields(named.by));
+    out.extend([place(named.source), named.token]);
+}
+
+fn no_form_words(out: &mut Vec<u32>, token: u32) {
+    out.push(3);
+    out.extend([NO_WORD; STEP_WORDS - 2]);
+    out.push(token);
 }
 
 /// The pair of the target at `position`: the two tokens before it, unless the

@@ -20,10 +20,11 @@
 use super::bind::BindTable;
 use super::{
     invalid, window_at, Asked, Entry, Form, HeldKey, HeldRow, Ladder, Reads, Row, StandBy,
-    FORMS_HELD, FORM_GAP, FORM_TOKENS, MAX_ORDER, MAX_SLOTS, ROW_RIGHT,
+    FORMS_HELD, FORM_GAP, FORM_TOKENS, MAX_ORDER, MAX_SLOTS, NO_WORD, ROW_RIGHT, STEP_WORDS,
 };
 use crate::Result;
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 
 pub const MAGIC: &[u8; 8] = b"UORRDR01";
 /// A file that also holds one class code per token, after the orders.
@@ -167,7 +168,7 @@ impl In<'_> {
 }
 
 /// Kind byte, three small fields and one value: a slot's entry.
-fn entry_fields(entry: Entry) -> [u32; 5] {
+pub(super) fn entry_fields(entry: Entry) -> [u32; 5] {
     match entry {
         Entry::Empty => [0, 0, 0, 0, 0],
         Entry::Token(token) => [1, 0, 0, 0, token],
@@ -210,6 +211,89 @@ fn held_order(key: &HeldKey) -> (u32, bool, u32, [u128; 2]) {
 
 fn form_order(form: &Form) -> ([u128; 3], u8, u8) {
     (form.words, form.gap_at, form.gap_len)
+}
+
+/// Step words with each form id replaced by that form's own words.
+fn by_form_words(forms: &HashMap<u32, [u32; 14]>, words: &[u32]) -> Vec<u32> {
+    let mut out = Vec::with_capacity(words.len() / STEP_WORDS * (STEP_WORDS + 13));
+    for step in words.chunks_exact(STEP_WORDS) {
+        out.extend(&step[..2]);
+        out.extend(forms.get(&step[2]).copied().unwrap_or([NO_WORD; 14]));
+        out.extend(&step[3..]);
+    }
+    out
+}
+
+/// What a replay of one panel found. `trained` is the reader as TRAIN left
+/// it in memory, `served` the reader read back from its file, `forced` the
+/// read half of a TRAIN pass over the served reply, on the served reader.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+pub struct Replay {
+    pub prompts: u64,
+    pub reply_ids: u64,
+    pub words_a_step: u64,
+    /// Steps by kind: a place's own row, a shared row, the ladder, no form.
+    pub steps: [u64; 4],
+    pub replies_from_empty_read_rows: u64,
+    pub prompts_served_differs_from_trained: u64,
+    pub prompts_forced_differs_from_served: u64,
+    pub forced_unread_steps: u64,
+    pub trained_words_sha256: String,
+    pub served_words_sha256: String,
+    pub forced_words_sha256: String,
+}
+
+/// Replays `prompts` on the trained and the served reader and compares the
+/// raw words of every step: the row's address (form words, history, tail),
+/// the slot read, the carried cursor and the token.
+pub fn replay<'a>(
+    trained: &Reader,
+    served: &Reader,
+    prompts: impl IntoIterator<Item = &'a [u32]>,
+    limit: usize,
+) -> Replay {
+    let trained_forms = trained.asked.forms_by_id();
+    let served_forms = served.asked.forms_by_id();
+    let mut hashes = [Sha256::new(), Sha256::new(), Sha256::new()];
+    let mut found = Replay {
+        words_a_step: (STEP_WORDS + 13) as u64,
+        ..Default::default()
+    };
+    let take = |hash: &mut Sha256, words: &[u32]| {
+        hash.update((words.len() as u64).to_le_bytes());
+        for word in words {
+            hash.update(word.to_le_bytes());
+        }
+    };
+    for prompt in prompts {
+        let (_, before, _) = trained.replay_words(&trained_forms, prompt, limit);
+        let (reply, after, empty) = served.replay_words(&served_forms, prompt, limit);
+        let (forced, unread) = served.forced_replay_words(&served_forms, prompt, &reply, empty);
+        found.prompts += 1;
+        found.reply_ids += reply.len() as u64;
+        found.replies_from_empty_read_rows += u64::from(empty);
+        for step in after.chunks_exact(STEP_WORDS + 13) {
+            found.steps[step[0] as usize] += 1;
+        }
+        found.prompts_served_differs_from_trained += u64::from(before != after);
+        found.prompts_forced_differs_from_served += u64::from(forced != after);
+        found.forced_unread_steps += unread;
+        let [first, second, third] = &mut hashes;
+        take(first, &before);
+        take(second, &after);
+        take(third, &forced);
+    }
+    let hex = |hash: Sha256| -> String {
+        hash.finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    };
+    let [first, second, third] = hashes;
+    found.trained_words_sha256 = hex(first);
+    found.served_words_sha256 = hex(second);
+    found.forced_words_sha256 = hex(third);
+    found
 }
 
 impl Reader {
@@ -306,6 +390,34 @@ impl Reader {
     pub fn reply_traced(&self, prompt: &[u32], limit: usize) -> (Vec<u32>, Vec<String>) {
         let (reply, _, trace) = self.asked.reply_traced(&self.ladder, prompt, limit);
         (reply, trace)
+    }
+
+    /// The reply to `prompt` as replay words: every step's words with the
+    /// form's id replaced by the form's own fourteen words
+    /// (`STEP_WORDS + 13` a reply token), and whether the reply was read
+    /// again from the rows for an empty read. `forms` is
+    /// [`Asked::forms_by_id`] of this reader.
+    pub fn replay_words(
+        &self,
+        forms: &HashMap<u32, [u32; 14]>,
+        prompt: &[u32],
+        limit: usize,
+    ) -> (Vec<u32>, Vec<u32>, bool) {
+        let (reply, words, empty) = self.asked.reply_words(&self.ladder, prompt, limit);
+        (reply, by_form_words(forms, &words), empty)
+    }
+
+    /// The read half of a TRAIN pass over `reply`, as replay words, and the
+    /// places whose held answer was absent or another token.
+    pub fn forced_replay_words(
+        &self,
+        forms: &HashMap<u32, [u32; 14]>,
+        prompt: &[u32],
+        reply: &[u32],
+        empty: bool,
+    ) -> (Vec<u32>, u64) {
+        let (words, unread) = self.asked.forced_words(prompt, reply, empty);
+        (by_form_words(forms, &words), unread)
     }
 
     /// The reader as bytes. Suffix rows written fewer than `ladder_least`
@@ -730,6 +842,33 @@ mod tests {
         let (again, resaved) = loaded.to_bytes(1);
         assert_eq!(again, bytes);
         assert_eq!(resaved, saved);
+        Ok(())
+    }
+
+    /// The served reader replays the trained one word for word; a reader
+    /// whose held rows are gone does not, so the comparison can fail.
+    #[test]
+    fn a_replay_compares_raw_step_words() -> Result<()> {
+        let (reader, prompts) = train()?;
+        let (bytes, _) = reader.to_bytes(1);
+        let served = Reader::from_bytes(&bytes)?;
+        let found = replay(&reader, &served, prompts.iter().map(Vec::as_slice), 8);
+        assert_eq!(found.prompts, 4);
+        assert_eq!(found.words_a_step, 36);
+        assert_eq!(found.steps.iter().sum::<u64>(), found.reply_ids);
+        assert!(found.steps[0] > 0);
+        assert!(found.replies_from_empty_read_rows > 0);
+        assert_eq!(found.prompts_served_differs_from_trained, 0);
+        assert_eq!(found.prompts_forced_differs_from_served, 0);
+        assert_eq!(found.forced_unread_steps, found.steps[2]);
+        assert_eq!(found.trained_words_sha256, found.served_words_sha256);
+        assert_eq!(found.forced_words_sha256, found.served_words_sha256);
+        let mut emptied = Reader::from_bytes(&bytes)?;
+        emptied.asked.rows.clear();
+        let other = replay(&reader, &emptied, prompts.iter().map(Vec::as_slice), 8);
+        assert!(other.prompts_served_differs_from_trained > 0);
+        assert_ne!(other.trained_words_sha256, other.served_words_sha256);
+        assert_eq!(other.trained_words_sha256, found.trained_words_sha256);
         Ok(())
     }
 

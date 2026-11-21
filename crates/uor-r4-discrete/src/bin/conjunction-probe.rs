@@ -355,14 +355,21 @@ fn reader(args: &[String]) -> Result<(), String> {
         );
         return Ok(());
     }
-    if args[0] == "reader-save" {
-        if !(12..=16).contains(&args.len()) {
+    let replay = args[0] == "reader-replay";
+    if replay && args.len() != 18 {
+        return Err(
+            "usage: conjunction-probe reader-replay TOKENS_U16 MASK_U8 READER_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST CODEBOOK_TABLE_JSON|- latest|pair|octonion:CODEBOOK_TABLE_JSON open|- READS_CSV PANEL_JSON OUT_JSON (the arguments of reader-save that wrote READER_FILE, then the panel)"
+                .into(),
+        );
+    }
+    if args[0] == "reader-save" || replay {
+        if !replay && !(12..=16).contains(&args.len()) {
             return Err(
                 "usage: conjunction-probe reader-save TOKENS_U16 MASK_U8 OUT_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST [CODEBOOK_TABLE_JSON|- [latest|pair|octonion:CODEBOOK_TABLE_JSON [open|- [READS_CSV(precise,explain,tail,across,agree)]]]]"
                     .into(),
             );
         }
-        fresh(&args[3])?;
+        fresh(&args[if replay { 17 } else { 3 }])?;
         let stream = read(&args[1])?;
         let mask = read(&args[2])?;
         let tokens: Vec<u32> = uor_r4_discrete::w2_capacity::parse_uort_tokens(&stream)?
@@ -470,6 +477,36 @@ fn reader(args: &[String]) -> Result<(), String> {
         let (again, resaved) = loaded.to_bytes(1);
         if again != bytes || resaved != saved {
             return Err("the saved reader does not read back to its own bytes".into());
+        }
+        if replay {
+            // The reader TRAIN leaves in memory must be the file, byte for
+            // byte; the served reader is read from the file alone.
+            let file = read(&args[3])?;
+            let served = Reader::from_bytes(&file).map_err(|e| e.to_string())?;
+            let panel_bytes = read(&args[16])?;
+            let panel: Vec<conjunction::PanelRow> =
+                serde_json::from_slice(&panel_bytes).map_err(|e| e.to_string())?;
+            let found = uor_r4_discrete::conjunction::saved::replay(
+                &reader,
+                &served,
+                panel.iter().map(|row| row.prompt.as_slice()),
+                number(&args[6])? as usize,
+            );
+            let report = serde_json::json!({
+                "schema": "uor-r4.discrete-reader-replay/1",
+                "tokens_sha256": sha(&stream),
+                "mask_sha256": sha(&mask),
+                "panel_sha256": sha(&panel_bytes),
+                "reader_sha256": sha(&file),
+                "trained_bytes_sha256": sha(&bytes),
+                "trained_bytes_are_the_file": bytes == file,
+                "target": format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS),
+                "replay": found,
+            });
+            std::fs::write(&args[17], report.to_string())
+                .map_err(|e| format!("{}: {e}", args[17]))?;
+            println!("{report}");
+            return Ok(());
         }
         std::fs::write(&args[3], &bytes).map_err(|e| format!("{}: {e}", args[3]))?;
         println!(
@@ -607,7 +644,7 @@ fn main() -> ExitCode {
         m2_format(&args)
     } else if matches!(
         args.first().map(String::as_str),
-        Some("reader-save" | "reader-replies" | "bind-census")
+        Some("reader-save" | "reader-replies" | "reader-replay" | "bind-census")
     ) {
         reader(&args)
     } else {
