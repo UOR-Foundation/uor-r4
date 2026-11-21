@@ -4,10 +4,10 @@ The five items `.agents/skills/native-space-cycle/SKILL.md` asks for, written fo
 
 ## What is not yet true
 
-- **One implementation only.** The reader's operators have one source definition and one implementation: Rust. It now compiles for three targets (aarch64 macOS, x86_64 Linux, `wasm32-wasip1`) and the word streams are equal on all three, which shows the source is deterministic across targets and nothing more. There is no CUDA kernel and no second, independently written implementation, so there is no differential between implementations.
+- **A second implementation of the read only.** The Rust source compiles for three targets (aarch64 macOS, x86_64 Linux, `wasm32-wasip1`) with equal word streams, which shows it is deterministic across targets. A CUDA kernel now reads the held rows as a second, separately written implementation and equals the host on readers A and B (section 3). It does not read the suffix ladder, it covers one set of read choices, and there is no second implementation of TRAIN.
 - **Carried by D11, not part of the trunk state.** A D11 artifact now carries the reader (schema `uor-r4.lut-discrete-question-reader/1`) and `discrete_d11` answers from it. It is carried as the reader's own file, byte for byte, under a header that binds it and the parent artifact by SHA-256. It is not one of the positional table sections of `TrunkTables`, and the transported trunk state (S1 of [claude-409](../../written-state-count-model/claude-409/NATIVE-SPACE.md)) takes no part in this read: the key is the question's tokens, not a transported code. The trunk and the reader share an artifact and a vocabulary, and nothing else yet.
 - **The carrier is not built in CI.** It is behind the integer crate's `reader-serving` feature, which no CI job selects. Its test and the builds below ran on the laptop. The integer crate with the feature was only type-checked for `wasm32-unknown-unknown`; the browser client does not call it.
-- **TRAIN is a host pass.** The rows are counted by `Reader::train` on the CPU. §3.5 makes GPU the default for training; a 20,000-case count that runs in seconds was run on the laptop and on wick's host. A GPU writer for these rows does not exist.
+- **TRAIN is a host pass.** The rows are counted by `Reader::train` on the CPU. §3.5 makes GPU the default for training; a 20,000-case count that runs in seconds was run on the laptop and on wick's host. A GPU writer for these rows does not exist; the owner's answer of 21 Nov ("No, GPU first") makes it the next unit.
 - **The file does not hold the whole learned state.** `to_bytes` leaves out every slot that was right fewer than `ROW_RIGHT` times and every row with no such slot. No reply changes (measured below), but TRAIN cannot be continued from the file: the left-out counts are gone. A whole-state save is not written.
 - **No gradient.** Learning is counting and the written verdicts (right and wrong counts a slot). There is no gradient or optimizer state in this line, so D85's gradient clause has nothing to check here.
 - **Dev panels only.** The replay ran on `m2-reply512` and the M-world dev panels p14 and p23. It did not read `m2-fresh256`, which is spent for this reader line.
@@ -73,6 +73,23 @@ The D11 artifacts are the M1 trunk `seed1.d11` (`04652a3d…2c147d`, 86,536,132 
 
 The test `a_carried_reader_replies_as_its_file_and_bad_bindings_are_refused` packs a toy reader behind a toy artifact, requires the reply through the model to be the file's reply, and requires a changed reader byte, a changed parent byte, a reader over another vocabulary, a cut reader file and a carrier inside a carrier each to be refused.
 
+### The same streams from a CUDA read kernel (wick's 4090)
+
+What this does not show, first [claude]. TRAIN is still a host count pass: only the read runs on the GPU. The kernel reads held rows only; a place no held row answers (the host's suffix ladder) and a prompt with no kept form stop the thread with a status, and are counted, not filled in. It is laid out for one set of read choices (pair stand, `precise,across`) and refuses any other reader. No reply is graded by this command, so no M2 count comes from it. The M2 headline is unchanged at 0.
+
+`reader_read.cu` is a second implementation of the read, in CUDA C: one thread a prompt finds the turn's kept forms and each held row by binary search in flat `u32` tables (`conjunction/flat.rs`, built from the reader's file) and writes the 36 raw words of every step. `build.rs` admits its PTX only with no floating-point instruction. `conjunction-probe reader-gpu READER_FILE PANEL_JSON LIMIT OUT_JSON` answers each prompt by the host reader and by the kernel and compares reply ids and words.
+
+Measured on 21 Nov (UTC) on wick (RTX 4090, `sm_89`, cubin `5704d89e…ff506175`, binary `conjunction-probe-v35` `f02d2f46…233b413`), reports in wick's `runs/conj/gpuread3/`:
+
+| Reader, panel, limit | Prompts read on the GPU | Stopped at the ladder | Read prompts that differ from the host | GPU words SHA-256 | Host words SHA-256 |
+|---|---|---|---|---|---|
+| A (`44574adb…`), `m2-reply512`, 48 and 64 | 512 of 512 | 0 | 0 | `440d7cd0…a46923de` | `440d7cd0…a46923de` |
+| B (`078dcfdc…`), `m2-reply512`, 48 | 512 of 512 | 0 | 0 | `4c0a0ed4…639bde8e` | `4c0a0ed4…639bde8e` |
+| corpus reader (`83c5f327…`), `p14`, 48 | 927 of 1,108 | 181 | 0 | not the host's (181 prompts unread) | `4dd4f97e…7aa31fa3` |
+| corpus reader (`83c5f327…`), `p23`, 48 | 944 of 1,110 | 166 | 0 | not the host's (166 prompts unread) | `7a6b1fcc…d02f0ca8` |
+
+Reply ids from the GPU for readers A and B hash to `4554ffd9…ffe2a1f6`, the host's. The comparison can fail: with every slot's times-wrong count zeroed in the tables, the same kernel differs from the host on 716 (`p14`) and 737 (`p23`) prompts; on `m2-reply512` that control changes nothing (0 prompts), so there the evidence that the comparison can fail is the corpus reader's rows alone. The kernel alone took 2.9 to 3.9 ms for the 512 prompts (6,664 ids) and 12.8 to 17.1 ms for the corpus panels; with context and table load 131 to 193 ms; the host read took 7 to 35 ms. The GPU read is not faster than the host at this size.
+
 ## 4. Update rule
 
 Counting, then written verdicts [claude]. Pass 1 counts forms; pass 2 writes each TRAIN reply token under every held form's rows, after reading what the reader would answer there; pass 3 writes the true reply again under empty-read keys where the reader's own reply met an empty read. Every write lands in the integer rows the server reads. There is no float master and no export step. The served file is those rows less the unreachable ones (see "What is not yet true").
@@ -83,4 +100,4 @@ Counting, then written verdicts [claude]. Pass 1 counts forms; pass 2 writes eac
 
 ## Next
 
-Done since the first version of this file: the portable build, the WASM run, and the D11 carrier read by `discrete_d11`. Still open, in the order D85 asks: a whole-state save so TRAIN can continue from the file; the reader keyed by the trunk's transported state, so the two are one state and not two tables in one file; a CUDA writer held to this replay's word streams; a CI job that builds `reader-serving`.
+Done since the first version of this file: the portable build, the WASM run, the D11 carrier read by `discrete_d11`, and a CUDA read kernel equal to the host on readers A and B. Still open: a CUDA writer (TRAIN on the GPU) whose reader file is the host's byte for byte, which the owner's "GPU first" asks for before any M2 count; the suffix ladder in the read kernel, which the corpus reader needs on about one prompt in six; a whole-state save so TRAIN can continue from the file; the reader keyed by the trunk's transported state, so the two are one state and not two tables in one file; a CI job that builds `reader-serving`.

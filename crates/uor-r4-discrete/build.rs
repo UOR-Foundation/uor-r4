@@ -419,6 +419,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=src/kn_score_division.cuh");
     println!("cargo:rerun-if-changed=src/kn_lookup.cu");
     println!("cargo:rerun-if-changed=src/equal_count.cu");
+    println!("cargo:rerun-if-changed=src/reader_read.cu");
     println!("cargo:rerun-if-env-changed=NVCC");
     println!("cargo:rerun-if-env-changed=UOR_NVCC_ARCH");
     let out = PathBuf::from(env::var_os("OUT_DIR").ok_or("Cargo did not supply OUT_DIR")?);
@@ -522,6 +523,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "equal_count_freeze",
             "equal_count_score",
         ],
+    )?;
+    let status = Command::new(env::var("NVCC").unwrap_or_else(|_| "nvcc".into()))
+        .args(["-ptx", "-std=c++17"])
+        .arg(format!("-arch={arch}"))
+        .arg("-o")
+        .arg(out.join("reader-read.ptx"))
+        .arg("src/reader_read.cu")
+        .status()?;
+    if !status.success() {
+        return Err(format!("reader-read PTX build failed: {status}").into());
+    }
+    admit_ptx_inventory(
+        &fs::read_to_string(out.join("reader-read.ptx"))?,
+        &["reader_read"],
     )?;
     // An independent module: the ordinary source, nvcc invocation and PTX stay
     // untouched. Only this diagnostic entry carries internal clocks/counters.
@@ -714,6 +729,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("kn-score", out.join("kn-score.ptx")),
         ("kn-lookup", out.join("kn-lookup.ptx")),
         ("equal-count", out.join("equal-count.ptx")),
+        ("reader-read", out.join("reader-read.ptx")),
     ] {
         let mut resource_command = Command::new(&nvcc);
         // PTX input needs assembly, not C++ preprocessing or a new resource cap.

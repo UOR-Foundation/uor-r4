@@ -32,6 +32,7 @@ use crate::{Error, Result};
 use std::collections::HashMap;
 
 pub mod bind;
+pub mod flat;
 pub mod saved;
 
 fn invalid(message: impl Into<String>) -> Error {

@@ -638,10 +638,164 @@ fn reader(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(feature = "cuda"))]
+fn reader_gpu(_: &[String]) -> Result<(), String> {
+    Err("reader-gpu needs the cuda feature".into())
+}
+
+/// `reader-gpu READER_FILE PANEL_JSON LIMIT OUT_JSON`: answers every panel
+/// prompt twice, by the host reader read from its file and by the CUDA read
+/// kernel over the same reader's flat tables, and compares reply ids and the
+/// raw words of every step. The hashes are those of `reader-replay`
+/// (`served_words_sha256`) and `question-reader-d11 words`. No reply is
+/// graded here. Fails when any prompt differs or was not read on the GPU.
+#[cfg(feature = "cuda")]
+fn reader_gpu(args: &[String]) -> Result<(), String> {
+    use sha2::{Digest, Sha256};
+    use std::time::Instant;
+    use uor_r4_discrete::conjunction::{self, flat::Flat, saved::Reader};
+    use uor_r4_discrete::reader_read_device as device;
+
+    if args.len() != 5 {
+        return Err(
+            "usage: conjunction-probe reader-gpu READER_FILE PANEL_JSON LIMIT OUT_JSON".into(),
+        );
+    }
+    if std::path::Path::new(&args[4]).exists() {
+        return Err(format!("{} already exists", args[4]));
+    }
+    let hex = |hash: Sha256| {
+        hash.finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    let take = |hash: &mut Sha256, words: &[u32]| {
+        hash.update((words.len() as u64).to_le_bytes());
+        for word in words {
+            hash.update(word.to_le_bytes());
+        }
+    };
+    let file = std::fs::read(&args[1]).map_err(|e| format!("{}: {e}", args[1]))?;
+    let panel_bytes = std::fs::read(&args[2]).map_err(|e| format!("{}: {e}", args[2]))?;
+    let limit: usize = args[3].parse().map_err(|e| format!("LIMIT: {e}"))?;
+    let reader = Reader::from_bytes(&file).map_err(|e| e.to_string())?;
+    let flat = Flat::of(&reader).map_err(|e| e.to_string())?;
+    let panel: Vec<conjunction::PanelRow> =
+        serde_json::from_slice(&panel_bytes).map_err(|e| e.to_string())?;
+    let prompts: Vec<&[u32]> = panel.iter().map(|row| row.prompt.as_slice()).collect();
+
+    let forms = reader.asked.forms_by_id();
+    let started = Instant::now();
+    let host: Vec<(Vec<u32>, Vec<u32>, bool)> = prompts
+        .iter()
+        .map(|prompt| reader.replay_words(&forms, prompt, limit))
+        .collect();
+    let host_ms = started.elapsed().as_millis() as u64;
+    let started = Instant::now();
+    let (gpu, kernel_micros) = device::read(&flat, &prompts, limit).map_err(|e| e.to_string())?;
+    let gpu_ms = started.elapsed().as_millis() as u64;
+    // A control the comparison must fail on: the same kernel over tables
+    // whose times-wrong counts are gone, so slots rank by times right alone.
+    let mut unranked = flat.clone();
+    for slot in unranked
+        .row_slots
+        .chunks_exact_mut(conjunction::flat::SLOT_WORDS)
+    {
+        slot[6] = 0;
+    }
+    let (control, _) = device::read(&unranked, &prompts, limit).map_err(|e| e.to_string())?;
+    let control_differs = host
+        .iter()
+        .zip(&control)
+        .filter(|((_, words, _), read)| *words != read.words)
+        .count();
+
+    let mut hashes = [Sha256::new(), Sha256::new(), Sha256::new(), Sha256::new()];
+    let mut status = [0u64; 3];
+    let mut differ = [0u64; 3];
+    let mut read_differ = 0u64;
+    let mut ids = [0u64; 2];
+    let mut first: Option<serde_json::Value> = None;
+    for (index, ((reply, words, empty), read)) in host.iter().zip(&gpu).enumerate() {
+        let [host_words, gpu_words, host_ids, gpu_ids] = &mut hashes;
+        take(host_words, words);
+        take(gpu_words, &read.words);
+        take(host_ids, reply);
+        take(gpu_ids, &read.reply);
+        status[read.status as usize] += 1;
+        ids[0] += reply.len() as u64;
+        ids[1] += read.reply.len() as u64;
+        differ[0] += u64::from(*words != read.words);
+        differ[1] += u64::from(*reply != read.reply);
+        differ[2] += u64::from(*empty != read.empty);
+        read_differ += u64::from(
+            read.status == device::STATUS_READ
+                && (*words != read.words || *reply != read.reply || *empty != read.empty),
+        );
+        if first.is_none() && *words != read.words {
+            let word = words
+                .iter()
+                .zip(&read.words)
+                .position(|(host, gpu)| host != gpu)
+                .unwrap_or(words.len().min(read.words.len()));
+            first = Some(serde_json::json!({
+                "prompt": index,
+                "step": word / device::STEP_WORDS,
+                "word_in_step": word % device::STEP_WORDS,
+                "host": words.get(word),
+                "gpu": read.words.get(word),
+                "host_words": words.len(),
+                "gpu_words": read.words.len(),
+                "gpu_status": read.status,
+            }));
+        }
+    }
+    let [host_words, gpu_words, host_ids, gpu_ids] = hashes;
+    let equal = differ == [0; 3] && status[1] == 0 && status[2] == 0;
+    let report = serde_json::json!({
+        "schema": "uor-r4.discrete-reader-gpu-read/1",
+        "reader_sha256": hex({ let mut hash = Sha256::new(); hash.update(&file); hash }),
+        "panel_sha256": hex({ let mut hash = Sha256::new(); hash.update(&panel_bytes); hash }),
+        "kernel_cubin_sha256": device::kernel_hash(),
+        "limit": limit,
+        "flat_forms": flat.form_count(),
+        "flat_rows": flat.row_count(),
+        "prompts": prompts.len(),
+        "host_reply_ids": ids[0],
+        "gpu_reply_ids": ids[1],
+        "gpu_prompts_read": status[0],
+        "gpu_prompts_stopped_at_the_ladder": status[1],
+        "gpu_prompts_with_no_form": status[2],
+        "prompts_words_differ": differ[0],
+        "prompts_reply_ids_differ": differ[1],
+        "prompts_empty_mark_differs": differ[2],
+        "prompts_read_on_the_gpu_that_differ": read_differ,
+        "control_prompts_differ_with_wrong_counts_zeroed": control_differs,
+        "first_difference": first,
+        "host_words_sha256": hex(host_words),
+        "gpu_words_sha256": hex(gpu_words),
+        "host_reply_ids_sha256": hex(host_ids),
+        "gpu_reply_ids_sha256": hex(gpu_ids),
+        "equal": equal,
+        "host_ms": host_ms,
+        "gpu_ms_with_context_and_table_load": gpu_ms,
+        "gpu_kernel_micros": kernel_micros,
+    });
+    std::fs::write(&args[4], report.to_string()).map_err(|e| format!("{}: {e}", args[4]))?;
+    println!("{report}");
+    if !equal {
+        return Err("the GPU read is not the host read".into());
+    }
+    Ok(())
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let done = if args.first().map(String::as_str) == Some("m2-format") {
         m2_format(&args)
+    } else if args.first().map(String::as_str) == Some("reader-gpu") {
+        reader_gpu(&args)
     } else if matches!(
         args.first().map(String::as_str),
         Some("reader-save" | "reader-replies" | "reader-replay" | "bind-census")
