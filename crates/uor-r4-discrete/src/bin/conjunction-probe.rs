@@ -297,6 +297,252 @@ fn m2_format(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// One level of wording outside the grammar: statement openings and
+/// questions a role (index 0 job, 1 home), as token ids.
+#[derive(serde::Deserialize)]
+struct M2Wording {
+    statements: [Vec<Vec<u32>>; 2],
+    queries: [Vec<Vec<u32>>; 2],
+}
+
+#[derive(serde::Deserialize)]
+struct M2Rewording {
+    levels: std::collections::BTreeMap<String, M2Wording>,
+}
+
+/// A formatted case taken apart again: the two statements as (role, value)
+/// in prompt order, each with the index of its opening, and the asked role.
+struct M2Stated {
+    role: usize,
+    value: Vec<u32>,
+    opening: usize,
+}
+
+struct M2Parsed {
+    stated: [M2Stated; 2],
+    asked: usize,
+    query: Vec<u32>,
+}
+
+impl M2Grammar {
+    /// The pieces of a prompt [`M2Grammar::prompt`] wrote.
+    fn parse(&self, prompt: &[u32]) -> Result<M2Parsed, String> {
+        let mut rest = prompt
+            .strip_prefix(&[self.bos])
+            .ok_or("the prompt does not open with BOS")?;
+        let mut close = self.assistant.clone();
+        close.extend([self.eos, self.newline]);
+        let mut stated = Vec::new();
+        for _ in 0..2 {
+            rest = rest
+                .strip_prefix(self.user.as_slice())
+                .ok_or("no user turn")?;
+            let end = rest
+                .windows(close.len())
+                .position(|window| window == close.as_slice())
+                .ok_or("a statement turn does not close")?;
+            let statement = &rest[..end];
+            rest = &rest[end + close.len()..];
+            let found = (0..2).find_map(|role| {
+                self.statements[role]
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, opening)| {
+                        let value = statement
+                            .strip_prefix(opening.as_slice())?
+                            .strip_suffix(&[self.period])?;
+                        Some(M2Stated {
+                            role,
+                            value: value.to_vec(),
+                            opening: index,
+                        })
+                    })
+            });
+            stated.push(found.ok_or("a statement is not in the grammar")?);
+        }
+        let query = rest
+            .strip_prefix(self.user.as_slice())
+            .and_then(|rest| rest.strip_suffix(self.assistant.as_slice()))
+            .ok_or("no question turn")?;
+        let asked = (0..2)
+            .find(|&role| self.queries[role].iter().any(|held| held == query))
+            .ok_or("the question is not in the grammar")?;
+        let [first, second] = <[_; 2]>::try_from(stated).map_err(|_| "two statements expected")?;
+        Ok(M2Parsed {
+            stated: [first, second],
+            asked,
+            query: query.to_vec(),
+        })
+    }
+}
+
+/// conjunction-probe m2-reword GRAMMAR_JSON WORDING_IDS_JSON PANEL_JSON OUT_DIR
+///
+/// Writes the cases of a panel `m2-format` wrote again in wording the
+/// grammar does not hold, values and references unchanged. For each level
+/// of WORDING_IDS_JSON: `q-NAME.json` (the question reworded), `s-NAME.json`
+/// (both statements reworded) and `qs-NAME.json` (both). Two controls in the
+/// grammar's own wording, references unchanged: `swapped.json` (the two
+/// statements carry each other's value, so a reader that reads the asked
+/// role's statement gives the other value) and `untold.json` (the asked
+/// role's statement is left out and the other one stands twice).
+fn m2_reword(args: &[String]) -> Result<(), String> {
+    use sha2::{Digest, Sha256};
+    use std::path::Path;
+
+    if args.len() != 5 {
+        return Err(
+            "usage: conjunction-probe m2-reword GRAMMAR_JSON WORDING_IDS_JSON PANEL_JSON OUT_DIR"
+                .into(),
+        );
+    }
+    let read = |path: &String| std::fs::read(path).map_err(|e| format!("{path}: {e}"));
+    let grammar: M2Grammar = serde_json::from_slice(&read(&args[1])?).map_err(|e| e.to_string())?;
+    let wording: M2Rewording =
+        serde_json::from_slice(&read(&args[2])?).map_err(|e| e.to_string())?;
+    let panel: Vec<serde_json::Value> =
+        serde_json::from_slice(&read(&args[3])?).map_err(|e| e.to_string())?;
+    let out = Path::new(&args[4]);
+    for (name, level) in &wording.levels {
+        for role in 0..2 {
+            if level.statements[role].is_empty() || level.queries[role].is_empty() {
+                return Err(format!("{name}: wording for both roles expected"));
+            }
+            let held = |new: &[Vec<u32>], old: &[Vec<u32>]| new.iter().any(|w| old.contains(w));
+            if held(&level.statements[role], &grammar.statements[role])
+                || held(&level.queries[role], &grammar.queries[role])
+            {
+                return Err(format!("{name}: a wording is in the grammar"));
+            }
+        }
+    }
+    std::fs::create_dir(out).map_err(|e| format!("{}: {e}", out.display()))?;
+
+    let mut cases = Vec::new();
+    for row in &panel {
+        let prompt: Vec<u32> = serde_json::from_value(row["prompt"].clone())
+            .map_err(|e| format!("{}: {e}", row["id"]))?;
+        let parsed = grammar
+            .parse(&prompt)
+            .map_err(|e| format!("{}: {e}", row["id"]))?;
+        cases.push(parsed);
+    }
+    let statement = |opening: &[u32], value: &[u32]| {
+        let mut tokens = opening.to_vec();
+        tokens.extend(value);
+        tokens.push(grammar.period);
+        tokens
+    };
+    let mut written = serde_json::Map::new();
+    let mut write = |name: String, prompts: Vec<Vec<u32>>| -> Result<(), String> {
+        let rows: Vec<serde_json::Value> = panel
+            .iter()
+            .zip(prompts)
+            .map(|(row, prompt)| {
+                serde_json::json!({"id": row["id"], "prompt": prompt, "reference": row["reference"]})
+            })
+            .collect();
+        let bytes = serde_json::to_vec(&rows).map_err(|e| e.to_string())?;
+        std::fs::write(out.join(&name), &bytes).map_err(|e| format!("{name}: {e}"))?;
+        let sha = Sha256::digest(&bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        written.insert(name, serde_json::json!(sha));
+        Ok(())
+    };
+    // A case in the grammar's wording with other values under its statements.
+    let told = |case: &M2Parsed, exchanged: bool| {
+        let [first, second] = &case.stated;
+        let values = if exchanged {
+            [&second.value, &first.value]
+        } else {
+            [&first.value, &second.value]
+        };
+        grammar.prompt(
+            [
+                &statement(&grammar.statements[first.role][first.opening], values[0]),
+                &statement(&grammar.statements[second.role][second.opening], values[1]),
+            ],
+            &case.query,
+        )
+    };
+    write(
+        "same.json".into(),
+        cases.iter().map(|case| told(case, false)).collect(),
+    )?;
+    write(
+        "swapped.json".into(),
+        cases.iter().map(|case| told(case, true)).collect(),
+    )?;
+    write(
+        "untold.json".into(),
+        cases
+            .iter()
+            .map(|case| {
+                let other = case
+                    .stated
+                    .iter()
+                    .find(|stated| stated.role != case.asked)
+                    .unwrap_or(&case.stated[0]);
+                let turn = statement(&grammar.statements[other.role][other.opening], &other.value);
+                grammar.prompt([&turn, &turn], &case.query)
+            })
+            .collect(),
+    )?;
+    for (name, level) in &wording.levels {
+        for (arm, new_question, new_statements) in
+            [("q", true, false), ("s", false, true), ("qs", true, true)]
+        {
+            let prompts = cases
+                .iter()
+                .enumerate()
+                .map(|(index, case)| {
+                    let turns: Vec<Vec<u32>> = case
+                        .stated
+                        .iter()
+                        .map(
+                            |M2Stated {
+                                 role,
+                                 value,
+                                 opening,
+                             }| {
+                                let openings = if new_statements {
+                                    &level.statements[*role]
+                                } else {
+                                    &grammar.statements[*role]
+                                };
+                                let at = if new_statements { index } else { *opening };
+                                statement(&openings[at % openings.len()], value)
+                            },
+                        )
+                        .collect();
+                    let queries = &level.queries[case.asked];
+                    let query = if new_question {
+                        &queries[index % queries.len()]
+                    } else {
+                        &case.query
+                    };
+                    grammar.prompt([&turns[0], &turns[1]], query)
+                })
+                .collect();
+            write(format!("{arm}-{name}.json"), prompts)?;
+        }
+    }
+    println!(
+        "{}",
+        serde_json::json!({
+            "rows": panel.len(),
+            "rows_with_one_role_stated_twice": cases
+                .iter()
+                .filter(|case| case.stated.iter().all(|stated| stated.role == case.asked))
+                .count(),
+            "panels_sha256": written,
+        })
+    );
+    Ok(())
+}
+
 /// A segment with only the fields the format reads.
 fn strip(segment: &serde_json::Value) -> serde_json::Value {
     match segment["kind"].as_str() {
@@ -1075,6 +1321,8 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let done = if args.first().map(String::as_str) == Some("m2-format") {
         m2_format(&args)
+    } else if args.first().map(String::as_str) == Some("m2-reword") {
+        m2_reword(&args)
     } else if args.first().map(String::as_str) == Some("reader-gpu") {
         reader_gpu(&args)
     } else if args.first().map(String::as_str) == Some("reader-gpu-train") {

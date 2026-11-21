@@ -1,0 +1,82 @@
+{
+  "levels": {
+    "near": {
+      "statements": [
+        [
+          "My current job is now",
+          "My job has changed to"
+        ],
+        [
+          "I am currently living in",
+          "I now live over in"
+        ]
+      ],
+      "queries": [
+        [
+          "What is my current job today?",
+          "Tell me my current job again.",
+          "Which job do I have right now?",
+          "What job do I have currently?"
+        ],
+        [
+          "Where do I currently live today?",
+          "Tell me where I live right now.",
+          "Where do I live at the moment?",
+          "Where is my current home again?"
+        ]
+      ]
+    },
+    "frame": {
+      "statements": [
+        [
+          "The job I have these days is",
+          "At the moment my job is"
+        ],
+        [
+          "The place I live these days is in",
+          "At the moment I live in"
+        ]
+      ],
+      "queries": [
+        [
+          "Do you remember my job?",
+          "Could you say what my job is?",
+          "I forgot my job, what is it?",
+          "Say my job back to me."
+        ],
+        [
+          "Do you remember where I live?",
+          "Could you say where I live?",
+          "I forgot where I live, where is it?",
+          "Say back to me where I live."
+        ]
+      ]
+    },
+    "relation": {
+      "statements": [
+        [
+          "My occupation is",
+          "For work I am"
+        ],
+        [
+          "I reside in",
+          "I am based in"
+        ]
+      ],
+      "queries": [
+        [
+          "What is my occupation?",
+          "What do I do for work?",
+          "What is my profession these days?",
+          "How do I earn a living?"
+        ],
+        [
+          "Where do I reside?",
+          "What city am I based in?",
+          "Where is my house?",
+          "What place am I staying in?"
+        ]
+      ]
+    }
+  }
+}

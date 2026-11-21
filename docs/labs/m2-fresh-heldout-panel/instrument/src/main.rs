@@ -14,8 +14,42 @@ fn main() -> Result<(), String> {
         .nth(4)
         .ok_or_else(|| "cannot resolve repo root".to_string())?;
 
-    let dev_spread = analyze_saved437_dev512_spread(repo_root)?;
     let args: Vec<String> = std::env::args().collect();
+
+    // `--encode IN_JSON OUT_JSON`: every string in IN_JSON is replaced by its
+    // ids under the pinned tokenizer, and nothing else of the instrument
+    // runs. It is how wording outside the reader grammar is given to
+    // `conjunction-probe m2-reword`.
+    if let Some(pos) = args.iter().position(|a| a == "--encode") {
+        let (Some(from), Some(to)) = (args.get(pos + 1), args.get(pos + 2)) else {
+            return Err("--encode requires IN_JSON OUT_JSON".into());
+        };
+        if Path::new(to).exists() {
+            return Err(format!("{to} already exists"));
+        }
+        let bytes = std::fs::read(from).map_err(|e| format!("{from}: {e}"))?;
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|e| format!("{from}: {e}"))?;
+        let tok = load_pinned_byte_bpe_tokenizer(repo_root)?;
+        fn encode(value: &mut serde_json::Value, tok: &uor_r4_tokenizer::ByteBpeTokenizer) {
+            match value {
+                serde_json::Value::String(text) => *value = serde_json::json!(tok.encode(text)),
+                serde_json::Value::Array(items) => items.iter_mut().for_each(|v| encode(v, tok)),
+                serde_json::Value::Object(map) => map.values_mut().for_each(|v| encode(v, tok)),
+                _ => {}
+            }
+        }
+        encode(&mut value, &tok);
+        let out = serde_json::to_vec(&value).map_err(|e| e.to_string())?;
+        std::fs::write(to, &out).map_err(|e| format!("{to}: {e}"))?;
+        println!(
+            "{}",
+            serde_json::json!({"wording_sha256": sha256_hex(&bytes), "encoded_sha256": sha256_hex(&out)})
+        );
+        return Ok(());
+    }
+
+    let dev_spread = analyze_saved437_dev512_spread(repo_root)?;
 
     // `--literals FILE`: the panel is built from that literal set (kept
     // outside git), encoded with the pinned tokenizer, checked against the
