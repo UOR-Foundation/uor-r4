@@ -61,6 +61,8 @@ The same sections bear on TRAIN: it ran on a CPU outside any D84-named program. 
 
 If the answer is no, the counts stay in the notebook as development research and the unit that moves the headline is a GPU reader held to the replay's word streams. Neither answer stops the work below. [claude]
 
+**Answered, 21 Nov 2026 (UTC), Casey in chat, to the question "Do the reader's CPU-trained, CPU-scored counts stand as M2's headline (512 of 512 dev)?": "No, GPU first".** The proposed counts are withdrawn. `headline.current` and `secondary[0].current` stay 0. The counts above stay in the notebook as development research. The next unit is a GPU reader: the read, then TRAIN, as CUDA kernels on wick's 4090, each held bit for bit to the host word streams of [NATIVE-SPACE.md](NATIVE-SPACE.md) §3, and the M2 counts scored from it under a sheet with a non-author FIT (§4.5). [claude]
+
 ## What M2 still needs before it can close
 
 1. The reader keyed by the trunk's transported state, so the artifact holds one state and not two tables (D85; M2's "one unified model").
