@@ -791,6 +791,8 @@ fn reader_gpu(args: &[String]) -> Result<(), String> {
         "prompts": prompts.len(),
         "host_reply_ids": ids[0],
         "gpu_reply_ids": ids[1],
+        // The replies the kernel wrote, one per prompt in panel order, for a grader outside this command.
+        "replies": gpu.iter().map(|read| read.reply.clone()).collect::<Vec<_>>(),
         "gpu_prompts_read": status[0],
         "gpu_prompts_stopped_at_the_ladder": status[1],
         "gpu_prompts_with_no_form": status[2],
