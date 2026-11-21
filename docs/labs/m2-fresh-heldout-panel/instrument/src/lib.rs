@@ -2002,6 +2002,58 @@ mod tests {
         assert!(grade_reader_replies(&tok, &bundle, &[]).is_err());
     }
 
+    /// Every case is in the forms `conjunction-probe m2-format` accepts: two
+    /// statements, each one of the grammar's published openings before a
+    /// value and the period, and a question the grammar holds under the
+    /// role the case id names. Only pass or fail is reported.
+    #[test]
+    fn every_case_is_in_the_reader_grammars_published_forms() {
+        let root = repo_root();
+        let path = root.join("docs/labs/m2-fresh-heldout-panel/reader-grammar.json");
+        let grammar: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).expect("grammar")).expect("json");
+        let lists = |value: &serde_json::Value| -> Vec<Vec<u32>> {
+            serde_json::from_value(value.clone()).expect("id lists")
+        };
+        let bundle = generate_m2_fresh256_panel().expect("bundle");
+        let inputs: ProbeInputs = serde_json::from_slice(&bundle.inputs_json).expect("inputs");
+        let mut outside = 0usize;
+        for case in &inputs.cases {
+            let role = usize::from(case.id.ends_with("-home"));
+            let asked = lists(&grammar["queries"][role]).contains(&case.query_ids);
+            let contexts: Vec<&Vec<u32>> = case
+                .segments
+                .iter()
+                .filter_map(|segment| match segment {
+                    ProbeSegment::Context { token_ids, .. } => Some(token_ids),
+                    ProbeSegment::Source { .. } => None,
+                })
+                .collect();
+            let relations: Vec<u32> = case
+                .segments
+                .iter()
+                .filter_map(|segment| match segment {
+                    ProbeSegment::Source { relation, .. } => Some(*relation),
+                    ProbeSegment::Context { .. } => None,
+                })
+                .collect();
+            let stated = contexts.len() == 2
+                && relations.len() == 2
+                && relations.contains(&(role as u32 + 1))
+                && contexts.iter().zip(&relations).all(|(context, &relation)| {
+                    lists(&grammar["statements"][relation as usize - 1])
+                        .iter()
+                        .any(|opening| {
+                            context.strip_prefix(opening.as_slice()).is_some_and(|rest| {
+                                rest.len() > 1 && rest.last() == Some(&PERIOD_TOKEN_ID)
+                            })
+                        })
+                });
+            outside += usize::from(!(asked && stated));
+        }
+        assert_eq!((inputs.cases.len(), outside), (256, 0));
+    }
+
     /// The reader writes its reply opening as the token ids of
     /// `reader-grammar.json`; the grader removes a string. The two must be
     /// the same text, or every reply would be graded whole and fail.
