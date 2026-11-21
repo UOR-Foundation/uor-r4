@@ -227,6 +227,7 @@ impl Reader {
         codes: &[u16],
         by: StandBy,
         bind: BindTable,
+        open: bool,
     ) -> Result<(Self, Trained)> {
         if !bind.words.is_empty() && bind.words.len() != vocabulary as usize {
             return Err(invalid("the bind table must hold one word a token"));
@@ -256,7 +257,8 @@ impl Reader {
         }
         let mut asked = Asked::new(window, bos, eos)
             .with_codes(codes.to_vec())?
-            .with_stand(by, bind)?;
+            .with_stand(by, bind)?
+            .with_open_forms(open);
         for run in &runs {
             asked.count(tokens, run[0]);
         }
@@ -646,6 +648,7 @@ mod tests {
             &[],
             StandBy::Latest,
             BindTable::default(),
+            false,
         )?;
         assert_eq!(trained.replies, 22);
         assert_eq!(trained.replies_with_an_empty_read, 9);
@@ -720,6 +723,7 @@ mod tests {
                 codes,
                 StandBy::Latest,
                 BindTable::default(),
+                false,
             )
         };
         let (plain, _) = train(&[])?;
@@ -812,6 +816,7 @@ mod tests {
                 &[],
                 by,
                 bind,
+                false,
             )
         };
 
@@ -834,6 +839,85 @@ mod tests {
             assert_eq!(loaded.to_bytes(1), (bytes, saved));
         }
         assert!(train(StandBy::Octonion, BindTable::default()).is_err());
+        Ok(())
+    }
+
+    /// "User: say exactly this: ▢" with thirty or more tokens to say is longer
+    /// than a form holds, so no form over its last thirty tokens is ever seen
+    /// twice. The open form keeps the turn's opening and closing tokens, and
+    /// under it the reply is the copy of what stands between.
+    #[test]
+    fn a_long_turn_is_held_by_its_opening_and_copied() -> Result<()> {
+        let [bos, eos, user, colon, say, exactly, this, line, mark] =
+            [0u32, 1, 2, 3, 4, 5, 6, 7, 8];
+        let [good, dot] = [9u32, 10];
+        let mut state = 12_345u32;
+        let mut said = |length: usize| -> Vec<u32> {
+            (0..length)
+                .map(|_| {
+                    state = state.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+                    20 + (state >> 16) % 44
+                })
+                .collect()
+        };
+        // The turn opens a record or follows a small turn, and what is to be
+        // said has no fixed length.
+        let asked = |payload: &[u32], after_a_turn: bool| {
+            let mut record = vec![bos];
+            if after_a_turn {
+                record.extend([
+                    user, colon, good, dot, line, mark, colon, good, dot, eos, line,
+                ]);
+            }
+            record.extend([user, colon, say, exactly, this, colon]);
+            record.extend(payload);
+            record.extend([line, mark, colon]);
+            record
+        };
+        let mut tokens = Vec::new();
+        let mut eligible = Vec::new();
+        for index in 0..24usize {
+            let payload = said(28 + index % 9);
+            tokens.extend(asked(&payload, index % 2 == 1));
+            let at = tokens.len();
+            tokens.extend(&payload);
+            tokens.push(eos);
+            eligible.extend(at..at + payload.len() + 1);
+        }
+        let train = |open: bool| {
+            Reader::train(
+                &tokens,
+                &eligible,
+                64,
+                192,
+                bos,
+                eos,
+                2,
+                &[],
+                48,
+                &[],
+                StandBy::Latest,
+                BindTable::default(),
+                open,
+            )
+        };
+        let (closed, _) = train(false)?;
+        let (reader, _) = train(true)?;
+        let (bytes, saved) = reader.to_bytes(1);
+        assert_eq!(&bytes[..8], MAGIC);
+        let loaded = Reader::from_bytes(&bytes)?;
+        assert_eq!(loaded.to_bytes(1), (bytes, saved));
+        for (length, after_a_turn) in [(30, false), (33, true), (36, false), (29, true)] {
+            let payload = said(length);
+            let prompt = asked(&payload, after_a_turn);
+            let mut right = payload.clone();
+            right.push(eos);
+            assert!(!closed.asked.reads_open(&prompt));
+            assert_ne!(closed.reply(&prompt, 48), right, "{length} closed");
+            assert!(reader.asked.reads_open(&prompt));
+            assert_eq!(reader.reply(&prompt, 48), right, "{length}");
+            assert_eq!(loaded.reply(&prompt, 48), right, "{length} loaded");
+        }
         Ok(())
     }
 

@@ -433,6 +433,15 @@ pub const FORMS_HELD: usize = 6;
 pub const ROW_RIGHT: u32 = 2;
 /// Marks a form taken over class codes in place of tokens (in `gap_len`).
 const CLASS_FORM: u8 = 0x80;
+/// Marks a form of a turn too long to hold whole: its opening and closing
+/// tokens with everything between left out (in `gap_len`, over the closing
+/// count).
+const OPEN_FORM: u8 = 0x40;
+/// Opening and closing tokens an open form may keep, and the fewest opening
+/// ones.
+pub const OPEN_HEAD: usize = 16;
+pub const OPEN_TAIL: usize = 8;
+pub const OPEN_HEAD_LEAST: usize = 4;
 /// Pointer slots one output error may add to a row.
 const POINTERS_ADDED: usize = 3;
 /// Previous-token symbols of a held row: the reply's first place, and any
@@ -469,6 +478,32 @@ impl Form {
         let gaps = (1..=FORM_GAP.min(turn.len()))
             .flat_map(move |len| (0..=turn.len() - len).map(move |at| Self::of(turn, at, len)));
         std::iter::once(Self::of(turn, 0, 0)).chain(gaps)
+    }
+    /// The form of a long turn that keeps its first `head` and last `tail`
+    /// tokens: "Say exactly this: ▢" is one form whatever is to be said.
+    fn open(turn: &[u32], head: usize, tail: usize) -> Self {
+        let mut words = [1u128; 3];
+        let kept = turn[..head].iter().chain(&turn[turn.len() - tail..]);
+        for (place, &token) in kept.enumerate() {
+            let word = &mut words[place / 10];
+            *word = (*word << 12) | u128::from(token);
+        }
+        Self {
+            words,
+            gap_at: head as u8,
+            gap_len: OPEN_FORM | tail as u8,
+        }
+    }
+    /// Every open form of a long `turn`, those that keep most first (the
+    /// longer opening on a tie).
+    fn each_open(turn: &[u32]) -> impl Iterator<Item = Self> + '_ {
+        let mut kept: Vec<(usize, usize)> = (OPEN_HEAD_LEAST..=OPEN_HEAD)
+            .flat_map(|head| (0..=OPEN_TAIL).map(move |tail| (head, tail)))
+            .filter(|&(head, tail)| head + tail <= turn.len())
+            .collect();
+        kept.sort_by_key(|&(head, tail)| std::cmp::Reverse((head + tail, head)));
+        kept.into_iter()
+            .map(move |(head, tail)| Self::open(turn, head, tail))
     }
     /// The same form, marked as one over class codes: it never meets a form
     /// over tokens.
@@ -881,6 +916,9 @@ pub struct Asked {
     /// shorter gap than its most specific token form is read under its class
     /// forms.
     sharper: bool,
+    /// First-pass choice, not saved: turns longer than [`FORM_TOKENS`] are
+    /// counted under their open forms. A read uses whatever forms are kept.
+    open: bool,
     stand: std::sync::Arc<Stand>,
     seen: HashMap<Form, u32>,
     rows: HashMap<HeldKey, HeldRow>,
@@ -894,6 +932,7 @@ impl Asked {
             context,
             codes: Vec::new(),
             sharper: false,
+            open: false,
             stand: Default::default(),
             seen: HashMap::new(),
             rows: HashMap::new(),
@@ -932,6 +971,11 @@ impl Asked {
     pub fn bind(&self) -> &bind::BindTable {
         &self.stand.bind
     }
+    /// Counts long turns under their open forms, before the first pass.
+    pub fn with_open_forms(mut self, on: bool) -> Self {
+        self.open = on;
+        self
+    }
     pub fn read_sharper_classes(&mut self, on: bool) {
         self.sharper = on;
     }
@@ -958,6 +1002,18 @@ impl Asked {
             .map_or(low, |place| place + 1);
         &tokens[first..start]
     }
+    /// The whole asked turn before a reply that starts at `start`, when it is
+    /// longer than [`FORM_TOKENS`]: the tokens after the latest EOS in the
+    /// window (after the BOS where there is none).
+    fn long_turn<'a>(&self, tokens: &'a [u32], start: usize) -> Option<&'a [u32]> {
+        let floor = start - window_at(tokens, start, self.context, self.bos).len();
+        let first = (floor..start)
+            .rev()
+            .find(|&place| tokens[place] == self.eos)
+            .map_or(floor, |place| place + 1);
+        let first = first + usize::from(first < start && tokens[first] == self.bos);
+        (start - first > FORM_TOKENS).then(|| &tokens[first..start])
+    }
     /// First pass: counts every form of the turn asked before `start`.
     pub fn count(&mut self, tokens: &[u32], start: usize) {
         let turn = self.turn(tokens, start);
@@ -967,6 +1023,13 @@ impl Asked {
         if let Some(coded) = self.coded(turn) {
             for form in Form::each(&coded) {
                 *self.seen.entry(form.classed()).or_default() += 1;
+            }
+        }
+        if self.open {
+            if let Some(long) = self.long_turn(tokens, start) {
+                for form in Form::each_open(long) {
+                    *self.seen.entry(form).or_default() += 1;
+                }
             }
         }
     }
@@ -999,13 +1062,28 @@ impl Asked {
             .take(FORMS_HELD)
             .collect()
     }
+    /// The kept open forms of that turn when it is a long one, those that
+    /// keep most first, at most [`FORMS_HELD`].
+    fn held_open(&self, tokens: &[u32], start: usize) -> Vec<u32> {
+        let Some(long) = self.long_turn(tokens, start) else {
+            return Vec::new();
+        };
+        Form::each_open(long)
+            .filter_map(|form| self.seen.get(&form).copied())
+            .take(FORMS_HELD)
+            .collect()
+    }
     /// The forms a reply to this turn is read under: its kept token forms,
     /// or its kept class forms when it has no token form (or, under the
     /// sharper read, when a class form leaves less of the turn out).
     fn read_under(&self, tokens: &[u32], start: usize) -> Vec<u32> {
         let forms = self.held(tokens, start);
         if forms.is_empty() {
-            return self.held_classes(tokens, start);
+            let classes = self.held_classes(tokens, start);
+            if classes.is_empty() {
+                return self.held_open(tokens, start);
+            }
+            return classes;
         }
         if self.sharper {
             if let (_, [Some(token), Some(class)]) = self.sharpest(&tokens[..start]) {
@@ -1034,6 +1112,13 @@ impl Asked {
     pub fn reads_classes(&self, prompt: &[u32]) -> bool {
         self.held(prompt, prompt.len()).is_empty()
             && !self.held_classes(prompt, prompt.len()).is_empty()
+    }
+    /// True when a reply to `prompt` is read under open forms alone.
+    pub fn reads_open(&self, prompt: &[u32]) -> bool {
+        let end = prompt.len();
+        self.held(prompt, end).is_empty()
+            && self.held_classes(prompt, end).is_empty()
+            && !self.held_open(prompt, end).is_empty()
     }
     /// `stand` is passed apart from `self` so rows can be written while a
     /// place is held.
@@ -1116,7 +1201,11 @@ impl Asked {
         // The reader sees the prompt's own window, not the corpus before it.
         let floor = start - window_at(tokens, start, self.context, self.bos).len();
         let mut wrote = false;
-        for forms in [self.held(tokens, start), self.held_classes(tokens, start)] {
+        for forms in [
+            self.held(tokens, start),
+            self.held_classes(tokens, start),
+            self.held_open(tokens, start),
+        ] {
             if forms.is_empty() {
                 continue;
             }
@@ -1132,7 +1221,11 @@ impl Asked {
     /// under its class forms: a read uses one set or the other, never both.
     fn write_under(&mut self, tokens: &[u32], start: usize, end: usize, empty: bool) -> bool {
         let mut wrote = false;
-        for forms in [self.held(tokens, start), self.held_classes(tokens, start)] {
+        for forms in [
+            self.held(tokens, start),
+            self.held_classes(tokens, start),
+            self.held_open(tokens, start),
+        ] {
             if !forms.is_empty() {
                 self.write_forms(&forms, tokens, start, end, empty);
                 wrote = true;

@@ -356,9 +356,9 @@ fn reader(args: &[String]) -> Result<(), String> {
         return Ok(());
     }
     if args[0] == "reader-save" {
-        if !(12..=14).contains(&args.len()) {
+        if !(12..=15).contains(&args.len()) {
             return Err(
-                "usage: conjunction-probe reader-save TOKENS_U16 MASK_U8 OUT_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST [CODEBOOK_TABLE_JSON|- [latest|pair|octonion:CODEBOOK_TABLE_JSON]]"
+                "usage: conjunction-probe reader-save TOKENS_U16 MASK_U8 OUT_FILE VOCABULARY WINDOW LIMIT BOS EOS SLOTS ORDERS_CSV|- LADDER_LEAST [CODEBOOK_TABLE_JSON|- [latest|pair|octonion:CODEBOOK_TABLE_JSON [open]]]"
                     .into(),
             );
         }
@@ -406,6 +406,11 @@ fn reader(args: &[String]) -> Result<(), String> {
             }
         };
         let stand = format!("{by:?}");
+        let open = match args.get(14).map(String::as_str) {
+            None => false,
+            Some("open") => true,
+            Some(other) => return Err(format!("unknown form choice {other}")),
+        };
         let codes: Vec<u16> = match args.get(12).filter(|path| path.as_str() != "-") {
             None => Vec::new(),
             Some(path) => {
@@ -440,6 +445,7 @@ fn reader(args: &[String]) -> Result<(), String> {
             &codes,
             by,
             bind,
+            open,
         )
         .map_err(|e| e.to_string())?;
         let train_ms = started.elapsed().as_millis() as u64;
@@ -460,6 +466,7 @@ fn reader(args: &[String]) -> Result<(), String> {
                 "codebook_sha256": codebook_sha256,
                 "class_codes": codes.iter().collect::<std::collections::BTreeSet<_>>().len(),
                 "stand": stand,
+                "open_forms": open,
                 "trained": trained,
                 "saved": saved,
                 "reader_sha256": sha(&bytes),
@@ -524,10 +531,16 @@ fn reader(args: &[String]) -> Result<(), String> {
     // Replies read under class forms alone, and how many of those are exact.
     let mut class_read = 0u64;
     let mut class_read_exact = 0u64;
+    let mut open_read = 0u64;
+    let mut open_read_exact = 0u64;
     for (row, reply) in panel.iter().zip(&replies) {
         if reader.asked.reads_classes(&row.prompt) {
             class_read += 1;
             class_read_exact += u64::from(reply == &row.reference);
+        }
+        if reader.asked.reads_open(&row.prompt) {
+            open_read += 1;
+            open_read_exact += u64::from(reply == &row.reference);
         }
     }
     let summary = serde_json::json!({
@@ -545,6 +558,8 @@ fn reader(args: &[String]) -> Result<(), String> {
         "class_sharper_exact": class_sharper_exact,
         "class_read": class_read,
         "class_read_exact": class_read_exact,
+        "open_read": open_read,
+        "open_read_exact": open_read_exact,
         "load_ms": load_ms,
         "reply_us": reply_us,
         "reply_ids": ids,
