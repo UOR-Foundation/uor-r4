@@ -1,6 +1,6 @@
 # [codex] Ordinary job and home replies with the requested form supplied
 
-Supplying only the correct job or home form recovered no complete replies on either panel. It removed every lexical first-token error on the 70 reached questions, but lost three previously exact replies per panel. All 21 job replies whose first error repeated a source occurrence still repeated it. The comparison that retained the other lexical candidates recovered six replies on the supplemental panel, all home answers referring to a fact in the current user turn.
+Supplying only the correct job or home form recovered zero previously wrong replies on either panel. Three primary replies stayed exact; no bridge reply stayed exact. It removed every lexical first-token error on the 70 reached questions, but lost three previously exact replies per panel. All 21 job replies whose first error repeated a source occurrence still repeated it. The comparison that retained the other lexical candidates recovered six replies on the supplemental panel, all home answers referring to a fact in the current user turn.
 
 ## Ordinary client results
 
