@@ -37,6 +37,7 @@ Code: `conjunction-probe` built on wick with `--features cuda` from the commit t
 
 One script on wick, `runs/conj/gpuscore-run.sh score v39 gpuscore1`, in a new folder `runs/conj/gpuscore1/`:
 
+0. Before the script: reader B's TRAIN stream and mask are on wick as `data/m2fmt-s2/` (copied from the laptop on 21 Nov; they are synthetic TRAIN cases, not corpus text) and were checked against the pins above in `runs/conj/gputrain5/inputs.sha256`.
 1. Write the sha256 of the binary, both host files, both TRAIN streams and masks and the panel to `inputs.sha256`.
 2. For reader A, then reader B: `conjunction-probe reader-gpu-train TOKENS MASK HOST_FILE 4096 192 48 0 1 8 OUT.uorrdr OUT-train.json`. It trains on the GPU, builds a reader from the GPU tables, and exits with an error unless every form, held row, slot and pair row equals the host's and the saved bytes equal `HOST_FILE`. `OUT.uorrdr` is the GPU-trained reader.
 3. For each `OUT.uorrdr`: `conjunction-probe reader-gpu OUT.uorrdr data/m2fmt/panel.json 48 OUT-read.json`. One thread a prompt writes the reply ids on the GPU. The command counts those ids against the panel's references with `count_replies_by`, the function `reader-replies` uses for the host: `gpu_count.exact` is the number of replies equal to the reference id for id, `gpu_count.ended` the number ending on EOS. It also reports `gpu_prompts_read` and the same count for each reply set against the next prompt's reference.
@@ -46,9 +47,10 @@ How a reply is graded: a reply is complete and correct when it is the reference,
 
 ## Bar (pre-registered)
 
-- PASS: for reader A, step 2 exits 0 (GPU bytes are the host file), `gpu_prompts_read` is 512, and `gpu_count.exact` is at or above 256 of 512, M2's registered development target. The number reported for the headline is reader A's `gpu_count.exact`.
+- PASS: for reader A, every input sha256 in `inputs.sha256` is the one pinned in this sheet, step 2 exits 0 (GPU bytes are the host file) with `gpu_reader_bytes_are_the_same_on_a_second_run` true, step 3 exits 0 (`equal` true: the GPU read is the host read on every prompt), `gpu_prompts_read` is 512, and `gpu_count.exact` is at or above 256 of 512, M2's registered development target. The number reported for the headline is reader A's `gpu_count.exact`.
+- An input sha256 that differs from this sheet voids the run. The script goes on after a failed step, so a read of a reader whose step 2 did not exit 0 is not counted, whatever it prints.
 - Reader B's count is reported beside it as the spread across the TRAIN draw. If reader B's count is below 256, or its step 2 fails, the result is recorded as a pass for one seed only, and the decision card says so.
-- Control: `control_gpu_count_against_the_next_prompts_reference.exact` must be under 26 of 512 for both readers. If it is not, the count does not depend on which prompt was asked and the result is void.
+- Control: `control_gpu_count_against_the_next_prompts_reference.exact` must be under 26 of 512 for both readers. If it is not, the count does not depend on which prompt was asked and the result is void. This control shows only that a reply belongs to its own prompt. It is not a no-reader control; the sheet claims the GPU path, not a memory gain.
 - Because the expected count is 512, any `gpu_count.exact` under 512, any prompt not read on the GPU, or any difference from the host reported by either command is recorded as a finding to be explained before the headline is changed, even where the bar is met.
 - A step that stops or crashes is an instrument stop for that reader and gives no count.
 
@@ -66,4 +68,6 @@ One pass of steps 1 to 4. The panel is a development panel, so a stop from a too
 
 What each outcome unlocks. PASS: the decision card records the GPU-trained, GPU-read count and `headline.current` for M2 is set to reader A's count; the next units are a fresh panel in other wording with controls, and the reader keyed by the trunk's state. Not PASS: the difference is found with the finite kernel tests and fixed, and the headline stays 0.
 
-TEST FITNESS: PENDING - no reader other than the author has read this sheet yet.
+Fitness reads. Read 1 (fresh-context reader, not the author, same lab): no blocker, but provisional, because it stopped before four checks. Its notes are written in above: step 3 must exit 0, a read after a failed step 2 is not counted, a differing input sha256 voids the run, and the control is not a no-reader control. Read 2 (a second fresh-context reader) did the four remaining checks against the code and the records and read the bar and stop rule again: FIT, no blocker. Its two notes are written in above: step 0, and the second-run field in the PASS line. Since the sheet was first written, reader B's GPU TRAIN was run as a finite kernel test (`runs/conj/gputrain5/`: bytes equal to the host file); no reply was read or counted in it.
+
+TEST FITNESS: FIT - read 2, a fresh-context reader that is not the author (same lab, claude); read 1 found no blocker but was incomplete. No other lab has read this sheet.
