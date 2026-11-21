@@ -38,28 +38,6 @@ pub const MAGIC_STAND: &[u8; 8] = b"UORRDR03";
 /// 4 tail row, 8 across forms, 16 agreed place), and after each held slot's count its wrong count.
 pub const MAGIC_READS: &[u8; 8] = b"UORRDR04";
 
-/// One class code per token from an address-cells codebook table (`blocks`
-/// blocks of eight coordinates a token): the writer cell, sixteen times the
-/// root of the first block plus the root of the last.
-pub fn cell_codes(table: &[i32], vocabulary: usize, blocks: usize) -> Result<Vec<u16>> {
-    if blocks < 2 || table.len() != vocabulary * blocks * 8 {
-        return Err(invalid("the codebook table is not vocabulary x blocks x 8"));
-    }
-    let root = |block: &[i32]| {
-        (0..16usize)
-            .find(|&root| crate::address_cells::block_l1(block, root) == 0)
-            .ok_or_else(|| invalid("a codebook block is not a root"))
-    };
-    table
-        .chunks_exact(blocks * 8)
-        .map(|token| {
-            let first = root(&token[..8])?;
-            let last = root(&token[(blocks - 1) * 8..])?;
-            Ok((first * 16 + last) as u16)
-        })
-        .collect()
-}
-
 /// The rows a reply is read from.
 #[derive(Debug)]
 pub struct Reader {

@@ -431,7 +431,7 @@ fn reader(args: &[String]) -> Result<(), String> {
                     .ok_or("the codebook table has no spec.blocks")?;
                 let table: Vec<i32> = serde_json::from_value(file["table"].clone())
                     .map_err(|e| format!("{path} table: {e}"))?;
-                uor_r4_discrete::conjunction::saved::cell_codes(
+                uor_r4_discrete::address_cells::cell_codes(
                     &table,
                     number(&args[4])? as usize,
                     blocks as usize,

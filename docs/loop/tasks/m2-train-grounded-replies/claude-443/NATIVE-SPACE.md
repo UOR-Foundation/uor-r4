@@ -4,8 +4,9 @@ The five items `.agents/skills/native-space-cycle/SKILL.md` asks for, written fo
 
 ## What is not yet true
 
-- **One backend only.** The reader's operators have one source definition and one implementation: host Rust. There is no CUDA kernel and no WASM or `discrete_d11` implementation, so there is no differential between device implementations. The replay below compares two machines running the same Rust source (aarch64 macOS and x86_64 Linux), which shows the source is deterministic across targets and nothing more.
-- **Not in the trunk state.** The rows are a file of their own (`UORRDR04`). They are not a table family of `TrunkTables`, and the D11 artifact does not carry them. The transported trunk state (S1 of [claude-409](../../written-state-count-model/claude-409/NATIVE-SPACE.md)) takes no part in this read: the key is the question's tokens, not a transported code.
+- **One implementation only.** The reader's operators have one source definition and one implementation: Rust. It now compiles for three targets (aarch64 macOS, x86_64 Linux, `wasm32-wasip1`) and the word streams are equal on all three, which shows the source is deterministic across targets and nothing more. There is no CUDA kernel and no second, independently written implementation, so there is no differential between implementations.
+- **Carried by D11, not part of the trunk state.** A D11 artifact now carries the reader (schema `uor-r4.lut-discrete-question-reader/1`) and `discrete_d11` answers from it. It is carried as the reader's own file, byte for byte, under a header that binds it and the parent artifact by SHA-256. It is not one of the positional table sections of `TrunkTables`, and the transported trunk state (S1 of [claude-409](../../written-state-count-model/claude-409/NATIVE-SPACE.md)) takes no part in this read: the key is the question's tokens, not a transported code. The trunk and the reader share an artifact and a vocabulary, and nothing else yet.
+- **The carrier is not built in CI.** It is behind the integer crate's `reader-serving` feature, which no CI job selects. Its test and the builds below ran on the laptop. The integer crate with the feature was only type-checked for `wasm32-unknown-unknown`; the browser client does not call it.
 - **TRAIN is a host pass.** The rows are counted by `Reader::train` on the CPU. §3.5 makes GPU the default for training; a 20,000-case count that runs in seconds was run on the laptop and on wick's host. A GPU writer for these rows does not exist.
 - **The file does not hold the whole learned state.** `to_bytes` leaves out every slot that was right fewer than `ROW_RIGHT` times and every row with no such slot. No reply changes (measured below), but TRAIN cannot be continued from the file: the left-out counts are gone. A whole-state save is not written.
 - **No gradient.** Learning is counting and the written verdicts (right and wrong counts a slot). There is no gradient or optimizer state in this line, so D85's gradient clause has nothing to check here.
@@ -35,7 +36,7 @@ One source definition each; TRAIN and serving call the same functions [claude].
 | `History::push`, `address`, `tails` | the reply-so-far key | `write_forms` | `generate` |
 | `Asked::read_under` | the forms a turn is read under | `write_under` (its three form sets) | `reply_traced`, `reply_words` |
 
-CUDA, WASM and `discrete_d11` columns do not exist (see above).
+The serving caller is the same in every build: the trainer crate (`uor_r4_discrete::conjunction`), the portable crate `uor-r4-reader-runtime` (the same source files, compiled without the GPU pipeline, host and `wasm32-wasip1`) and `IntegerDiscreteModel::question_reply` in `discrete_d11`, which calls the portable crate. A CUDA column does not exist.
 
 ## 3. Replay oracle
 
@@ -57,6 +58,21 @@ Reader A's stream has one SHA-256 on both machines (same TRAIN `bfbf5812…`, sa
 
 The forced stream is a consistency check of the stepper, not independent evidence: it calls the same two operators in a second loop.
 
+### The same streams from the portable build and from a D11 artifact
+
+Measured on 21 Nov (UTC) on `m2-reply512` (panel `40e12f87…`, 512 prompts, 6,664 reply ids, limit 64) [claude]. The trainer rows are the first and third rows of the table above.
+
+| Read by | Reader A words SHA-256 | Reader B words SHA-256 | Reply ids SHA-256 (A and B) |
+|---|---|---|---|
+| trainer crate, `reader-replay` | `440d7cd0…a46923de` | `4c0a0ed4…639bde8e` | not hashed by this command |
+| `uor-r4-reader-runtime`, host (`reader-words` example) | `440d7cd0…a46923de` | `4c0a0ed4…639bde8e` | `4554ffd9…ffe2a1f6` |
+| `uor-r4-reader-runtime`, `wasm32-wasip1` under Node 26 WASI | `440d7cd0…a46923de` | `4c0a0ed4…639bde8e` | `4554ffd9…ffe2a1f6` |
+| D11 artifact through `IntegerDiscreteModel::question_reply` (`question-reader-d11 words`) | `440d7cd0…a46923de` | `4c0a0ed4…639bde8e` | `4554ffd9…ffe2a1f6` |
+
+The D11 artifacts are the M1 trunk `seed1.d11` (`04652a3d…2c147d`, 86,536,132 bytes, unchanged inside the carrier) behind reader A (artifact `604fcd03…a7e4dd`, 122,111,038 bytes) and behind reader B (artifact `cf9bf6ee…adce1d`, 122,949,062 bytes). Answering the 512 prompts from an artifact, load included, took 2.0 s on the laptop. Readers A and B give the same reply ids on this panel and differ in which rows they read. Reports: `local/claude/d11-reader/`.
+
+The test `a_carried_reader_replies_as_its_file_and_bad_bindings_are_refused` packs a toy reader behind a toy artifact, requires the reply through the model to be the file's reply, and requires a changed reader byte, a changed parent byte, a reader over another vocabulary, a cut reader file and a carrier inside a carrier each to be refused.
+
 ## 4. Update rule
 
 Counting, then written verdicts [claude]. Pass 1 counts forms; pass 2 writes each TRAIN reply token under every held form's rows, after reading what the reader would answer there; pass 3 writes the true reply again under empty-read keys where the reader's own reply met an empty read. Every write lands in the integer rows the server reads. There is no float master and no export step. The served file is those rows less the unreachable ones (see "What is not yet true").
@@ -67,4 +83,4 @@ Counting, then written verdicts [claude]. Pass 1 counts forms; pass 2 writes eac
 
 ## Next
 
-In order of what D85 asks: a whole-state save so TRAIN can continue from the file; the rows as a table family the D11 artifact carries, read by `discrete_d11`; a second implementation (WASM or CUDA) held to this replay's word streams.
+Done since the first version of this file: the portable build, the WASM run, and the D11 carrier read by `discrete_d11`. Still open, in the order D85 asks: a whole-state save so TRAIN can continue from the file; the reader keyed by the trunk's transported state, so the two are one state and not two tables in one file; a CUDA writer held to this replay's word streams; a CI job that builds `reader-serving`.

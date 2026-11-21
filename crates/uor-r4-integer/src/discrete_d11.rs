@@ -35,6 +35,10 @@ pub mod contextual_source;
 pub mod pair_rank;
 pub use assertion_retrieval::pack_assertion_retrieval;
 pub use rival_admission::pack_rival_admission;
+#[cfg(feature = "reader-serving")]
+mod question_reader;
+#[cfg(feature = "reader-serving")]
+pub use question_reader::pack_question_reader;
 
 /// Container magic (`UORLUT01`).
 pub const MAGIC: &[u8; 8] = b"UORLUT01";
@@ -1224,6 +1228,9 @@ pub struct IntegerDiscreteModel {
     role_policy: Option<RolePolicy>,
     contextual_source: Option<contextual_source::SourcePolicy>,
     pair_rank: Option<pair_rank::Policy>,
+    /// The saved question reader (conjunction rows) this artifact carries.
+    #[cfg(feature = "reader-serving")]
+    question_reader: Option<question_reader::Carried>,
     assertion_arm: Option<crate::relation_retrieval::Arm>,
     tokenizer_sha256: Option<String>,
     shape: DiscreteLutShape,
@@ -1952,6 +1959,10 @@ impl IntegerDiscreteModel {
         if schema == rival_admission::SCHEMA {
             return rival_admission::read(bytes, encoded_header, end_header, allow_role);
         }
+        #[cfg(feature = "reader-serving")]
+        if schema == question_reader::SCHEMA {
+            return question_reader::read(bytes, encoded_header, end_header, allow_role);
+        }
         if schema == assertion_retrieval::SCHEMA {
             return assertion_retrieval::read(bytes, encoded_header, end_header, allow_role);
         }
@@ -2537,6 +2548,8 @@ impl IntegerDiscreteModel {
             role_policy: None,
             contextual_source: None,
             pair_rank: None,
+            #[cfg(feature = "reader-serving")]
+            question_reader: None,
             assertion_arm: None,
             tokenizer_sha256: header.tokenizer_sha256,
             shape: header.shape,
@@ -2614,6 +2627,10 @@ impl IntegerDiscreteModel {
     pub fn artifact_schema(&self) -> &'static str {
         if let Some(bindings) = self.pair_rank_bindings() {
             return bindings.geometry.schema();
+        }
+        #[cfg(feature = "reader-serving")]
+        if self.question_reader.is_some() {
+            return question_reader::SCHEMA;
         }
         if self.assertion_arm.is_some() {
             return assertion_retrieval::SCHEMA;
@@ -4362,6 +4379,30 @@ mod tests {
         out.resize(out.len() + pad, 0);
         out.extend_from_slice(&blob);
         out
+    }
+
+    /// A plain route artifact over `vocabulary` tokens, for carrier tests.
+    #[cfg(feature = "reader-serving")]
+    pub(super) fn plain_artifact(vocabulary: u32) -> Vec<u8> {
+        let shape = DiscreteLutShape {
+            vocabulary,
+            blocks: 2,
+            context: 1,
+            kept_cells: 2,
+            stages: 1,
+            read_mode: "route".to_owned(),
+            read_kept: 0,
+            read_sweeps: 0,
+            read_position: 0,
+            objective_policy: "nearest_address_margin_v1".to_owned(),
+            read_initialization: "zero_gates_v1".to_owned(),
+            seed: 7,
+            epoch: 0,
+        };
+        let tokens: Vec<[[i32; 8]; 2]> = (0..vocabulary)
+            .map(|id| if id % 2 == 0 { [A, A] } else { [NEG_A, NEG_A] })
+            .collect();
+        build_discrete_uorlut01(shape, &tokens, &[0, 0], &[0, 0])
     }
 
     #[test]
