@@ -1,0 +1,92 @@
+[
+  {
+    "name": "client-empty",
+    "first": {
+      "index": 4,
+      "expected": 92,
+      "actual": 261
+    },
+    "reply": [
+      2997,
+      1541,
+      435,
+      261,
+      261,
+      92,
+      607,
+      770,
+      397,
+      471,
+      16,
+      1
+    ],
+    "eos": true,
+    "exact": false
+  },
+  {
+    "name": "client-generated",
+    "first": {
+      "index": 4,
+      "expected": 92,
+      "actual": 261
+    },
+    "reply": [
+      2997,
+      1541,
+      435,
+      261,
+      261,
+      92,
+      607,
+      770,
+      397,
+      471,
+      16,
+      617
+    ],
+    "eos": false,
+    "exact": false
+  },
+  {
+    "name": "fixture-empty",
+    "first": null,
+    "reply": [
+      2997,
+      1541,
+      435,
+      261,
+      92,
+      607,
+      770,
+      397,
+      471,
+      16,
+      1
+    ],
+    "eos": true,
+    "exact": true
+  },
+  {
+    "name": "fixture-generated",
+    "first": {
+      "index": 10,
+      "expected": 1,
+      "actual": 617
+    },
+    "reply": [
+      2997,
+      1541,
+      435,
+      261,
+      92,
+      607,
+      770,
+      397,
+      471,
+      16,
+      617
+    ],
+    "eos": false,
+    "exact": false
+  }
+]

@@ -1,0 +1,1346 @@
+[
+  {
+    "answer": " Your job is aquamarine beacon.",
+    "cohort": "primary",
+    "id": "primary-p0-a0-o0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is aquamarine beacon. I currently live in aquatic vineyard.",
+      "What is my current job?"
+    ],
+    "value": "aquamarine beacon",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is aquamarine beacon.",
+    "cohort": "primary",
+    "id": "primary-p0-a0-o0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is aquamarine beacon. I currently live in aquatic vineyard.",
+      "What work do I currently do?"
+    ],
+    "value": "aquamarine beacon",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is aquamarine beacon.",
+    "cohort": "primary",
+    "id": "primary-p0-a0-o1-w0",
+    "role": "job",
+    "turns": [
+      "I currently live in aquatic vineyard. My current job is aquamarine beacon.",
+      "What is my current job?"
+    ],
+    "value": "aquamarine beacon",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is aquamarine beacon.",
+    "cohort": "primary",
+    "id": "primary-p0-a0-o1-w1",
+    "role": "job",
+    "turns": [
+      "I currently live in aquatic vineyard. My current job is aquamarine beacon.",
+      "What work do I currently do?"
+    ],
+    "value": "aquamarine beacon",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is aquamarine beacon.",
+    "cohort": "bridge",
+    "id": "bridge-p0-a0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is aquamarine beacon.",
+      "I currently live in aquatic vineyard. What is my current job?"
+    ],
+    "value": "aquamarine beacon",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is aquamarine beacon.",
+    "cohort": "bridge",
+    "id": "bridge-p0-a0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is aquamarine beacon.",
+      "I currently live in aquatic vineyard. What work do I currently do?"
+    ],
+    "value": "aquamarine beacon",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " You live in aquatic vineyard.",
+    "cohort": "bridge",
+    "id": "bridge-p0-a0-w2",
+    "role": "home",
+    "turns": [
+      "My current job is aquamarine beacon.",
+      "I currently live in aquatic vineyard. Where do I currently live?"
+    ],
+    "value": "aquatic vineyard",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is aquatic vineyard.",
+    "cohort": "primary",
+    "id": "primary-p0-a1-o0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is aquatic vineyard. I currently live in aquamarine beacon.",
+      "What is my current job?"
+    ],
+    "value": "aquatic vineyard",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is aquatic vineyard.",
+    "cohort": "primary",
+    "id": "primary-p0-a1-o0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is aquatic vineyard. I currently live in aquamarine beacon.",
+      "What work do I currently do?"
+    ],
+    "value": "aquatic vineyard",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is aquatic vineyard.",
+    "cohort": "primary",
+    "id": "primary-p0-a1-o1-w0",
+    "role": "job",
+    "turns": [
+      "I currently live in aquamarine beacon. My current job is aquatic vineyard.",
+      "What is my current job?"
+    ],
+    "value": "aquatic vineyard",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is aquatic vineyard.",
+    "cohort": "primary",
+    "id": "primary-p0-a1-o1-w1",
+    "role": "job",
+    "turns": [
+      "I currently live in aquamarine beacon. My current job is aquatic vineyard.",
+      "What work do I currently do?"
+    ],
+    "value": "aquatic vineyard",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is aquatic vineyard.",
+    "cohort": "bridge",
+    "id": "bridge-p0-a1-w0",
+    "role": "job",
+    "turns": [
+      "My current job is aquatic vineyard.",
+      "I currently live in aquamarine beacon. What is my current job?"
+    ],
+    "value": "aquatic vineyard",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is aquatic vineyard.",
+    "cohort": "bridge",
+    "id": "bridge-p0-a1-w1",
+    "role": "job",
+    "turns": [
+      "My current job is aquatic vineyard.",
+      "I currently live in aquamarine beacon. What work do I currently do?"
+    ],
+    "value": "aquatic vineyard",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " You live in aquamarine beacon.",
+    "cohort": "bridge",
+    "id": "bridge-p0-a1-w2",
+    "role": "home",
+    "turns": [
+      "My current job is aquatic vineyard.",
+      "I currently live in aquamarine beacon. Where do I currently live?"
+    ],
+    "value": "aquamarine beacon",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is cinnamon orchard.",
+    "cohort": "primary",
+    "id": "primary-p1-a0-o0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is cinnamon orchard. I currently live in cinder observatory.",
+      "What is my current job?"
+    ],
+    "value": "cinnamon orchard",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is cinnamon orchard.",
+    "cohort": "primary",
+    "id": "primary-p1-a0-o0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is cinnamon orchard. I currently live in cinder observatory.",
+      "What work do I currently do?"
+    ],
+    "value": "cinnamon orchard",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is cinnamon orchard.",
+    "cohort": "primary",
+    "id": "primary-p1-a0-o1-w0",
+    "role": "job",
+    "turns": [
+      "I currently live in cinder observatory. My current job is cinnamon orchard.",
+      "What is my current job?"
+    ],
+    "value": "cinnamon orchard",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is cinnamon orchard.",
+    "cohort": "primary",
+    "id": "primary-p1-a0-o1-w1",
+    "role": "job",
+    "turns": [
+      "I currently live in cinder observatory. My current job is cinnamon orchard.",
+      "What work do I currently do?"
+    ],
+    "value": "cinnamon orchard",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is cinnamon orchard.",
+    "cohort": "bridge",
+    "id": "bridge-p1-a0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is cinnamon orchard.",
+      "I currently live in cinder observatory. What is my current job?"
+    ],
+    "value": "cinnamon orchard",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is cinnamon orchard.",
+    "cohort": "bridge",
+    "id": "bridge-p1-a0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is cinnamon orchard.",
+      "I currently live in cinder observatory. What work do I currently do?"
+    ],
+    "value": "cinnamon orchard",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " You live in cinder observatory.",
+    "cohort": "bridge",
+    "id": "bridge-p1-a0-w2",
+    "role": "home",
+    "turns": [
+      "My current job is cinnamon orchard.",
+      "I currently live in cinder observatory. Where do I currently live?"
+    ],
+    "value": "cinder observatory",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is cinder observatory.",
+    "cohort": "primary",
+    "id": "primary-p1-a1-o0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is cinder observatory. I currently live in cinnamon orchard.",
+      "What is my current job?"
+    ],
+    "value": "cinder observatory",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is cinder observatory.",
+    "cohort": "primary",
+    "id": "primary-p1-a1-o0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is cinder observatory. I currently live in cinnamon orchard.",
+      "What work do I currently do?"
+    ],
+    "value": "cinder observatory",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is cinder observatory.",
+    "cohort": "primary",
+    "id": "primary-p1-a1-o1-w0",
+    "role": "job",
+    "turns": [
+      "I currently live in cinnamon orchard. My current job is cinder observatory.",
+      "What is my current job?"
+    ],
+    "value": "cinder observatory",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is cinder observatory.",
+    "cohort": "primary",
+    "id": "primary-p1-a1-o1-w1",
+    "role": "job",
+    "turns": [
+      "I currently live in cinnamon orchard. My current job is cinder observatory.",
+      "What work do I currently do?"
+    ],
+    "value": "cinder observatory",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is cinder observatory.",
+    "cohort": "bridge",
+    "id": "bridge-p1-a1-w0",
+    "role": "job",
+    "turns": [
+      "My current job is cinder observatory.",
+      "I currently live in cinnamon orchard. What is my current job?"
+    ],
+    "value": "cinder observatory",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is cinder observatory.",
+    "cohort": "bridge",
+    "id": "bridge-p1-a1-w1",
+    "role": "job",
+    "turns": [
+      "My current job is cinder observatory.",
+      "I currently live in cinnamon orchard. What work do I currently do?"
+    ],
+    "value": "cinder observatory",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " You live in cinnamon orchard.",
+    "cohort": "bridge",
+    "id": "bridge-p1-a1-w2",
+    "role": "home",
+    "turns": [
+      "My current job is cinder observatory.",
+      "I currently live in cinnamon orchard. Where do I currently live?"
+    ],
+    "value": "cinnamon orchard",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is lavender compass.",
+    "cohort": "primary",
+    "id": "primary-p2-a0-o0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is lavender compass. I currently live in lavish waterfall.",
+      "What is my current job?"
+    ],
+    "value": "lavender compass",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is lavender compass.",
+    "cohort": "primary",
+    "id": "primary-p2-a0-o0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is lavender compass. I currently live in lavish waterfall.",
+      "What work do I currently do?"
+    ],
+    "value": "lavender compass",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is lavender compass.",
+    "cohort": "primary",
+    "id": "primary-p2-a0-o1-w0",
+    "role": "job",
+    "turns": [
+      "I currently live in lavish waterfall. My current job is lavender compass.",
+      "What is my current job?"
+    ],
+    "value": "lavender compass",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is lavender compass.",
+    "cohort": "primary",
+    "id": "primary-p2-a0-o1-w1",
+    "role": "job",
+    "turns": [
+      "I currently live in lavish waterfall. My current job is lavender compass.",
+      "What work do I currently do?"
+    ],
+    "value": "lavender compass",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is lavender compass.",
+    "cohort": "bridge",
+    "id": "bridge-p2-a0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is lavender compass.",
+      "I currently live in lavish waterfall. What is my current job?"
+    ],
+    "value": "lavender compass",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is lavender compass.",
+    "cohort": "bridge",
+    "id": "bridge-p2-a0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is lavender compass.",
+      "I currently live in lavish waterfall. What work do I currently do?"
+    ],
+    "value": "lavender compass",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " You live in lavish waterfall.",
+    "cohort": "bridge",
+    "id": "bridge-p2-a0-w2",
+    "role": "home",
+    "turns": [
+      "My current job is lavender compass.",
+      "I currently live in lavish waterfall. Where do I currently live?"
+    ],
+    "value": "lavish waterfall",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is lavish waterfall.",
+    "cohort": "primary",
+    "id": "primary-p2-a1-o0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is lavish waterfall. I currently live in lavender compass.",
+      "What is my current job?"
+    ],
+    "value": "lavish waterfall",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is lavish waterfall.",
+    "cohort": "primary",
+    "id": "primary-p2-a1-o0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is lavish waterfall. I currently live in lavender compass.",
+      "What work do I currently do?"
+    ],
+    "value": "lavish waterfall",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is lavish waterfall.",
+    "cohort": "primary",
+    "id": "primary-p2-a1-o1-w0",
+    "role": "job",
+    "turns": [
+      "I currently live in lavender compass. My current job is lavish waterfall.",
+      "What is my current job?"
+    ],
+    "value": "lavish waterfall",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is lavish waterfall.",
+    "cohort": "primary",
+    "id": "primary-p2-a1-o1-w1",
+    "role": "job",
+    "turns": [
+      "I currently live in lavender compass. My current job is lavish waterfall.",
+      "What work do I currently do?"
+    ],
+    "value": "lavish waterfall",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is lavish waterfall.",
+    "cohort": "bridge",
+    "id": "bridge-p2-a1-w0",
+    "role": "job",
+    "turns": [
+      "My current job is lavish waterfall.",
+      "I currently live in lavender compass. What is my current job?"
+    ],
+    "value": "lavish waterfall",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is lavish waterfall.",
+    "cohort": "bridge",
+    "id": "bridge-p2-a1-w1",
+    "role": "job",
+    "turns": [
+      "My current job is lavish waterfall.",
+      "I currently live in lavender compass. What work do I currently do?"
+    ],
+    "value": "lavish waterfall",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " You live in lavender compass.",
+    "cohort": "bridge",
+    "id": "bridge-p2-a1-w2",
+    "role": "home",
+    "turns": [
+      "My current job is lavish waterfall.",
+      "I currently live in lavender compass. Where do I currently live?"
+    ],
+    "value": "lavender compass",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is marigold turbine.",
+    "cohort": "primary",
+    "id": "primary-p3-a0-o0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is marigold turbine. I currently live in maritime alcove.",
+      "What is my current job?"
+    ],
+    "value": "marigold turbine",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is marigold turbine.",
+    "cohort": "primary",
+    "id": "primary-p3-a0-o0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is marigold turbine. I currently live in maritime alcove.",
+      "What work do I currently do?"
+    ],
+    "value": "marigold turbine",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is marigold turbine.",
+    "cohort": "primary",
+    "id": "primary-p3-a0-o1-w0",
+    "role": "job",
+    "turns": [
+      "I currently live in maritime alcove. My current job is marigold turbine.",
+      "What is my current job?"
+    ],
+    "value": "marigold turbine",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is marigold turbine.",
+    "cohort": "primary",
+    "id": "primary-p3-a0-o1-w1",
+    "role": "job",
+    "turns": [
+      "I currently live in maritime alcove. My current job is marigold turbine.",
+      "What work do I currently do?"
+    ],
+    "value": "marigold turbine",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is marigold turbine.",
+    "cohort": "bridge",
+    "id": "bridge-p3-a0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is marigold turbine.",
+      "I currently live in maritime alcove. What is my current job?"
+    ],
+    "value": "marigold turbine",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is marigold turbine.",
+    "cohort": "bridge",
+    "id": "bridge-p3-a0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is marigold turbine.",
+      "I currently live in maritime alcove. What work do I currently do?"
+    ],
+    "value": "marigold turbine",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " You live in maritime alcove.",
+    "cohort": "bridge",
+    "id": "bridge-p3-a0-w2",
+    "role": "home",
+    "turns": [
+      "My current job is marigold turbine.",
+      "I currently live in maritime alcove. Where do I currently live?"
+    ],
+    "value": "maritime alcove",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is maritime alcove.",
+    "cohort": "primary",
+    "id": "primary-p3-a1-o0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is maritime alcove. I currently live in marigold turbine.",
+      "What is my current job?"
+    ],
+    "value": "maritime alcove",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is maritime alcove.",
+    "cohort": "primary",
+    "id": "primary-p3-a1-o0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is maritime alcove. I currently live in marigold turbine.",
+      "What work do I currently do?"
+    ],
+    "value": "maritime alcove",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is maritime alcove.",
+    "cohort": "primary",
+    "id": "primary-p3-a1-o1-w0",
+    "role": "job",
+    "turns": [
+      "I currently live in marigold turbine. My current job is maritime alcove.",
+      "What is my current job?"
+    ],
+    "value": "maritime alcove",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is maritime alcove.",
+    "cohort": "primary",
+    "id": "primary-p3-a1-o1-w1",
+    "role": "job",
+    "turns": [
+      "I currently live in marigold turbine. My current job is maritime alcove.",
+      "What work do I currently do?"
+    ],
+    "value": "maritime alcove",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is maritime alcove.",
+    "cohort": "bridge",
+    "id": "bridge-p3-a1-w0",
+    "role": "job",
+    "turns": [
+      "My current job is maritime alcove.",
+      "I currently live in marigold turbine. What is my current job?"
+    ],
+    "value": "maritime alcove",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is maritime alcove.",
+    "cohort": "bridge",
+    "id": "bridge-p3-a1-w1",
+    "role": "job",
+    "turns": [
+      "My current job is maritime alcove.",
+      "I currently live in marigold turbine. What work do I currently do?"
+    ],
+    "value": "maritime alcove",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " You live in marigold turbine.",
+    "cohort": "bridge",
+    "id": "bridge-p3-a1-w2",
+    "role": "home",
+    "turns": [
+      "My current job is maritime alcove.",
+      "I currently live in marigold turbine. Where do I currently live?"
+    ],
+    "value": "marigold turbine",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is platinum kettle.",
+    "cohort": "primary",
+    "id": "primary-p4-a0-o0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is platinum kettle. I currently live in plausible monastery.",
+      "What is my current job?"
+    ],
+    "value": "platinum kettle",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is platinum kettle.",
+    "cohort": "primary",
+    "id": "primary-p4-a0-o0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is platinum kettle. I currently live in plausible monastery.",
+      "What work do I currently do?"
+    ],
+    "value": "platinum kettle",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is platinum kettle.",
+    "cohort": "primary",
+    "id": "primary-p4-a0-o1-w0",
+    "role": "job",
+    "turns": [
+      "I currently live in plausible monastery. My current job is platinum kettle.",
+      "What is my current job?"
+    ],
+    "value": "platinum kettle",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is platinum kettle.",
+    "cohort": "primary",
+    "id": "primary-p4-a0-o1-w1",
+    "role": "job",
+    "turns": [
+      "I currently live in plausible monastery. My current job is platinum kettle.",
+      "What work do I currently do?"
+    ],
+    "value": "platinum kettle",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is platinum kettle.",
+    "cohort": "bridge",
+    "id": "bridge-p4-a0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is platinum kettle.",
+      "I currently live in plausible monastery. What is my current job?"
+    ],
+    "value": "platinum kettle",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is platinum kettle.",
+    "cohort": "bridge",
+    "id": "bridge-p4-a0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is platinum kettle.",
+      "I currently live in plausible monastery. What work do I currently do?"
+    ],
+    "value": "platinum kettle",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " You live in plausible monastery.",
+    "cohort": "bridge",
+    "id": "bridge-p4-a0-w2",
+    "role": "home",
+    "turns": [
+      "My current job is platinum kettle.",
+      "I currently live in plausible monastery. Where do I currently live?"
+    ],
+    "value": "plausible monastery",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is plausible monastery.",
+    "cohort": "primary",
+    "id": "primary-p4-a1-o0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is plausible monastery. I currently live in platinum kettle.",
+      "What is my current job?"
+    ],
+    "value": "plausible monastery",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is plausible monastery.",
+    "cohort": "primary",
+    "id": "primary-p4-a1-o0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is plausible monastery. I currently live in platinum kettle.",
+      "What work do I currently do?"
+    ],
+    "value": "plausible monastery",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is plausible monastery.",
+    "cohort": "primary",
+    "id": "primary-p4-a1-o1-w0",
+    "role": "job",
+    "turns": [
+      "I currently live in platinum kettle. My current job is plausible monastery.",
+      "What is my current job?"
+    ],
+    "value": "plausible monastery",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is plausible monastery.",
+    "cohort": "primary",
+    "id": "primary-p4-a1-o1-w1",
+    "role": "job",
+    "turns": [
+      "I currently live in platinum kettle. My current job is plausible monastery.",
+      "What work do I currently do?"
+    ],
+    "value": "plausible monastery",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is plausible monastery.",
+    "cohort": "bridge",
+    "id": "bridge-p4-a1-w0",
+    "role": "job",
+    "turns": [
+      "My current job is plausible monastery.",
+      "I currently live in platinum kettle. What is my current job?"
+    ],
+    "value": "plausible monastery",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is plausible monastery.",
+    "cohort": "bridge",
+    "id": "bridge-p4-a1-w1",
+    "role": "job",
+    "turns": [
+      "My current job is plausible monastery.",
+      "I currently live in platinum kettle. What work do I currently do?"
+    ],
+    "value": "plausible monastery",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " You live in platinum kettle.",
+    "cohort": "bridge",
+    "id": "bridge-p4-a1-w2",
+    "role": "home",
+    "turns": [
+      "My current job is plausible monastery.",
+      "I currently live in platinum kettle. Where do I currently live?"
+    ],
+    "value": "platinum kettle",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is vermilion glacier.",
+    "cohort": "primary",
+    "id": "primary-p5-a0-o0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is vermilion glacier. I currently live in verdant telescope.",
+      "What is my current job?"
+    ],
+    "value": "vermilion glacier",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is vermilion glacier.",
+    "cohort": "primary",
+    "id": "primary-p5-a0-o0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is vermilion glacier. I currently live in verdant telescope.",
+      "What work do I currently do?"
+    ],
+    "value": "vermilion glacier",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is vermilion glacier.",
+    "cohort": "primary",
+    "id": "primary-p5-a0-o1-w0",
+    "role": "job",
+    "turns": [
+      "I currently live in verdant telescope. My current job is vermilion glacier.",
+      "What is my current job?"
+    ],
+    "value": "vermilion glacier",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is vermilion glacier.",
+    "cohort": "primary",
+    "id": "primary-p5-a0-o1-w1",
+    "role": "job",
+    "turns": [
+      "I currently live in verdant telescope. My current job is vermilion glacier.",
+      "What work do I currently do?"
+    ],
+    "value": "vermilion glacier",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is vermilion glacier.",
+    "cohort": "bridge",
+    "id": "bridge-p5-a0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is vermilion glacier.",
+      "I currently live in verdant telescope. What is my current job?"
+    ],
+    "value": "vermilion glacier",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is vermilion glacier.",
+    "cohort": "bridge",
+    "id": "bridge-p5-a0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is vermilion glacier.",
+      "I currently live in verdant telescope. What work do I currently do?"
+    ],
+    "value": "vermilion glacier",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " You live in verdant telescope.",
+    "cohort": "bridge",
+    "id": "bridge-p5-a0-w2",
+    "role": "home",
+    "turns": [
+      "My current job is vermilion glacier.",
+      "I currently live in verdant telescope. Where do I currently live?"
+    ],
+    "value": "verdant telescope",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is verdant telescope.",
+    "cohort": "primary",
+    "id": "primary-p5-a1-o0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is verdant telescope. I currently live in vermilion glacier.",
+      "What is my current job?"
+    ],
+    "value": "verdant telescope",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is verdant telescope.",
+    "cohort": "primary",
+    "id": "primary-p5-a1-o0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is verdant telescope. I currently live in vermilion glacier.",
+      "What work do I currently do?"
+    ],
+    "value": "verdant telescope",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is verdant telescope.",
+    "cohort": "primary",
+    "id": "primary-p5-a1-o1-w0",
+    "role": "job",
+    "turns": [
+      "I currently live in vermilion glacier. My current job is verdant telescope.",
+      "What is my current job?"
+    ],
+    "value": "verdant telescope",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is verdant telescope.",
+    "cohort": "primary",
+    "id": "primary-p5-a1-o1-w1",
+    "role": "job",
+    "turns": [
+      "I currently live in vermilion glacier. My current job is verdant telescope.",
+      "What work do I currently do?"
+    ],
+    "value": "verdant telescope",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is verdant telescope.",
+    "cohort": "bridge",
+    "id": "bridge-p5-a1-w0",
+    "role": "job",
+    "turns": [
+      "My current job is verdant telescope.",
+      "I currently live in vermilion glacier. What is my current job?"
+    ],
+    "value": "verdant telescope",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is verdant telescope.",
+    "cohort": "bridge",
+    "id": "bridge-p5-a1-w1",
+    "role": "job",
+    "turns": [
+      "My current job is verdant telescope.",
+      "I currently live in vermilion glacier. What work do I currently do?"
+    ],
+    "value": "verdant telescope",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " You live in vermilion glacier.",
+    "cohort": "bridge",
+    "id": "bridge-p5-a1-w2",
+    "role": "home",
+    "turns": [
+      "My current job is verdant telescope.",
+      "I currently live in vermilion glacier. Where do I currently live?"
+    ],
+    "value": "vermilion glacier",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is tangerine mosaic.",
+    "cohort": "primary",
+    "id": "primary-p6-a0-o0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is tangerine mosaic. I currently live in tangible lighthouse.",
+      "What is my current job?"
+    ],
+    "value": "tangerine mosaic",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is tangerine mosaic.",
+    "cohort": "primary",
+    "id": "primary-p6-a0-o0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is tangerine mosaic. I currently live in tangible lighthouse.",
+      "What work do I currently do?"
+    ],
+    "value": "tangerine mosaic",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is tangerine mosaic.",
+    "cohort": "primary",
+    "id": "primary-p6-a0-o1-w0",
+    "role": "job",
+    "turns": [
+      "I currently live in tangible lighthouse. My current job is tangerine mosaic.",
+      "What is my current job?"
+    ],
+    "value": "tangerine mosaic",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is tangerine mosaic.",
+    "cohort": "primary",
+    "id": "primary-p6-a0-o1-w1",
+    "role": "job",
+    "turns": [
+      "I currently live in tangible lighthouse. My current job is tangerine mosaic.",
+      "What work do I currently do?"
+    ],
+    "value": "tangerine mosaic",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is tangerine mosaic.",
+    "cohort": "bridge",
+    "id": "bridge-p6-a0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is tangerine mosaic.",
+      "I currently live in tangible lighthouse. What is my current job?"
+    ],
+    "value": "tangerine mosaic",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is tangerine mosaic.",
+    "cohort": "bridge",
+    "id": "bridge-p6-a0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is tangerine mosaic.",
+      "I currently live in tangible lighthouse. What work do I currently do?"
+    ],
+    "value": "tangerine mosaic",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " You live in tangible lighthouse.",
+    "cohort": "bridge",
+    "id": "bridge-p6-a0-w2",
+    "role": "home",
+    "turns": [
+      "My current job is tangerine mosaic.",
+      "I currently live in tangible lighthouse. Where do I currently live?"
+    ],
+    "value": "tangible lighthouse",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is tangible lighthouse.",
+    "cohort": "primary",
+    "id": "primary-p6-a1-o0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is tangible lighthouse. I currently live in tangerine mosaic.",
+      "What is my current job?"
+    ],
+    "value": "tangible lighthouse",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is tangible lighthouse.",
+    "cohort": "primary",
+    "id": "primary-p6-a1-o0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is tangible lighthouse. I currently live in tangerine mosaic.",
+      "What work do I currently do?"
+    ],
+    "value": "tangible lighthouse",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is tangible lighthouse.",
+    "cohort": "primary",
+    "id": "primary-p6-a1-o1-w0",
+    "role": "job",
+    "turns": [
+      "I currently live in tangerine mosaic. My current job is tangible lighthouse.",
+      "What is my current job?"
+    ],
+    "value": "tangible lighthouse",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is tangible lighthouse.",
+    "cohort": "primary",
+    "id": "primary-p6-a1-o1-w1",
+    "role": "job",
+    "turns": [
+      "I currently live in tangerine mosaic. My current job is tangible lighthouse.",
+      "What work do I currently do?"
+    ],
+    "value": "tangible lighthouse",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is tangible lighthouse.",
+    "cohort": "bridge",
+    "id": "bridge-p6-a1-w0",
+    "role": "job",
+    "turns": [
+      "My current job is tangible lighthouse.",
+      "I currently live in tangerine mosaic. What is my current job?"
+    ],
+    "value": "tangible lighthouse",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is tangible lighthouse.",
+    "cohort": "bridge",
+    "id": "bridge-p6-a1-w1",
+    "role": "job",
+    "turns": [
+      "My current job is tangible lighthouse.",
+      "I currently live in tangerine mosaic. What work do I currently do?"
+    ],
+    "value": "tangible lighthouse",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " You live in tangerine mosaic.",
+    "cohort": "bridge",
+    "id": "bridge-p6-a1-w2",
+    "role": "home",
+    "turns": [
+      "My current job is tangible lighthouse.",
+      "I currently live in tangerine mosaic. Where do I currently live?"
+    ],
+    "value": "tangerine mosaic",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is obsidian zeppelin.",
+    "cohort": "primary",
+    "id": "primary-p7-a0-o0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is obsidian zeppelin. I currently live in obscure juniper.",
+      "What is my current job?"
+    ],
+    "value": "obsidian zeppelin",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is obsidian zeppelin.",
+    "cohort": "primary",
+    "id": "primary-p7-a0-o0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is obsidian zeppelin. I currently live in obscure juniper.",
+      "What work do I currently do?"
+    ],
+    "value": "obsidian zeppelin",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is obsidian zeppelin.",
+    "cohort": "primary",
+    "id": "primary-p7-a0-o1-w0",
+    "role": "job",
+    "turns": [
+      "I currently live in obscure juniper. My current job is obsidian zeppelin.",
+      "What is my current job?"
+    ],
+    "value": "obsidian zeppelin",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is obsidian zeppelin.",
+    "cohort": "primary",
+    "id": "primary-p7-a0-o1-w1",
+    "role": "job",
+    "turns": [
+      "I currently live in obscure juniper. My current job is obsidian zeppelin.",
+      "What work do I currently do?"
+    ],
+    "value": "obsidian zeppelin",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is obsidian zeppelin.",
+    "cohort": "bridge",
+    "id": "bridge-p7-a0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is obsidian zeppelin.",
+      "I currently live in obscure juniper. What is my current job?"
+    ],
+    "value": "obsidian zeppelin",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is obsidian zeppelin.",
+    "cohort": "bridge",
+    "id": "bridge-p7-a0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is obsidian zeppelin.",
+      "I currently live in obscure juniper. What work do I currently do?"
+    ],
+    "value": "obsidian zeppelin",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " You live in obscure juniper.",
+    "cohort": "bridge",
+    "id": "bridge-p7-a0-w2",
+    "role": "home",
+    "turns": [
+      "My current job is obsidian zeppelin.",
+      "I currently live in obscure juniper. Where do I currently live?"
+    ],
+    "value": "obscure juniper",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is obscure juniper.",
+    "cohort": "primary",
+    "id": "primary-p7-a1-o0-w0",
+    "role": "job",
+    "turns": [
+      "My current job is obscure juniper. I currently live in obsidian zeppelin.",
+      "What is my current job?"
+    ],
+    "value": "obscure juniper",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is obscure juniper.",
+    "cohort": "primary",
+    "id": "primary-p7-a1-o0-w1",
+    "role": "job",
+    "turns": [
+      "My current job is obscure juniper. I currently live in obsidian zeppelin.",
+      "What work do I currently do?"
+    ],
+    "value": "obscure juniper",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is obscure juniper.",
+    "cohort": "primary",
+    "id": "primary-p7-a1-o1-w0",
+    "role": "job",
+    "turns": [
+      "I currently live in obsidian zeppelin. My current job is obscure juniper.",
+      "What is my current job?"
+    ],
+    "value": "obscure juniper",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is obscure juniper.",
+    "cohort": "primary",
+    "id": "primary-p7-a1-o1-w1",
+    "role": "job",
+    "turns": [
+      "I currently live in obsidian zeppelin. My current job is obscure juniper.",
+      "What work do I currently do?"
+    ],
+    "value": "obscure juniper",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " Your job is obscure juniper.",
+    "cohort": "bridge",
+    "id": "bridge-p7-a1-w0",
+    "role": "job",
+    "turns": [
+      "My current job is obscure juniper.",
+      "I currently live in obsidian zeppelin. What is my current job?"
+    ],
+    "value": "obscure juniper",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is obscure juniper.",
+    "cohort": "bridge",
+    "id": "bridge-p7-a1-w1",
+    "role": "job",
+    "turns": [
+      "My current job is obscure juniper.",
+      "I currently live in obsidian zeppelin. What work do I currently do?"
+    ],
+    "value": "obscure juniper",
+    "wording": "paraphrased"
+  },
+  {
+    "answer": " You live in obsidian zeppelin.",
+    "cohort": "bridge",
+    "id": "bridge-p7-a1-w2",
+    "role": "home",
+    "turns": [
+      "My current job is obscure juniper.",
+      "I currently live in obsidian zeppelin. Where do I currently live?"
+    ],
+    "value": "obsidian zeppelin",
+    "wording": "familiar"
+  }
+]

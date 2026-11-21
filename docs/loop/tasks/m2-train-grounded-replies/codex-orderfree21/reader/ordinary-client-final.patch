@@ -1,0 +1,247 @@
+diff --git a/crates/uor-r4-integer/src/bin/uor-chat.rs b/crates/uor-r4-integer/src/bin/uor-chat.rs
+index 925723f..ff16245 100644
+--- a/crates/uor-r4-integer/src/bin/uor-chat.rs
++++ b/crates/uor-r4-integer/src/bin/uor-chat.rs
+@@ -365,7 +365,7 @@ impl Default for CliArgs {
+ fn print_usage() {
+     eprintln!("Usage: uor-chat --bundle <PATH> [OPTIONS]");
+     eprintln!("       uor-chat --stack <ARTIFACT.lut> --tokenizer <TOKENIZER.json> [OPTIONS]");
+-    eprintln!("       uor-chat --discrete <ARTIFACT.lut> (--prompt-ids <CSV> | --tokenizer <JSON> --say <TEXT>) [OPTIONS]");
++    eprintln!("       uor-chat --discrete <ARTIFACT.lut> (--prompt-ids <CSV> | --tokenizer <JSON> (--say <TEXT> | --script <PATH>)) [OPTIONS]");
+     eprintln!();
+     eprintln!("Options:");
+     eprintln!(
+@@ -968,9 +968,9 @@ fn parse_cli_args() -> CliArgs {
+     }
+     if args.tokenizer_path.is_some()
+         && args.stack_path.is_none()
+-        && !(args.discrete_path.is_some() && args.say.is_some())
++        && !(args.discrete_path.is_some() && (args.say.is_some() || args.script_path.is_some()))
+     {
+-        eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} '--tokenizer' requires '--stack' or a discrete '--say' turn");
++        eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} '--tokenizer' requires '--stack' or a discrete text turn");
+         process::exit(1);
+     }
+     if args.content_readout_path.is_some() && args.stack_path.is_none() {
+@@ -1089,9 +1089,9 @@ fn parse_cli_args() -> CliArgs {
+     }
+     if args.discrete_path.is_some()
+         && args.prompt_ids.is_none()
+-        && (args.say.is_none() || args.tokenizer_path.is_none())
++        && ((args.say.is_none() && args.script_path.is_none()) || args.tokenizer_path.is_none())
+     {
+-        eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} '--discrete' requires '--prompt-ids' or '--say' with its bound '--tokenizer'");
++        eprintln!("{ANSI_RED_BOLD}error:{ANSI_RESET} '--discrete' requires '--prompt-ids' or a text turn with its bound '--tokenizer'");
+         process::exit(1);
+     }
+     #[cfg(feature = "p1-count-serving")]
+@@ -2116,6 +2116,114 @@ mod tests {
+     }
+ }
+ 
++#[cfg(feature = "reader-serving")]
++fn run_discrete_question_script(
++    cli: &CliArgs,
++    model: &uor_r4_integer::discrete_d11::IntegerDiscreteModel,
++    path: &Path,
++) -> Result<()> {
++    let reader_sha = model
++        .question_reader_sha256()
++        .ok_or_else(|| IntegerError::Invalid("discrete scripts require a question reader".into()))?;
++    if cli.read_mode != ReadMode::Enabled || cli.memory.is_some() || cli.memory_sieve {
++        return Err(IntegerError::Invalid(
++            "question-reader scripts require the carried reader and use literal dialogue history".into(),
++        ));
++    }
++    let tokenizer_path = cli
++        .tokenizer_path
++        .as_deref()
++        .ok_or_else(|| IntegerError::Invalid("missing discrete tokenizer".into()))?;
++    let bytes = std::fs::read(tokenizer_path)?;
++    let digest = hex::encode(Sha256::digest(&bytes));
++    let tokenizer = discrete_text_tokenizer(model, &bytes, &digest)?;
++    let protocol = DialogueProtocol::literal_roles_version(&tokenizer, cli.protocol)
++        .map_err(|error| IntegerError::Invalid(error.to_string()))?;
++    let encoder = protocol
++        .bind(&tokenizer)
++        .map_err(|error| IntegerError::Invalid(error.to_string()))?;
++    let script = parse_chat_script(&std::fs::read(path)?, path).map_err(IntegerError::Invalid)?;
++    if script
++        .turns
++        .iter()
++        .any(|turn| turn.memory.is_some() || turn.memory_auto.is_some())
++    {
++        return Err(IntegerError::Invalid(
++            "question-reader scripts use literal dialogue history".into(),
++        ));
++    }
++    let mut history = vec![protocol.bos_id];
++    let mut transcript = Vec::with_capacity(script.turns.len());
++    let mut completed_turns = 0;
++    for turn in &script.turns {
++        let has_history = completed_turns > 0;
++        history.extend(encoder.encode_user_prefix(&turn.user, has_history).tokens);
++        if history.len() > model.shape().context as usize {
++            return Err(IntegerError::Invalid("discrete script exceeds model context".into()));
++        }
++        let reply = model.question_reply(&history, cli.max_tokens)?;
++        let visible = reply.strip_suffix(&[protocol.eos_id]);
++        let stop = reader_stop(visible.is_some(), reply.len(), cli.max_tokens);
++        transcript.push(serde_json::json!({
++            "user": turn.user,
++            "prompt_ids": history,
++            "reply_ids": reply,
++            "reply_text": tokenizer.decode(visible.unwrap_or(&reply)),
++            "stop": stop,
++        }));
++        if visible.is_none() {
++            break;
++        }
++        history.extend(reply);
++        completed_turns += 1;
++    }
++    println!(
++        "{}",
++        serde_json::to_string_pretty(&serde_json::json!({
++            "schema": "uor-r4.uor-chat-discrete-script/1",
++            "artifact_sha256": model.artifact_sha256(),
++            "question_reader_sha256": reader_sha,
++            "tokenizer_sha256": digest,
++            "protocol": protocol.schema,
++            "requested_turns": script.turns.len(),
++            "completed_turns": completed_turns,
++            "turns": transcript,
++        }))?
++    );
++    Ok(())
++}
++
++#[cfg(feature = "reader-serving")]
++fn reader_stop(eos: bool, emitted: usize, limit: usize) -> &'static str {
++    if eos {
++        "eos"
++    } else if emitted == limit {
++        "max_tokens"
++    } else {
++        "reader_exhausted"
++    }
++}
++
++fn discrete_text_tokenizer(
++    model: &uor_r4_integer::discrete_d11::IntegerDiscreteModel,
++    bytes: &[u8],
++    digest: &str,
++) -> Result<ByteBpeTokenizer> {
++    if model.tokenizer_sha256() != Some(digest) {
++        return Err(IntegerError::Invalid(
++            "discrete artifact does not bind this tokenizer SHA-256".into(),
++        ));
++    }
++    let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(bytes)
++        .ok_or_else(|| IntegerError::Invalid("invalid discrete tokenizer JSON".into()))?;
++    if tokenizer.vocab_size() != model.shape().vocabulary as usize {
++        return Err(IntegerError::Invalid(
++            "discrete tokenizer vocabulary mismatch".into(),
++        ));
++    }
++    Ok(tokenizer)
++}
++
+ fn run_discrete_parity(cli: &CliArgs) -> Result<()> {
+     let artifact = cli
+         .discrete_path
+@@ -2157,23 +2265,18 @@ fn run_discrete_parity(cli: &CliArgs) -> Result<()> {
+     }
+     #[cfg(feature = "p1-count-serving")]
+     let profile_start = profile_start.filter(|_| p1.is_some());
++    if let Some(path) = cli.script_path.as_deref() {
++        #[cfg(feature = "reader-serving")]
++        return run_discrete_question_script(cli, &model, path);
++        #[cfg(not(feature = "reader-serving"))]
++        return Err(IntegerError::Invalid(format!("{} requires reader-serving", path.display())));
++    }
+     let mut text_mode = None;
+     let encoded;
+     let prompt = if let (Some(text), Some(path)) = (&cli.say, &cli.tokenizer_path) {
+         let bytes = std::fs::read(path)?;
+         let digest = hex::encode(Sha256::digest(&bytes));
+-        if model.tokenizer_sha256() != Some(digest.as_str()) {
+-            return Err(IntegerError::Invalid(
+-                "discrete artifact does not bind this tokenizer SHA-256".into(),
+-            ));
+-        }
+-        let tokenizer = ByteBpeTokenizer::from_tokenizer_json_bytes(&bytes)
+-            .ok_or_else(|| IntegerError::Invalid("invalid discrete tokenizer JSON".into()))?;
+-        if tokenizer.vocab_size() != model.shape().vocabulary as usize {
+-            return Err(IntegerError::Invalid(
+-                "discrete tokenizer vocabulary mismatch".into(),
+-            ));
+-        }
++        let tokenizer = discrete_text_tokenizer(&model, &bytes, &digest)?;
+         let protocol = DialogueProtocol::literal_roles_version(&tokenizer, cli.protocol)
+             .map_err(|e| IntegerError::Invalid(e.to_string()))?;
+         encoded = protocol
+@@ -2223,6 +2326,8 @@ fn run_discrete_parity(cli: &CliArgs) -> Result<()> {
+         }
+     }
+     let read_enabled = cli.read_mode == ReadMode::Enabled;
++    #[cfg(feature = "reader-serving")]
++    let carried_question_reply = read_enabled && model.question_reader().is_some();
+     if read_enabled && model.pair_rank_bindings().is_some()
+         && !matches!(cli.role_replay, Some(RoleReplay::Detached))
+     {
+@@ -2254,7 +2359,14 @@ fn run_discrete_parity(cli: &CliArgs) -> Result<()> {
+     let mut copy_steps = Vec::new();
+     let mut context = prompt.to_vec();
+     let decode_tokens = cli.pair_replay.project.map_or(cli.max_tokens, |_| 0);
++    #[cfg(not(feature = "reader-serving"))]
+     let mut generated_ids = Vec::with_capacity(decode_tokens);
++    #[cfg(feature = "reader-serving")]
++    let (decode_tokens, mut generated_ids) = if carried_question_reply {
++        (0, model.question_reply(prompt, decode_tokens)?)
++    } else {
++        (decode_tokens, Vec::with_capacity(decode_tokens))
++    };
+     let mut count_masses = Vec::new();
+     #[cfg(feature = "p1-count-serving")]
+     let mut p1_steps = Vec::new();
+@@ -2444,6 +2556,14 @@ fn run_discrete_parity(cli: &CliArgs) -> Result<()> {
+         }
+         record["generated_mass_q32"] = serde_json::to_value(count_masses)?;
+     }
++    #[cfg(feature = "reader-serving")]
++    if let Some(digest) = model.question_reader_sha256() {
++        record["question_reader_sha256"] = digest.into();
++        record["read_enabled"] = carried_question_reply.into();
++        if carried_question_reply {
++            record["decoding"] = "greedy carried question reader".into();
++        }
++    }
+     if let Some((tokenizer, protocol, digest)) = text_mode {
+         let visible = generated_ids.strip_suffix(&[protocol.eos_id]);
+         record["schema"] = "uor-r4.uor-chat-discrete-text/1".into();
+@@ -2453,6 +2573,10 @@ fn run_discrete_parity(cli: &CliArgs) -> Result<()> {
+             "max_tokens"
+         }
+         .into();
++        #[cfg(feature = "reader-serving")]
++        if carried_question_reply {
++            record["stop"] = reader_stop(visible.is_some(), generated_ids.len(), cli.max_tokens).into();
++        }
+         record["text"] = tokenizer.decode(visible.unwrap_or(&generated_ids)).into();
+         record["tokenizer_sha256"] = digest.into();
+         record["protocol"] = protocol.schema.into();
+diff --git a/crates/uor-r4-integer/src/discrete_d11/question_reader.rs b/crates/uor-r4-integer/src/discrete_d11/question_reader.rs
+index 2ea5c9e..241b90d 100644
+--- a/crates/uor-r4-integer/src/discrete_d11/question_reader.rs
++++ b/crates/uor-r4-integer/src/discrete_d11/question_reader.rs
+@@ -80,6 +80,9 @@ pub(super) fn read(
+             "question reader and parent are over different vocabularies",
+         ));
+     }
++    // Resolve the legacy M1 tokenizer pin against the parent while its own
++    // artifact digest is still available.
++    model.tokenizer_sha256 = model.tokenizer_sha256().map(str::to_owned);
+     model.question_reader = Some(Carried {
+         reader: Arc::new(reader),
+         sha256: envelope.reader_sha256,

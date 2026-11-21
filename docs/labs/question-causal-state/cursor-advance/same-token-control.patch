@@ -1,0 +1,26 @@
+--- a/crates/uor-r4-discrete/src/conjunction.rs
++++ b/crates/uor-r4-discrete/src/conjunction.rs
+@@ -1761,2 +1761,23 @@
+     #[test]
++    fn equal_token_ids_preserve_distinct_occurrences() {
++        let prompt = [10, 41, 12, 41, 14];
++        let mut current = CursorIntervention::new(None);
++        let mut original = CursorIntervention::new(Some(0));
++        let mut current_read = named(2);
++        let mut original_read = current_read;
++        current.apply(&mut current_read, Some(2), &prompt, 3);
++        original.apply(&mut original_read, Some(2), &prompt, 3);
++
++        assert!(current.applied && original.applied);
++        assert_eq!(current_read.token, 41);
++        assert_eq!(original_read.token, current_read.token);
++        assert_eq!(current_read.source, Some(3));
++        assert_eq!(original_read.source, Some(1));
++        assert_eq!(current.to, current_read.source);
++        assert_eq!(original.to, original_read.source);
++        assert_eq!(prompt[current_read.source.unwrap() + 1], 14);
++        assert_eq!(prompt[original_read.source.unwrap() + 1], 12);
++    }
++
++    #[test]
+     fn causal_read_controls() {

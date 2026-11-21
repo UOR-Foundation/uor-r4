@@ -1,0 +1,47 @@
+# Order-free D11, ordinary conversation and unseen wording
+
+The nearest-state selector recovered zero new exact replies on the 128 unseen prompts. Six replies that the lexical selector completed regressed. Both of the new arm's exact replies came from abstaining and running the suffix fallback. On the 32 controls with familiar question wording the ordinary lexical reader completed every reply. Replacing its form choice with the state lookup reduced that to nine.
+
+| Selector and shared writer | Familiar exact / 32 | Unseen exact / 128 | Unseen first wrong at 0 | At 1 | At 2 or later | Unseen ended in EOS |
+|---|---:|---:|---:|---:|---:|---:|
+| Lexical order-free | 32 | 8 | 48 | 16 | 56 | 50 |
+| Trunk pre-gate Relation vector | 9 | 2 | 61 | 54 | 11 | 46 |
+| Opposite-role donor state | 2 | 2 | 67 | 47 | 12 | 46 |
+| Transport knockout | 2 | 8 | 64 | 0 | 56 | 16 |
+| Suffix fallback | 2 | 8 | 64 | 0 | 56 | 16 |
+
+The comparison holds the job and home facts, values, question, history and writer fixed within each arm. Across lexical versus real state, the first wrong original ID moved later in 31 cases (25 from index 0 to 1, four from 0 to 8, two from 0 to 9). It moved earlier in 60 cases. On 29 it stayed at the same index, on six an exact reply broke and on two both were exact. All offsets are zero-based. The complete required opening survived on 64 lexical and 13 real-state rows. Among the openings that survived, the first value token matched in all cases. An EOS by itself did not earn exact credit.
+
+| Unseen wording, 32 rows each | Lexical exact | Real state exact |
+|---|---:|---:|
+| Alternative question | 2 | 1 |
+| Declarative request | 4 | 1 |
+| Exclusion first | 2 | 0 |
+| Exclusion last | 0 | 0 |
+
+In w0032 (“Which position do I work in?”) the lexical reader began with housing token 617 in place of job opener 2997. State fixed that token, then copied prompt position 61 and emitted 315 in place of job token 1541 at index 1. In adjacent w0033 (“Which place do I call home?”) the lexical reader emitted the right answer through the period and missed EOS at index 9, emitting 201 in place of 1. State moved the first error to index 0, emitting job opener 2997 in place of housing opener 617. In w0053, state broke a previously exact housing reply at that same first token.
+
+The 128 unseen prompts produced 45 distinct live vectors and one knockout vector. Donating the paired opposite-role state left the vector identical on 62 of the 128 rows, held the form decision identical on 72 and held the complete reply identical on 78. Twenty-one of the 45 live vectors occurred with both required roles. Even a role classifier choosing the more frequent gold role for each exact vector would miss 39 of 128 on this panel. The writer can also read prompt tokens, so this descriptive bound applies only to inferring the role from the vector alone. All knockout rows abstained. The full-state arm abstained on 15. It selected forms on the remaining 113 and none reached exact EOS. Nearest selection minimizes integer L1 distance to a frozen 107-prototype index, trained on 4,096 response onsets using existing lexical form labels. The conclusions apply to this observer, selector and panel.
+
+## Ordinary serving on Wick
+
+The 120,755,422-byte package binds the original reader and trunk. Reloading it reproduced 6,664 original output IDs including EOS and the development step-word digest for 512 rows. Four structural prompts were replayed through the ordinary binary raw-ID entry and matched through EOS. That panel supplies historical empty assistant turns. True user-text entry differed at input position 4 (2485 vs 2496) and included actual assistant output. In both full three-turn text scripts the second reply reached the cap before the query turn. A shorter job session reached the query. Its shared writer selected source position 11 twice at offsets 3 and 4, duplicating ID 261 instead of advancing to position 12 for ID 92. After the period it selected position 24, the start of a prior assistant answer. The direct home case had no held form at the expected EOS and the suffix fallback emitted role-marker token 201. [Client checks and original source traces](reader/INDEX.md)
+
+A four-way replay isolated two effects on that previously observed job conversation. It preserved the same user text, source fact and question. The client and fixture framings differ in exactly two user-turn-leading IDs (2496 versus 2485 and 1601 versus 1085). The history intervention substituted the actual first assistant reply, including its EOS, or a single EOS for the empty turn. The client/generated arm reproduced the genuine client answer. The other three are controlled raw-ID replays through the ordinary binary.
+
+| Job question replay | First wrong original ID | End |
+|---|---|---|
+| Fixture framing, empty prior assistant | Exact through EOS | EOS |
+| Client framing, empty prior assistant | Offset 4, expected 92, emitted 261 | EOS |
+| Fixture framing, generated prior assistant | Offset 10, expected EOS 1, emitted 617 | Reader exhausted |
+| Client framing, generated prior assistant | Offset 4, expected 92, emitted 261 | Reader exhausted after 617 |
+
+On this one conversation, changing the two framing IDs was sufficient to induce the duplicated value token in either history. In either framing, inserting the prior generated reply changed the final emitted token from EOS to 617. These interventions used existing tokens and made no model updates. [Four replay grades and original IDs](reader/job-factorial/grades.json)
+
+## Measurement and decision
+
+The panel crosses two roles, two fact orders, two object assignments and four literal pairs. Eight complete tokenized question strings had zero occurrences in the original reader TRAIN stream. Wording families and literals recur across panel rows. The panel uses structural empty prior assistant turns. These rates characterize those paired rows. The ordinary-client transcripts independently measure what happens during free-running turns. D37's separate seven-arm comparison selected A1s at 1.581444 bits per byte across 10,807,417 DEV-tune targets. A1 scored 1.581484 and the disabled read scored 1.681112. The sealed DEV-test was outside that selection. [Seven-arm result and original record reconstruction](https://github.com/UOR-Foundation/uor-r4/blob/7e884048873d79f76b60b49e14f7272ab0c8f2da/docs/loop/tasks/written-state-count-model/codex-37/tune/RESULT.md)
+
+The GPU finite checked 16 full and 16 knockout 32-word vectors against the native CPU reference, plus exact-match donor switching and conflicting-tie abstention. GPU fit and prediction used the same pre-joint-pointer Relation operator. The original integer writer ran on the host for all arms. Two graders agreed for every original token, first error and absent output over 800 trajectories. The raw prediction file on Wick is `/mnt/plexpool/uor-r4-corpus/runs/20261121-orderfree-trunk/codex-state/pod-receipts/predict-run-1/predictions.json`. The stored answer trajectories, IDs and trace addresses at each first error suffice to reproduce the table. [Per-prompt original-ID results](state/graded-v1.json) · [Group counts](state/group-counts.json) · [Panel inputs and references](panel/SHA256SUMS) · [Prediction identity](state/adjudication.sha256)
+
+Keep the lexical selector as the control. Extend the single-case framing/history result to fresh matched job/home examples. Supply the correct frozen form as a diagnostic ceiling on those prompts and measure how often the fixed writer completes with genuine history. At copy transitions record whether the same source occurrence is rebound and whether the first read after the period chooses EOS or the previous assistant. A successful oracle would isolate where role selection can help. A failing oracle identifies a writer or turn-boundary defect even after role selection is correct. This is an experimental next step and changes no milestone.

@@ -1,0 +1,210 @@
+[
+  {
+    "answer": " Your job is indigo harbor.",
+    "cohort": "historical-dual-enriched",
+    "id": "supp-p0-w0",
+    "prior_id": "dual-p1-a1-o1-job-familiar",
+    "role": "job",
+    "turns": [
+      "I currently live in amber compass. My current job is indigo harbor.",
+      "Just checking. What is my current job?"
+    ],
+    "value": "indigo harbor",
+    "wording": "familiar-a"
+  },
+  {
+    "answer": " Your job is indigo harbor.",
+    "cohort": "historical-dual-enriched",
+    "id": "supp-p0-w1",
+    "prior_id": "dual-p1-a1-o1-job-familiar",
+    "role": "job",
+    "turns": [
+      "I currently live in amber compass. My current job is indigo harbor.",
+      "For clarity. What is my current job?"
+    ],
+    "value": "indigo harbor",
+    "wording": "familiar-b"
+  },
+  {
+    "answer": " Your job is indigo harbor.",
+    "cohort": "historical-dual-enriched",
+    "id": "supp-p0-w2",
+    "prior_id": "dual-p1-a1-o1-job-familiar",
+    "role": "job",
+    "turns": [
+      "I currently live in amber compass. My current job is indigo harbor.",
+      "A quick reminder: Which job do I have now?"
+    ],
+    "value": "indigo harbor",
+    "wording": "new"
+  },
+  {
+    "answer": " You live in amber compass.",
+    "cohort": "historical-dual-enriched",
+    "id": "supp-p0-w3",
+    "prior_id": "dual-p1-a1-o1-job-familiar",
+    "role": "home",
+    "turns": [
+      "I currently live in amber compass. My current job is indigo harbor.",
+      "One more thing. Where do I currently live?"
+    ],
+    "value": "amber compass",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is ivory mountain.",
+    "cohort": "historical-dual-enriched",
+    "id": "supp-p1-w0",
+    "prior_id": "dual-p3-a0-o1-job-familiar",
+    "role": "job",
+    "turns": [
+      "I currently live in emerald river. My current job is ivory mountain.",
+      "Just checking. What is my current job?"
+    ],
+    "value": "ivory mountain",
+    "wording": "familiar-a"
+  },
+  {
+    "answer": " Your job is ivory mountain.",
+    "cohort": "historical-dual-enriched",
+    "id": "supp-p1-w1",
+    "prior_id": "dual-p3-a0-o1-job-familiar",
+    "role": "job",
+    "turns": [
+      "I currently live in emerald river. My current job is ivory mountain.",
+      "For clarity. What is my current job?"
+    ],
+    "value": "ivory mountain",
+    "wording": "familiar-b"
+  },
+  {
+    "answer": " Your job is ivory mountain.",
+    "cohort": "historical-dual-enriched",
+    "id": "supp-p1-w2",
+    "prior_id": "dual-p3-a0-o1-job-familiar",
+    "role": "job",
+    "turns": [
+      "I currently live in emerald river. My current job is ivory mountain.",
+      "A quick reminder: Which job do I have now?"
+    ],
+    "value": "ivory mountain",
+    "wording": "new"
+  },
+  {
+    "answer": " You live in emerald river.",
+    "cohort": "historical-dual-enriched",
+    "id": "supp-p1-w3",
+    "prior_id": "dual-p3-a0-o1-job-familiar",
+    "role": "home",
+    "turns": [
+      "I currently live in emerald river. My current job is ivory mountain.",
+      "One more thing. Where do I currently live?"
+    ],
+    "value": "emerald river",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is scarlet garden.",
+    "cohort": "historical-dual-enriched",
+    "id": "supp-p2-w0",
+    "prior_id": "dual-p2-a0-o1-job-familiar",
+    "role": "job",
+    "turns": [
+      "I currently live in golden valley. My current job is scarlet garden.",
+      "Just checking. What is my current job?"
+    ],
+    "value": "scarlet garden",
+    "wording": "familiar-a"
+  },
+  {
+    "answer": " Your job is scarlet garden.",
+    "cohort": "historical-dual-enriched",
+    "id": "supp-p2-w1",
+    "prior_id": "dual-p2-a0-o1-job-familiar",
+    "role": "job",
+    "turns": [
+      "I currently live in golden valley. My current job is scarlet garden.",
+      "For clarity. What is my current job?"
+    ],
+    "value": "scarlet garden",
+    "wording": "familiar-b"
+  },
+  {
+    "answer": " Your job is scarlet garden.",
+    "cohort": "historical-dual-enriched",
+    "id": "supp-p2-w2",
+    "prior_id": "dual-p2-a0-o1-job-familiar",
+    "role": "job",
+    "turns": [
+      "I currently live in golden valley. My current job is scarlet garden.",
+      "A quick reminder: Which job do I have now?"
+    ],
+    "value": "scarlet garden",
+    "wording": "new"
+  },
+  {
+    "answer": " You live in golden valley.",
+    "cohort": "historical-dual-enriched",
+    "id": "supp-p2-w3",
+    "prior_id": "dual-p2-a0-o1-job-familiar",
+    "role": "home",
+    "turns": [
+      "I currently live in golden valley. My current job is scarlet garden.",
+      "One more thing. Where do I currently live?"
+    ],
+    "value": "golden valley",
+    "wording": "familiar"
+  },
+  {
+    "answer": " Your job is emerald river.",
+    "cohort": "historical-dual-enriched",
+    "id": "supp-p3-w0",
+    "prior_id": "dual-p3-a1-o1-job-familiar",
+    "role": "job",
+    "turns": [
+      "I currently live in ivory mountain. My current job is emerald river.",
+      "Just checking. What is my current job?"
+    ],
+    "value": "emerald river",
+    "wording": "familiar-a"
+  },
+  {
+    "answer": " Your job is emerald river.",
+    "cohort": "historical-dual-enriched",
+    "id": "supp-p3-w1",
+    "prior_id": "dual-p3-a1-o1-job-familiar",
+    "role": "job",
+    "turns": [
+      "I currently live in ivory mountain. My current job is emerald river.",
+      "For clarity. What is my current job?"
+    ],
+    "value": "emerald river",
+    "wording": "familiar-b"
+  },
+  {
+    "answer": " Your job is emerald river.",
+    "cohort": "historical-dual-enriched",
+    "id": "supp-p3-w2",
+    "prior_id": "dual-p3-a1-o1-job-familiar",
+    "role": "job",
+    "turns": [
+      "I currently live in ivory mountain. My current job is emerald river.",
+      "A quick reminder: Which job do I have now?"
+    ],
+    "value": "emerald river",
+    "wording": "new"
+  },
+  {
+    "answer": " You live in ivory mountain.",
+    "cohort": "historical-dual-enriched",
+    "id": "supp-p3-w3",
+    "prior_id": "dual-p3-a1-o1-job-familiar",
+    "role": "home",
+    "turns": [
+      "I currently live in ivory mountain. My current job is emerald river.",
+      "One more thing. Where do I currently live?"
+    ],
+    "value": "ivory mountain",
+    "wording": "familiar"
+  }
+]

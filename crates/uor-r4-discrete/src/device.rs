@@ -820,6 +820,7 @@ struct Kernels {
     encode: CudaFunction,
     export_token_cells: CudaFunction,
     forward: CudaFunction,
+    question_state_matches: Option<CudaFunction>,
     counterfactual: CudaFunction,
     choose: CudaFunction,
     apply: CudaFunction,
@@ -1040,6 +1041,7 @@ impl Device {
                 .load_function("discrete_export_token_cells")
                 .map_err(cuda)?,
             forward: module.load_function("discrete_forward").map_err(cuda)?,
+            question_state_matches: Some(module.load_function("discrete_question_state_matches").map_err(cuda)?),
             counterfactual: module
                 .load_function("discrete_counterfactual")
                 .map_err(cuda)?,
@@ -1607,6 +1609,44 @@ impl Device {
             rows,
             stream: Arc::clone(&self.stream),
         })
+    }
+
+    /// Bounded device nearest-neighbor selection over native read-vector words.
+    pub fn question_state_matches(
+        &self,
+        queries: &[i32],
+        keys: &[i32],
+        labels: &[u32],
+    ) -> Result<Vec<(Option<u64>, usize)>> {
+        let width = self.spec().blocks as usize * 8;
+        let rows = queries.len() / width;
+        let count = keys.len() / width;
+        if !(1..=4096).contains(&rows)
+            || !(1..=4096).contains(&count)
+            || queries.len() != rows * width
+            || keys.len() != count * width
+            || labels.len() != count
+        {
+            return Err(invalid("invalid bounded native nearest geometry"));
+        }
+        let q = self.stream.clone_htod(queries).map_err(cuda)?;
+        let k = self.stream.clone_htod(keys).map_err(cuda)?;
+        let l = self.stream.clone_htod(labels).map_err(cuda)?;
+        let mut distances = self.stream.alloc_zeros::<u64>(rows).map_err(cuda)?;
+        let mut selected = self.stream.alloc_zeros::<u32>(rows).map_err(cuda)?;
+        let (rows, count, width) = (rows as u32, count as u32, width as u32);
+        let kernel = self.kernels.question_state_matches.as_ref()
+            .ok_or_else(|| invalid("question-state selection requires ordinary CUDA image"))?;
+        let mut launch = self.stream.launch_builder(kernel);
+        launch.arg(&q).arg(&k).arg(&l).arg(&rows).arg(&count)
+            .arg(&width).arg(&mut distances).arg(&mut selected);
+        // SAFETY: all rows, keys, labels and output shapes match the kernel bounds.
+        unsafe { launch.launch(launch_config(rows)) }.map_err(cuda)?;
+        let distances = self.stream.clone_dtoh(&distances).map_err(cuda)?;
+        let selected = self.stream.clone_dtoh(&selected).map_err(cuda)?;
+        Ok(distances.into_iter().zip(selected).map(|(distance, selected)| {
+            (Some(distance), selected as usize)
+        }).collect())
     }
 
     pub fn forward(&self, batch: &CarriedBatch, targets: &[u32]) -> Result<Forward> {

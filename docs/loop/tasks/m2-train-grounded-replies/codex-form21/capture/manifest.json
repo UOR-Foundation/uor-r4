@@ -1,0 +1,1154 @@
+[
+  {
+    "id": "dual-p0-a0-o0-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "copper lantern",
+    "turns": [
+      "My current job is copper lantern. I currently live in silver meadow.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is copper lantern."
+  },
+  {
+    "id": "dual-p0-a0-o0-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "copper lantern",
+    "turns": [
+      "My current job is copper lantern. I currently live in silver meadow.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is copper lantern."
+  },
+  {
+    "id": "dual-p0-a0-o0-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "silver meadow",
+    "turns": [
+      "My current job is copper lantern. I currently live in silver meadow.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in silver meadow."
+  },
+  {
+    "id": "dual-p0-a0-o0-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "silver meadow",
+    "turns": [
+      "My current job is copper lantern. I currently live in silver meadow.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in silver meadow."
+  },
+  {
+    "id": "dual-p0-a0-o1-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "copper lantern",
+    "turns": [
+      "I currently live in silver meadow. My current job is copper lantern.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is copper lantern."
+  },
+  {
+    "id": "dual-p0-a0-o1-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "copper lantern",
+    "turns": [
+      "I currently live in silver meadow. My current job is copper lantern.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is copper lantern."
+  },
+  {
+    "id": "dual-p0-a0-o1-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "silver meadow",
+    "turns": [
+      "I currently live in silver meadow. My current job is copper lantern.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in silver meadow."
+  },
+  {
+    "id": "dual-p0-a0-o1-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "silver meadow",
+    "turns": [
+      "I currently live in silver meadow. My current job is copper lantern.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in silver meadow."
+  },
+  {
+    "id": "dual-p0-a1-o0-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "silver meadow",
+    "turns": [
+      "My current job is silver meadow. I currently live in copper lantern.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is silver meadow."
+  },
+  {
+    "id": "dual-p0-a1-o0-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "silver meadow",
+    "turns": [
+      "My current job is silver meadow. I currently live in copper lantern.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is silver meadow."
+  },
+  {
+    "id": "dual-p0-a1-o0-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "copper lantern",
+    "turns": [
+      "My current job is silver meadow. I currently live in copper lantern.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in copper lantern."
+  },
+  {
+    "id": "dual-p0-a1-o0-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "copper lantern",
+    "turns": [
+      "My current job is silver meadow. I currently live in copper lantern.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in copper lantern."
+  },
+  {
+    "id": "dual-p0-a1-o1-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "silver meadow",
+    "turns": [
+      "I currently live in copper lantern. My current job is silver meadow.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is silver meadow."
+  },
+  {
+    "id": "dual-p0-a1-o1-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "silver meadow",
+    "turns": [
+      "I currently live in copper lantern. My current job is silver meadow.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is silver meadow."
+  },
+  {
+    "id": "dual-p0-a1-o1-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "copper lantern",
+    "turns": [
+      "I currently live in copper lantern. My current job is silver meadow.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in copper lantern."
+  },
+  {
+    "id": "dual-p0-a1-o1-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "copper lantern",
+    "turns": [
+      "I currently live in copper lantern. My current job is silver meadow.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in copper lantern."
+  },
+  {
+    "id": "dual-p1-a0-o0-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "amber compass",
+    "turns": [
+      "My current job is amber compass. I currently live in indigo harbor.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is amber compass."
+  },
+  {
+    "id": "dual-p1-a0-o0-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "amber compass",
+    "turns": [
+      "My current job is amber compass. I currently live in indigo harbor.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is amber compass."
+  },
+  {
+    "id": "dual-p1-a0-o0-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "indigo harbor",
+    "turns": [
+      "My current job is amber compass. I currently live in indigo harbor.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in indigo harbor."
+  },
+  {
+    "id": "dual-p1-a0-o0-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "indigo harbor",
+    "turns": [
+      "My current job is amber compass. I currently live in indigo harbor.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in indigo harbor."
+  },
+  {
+    "id": "dual-p1-a0-o1-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "amber compass",
+    "turns": [
+      "I currently live in indigo harbor. My current job is amber compass.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is amber compass."
+  },
+  {
+    "id": "dual-p1-a0-o1-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "amber compass",
+    "turns": [
+      "I currently live in indigo harbor. My current job is amber compass.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is amber compass."
+  },
+  {
+    "id": "dual-p1-a0-o1-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "indigo harbor",
+    "turns": [
+      "I currently live in indigo harbor. My current job is amber compass.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in indigo harbor."
+  },
+  {
+    "id": "dual-p1-a0-o1-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "indigo harbor",
+    "turns": [
+      "I currently live in indigo harbor. My current job is amber compass.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in indigo harbor."
+  },
+  {
+    "id": "dual-p1-a1-o0-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "indigo harbor",
+    "turns": [
+      "My current job is indigo harbor. I currently live in amber compass.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is indigo harbor."
+  },
+  {
+    "id": "dual-p1-a1-o0-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "indigo harbor",
+    "turns": [
+      "My current job is indigo harbor. I currently live in amber compass.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is indigo harbor."
+  },
+  {
+    "id": "dual-p1-a1-o0-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "amber compass",
+    "turns": [
+      "My current job is indigo harbor. I currently live in amber compass.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in amber compass."
+  },
+  {
+    "id": "dual-p1-a1-o0-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "amber compass",
+    "turns": [
+      "My current job is indigo harbor. I currently live in amber compass.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in amber compass."
+  },
+  {
+    "id": "dual-p1-a1-o1-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "indigo harbor",
+    "turns": [
+      "I currently live in amber compass. My current job is indigo harbor.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is indigo harbor."
+  },
+  {
+    "id": "dual-p1-a1-o1-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "indigo harbor",
+    "turns": [
+      "I currently live in amber compass. My current job is indigo harbor.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is indigo harbor."
+  },
+  {
+    "id": "dual-p1-a1-o1-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "amber compass",
+    "turns": [
+      "I currently live in amber compass. My current job is indigo harbor.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in amber compass."
+  },
+  {
+    "id": "dual-p1-a1-o1-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "amber compass",
+    "turns": [
+      "I currently live in amber compass. My current job is indigo harbor.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in amber compass."
+  },
+  {
+    "id": "dual-p2-a0-o0-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "scarlet garden",
+    "turns": [
+      "My current job is scarlet garden. I currently live in golden valley.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is scarlet garden."
+  },
+  {
+    "id": "dual-p2-a0-o0-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "scarlet garden",
+    "turns": [
+      "My current job is scarlet garden. I currently live in golden valley.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is scarlet garden."
+  },
+  {
+    "id": "dual-p2-a0-o0-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "golden valley",
+    "turns": [
+      "My current job is scarlet garden. I currently live in golden valley.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in golden valley."
+  },
+  {
+    "id": "dual-p2-a0-o0-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "golden valley",
+    "turns": [
+      "My current job is scarlet garden. I currently live in golden valley.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in golden valley."
+  },
+  {
+    "id": "dual-p2-a0-o1-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "scarlet garden",
+    "turns": [
+      "I currently live in golden valley. My current job is scarlet garden.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is scarlet garden."
+  },
+  {
+    "id": "dual-p2-a0-o1-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "scarlet garden",
+    "turns": [
+      "I currently live in golden valley. My current job is scarlet garden.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is scarlet garden."
+  },
+  {
+    "id": "dual-p2-a0-o1-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "golden valley",
+    "turns": [
+      "I currently live in golden valley. My current job is scarlet garden.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in golden valley."
+  },
+  {
+    "id": "dual-p2-a0-o1-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "golden valley",
+    "turns": [
+      "I currently live in golden valley. My current job is scarlet garden.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in golden valley."
+  },
+  {
+    "id": "dual-p2-a1-o0-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "golden valley",
+    "turns": [
+      "My current job is golden valley. I currently live in scarlet garden.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is golden valley."
+  },
+  {
+    "id": "dual-p2-a1-o0-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "golden valley",
+    "turns": [
+      "My current job is golden valley. I currently live in scarlet garden.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is golden valley."
+  },
+  {
+    "id": "dual-p2-a1-o0-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "scarlet garden",
+    "turns": [
+      "My current job is golden valley. I currently live in scarlet garden.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in scarlet garden."
+  },
+  {
+    "id": "dual-p2-a1-o0-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "scarlet garden",
+    "turns": [
+      "My current job is golden valley. I currently live in scarlet garden.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in scarlet garden."
+  },
+  {
+    "id": "dual-p2-a1-o1-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "golden valley",
+    "turns": [
+      "I currently live in scarlet garden. My current job is golden valley.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is golden valley."
+  },
+  {
+    "id": "dual-p2-a1-o1-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "golden valley",
+    "turns": [
+      "I currently live in scarlet garden. My current job is golden valley.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is golden valley."
+  },
+  {
+    "id": "dual-p2-a1-o1-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "scarlet garden",
+    "turns": [
+      "I currently live in scarlet garden. My current job is golden valley.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in scarlet garden."
+  },
+  {
+    "id": "dual-p2-a1-o1-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "scarlet garden",
+    "turns": [
+      "I currently live in scarlet garden. My current job is golden valley.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in scarlet garden."
+  },
+  {
+    "id": "dual-p3-a0-o0-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "ivory mountain",
+    "turns": [
+      "My current job is ivory mountain. I currently live in emerald river.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is ivory mountain."
+  },
+  {
+    "id": "dual-p3-a0-o0-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "ivory mountain",
+    "turns": [
+      "My current job is ivory mountain. I currently live in emerald river.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is ivory mountain."
+  },
+  {
+    "id": "dual-p3-a0-o0-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "emerald river",
+    "turns": [
+      "My current job is ivory mountain. I currently live in emerald river.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in emerald river."
+  },
+  {
+    "id": "dual-p3-a0-o0-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "emerald river",
+    "turns": [
+      "My current job is ivory mountain. I currently live in emerald river.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in emerald river."
+  },
+  {
+    "id": "dual-p3-a0-o1-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "ivory mountain",
+    "turns": [
+      "I currently live in emerald river. My current job is ivory mountain.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is ivory mountain."
+  },
+  {
+    "id": "dual-p3-a0-o1-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "ivory mountain",
+    "turns": [
+      "I currently live in emerald river. My current job is ivory mountain.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is ivory mountain."
+  },
+  {
+    "id": "dual-p3-a0-o1-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "emerald river",
+    "turns": [
+      "I currently live in emerald river. My current job is ivory mountain.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in emerald river."
+  },
+  {
+    "id": "dual-p3-a0-o1-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "emerald river",
+    "turns": [
+      "I currently live in emerald river. My current job is ivory mountain.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in emerald river."
+  },
+  {
+    "id": "dual-p3-a1-o0-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "emerald river",
+    "turns": [
+      "My current job is emerald river. I currently live in ivory mountain.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is emerald river."
+  },
+  {
+    "id": "dual-p3-a1-o0-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "emerald river",
+    "turns": [
+      "My current job is emerald river. I currently live in ivory mountain.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is emerald river."
+  },
+  {
+    "id": "dual-p3-a1-o0-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "ivory mountain",
+    "turns": [
+      "My current job is emerald river. I currently live in ivory mountain.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in ivory mountain."
+  },
+  {
+    "id": "dual-p3-a1-o0-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "ivory mountain",
+    "turns": [
+      "My current job is emerald river. I currently live in ivory mountain.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in ivory mountain."
+  },
+  {
+    "id": "dual-p3-a1-o1-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "emerald river",
+    "turns": [
+      "I currently live in ivory mountain. My current job is emerald river.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is emerald river."
+  },
+  {
+    "id": "dual-p3-a1-o1-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "emerald river",
+    "turns": [
+      "I currently live in ivory mountain. My current job is emerald river.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is emerald river."
+  },
+  {
+    "id": "dual-p3-a1-o1-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "value": "ivory mountain",
+    "turns": [
+      "I currently live in ivory mountain. My current job is emerald river.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in ivory mountain."
+  },
+  {
+    "id": "dual-p3-a1-o1-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "value": "ivory mountain",
+    "turns": [
+      "I currently live in ivory mountain. My current job is emerald river.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in ivory mountain."
+  },
+  {
+    "id": "single-p0-v0-job-familiar",
+    "role": "job",
+    "cohort": "single",
+    "wording": "familiar",
+    "value": "copper lantern",
+    "turns": [
+      "My current job is copper lantern.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is copper lantern."
+  },
+  {
+    "id": "single-p0-v0-job-paraphrased",
+    "role": "job",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "value": "copper lantern",
+    "turns": [
+      "My current job is copper lantern.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is copper lantern."
+  },
+  {
+    "id": "single-p0-v0-home-familiar",
+    "role": "home",
+    "cohort": "single",
+    "wording": "familiar",
+    "value": "copper lantern",
+    "turns": [
+      "I currently live in copper lantern.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in copper lantern."
+  },
+  {
+    "id": "single-p0-v0-home-paraphrased",
+    "role": "home",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "value": "copper lantern",
+    "turns": [
+      "I currently live in copper lantern.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in copper lantern."
+  },
+  {
+    "id": "single-p0-v1-job-familiar",
+    "role": "job",
+    "cohort": "single",
+    "wording": "familiar",
+    "value": "silver meadow",
+    "turns": [
+      "My current job is silver meadow.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is silver meadow."
+  },
+  {
+    "id": "single-p0-v1-job-paraphrased",
+    "role": "job",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "value": "silver meadow",
+    "turns": [
+      "My current job is silver meadow.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is silver meadow."
+  },
+  {
+    "id": "single-p0-v1-home-familiar",
+    "role": "home",
+    "cohort": "single",
+    "wording": "familiar",
+    "value": "silver meadow",
+    "turns": [
+      "I currently live in silver meadow.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in silver meadow."
+  },
+  {
+    "id": "single-p0-v1-home-paraphrased",
+    "role": "home",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "value": "silver meadow",
+    "turns": [
+      "I currently live in silver meadow.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in silver meadow."
+  },
+  {
+    "id": "single-p1-v0-job-familiar",
+    "role": "job",
+    "cohort": "single",
+    "wording": "familiar",
+    "value": "amber compass",
+    "turns": [
+      "My current job is amber compass.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is amber compass."
+  },
+  {
+    "id": "single-p1-v0-job-paraphrased",
+    "role": "job",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "value": "amber compass",
+    "turns": [
+      "My current job is amber compass.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is amber compass."
+  },
+  {
+    "id": "single-p1-v0-home-familiar",
+    "role": "home",
+    "cohort": "single",
+    "wording": "familiar",
+    "value": "amber compass",
+    "turns": [
+      "I currently live in amber compass.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in amber compass."
+  },
+  {
+    "id": "single-p1-v0-home-paraphrased",
+    "role": "home",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "value": "amber compass",
+    "turns": [
+      "I currently live in amber compass.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in amber compass."
+  },
+  {
+    "id": "single-p1-v1-job-familiar",
+    "role": "job",
+    "cohort": "single",
+    "wording": "familiar",
+    "value": "indigo harbor",
+    "turns": [
+      "My current job is indigo harbor.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is indigo harbor."
+  },
+  {
+    "id": "single-p1-v1-job-paraphrased",
+    "role": "job",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "value": "indigo harbor",
+    "turns": [
+      "My current job is indigo harbor.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is indigo harbor."
+  },
+  {
+    "id": "single-p1-v1-home-familiar",
+    "role": "home",
+    "cohort": "single",
+    "wording": "familiar",
+    "value": "indigo harbor",
+    "turns": [
+      "I currently live in indigo harbor.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in indigo harbor."
+  },
+  {
+    "id": "single-p1-v1-home-paraphrased",
+    "role": "home",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "value": "indigo harbor",
+    "turns": [
+      "I currently live in indigo harbor.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in indigo harbor."
+  },
+  {
+    "id": "single-p2-v0-job-familiar",
+    "role": "job",
+    "cohort": "single",
+    "wording": "familiar",
+    "value": "scarlet garden",
+    "turns": [
+      "My current job is scarlet garden.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is scarlet garden."
+  },
+  {
+    "id": "single-p2-v0-job-paraphrased",
+    "role": "job",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "value": "scarlet garden",
+    "turns": [
+      "My current job is scarlet garden.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is scarlet garden."
+  },
+  {
+    "id": "single-p2-v0-home-familiar",
+    "role": "home",
+    "cohort": "single",
+    "wording": "familiar",
+    "value": "scarlet garden",
+    "turns": [
+      "I currently live in scarlet garden.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in scarlet garden."
+  },
+  {
+    "id": "single-p2-v0-home-paraphrased",
+    "role": "home",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "value": "scarlet garden",
+    "turns": [
+      "I currently live in scarlet garden.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in scarlet garden."
+  },
+  {
+    "id": "single-p2-v1-job-familiar",
+    "role": "job",
+    "cohort": "single",
+    "wording": "familiar",
+    "value": "golden valley",
+    "turns": [
+      "My current job is golden valley.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is golden valley."
+  },
+  {
+    "id": "single-p2-v1-job-paraphrased",
+    "role": "job",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "value": "golden valley",
+    "turns": [
+      "My current job is golden valley.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is golden valley."
+  },
+  {
+    "id": "single-p2-v1-home-familiar",
+    "role": "home",
+    "cohort": "single",
+    "wording": "familiar",
+    "value": "golden valley",
+    "turns": [
+      "I currently live in golden valley.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in golden valley."
+  },
+  {
+    "id": "single-p2-v1-home-paraphrased",
+    "role": "home",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "value": "golden valley",
+    "turns": [
+      "I currently live in golden valley.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in golden valley."
+  },
+  {
+    "id": "single-p3-v0-job-familiar",
+    "role": "job",
+    "cohort": "single",
+    "wording": "familiar",
+    "value": "ivory mountain",
+    "turns": [
+      "My current job is ivory mountain.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is ivory mountain."
+  },
+  {
+    "id": "single-p3-v0-job-paraphrased",
+    "role": "job",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "value": "ivory mountain",
+    "turns": [
+      "My current job is ivory mountain.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is ivory mountain."
+  },
+  {
+    "id": "single-p3-v0-home-familiar",
+    "role": "home",
+    "cohort": "single",
+    "wording": "familiar",
+    "value": "ivory mountain",
+    "turns": [
+      "I currently live in ivory mountain.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in ivory mountain."
+  },
+  {
+    "id": "single-p3-v0-home-paraphrased",
+    "role": "home",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "value": "ivory mountain",
+    "turns": [
+      "I currently live in ivory mountain.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in ivory mountain."
+  },
+  {
+    "id": "single-p3-v1-job-familiar",
+    "role": "job",
+    "cohort": "single",
+    "wording": "familiar",
+    "value": "emerald river",
+    "turns": [
+      "My current job is emerald river.",
+      "What is my current job?"
+    ],
+    "answer": " Your job is emerald river."
+  },
+  {
+    "id": "single-p3-v1-job-paraphrased",
+    "role": "job",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "value": "emerald river",
+    "turns": [
+      "My current job is emerald river.",
+      "What work do I currently do?"
+    ],
+    "answer": " Your job is emerald river."
+  },
+  {
+    "id": "single-p3-v1-home-familiar",
+    "role": "home",
+    "cohort": "single",
+    "wording": "familiar",
+    "value": "emerald river",
+    "turns": [
+      "I currently live in emerald river.",
+      "Where do I currently live?"
+    ],
+    "answer": " You live in emerald river."
+  },
+  {
+    "id": "single-p3-v1-home-paraphrased",
+    "role": "home",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "value": "emerald river",
+    "turns": [
+      "I currently live in emerald river.",
+      "What is my present home location?"
+    ],
+    "answer": " You live in emerald river."
+  }
+]

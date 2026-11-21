@@ -1,0 +1,10 @@
+c8a2ed5020aece406786f53c5121db08a7cf83b4b57573d3da3b93ebfeb3910a  crates/uor-r4-discrete/build.rs
+efdfd7f1ec978bf8908b4844915dfa30ac5c9daa1193df97a78ae3e868874c02  crates/uor-r4-discrete/src/bvgk_device.rs
+d0bfd18f2ca06cb24a5f105b258a3d3a4d1d978077eedeb2036a11b9bf965b84  crates/uor-r4-discrete/src/conjunction.rs
+498294d2401974b5a801f9485aeef5f9c4e9dfca1df38dd4132b323c697d2217  crates/uor-r4-discrete/src/device.rs
+3853acb77af71dd63e42d103f7b2e4f7fd66e6abf7abaa25b4dfa0e152211912  crates/uor-r4-discrete/src/discrete.cu
+d87d36ce29509b71372619fc88d01d2337646162f07600c71a8d9b3f2428f99f  crates/uor-r4-integer/src/discrete_d11.rs
+285c30d706fdd20608f49782c9b9372ec4d90dfa1755f47655f7b8ecbab3d625  local/codex/state-cli/Cargo.lock
+95c5b465cf7b50e0fd2a7a77835e526262a637a854dd787ac4949b6083ffe548  local/codex/state-cli/Cargo.toml
+28845c868590325008f1fb8c099ec266b7ed2081433e539a6eb543e2210a04cb  local/codex/state-cli/device.rs
+38117e6cba8b3486fb77f33f08b19805abdabba61d2020f30a77fb22a4e8ae7c  local/codex/state-cli/main.rs

@@ -567,6 +567,33 @@ extern "C" __global__ void discrete_export_token_cells(const int* table,const U*
 }
 // trace: mode-specific rows*blocks*(header+stages*level) words for Route and
 // active-leaf reads, plus rows*blocks*max_nodes Relation-score words.
+// One bounded nearest-state query per lane. Conflicting minimum labels abstain.
+extern "C" __global__ void discrete_question_state_matches(
+    const int* queries, const int* keys, const U* labels, U rows, U count, U width,
+    W* distances, U* selected
+) {
+    U row = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row >= rows) return;
+    W best = ~(W)0;
+    U best_index = ABSENT;
+    U best_label = ABSENT;
+    for (U key = 0; key < count; ++key) {
+        W cost = 0;
+        for (U d = 0; d < width; ++d) {
+            long long delta = (long long)queries[row * width + d] - keys[key * width + d];
+            cost += (W)(delta < 0 ? -delta : delta);
+        }
+        if (cost < best) {
+            best = cost;
+            best_index = key;
+            best_label = labels[key];
+        } else if (cost == best && labels[key] != best_label) {
+            best_index = ABSENT;
+        }
+    }
+    distances[row] = best;
+    selected[row] = best_index;
+}
 extern "C" __global__ void discrete_forward(const int* table,const U* routes,const int* gates,const U* ids,const int* input,const U* targets,const U* plan,const U* g,const U* s,const U* position_steps,int* out,U* predictions,W* losses,U* token_rivals,U* address_rivals,U* admitted,U* trace,U* status) {
     U row=blockIdx.x*blockDim.x+threadIdx.x;if(row>=s[4])return;
     int q[MAX_WIDTH];if(!read_vector(input,ids,routes,gates,plan,g,s,position_steps,row,2,0,0,q,trace)){atomicExch(status,2u);return;}

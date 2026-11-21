@@ -1,0 +1,674 @@
+[
+  {
+    "id": "dual-p0-a0-o0-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p0-a0-o0-job-familiar.json"
+  },
+  {
+    "id": "dual-p0-a0-o0-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p0-a0-o0-job-paraphrased.json"
+  },
+  {
+    "id": "dual-p0-a0-o0-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p0-a0-o0-home-familiar.json"
+  },
+  {
+    "id": "dual-p0-a0-o0-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p0-a0-o0-home-paraphrased.json"
+  },
+  {
+    "id": "dual-p0-a0-o1-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p0-a0-o1-job-familiar.json"
+  },
+  {
+    "id": "dual-p0-a0-o1-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p0-a0-o1-job-paraphrased.json"
+  },
+  {
+    "id": "dual-p0-a0-o1-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p0-a0-o1-home-familiar.json"
+  },
+  {
+    "id": "dual-p0-a0-o1-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p0-a0-o1-home-paraphrased.json"
+  },
+  {
+    "id": "dual-p0-a1-o0-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p0-a1-o0-job-familiar.json"
+  },
+  {
+    "id": "dual-p0-a1-o0-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p0-a1-o0-job-paraphrased.json"
+  },
+  {
+    "id": "dual-p0-a1-o0-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p0-a1-o0-home-familiar.json"
+  },
+  {
+    "id": "dual-p0-a1-o0-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p0-a1-o0-home-paraphrased.json"
+  },
+  {
+    "id": "dual-p0-a1-o1-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p0-a1-o1-job-familiar.json"
+  },
+  {
+    "id": "dual-p0-a1-o1-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p0-a1-o1-job-paraphrased.json"
+  },
+  {
+    "id": "dual-p0-a1-o1-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p0-a1-o1-home-familiar.json"
+  },
+  {
+    "id": "dual-p0-a1-o1-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p0-a1-o1-home-paraphrased.json"
+  },
+  {
+    "id": "dual-p1-a0-o0-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p1-a0-o0-job-familiar.json"
+  },
+  {
+    "id": "dual-p1-a0-o0-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p1-a0-o0-job-paraphrased.json"
+  },
+  {
+    "id": "dual-p1-a0-o0-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p1-a0-o0-home-familiar.json"
+  },
+  {
+    "id": "dual-p1-a0-o0-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p1-a0-o0-home-paraphrased.json"
+  },
+  {
+    "id": "dual-p1-a0-o1-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p1-a0-o1-job-familiar.json"
+  },
+  {
+    "id": "dual-p1-a0-o1-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p1-a0-o1-job-paraphrased.json"
+  },
+  {
+    "id": "dual-p1-a0-o1-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p1-a0-o1-home-familiar.json"
+  },
+  {
+    "id": "dual-p1-a0-o1-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p1-a0-o1-home-paraphrased.json"
+  },
+  {
+    "id": "dual-p1-a1-o0-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p1-a1-o0-job-familiar.json"
+  },
+  {
+    "id": "dual-p1-a1-o0-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p1-a1-o0-job-paraphrased.json"
+  },
+  {
+    "id": "dual-p1-a1-o0-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p1-a1-o0-home-familiar.json"
+  },
+  {
+    "id": "dual-p1-a1-o0-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p1-a1-o0-home-paraphrased.json"
+  },
+  {
+    "id": "dual-p1-a1-o1-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p1-a1-o1-job-familiar.json"
+  },
+  {
+    "id": "dual-p1-a1-o1-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p1-a1-o1-job-paraphrased.json"
+  },
+  {
+    "id": "dual-p1-a1-o1-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p1-a1-o1-home-familiar.json"
+  },
+  {
+    "id": "dual-p1-a1-o1-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p1-a1-o1-home-paraphrased.json"
+  },
+  {
+    "id": "dual-p2-a0-o0-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p2-a0-o0-job-familiar.json"
+  },
+  {
+    "id": "dual-p2-a0-o0-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p2-a0-o0-job-paraphrased.json"
+  },
+  {
+    "id": "dual-p2-a0-o0-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p2-a0-o0-home-familiar.json"
+  },
+  {
+    "id": "dual-p2-a0-o0-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p2-a0-o0-home-paraphrased.json"
+  },
+  {
+    "id": "dual-p2-a0-o1-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p2-a0-o1-job-familiar.json"
+  },
+  {
+    "id": "dual-p2-a0-o1-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p2-a0-o1-job-paraphrased.json"
+  },
+  {
+    "id": "dual-p2-a0-o1-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p2-a0-o1-home-familiar.json"
+  },
+  {
+    "id": "dual-p2-a0-o1-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p2-a0-o1-home-paraphrased.json"
+  },
+  {
+    "id": "dual-p2-a1-o0-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p2-a1-o0-job-familiar.json"
+  },
+  {
+    "id": "dual-p2-a1-o0-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p2-a1-o0-job-paraphrased.json"
+  },
+  {
+    "id": "dual-p2-a1-o0-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p2-a1-o0-home-familiar.json"
+  },
+  {
+    "id": "dual-p2-a1-o0-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p2-a1-o0-home-paraphrased.json"
+  },
+  {
+    "id": "dual-p2-a1-o1-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p2-a1-o1-job-familiar.json"
+  },
+  {
+    "id": "dual-p2-a1-o1-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p2-a1-o1-job-paraphrased.json"
+  },
+  {
+    "id": "dual-p2-a1-o1-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p2-a1-o1-home-familiar.json"
+  },
+  {
+    "id": "dual-p2-a1-o1-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p2-a1-o1-home-paraphrased.json"
+  },
+  {
+    "id": "dual-p3-a0-o0-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p3-a0-o0-job-familiar.json"
+  },
+  {
+    "id": "dual-p3-a0-o0-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p3-a0-o0-job-paraphrased.json"
+  },
+  {
+    "id": "dual-p3-a0-o0-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p3-a0-o0-home-familiar.json"
+  },
+  {
+    "id": "dual-p3-a0-o0-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p3-a0-o0-home-paraphrased.json"
+  },
+  {
+    "id": "dual-p3-a0-o1-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p3-a0-o1-job-familiar.json"
+  },
+  {
+    "id": "dual-p3-a0-o1-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p3-a0-o1-job-paraphrased.json"
+  },
+  {
+    "id": "dual-p3-a0-o1-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p3-a0-o1-home-familiar.json"
+  },
+  {
+    "id": "dual-p3-a0-o1-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p3-a0-o1-home-paraphrased.json"
+  },
+  {
+    "id": "dual-p3-a1-o0-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p3-a1-o0-job-familiar.json"
+  },
+  {
+    "id": "dual-p3-a1-o0-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p3-a1-o0-job-paraphrased.json"
+  },
+  {
+    "id": "dual-p3-a1-o0-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p3-a1-o0-home-familiar.json"
+  },
+  {
+    "id": "dual-p3-a1-o0-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p3-a1-o0-home-paraphrased.json"
+  },
+  {
+    "id": "dual-p3-a1-o1-job-familiar",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p3-a1-o1-job-familiar.json"
+  },
+  {
+    "id": "dual-p3-a1-o1-job-paraphrased",
+    "role": "job",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p3-a1-o1-job-paraphrased.json"
+  },
+  {
+    "id": "dual-p3-a1-o1-home-familiar",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "familiar",
+    "transcript": "transcripts/dual-p3-a1-o1-home-familiar.json"
+  },
+  {
+    "id": "dual-p3-a1-o1-home-paraphrased",
+    "role": "home",
+    "cohort": "dual",
+    "wording": "paraphrased",
+    "transcript": "transcripts/dual-p3-a1-o1-home-paraphrased.json"
+  },
+  {
+    "id": "single-p0-v0-job-familiar",
+    "role": "job",
+    "cohort": "single",
+    "wording": "familiar",
+    "transcript": "transcripts/single-p0-v0-job-familiar.json"
+  },
+  {
+    "id": "single-p0-v0-job-paraphrased",
+    "role": "job",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "transcript": "transcripts/single-p0-v0-job-paraphrased.json"
+  },
+  {
+    "id": "single-p0-v0-home-familiar",
+    "role": "home",
+    "cohort": "single",
+    "wording": "familiar",
+    "transcript": "transcripts/single-p0-v0-home-familiar.json"
+  },
+  {
+    "id": "single-p0-v0-home-paraphrased",
+    "role": "home",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "transcript": "transcripts/single-p0-v0-home-paraphrased.json"
+  },
+  {
+    "id": "single-p0-v1-job-familiar",
+    "role": "job",
+    "cohort": "single",
+    "wording": "familiar",
+    "transcript": "transcripts/single-p0-v1-job-familiar.json"
+  },
+  {
+    "id": "single-p0-v1-job-paraphrased",
+    "role": "job",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "transcript": "transcripts/single-p0-v1-job-paraphrased.json"
+  },
+  {
+    "id": "single-p0-v1-home-familiar",
+    "role": "home",
+    "cohort": "single",
+    "wording": "familiar",
+    "transcript": "transcripts/single-p0-v1-home-familiar.json"
+  },
+  {
+    "id": "single-p0-v1-home-paraphrased",
+    "role": "home",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "transcript": "transcripts/single-p0-v1-home-paraphrased.json"
+  },
+  {
+    "id": "single-p1-v0-job-familiar",
+    "role": "job",
+    "cohort": "single",
+    "wording": "familiar",
+    "transcript": "transcripts/single-p1-v0-job-familiar.json"
+  },
+  {
+    "id": "single-p1-v0-job-paraphrased",
+    "role": "job",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "transcript": "transcripts/single-p1-v0-job-paraphrased.json"
+  },
+  {
+    "id": "single-p1-v0-home-familiar",
+    "role": "home",
+    "cohort": "single",
+    "wording": "familiar",
+    "transcript": "transcripts/single-p1-v0-home-familiar.json"
+  },
+  {
+    "id": "single-p1-v0-home-paraphrased",
+    "role": "home",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "transcript": "transcripts/single-p1-v0-home-paraphrased.json"
+  },
+  {
+    "id": "single-p1-v1-job-familiar",
+    "role": "job",
+    "cohort": "single",
+    "wording": "familiar",
+    "transcript": "transcripts/single-p1-v1-job-familiar.json"
+  },
+  {
+    "id": "single-p1-v1-job-paraphrased",
+    "role": "job",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "transcript": "transcripts/single-p1-v1-job-paraphrased.json"
+  },
+  {
+    "id": "single-p1-v1-home-familiar",
+    "role": "home",
+    "cohort": "single",
+    "wording": "familiar",
+    "transcript": "transcripts/single-p1-v1-home-familiar.json"
+  },
+  {
+    "id": "single-p1-v1-home-paraphrased",
+    "role": "home",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "transcript": "transcripts/single-p1-v1-home-paraphrased.json"
+  },
+  {
+    "id": "single-p2-v0-job-familiar",
+    "role": "job",
+    "cohort": "single",
+    "wording": "familiar",
+    "transcript": "transcripts/single-p2-v0-job-familiar.json"
+  },
+  {
+    "id": "single-p2-v0-job-paraphrased",
+    "role": "job",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "transcript": "transcripts/single-p2-v0-job-paraphrased.json"
+  },
+  {
+    "id": "single-p2-v0-home-familiar",
+    "role": "home",
+    "cohort": "single",
+    "wording": "familiar",
+    "transcript": "transcripts/single-p2-v0-home-familiar.json"
+  },
+  {
+    "id": "single-p2-v0-home-paraphrased",
+    "role": "home",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "transcript": "transcripts/single-p2-v0-home-paraphrased.json"
+  },
+  {
+    "id": "single-p2-v1-job-familiar",
+    "role": "job",
+    "cohort": "single",
+    "wording": "familiar",
+    "transcript": "transcripts/single-p2-v1-job-familiar.json"
+  },
+  {
+    "id": "single-p2-v1-job-paraphrased",
+    "role": "job",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "transcript": "transcripts/single-p2-v1-job-paraphrased.json"
+  },
+  {
+    "id": "single-p2-v1-home-familiar",
+    "role": "home",
+    "cohort": "single",
+    "wording": "familiar",
+    "transcript": "transcripts/single-p2-v1-home-familiar.json"
+  },
+  {
+    "id": "single-p2-v1-home-paraphrased",
+    "role": "home",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "transcript": "transcripts/single-p2-v1-home-paraphrased.json"
+  },
+  {
+    "id": "single-p3-v0-job-familiar",
+    "role": "job",
+    "cohort": "single",
+    "wording": "familiar",
+    "transcript": "transcripts/single-p3-v0-job-familiar.json"
+  },
+  {
+    "id": "single-p3-v0-job-paraphrased",
+    "role": "job",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "transcript": "transcripts/single-p3-v0-job-paraphrased.json"
+  },
+  {
+    "id": "single-p3-v0-home-familiar",
+    "role": "home",
+    "cohort": "single",
+    "wording": "familiar",
+    "transcript": "transcripts/single-p3-v0-home-familiar.json"
+  },
+  {
+    "id": "single-p3-v0-home-paraphrased",
+    "role": "home",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "transcript": "transcripts/single-p3-v0-home-paraphrased.json"
+  },
+  {
+    "id": "single-p3-v1-job-familiar",
+    "role": "job",
+    "cohort": "single",
+    "wording": "familiar",
+    "transcript": "transcripts/single-p3-v1-job-familiar.json"
+  },
+  {
+    "id": "single-p3-v1-job-paraphrased",
+    "role": "job",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "transcript": "transcripts/single-p3-v1-job-paraphrased.json"
+  },
+  {
+    "id": "single-p3-v1-home-familiar",
+    "role": "home",
+    "cohort": "single",
+    "wording": "familiar",
+    "transcript": "transcripts/single-p3-v1-home-familiar.json"
+  },
+  {
+    "id": "single-p3-v1-home-paraphrased",
+    "role": "home",
+    "cohort": "single",
+    "wording": "paraphrased",
+    "transcript": "transcripts/single-p3-v1-home-paraphrased.json"
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "schema": "uor-r4.chat-script/1",
+  "turns": [
+    {
+      "user": "I currently live in violet hillside."
+    },
+    {
+      "user": "Where do I currently live?"
+    }
+  ]
+}

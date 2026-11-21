@@ -88,6 +88,9 @@ pub(super) fn read(
             "question reader and parent are over different vocabularies",
         ));
     }
+    // Resolve the legacy M1 tokenizer pin against the parent while its own
+    // artifact digest is still available.
+    model.tokenizer_sha256 = model.tokenizer_sha256().map(str::to_owned);
     model.question_reader = Some(Carried {
         reader: Arc::new(reader),
         sha256: envelope.reader_sha256,

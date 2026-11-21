@@ -1,0 +1,14 @@
+{
+  "schema": "uor-r4.chat-script/1",
+  "turns": [
+    {
+      "user": "My current job is azure orchard."
+    },
+    {
+      "user": "I currently live in violet hillside."
+    },
+    {
+      "user": "Where do I currently live?"
+    }
+  ]
+}

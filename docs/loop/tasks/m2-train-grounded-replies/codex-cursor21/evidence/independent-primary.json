@@ -1,0 +1,3094 @@
+{
+  "attempted": 112,
+  "reached": 48,
+  "rows": [
+    {
+      "id": "bridge-p0-a0-w0",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 675,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 675,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "later",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p0-a0-w1",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p0-a0-w2",
+      "role": "home",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p0-a1-w0",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 675,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 675,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "later",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p0-a1-w1",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p0-a1-w2",
+      "role": "home",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 12,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 12,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 12,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p1-a0-w0",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 272,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 272,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "later",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p1-a0-w1",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p1-a0-w2",
+      "role": "home",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p1-a1-w0",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 445,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 445,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "later",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p1-a1-w1",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p1-a1-w2",
+      "role": "home",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p2-a0-w0",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 354,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 354,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "later",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p2-a0-w1",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 9,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 9,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 9,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p2-a0-w2",
+      "role": "home",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p2-a1-w0",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 88,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 88,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "later",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p2-a1-w1",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p2-a1-w2",
+      "role": "home",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 9,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 9,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 9,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p3-a0-w0",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 313,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 313,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "later",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p3-a0-w1",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p3-a0-w2",
+      "role": "home",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p3-a1-w0",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 276,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 276,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "later",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p3-a1-w1",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p3-a1-w2",
+      "role": "home",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p4-a0-w0",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 299,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 299,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "later",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p4-a0-w1",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 12,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 12,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 12,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p4-a0-w2",
+      "role": "home",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p4-a1-w0",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 67,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 67,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "later",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p4-a1-w1",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p4-a1-w2",
+      "role": "home",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 12,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 12,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 12,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p5-a0-w0",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 322,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "original": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 13,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 13,
+            "triggered": true,
+            "token": 79,
+            "next_cursor": 13
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "same",
+      "original_vs_current": "earlier",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p5-a0-w1",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p5-a0-w2",
+      "role": "home",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 12,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 12,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 12,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p5-a1-w0",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 322,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "original": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 13,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 13,
+            "triggered": true,
+            "token": 70,
+            "next_cursor": 13
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "same",
+      "original_vs_current": "earlier",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p5-a1-w1",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p5-a1-w2",
+      "role": "home",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 12,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 12,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 12,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p6-a0-w0",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 3309,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 3309,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "later",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p6-a0-w1",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p6-a0-w2",
+      "role": "home",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p6-a1-w0",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 1702,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 1702,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "later",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p6-a1-w1",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 10,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p6-a1-w2",
+      "role": "home",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p7-a0-w0",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 85,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 85,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "later",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p7-a0-w1",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 13,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 13,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 13,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p7-a0-w2",
+      "role": "home",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p7-a1-w0",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 4,
+        "exact": false,
+        "eos": true,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 2011,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "original": {
+        "first": 5,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": [
+          {
+            "applied": true,
+            "discarded": false,
+            "from": 11,
+            "step": 4,
+            "to": 12,
+            "triggered": true,
+            "token": 2011,
+            "next_cursor": 12
+          }
+        ]
+      },
+      "current_movement": "later",
+      "original_movement": "later",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p7-a1-w1",
+      "role": "job",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "original": {
+        "first": 11,
+        "exact": false,
+        "eos": false,
+        "retained": [
+          {
+            "applied": false,
+            "discarded": false,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "discarded": [
+          {
+            "applied": false,
+            "discarded": true,
+            "from": null,
+            "step": null,
+            "to": null,
+            "triggered": false
+          }
+        ],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    },
+    {
+      "id": "bridge-p7-a1-w2",
+      "role": "home",
+      "cohort": "bridge",
+      "baseline": {
+        "first": 13,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current": {
+        "first": 13,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "original": {
+        "first": 13,
+        "exact": false,
+        "eos": false,
+        "retained": [],
+        "discarded": [],
+        "events": []
+      },
+      "current_movement": "same",
+      "original_movement": "same",
+      "original_vs_current": "same",
+      "same_token_different_source": false
+    }
+  ]
+}

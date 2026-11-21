@@ -1558,6 +1558,37 @@ impl Asked {
         let (reply, under_form, _) = self.reply_traced(ladder, prompt, limit);
         (reply, under_form)
     }
+    /// Ordered row addresses selected by the frozen lexical reader.
+    pub fn form_ids(&self, prompt: &[u32]) -> Vec<u32> {
+        self.read_under(prompt, prompt.len())
+    }
+
+    /// Select TRAIN prompts with the same BOS fence and window as the reader.
+    pub fn train_prompt<'a>(&self, tokens: &'a [u32], onset: usize) -> &'a [u32] {
+        window_at(tokens, onset, self.context, self.bos)
+    }
+
+    /// Run the ordinary frozen writer with an externally selected row list.
+    pub fn reply_for_forms(
+        &self,
+        ladder: &Ladder,
+        prompt: &[u32],
+        limit: usize,
+        forms: &[u32],
+    ) -> (Vec<u32>, bool, Vec<String>) {
+        if forms.is_empty() {
+            let reply = ladder.reply(prompt, true, self.context, self.bos, self.eos, limit);
+            return (reply, false, Vec::new());
+        }
+        let (reply, trace, missed) = self.generate(ladder, forms, prompt, limit, false, None);
+        if !missed {
+            return (reply, true, trace);
+        }
+        let (reply, mut trace, _) = self.generate(ladder, forms, prompt, limit, true, None);
+        trace.insert(0, "empty read".into());
+        (reply, true, trace)
+    }
+
     /// As [`Asked::reply`], with what named each token: the form's index, its
     /// own or the shared row and the slot (`ladder` where no held row
     /// answered). A reply that met an empty read is answered again from the
@@ -1569,17 +1600,7 @@ impl Asked {
         limit: usize,
     ) -> (Vec<u32>, bool, Vec<String>) {
         let forms = self.read_under(prompt, prompt.len());
-        if forms.is_empty() {
-            let reply = ladder.reply(prompt, true, self.context, self.bos, self.eos, limit);
-            return (reply, false, Vec::new());
-        }
-        let (reply, trace, missed) = self.generate(ladder, &forms, prompt, limit, false, None);
-        if !missed {
-            return (reply, true, trace);
-        }
-        let (reply, mut trace, _) = self.generate(ladder, &forms, prompt, limit, true, None);
-        trace.insert(0, "empty read".into());
-        (reply, true, trace)
+        self.reply_for_forms(ladder, prompt, limit, &forms)
     }
     /// As [`Asked::reply`], with the raw words of every step
     /// ([`STEP_WORDS`] a reply token) and whether the reply was read again
@@ -1593,6 +1614,18 @@ impl Asked {
         limit: usize,
     ) -> (Vec<u32>, Vec<u32>, bool) {
         let forms = self.read_under(prompt, prompt.len());
+        self.reply_words_for_forms(ladder, prompt, limit, &forms)
+    }
+
+    /// Observe the ordinary writer's exact step words under an explicit frozen
+    /// selection. These include the original source occurrence and cursor.
+    pub fn reply_words_for_forms(
+        &self,
+        ladder: &Ladder,
+        prompt: &[u32],
+        limit: usize,
+        forms: &[u32],
+    ) -> (Vec<u32>, Vec<u32>, bool) {
         let mut words = Vec::new();
         if forms.is_empty() {
             let reply = ladder.reply(prompt, true, self.context, self.bos, self.eos, limit);
@@ -1602,12 +1635,12 @@ impl Asked {
             return (reply, words, false);
         }
         let (reply, _, missed) =
-            self.generate(ladder, &forms, prompt, limit, false, Some(&mut words));
+            self.generate(ladder, forms, prompt, limit, false, Some(&mut words));
         if !missed {
             return (reply, words, false);
         }
         words.clear();
-        let (reply, _, _) = self.generate(ladder, &forms, prompt, limit, true, Some(&mut words));
+        let (reply, _, _) = self.generate(ladder, forms, prompt, limit, true, Some(&mut words));
         (reply, words, true)
     }
     /// The read half of a TRAIN pass over `reply` given after `prompt`, with

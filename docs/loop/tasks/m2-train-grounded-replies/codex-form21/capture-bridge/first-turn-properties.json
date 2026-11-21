@@ -1,0 +1,66 @@
+[
+  {
+    "first_user": "My current job is bronze willow.",
+    "rows": 4,
+    "first_prompts_equal": true,
+    "first_replies_equal": true,
+    "first_eos": true,
+    "second_reached": true
+  },
+  {
+    "first_user": "My current job is cerulean bridge.",
+    "rows": 4,
+    "first_prompts_equal": true,
+    "first_replies_equal": true,
+    "first_eos": true,
+    "second_reached": true
+  },
+  {
+    "first_user": "My current job is cobalt vessel.",
+    "rows": 4,
+    "first_prompts_equal": true,
+    "first_replies_equal": true,
+    "first_eos": true,
+    "second_reached": true
+  },
+  {
+    "first_user": "My current job is crimson forest.",
+    "rows": 4,
+    "first_prompts_equal": true,
+    "first_replies_equal": true,
+    "first_eos": true,
+    "second_reached": true
+  },
+  {
+    "first_user": "My current job is marble prairie.",
+    "rows": 4,
+    "first_prompts_equal": true,
+    "first_replies_equal": true,
+    "first_eos": true,
+    "second_reached": true
+  },
+  {
+    "first_user": "My current job is pearl island.",
+    "rows": 4,
+    "first_prompts_equal": true,
+    "first_replies_equal": true,
+    "first_eos": true,
+    "second_reached": true
+  },
+  {
+    "first_user": "My current job is russet canyon.",
+    "rows": 4,
+    "first_prompts_equal": true,
+    "first_replies_equal": true,
+    "first_eos": true,
+    "second_reached": true
+  },
+  {
+    "first_user": "My current job is saffron tower.",
+    "rows": 4,
+    "first_prompts_equal": true,
+    "first_replies_equal": true,
+    "first_eos": true,
+    "second_reached": true
+  }
+]
