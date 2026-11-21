@@ -1,3 +1,7 @@
+![UOR-R4 preliminary research banner: geometry-driven language modeling. Placeholder not approved.](assets/readme-banner-PLACEHOLDER.png)
+
+*Illustrative placeholder artwork, pending UOR Foundation brand approval.*
+
 # UOR-R4 · A geometric language model
 
 **Can a laptop predict language by rotating points, following a few addresses and reading exact memory?** UOR-R4 is an open research project testing that question. We build the model in Rust, measure each proposed mechanism against a simple baseline, and publish the failures alongside the results.
@@ -19,6 +23,18 @@
 
 Here we can test competing designs, retain a negative and change direction within the [research charter](CHARTER.md). LexLean-R4 takes the same goal toward a product through a separate formal implementation in LexLean and PrismPM. Each repository records the evidence for its own implementation.
 
+## Contents
+
+- [Try the M1 predictor](#try-the-m1-predictor)
+- [Current research direction](#current-research-direction)
+- [Where we are](#where-we-are)
+- [The three products](#the-three-products)
+- [Where we're going](#where-were-going)
+- [How it works](#how-it-works)
+- [Explore](#explore)
+- [Contribute](#contribute)
+- [Acknowledgements](#acknowledgements)
+- [Citation and license](#citation-and-license)
 ## Try the M1 predictor
 
 ### Load and identify the model
