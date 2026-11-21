@@ -408,36 +408,65 @@ pub fn train(
                     "the held rows do not fit the largest row table",
                 ));
             }
+            // The rows are placed twice when the first table is wider than
+            // they need: the offers bound the rows from far above, and a row
+            // slot costs 84 words once its entries and standings are held.
+            // The saved reader does not depend on where a row stands.
+            let mut offer_row = zeros(offer_slots)?;
+            let mut row_slots = row_slots;
+            let (state, keys) = loop {
+                let mut state = zeros(row_slots)?;
+                let mut keys = zeros(row_slots * KEY_WORDS)?;
+                let row_capacity = small(row_slots)?;
+                ctx.synchronize().map_err(cuda)?;
+                let started = std::time::Instant::now();
+                // SAFETY: a thread an offer slot; a row's slot is claimed by
+                // compare-and-swap and each thread writes its own word of
+                // `offer_row`.
+                unsafe {
+                    stream
+                        .launch_builder(&rows_kernel)
+                        .arg(&offer_state)
+                        .arg(&offer_keys)
+                        .arg(&mut state)
+                        .arg(&mut keys)
+                        .arg(&mut offer_row)
+                        .arg(&mut flags_gpu)
+                        .arg(&offer_capacity)
+                        .arg(&row_capacity)
+                        .launch(grid(offer_slots, 256))
+                }
+                .map_err(cuda)?;
+                ctx.synchronize().map_err(cuda)?;
+                micros += started.elapsed().as_micros() as u64;
+                launches += 1;
+                if stream.clone_dtoh(&flags_gpu).map_err(cuda)?[1] != 0 {
+                    return Err(invalid("the held rows do not fit their row table"));
+                }
+                let rows = stream
+                    .clone_dtoh(&state)
+                    .map_err(cuda)?
+                    .iter()
+                    .filter(|&&slot| slot == SLOT_READY)
+                    .count();
+                let tight = (rows * 2).next_power_of_two().max(1 << 12);
+                if tight >= row_slots {
+                    break (state, keys);
+                }
+                row_slots = tight;
+            };
             let mut new = Held {
-                state: zeros(row_slots)?,
-                keys: zeros(row_slots * KEY_WORDS)?,
+                state,
+                keys,
                 rows: zeros(row_slots * ROW_WORDS)?,
                 capacity: row_slots,
             };
-            let mut offer_row = zeros(offer_slots)?;
             let mut best = stream
                 .alloc_zeros::<u64>(row_slots * MAX_SLOTS)
                 .map_err(cuda)?;
             let row_capacity = small(row_slots)?;
             ctx.synchronize().map_err(cuda)?;
             let started = std::time::Instant::now();
-            // SAFETY: a thread an offer slot; a row's slot is claimed by
-            // compare-and-swap and each thread writes its own word of
-            // `offer_row`.
-            unsafe {
-                stream
-                    .launch_builder(&rows_kernel)
-                    .arg(&offer_state)
-                    .arg(&offer_keys)
-                    .arg(&mut new.state)
-                    .arg(&mut new.keys)
-                    .arg(&mut offer_row)
-                    .arg(&mut flags_gpu)
-                    .arg(&offer_capacity)
-                    .arg(&row_capacity)
-                    .launch(grid(offer_slots, 256))
-            }
-            .map_err(cuda)?;
             for round in 0..MAX_SLOTS as u32 {
                 // SAFETY: a row's eight words of `best` grow by atomic
                 // maxima; round `round` reads the word of the round before,
@@ -507,7 +536,7 @@ pub fn train(
             .map_err(cuda)?;
             ctx.synchronize().map_err(cuda)?;
             micros += started.elapsed().as_micros() as u64;
-            launches += 3 + MAX_SLOTS as u64 + 1;
+            launches += 3 + MAX_SLOTS as u64;
             if stream.clone_dtoh(&flags_gpu).map_err(cuda)?[1] != 0 {
                 return Err(invalid("the held rows do not fit their row table"));
             }
