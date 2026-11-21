@@ -2002,6 +2002,42 @@ mod tests {
         assert!(grade_reader_replies(&tok, &bundle, &[]).is_err());
     }
 
+    /// The reader writes its reply opening as the token ids of
+    /// `reader-grammar.json`; the grader removes a string. The two must be
+    /// the same text, or every reply would be graded whole and fail.
+    #[test]
+    fn the_reader_grammar_openings_are_the_strings_the_grader_removes() {
+        let root = repo_root();
+        let tok = load_pinned_byte_bpe_tokenizer(&root).expect("tokenizer");
+        let path = root.join("docs/labs/m2-fresh-heldout-panel/reader-grammar.json");
+        let bytes = std::fs::read(&path).expect("reader-grammar.json");
+        assert_eq!(
+            sha256_hex(&bytes),
+            "90429301dccbf2e1b9c1594fb9869c7b285e61f137beffe6008392e5a4ba32c4"
+        );
+        let grammar: serde_json::Value = serde_json::from_slice(&bytes).expect("json");
+        let ids = |value: &serde_json::Value| -> Vec<u32> {
+            serde_json::from_value(value.clone()).expect("token ids")
+        };
+        let pool = ids(&grammar["pool"]);
+        let period: u32 = serde_json::from_value(grammar["period"].clone()).expect("period");
+        assert_eq!(period, PERIOD_TOKEN_ID);
+        for role in 0..2 {
+            let opening = ids(&grammar["replies"][role]);
+            // Every pool token starts a value: the opening and one of them
+            // must read as the opening string and a word.
+            for &word in &pool {
+                let mut reply = opening.clone();
+                reply.extend([word, period]);
+                let text = String::from_utf8(tok.decode_bytes(&reply)).expect("utf8");
+                let rest = text
+                    .strip_prefix(READER_REPLY_OPENINGS[role])
+                    .unwrap_or_else(|| panic!("role {role}: {text:?}"));
+                assert!(!rest.starts_with(' ') && rest.ends_with('.'), "{text:?}");
+            }
+        }
+    }
+
     fn repo_root() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()

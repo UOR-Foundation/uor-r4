@@ -44,6 +44,18 @@ fn main() -> Result<(), String> {
             serde_json::from_slice(&bytes).map_err(|e| format!("{path}: {e}"))?;
         let replies: Vec<Vec<u32>> = serde_json::from_value(report["replies"].clone())
             .map_err(|e| format!("{path}: replies: {e}"))?;
+        // `--reader SHA256`: the report must come from that reader file.
+        let expected = args
+            .iter()
+            .position(|a| a == "--reader")
+            .and_then(|pos| args.get(pos + 1))
+            .ok_or_else(|| "--grade requires --reader SHA256".to_string())?;
+        if report["reader_sha256"].as_str() != Some(expected.as_str()) {
+            return Err(format!(
+                "{path}: reader_sha256 {} is not the expected {expected}",
+                report["reader_sha256"]
+            ));
+        }
         let tok = load_pinned_byte_bpe_tokenizer(repo_root)?;
         let grade = grade_reader_replies(&tok, &bundle, &replies)?;
         println!(
