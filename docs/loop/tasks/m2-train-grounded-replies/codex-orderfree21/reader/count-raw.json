@@ -1,0 +1,43 @@
+{
+  "artifact": "/mnt/plexpool/uor-r4-corpus/runs/20261120-whole-context-36/client/pruned/fixture.d11",
+  "artifact_sha256": "10092c15b469353eb054311aebe304b2dff5aafee252d8c8e79dcb31e7577124",
+  "context": 192,
+  "decoding": "greedy complete count and fitted native A1 mixture",
+  "generated_ids": [
+    223
+  ],
+  "model_schema": "uor-r4.lut-discrete-count/1",
+  "p1_components": {
+    "count_sha256": "b50e64c74be682f04ef1661b5599c6729ede643b005e062ffa71c0799b640f71",
+    "fit_manifest_sha256": "2f7650141a3f188a52289b31de1cf18df9d0994a1790b001cd1f112248f8676c",
+    "weights_sha256": "b14bc2c661eb1f83649d875894a1d32b2e64b1b4304974ad7bcecce354e74989"
+  },
+  "p1_sha256": "2512b4a9f0a1d4adc07514b6fe4027b18138fd8ac429fbb6aadf1de0a51008e6",
+  "p1_state_sha256": "2512b4a9f0a1d4adc07514b6fe4027b18138fd8ac429fbb6aadf1de0a51008e6",
+  "p1_steps": [
+    {
+      "bucket": 407,
+      "context_tokens": 4,
+      "mass_q48": 27992973392977,
+      "mass_sha256": "6d5eb0c301d5663294b6fd9c4ef6b87812df8b025b89bef2c3977818dea444f8",
+      "pick_successor": 2728,
+      "pick_words": [
+        1,
+        18,
+        1
+      ],
+      "prefix_sha256": "2b89adb8ed22b5bc3bd91e9f33f0c812165972699374e032f619becf54bf6c13",
+      "token": 223,
+      "top_ties": 1
+    }
+  ],
+  "p1_trunk_sha256": "04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d",
+  "prompt_ids": [
+    0,
+    55,
+    2728,
+    28
+  ],
+  "read_enabled": true,
+  "schema": "uor-r4.uor-chat-discrete-parity/1"
+}

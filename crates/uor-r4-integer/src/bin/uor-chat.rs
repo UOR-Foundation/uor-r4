@@ -2265,7 +2265,19 @@ fn run_discrete_parity(cli: &CliArgs) -> Result<()> {
     }
     #[cfg(feature = "p1-count-serving")]
     let profile_start = profile_start.filter(|_| p1.is_some());
+    #[cfg(all(feature = "p1-count-serving", feature = "reader-serving"))]
+    if p1.is_some() && model.question_reader().is_some() && cli.read_mode == ReadMode::Enabled {
+        return Err(IntegerError::Invalid(
+            "both the count state and the question reader are bound to the enabled decoder".into(),
+        ));
+    }
     if let Some(path) = cli.script_path.as_deref() {
+        #[cfg(feature = "p1-count-serving")]
+        if p1.is_some() {
+            return Err(IntegerError::Invalid(
+                "discrete question-reader scripts cannot serve a bound count state".into(),
+            ));
+        }
         #[cfg(feature = "reader-serving")]
         return run_discrete_question_script(cli, &model, path);
         #[cfg(not(feature = "reader-serving"))]
