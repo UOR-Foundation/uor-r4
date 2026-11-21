@@ -717,14 +717,15 @@ fn hamming_snapshot(
     layers: usize,
     width: usize,
 ) -> Result<FbsHammingSnapshot> {
-    // The read sits at its own depth inside the trunk; the only requirement is that the trunk is
-    // deep enough to contain it. Requiring exactly `HAMMING_READOUT_DEPTH` layers was a guard from
-    // when only 6-layer trunks existed, and it blocked exporting a 12-layer run whose read is at
-    // depth 6 — the served session reads the depth from the artifact's hamming image, so it applies
-    // the read where it was trained.
-    if layers <= HAMMING_READOUT_DEPTH {
+    // The readout read must sit on the **final** layer: the artifact's record requires the last
+    // Hamming depth to equal the trunk's layer count (`format.rs`'s carry check), because the
+    // readout read runs on the final norm's output. `HAMMING_DEPTHS` is `[2, 6]`, so a 6-layer trunk
+    // is the shape where that holds. A 12-layer trunk would need its read depths made
+    // trunk-relative (`[layers/3, layers]`) in training, not just a relaxed guard here — relaxing it
+    // only moves the refusal one layer deeper, which is how this was found.
+    if layers != HAMMING_READOUT_DEPTH {
         return Err(invalid(format!(
-            "the Hamming readout read runs at depth {HAMMING_READOUT_DEPTH}, but this trunk has {layers} layers; the trunk must be deeper than the read"
+            "the Hamming readout read runs at depth {HAMMING_READOUT_DEPTH}, which must be the trunk's final layer, but this trunk has {layers} layers; a deeper trunk needs trunk-relative read depths in training"
         )));
     }
     if reads.reads.len() != HAMMING_DEPTHS.len() || width == 0 || !width.is_multiple_of(4) {
