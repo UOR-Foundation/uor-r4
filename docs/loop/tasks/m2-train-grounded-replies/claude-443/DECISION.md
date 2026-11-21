@@ -3,19 +3,22 @@
 - **Lab:** `claude`, 21 Nov 2026 (UTC). Casey asked for this card in chat: "Write the card".
 - **Milestone:** M2, issue #2030. **Native-space items:** [NATIVE-SPACE.md](NATIVE-SPACE.md).
 - **Decision review:** recorded at the end of this card.
-- **Authority:** §5.1: a status or scope change goes ahead on the lab's own whole-project decision review and is logged for Casey, who can reverse it. One part of this card is not the lab's to decide, because it reads §3.5 and §3.6; it is marked "for the owner" below and nothing in `docs/harness/milestones.json` changes until he answers. [claude]
+- **Authority:** §5.1: a status or scope change goes ahead on the lab's own whole-project decision review and is logged for Casey, who can reverse it. One part of this card is not the lab's to decide, because it reads §3.5 and §3.6; it is marked "for the owner" below. This card writes M2's `base_artifact` in `docs/harness/milestones.json`; only `headline.current` and `secondary[0].current` wait for his answer. [claude]
 
 ## What this card does not claim
 
 - **M2 is not closed.** M2's own text asks for "one unified model". The reader and the trunk share an artifact and a vocabulary; the trunk's transported state takes no part in the read. [claude]
-- **Wording transfer is not shown.** TRAIN is 20,000 synthetic cases a seed, drawn by `conjunction-probe m2-format` from the panel family's published wording (four statement openings, twelve questions, two reply openings). The fresh panel uses the same wording with values and histories the reader never saw. So the result shows transfer to new values, which is where the last candidate fell from 437 of 512 to 0 of 128. It does not show a reply to a question phrased another way. [claude]
+- **Wording transfer is not shown.** TRAIN is 20,000 synthetic cases a seed, drawn by `conjunction-probe m2-format` from the panel family's published wording (four statement openings, twelve questions, two reply openings). The fresh panel uses the same wording with other values and histories. So the result shows transfer to new values, which is where the last candidate fell from 437 of 512 to 0 of 128. It does not show a reply to a question phrased another way. [claude]
+- **The development count is in-distribution.** `m2-reply512` is in the same wording family TRAIN was drawn from, so 512 of 512 there is expected and says little by itself; the last candidate had 437 of 512 there and 0 of 128 fresh. The fresh read is the informative one. [claude]
+- **The TRAIN generator is this lab's, and its separation from the fresh panel is by construction, not by a check.** `m2-format` and `reader-grammar.json` were written by this lab (commit 658708b9a) from the panel family's published openings and the development inputs. TRAIN values are drawn from 2,534 whole-word tokens that no development case uses. The panel's fresh literals were not read, so a single pool token may also be a word of a fresh literal, and a whole fresh literal of two or more tokens appearing as a TRAIN value was estimated at about 5 in 10,000 a literal a seed, not measured (the sheet, lines 32–33). [claude]
+- **TRAIN ran outside any D84-named CPU program.** §3.5 allows CPU training as development research in an owner-authorized, named, separately scanned module. `conjunction-probe` is not one. [claude]
 - **Not trained on the corpus.** The reader was not trained on D87. Nothing here is evidence about the 1B-equivalent model. [claude]
 - **CPU only.** TRAIN is a host count pass and every read was scored on a CPU (the laptop, aarch64 macOS; the replay also on wick's host, x86_64 Linux). No GPU ran. [claude]
 - **Overwrites are not shown.** The fresh panel's inputs carry a history's two current records only. [claude]
 - **The grade has a mapping this lab added.** The panel's labels accept the bare value; the reader replies in the asked role's opening, which the development labels accept. `--grade` removes that opening before the registered grader runs unchanged. [claude]
 - **Same-lab review only.** The sheet's four fitness reads and this card's review are fresh-context readers of this lab. No other lab has read either. [claude]
 - **One implementation.** Host, `wasm32-wasip1` and the D11 path compile one Rust source. No CI job builds the integer crate's `reader-serving` feature. [claude]
-- **No reader-specific no-memory control.** The reader is memory and nothing else, so with its rows removed it replies nothing. The controls are the panel instrument's: question-blind copy and role-swap, each 0 of 128 pairs. [claude]
+- **No reader ablation.** The reader is memory and nothing else, so with its rows removed it replies nothing. The controls are the panel instrument's four heuristic replies, scored check-only and not runs of the reader: `copy_first_stated`, `copy_last_stated`, `role_swap_distractor` and `best_constant_reply`, each 0 of 128 pairs. [claude]
 
 ## The decision (the lab's)
 
@@ -28,7 +31,7 @@ The lab selects, as M2's saved model, **reader A carried in a D11 artifact**: [c
 | Parent inside it, unchanged | the seed-1 M1 artifact `seed1.d11`, sha256 `04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d`, 86,536,132 bytes |
 | Replicate | reader B, TRAIN seed 2, sha256 `078dcfdc…810c2b`, in artifact `cf9bf6ee…adce1d` |
 
-It replaces "unselected" in M2's `base_artifact`. The artifact is built by `question-reader-d11 pack` from files whose hashes are above; it is not committed (§3.13) and is on the laptop at `local/claude/d11-reader/`. [claude]
+This card writes it into M2's `base_artifact`, with the note that the trunk takes no part in the read. The artifact is built by `question-reader-d11 pack` from files whose hashes are above; it is not committed (§3.13) and is on the laptop at `local/claude/d11-reader/`. [claude]
 
 ## The counts this model has
 
@@ -37,23 +40,23 @@ It replaces "unselected" in M2's `base_artifact`. The artifact is built by `ques
 | `m2-reply512`, replies token-for-token the reference (development) | 256 of 512 | 512 of 512 | 512 of 512 | sheet `docs/harness/prep/m2-fresh256-reader-read-2026-11-21.md`; report `local/claude/m2-fresh-sheet/dev-s1.json` (`count.exact` 512, `count.ended` 512) |
 | `m2-fresh256`, pairs both complete and distinct | 52 of 128 | 128 of 128 | 128 of 128 | notebook row of 21 Nov, `docs/research/notebook/m2-grounded-reply.md`; one pre-registered read, the panel is spent for this line |
 | `m2-fresh256`, rows complete | 104 of 256 | 256 of 256 | 256 of 256 | same row |
-| Panel controls on `m2-fresh256` (question-blind copy, role swap) | below the bar | 0 of 128 pairs each | | `docs/labs/m2-fresh-heldout-panel/README.md` |
+| Panel instrument controls on `m2-fresh256` (four heuristic replies, not reader runs) | below the bar | 0 of 128 pairs each | | `docs/labs/m2-fresh-heldout-panel/README.md` |
 | Trained reader against the reader read from its file, raw step words | equal | 0 prompts differ | 0 prompts differ | [NATIVE-SPACE.md](NATIVE-SPACE.md) §3 |
 | The same words and reply ids from the D11 artifact | equal | equal (`440d7cd0…`, `4554ffd9…`) | equal (`4c0a0ed4…`, `4554ffd9…`) | [NATIVE-SPACE.md](NATIVE-SPACE.md) §3 |
+| `m2-reply512` answered from the D11 artifact, replies token-for-token the reference | 256 of 512 | 512 of 512 | 512 of 512 | `question-reader-d11 words … 48`: `replies_equal_to_reference` 512, 6,664 reply ids; `local/claude/d11-reader/words48-s{1,2}.json` |
 
-All of it was measured on CPU. The development count was read from the reader file; the D11 row shows the artifact gives the same reply ids on that panel, so the artifact's development count is the same 512. The fresh count was read from the reader file before the artifact existed, and the panel is not read again. [claude]
+All of it was measured on CPU. The development count is measured twice: from the reader file (reply limit 48) and from the D11 artifact itself (limit 48, last row; the hash rows used limit 64, and every reply ends before either limit, 6,664 ids in each run). The fresh count was read from the reader file before the artifact existed, and the panel is not read again. It carries to the artifact only because the artifact holds that file byte for byte under a SHA-256 binding and answers through the same source; that is an argument, not a second measurement. [claude]
 
 ## For the owner: does a CPU count stand as M2's headline
 
 §3.5: a CPU program "may not substitute CPU output for a GPU qualification bar unless a later owner decision says so". §3.6: "panel scoring and milestone evaluation remain GPU research compute". The reader's TRAIN is a count pass of seconds on a CPU, and its replies are integer row reads on a CPU; there is no GPU kernel for either. Casey's 16 Nov goal names a model "that can be trained and served on this laptop". The lab does not read that as the later owner decision §3.5 asks for. [claude]
 
-So the headline change is a proposal, and it is the one line of this card that waits: [claude]
+The same sections bear on TRAIN: it ran on a CPU outside any D84-named program. So the question to the owner is one: do this reader's CPU-trained, CPU-scored counts stand as M2's headline. The headline change is a proposal, and it is the one part of this card that waits: [claude]
 
 | Field in `docs/harness/milestones.json`, M2 | Now | Proposed |
 |---|---|---|
 | `headline.current` | 0 | 512 |
-| `secondary[0].current` (fresh, percent) | 0 | 100 |
-| `base_artifact` | unselected | the artifact above |
+| `secondary[0].current` (fresh, percent) | 0 | 100, with the note kept and extended: "new values, same wording as TRAIN; read from the reader file the artifact carries byte for byte; fresh acceptance in other wording remains unqualified" |
 | `status` | in-progress | in-progress (unchanged) |
 
 If the answer is no, the counts stay in the notebook as development research and the unit that moves the headline is a GPU reader held to the replay's word streams. Neither answer stops the work below. [claude]
@@ -74,4 +77,15 @@ If the answer is no, the counts stay in the notebook as development research and
 
 ## Decision review
 
-Pending at this commit; the verdict and its findings are written here before the card is used. [claude]
+A fresh-context reader of this lab, read-only, given this card at commit 931323ff5ff7877ca6048f4c373f83b0c933f626 and the files it cites, and none of the reasoning behind it. Verdict: **SURVIVES-WITH-FIXES**. It found the §3.5 and §3.6 deferral correctly placed, and the selection sound as a selection ("unified" is a closing condition). Its eight findings, each fixed in this text: [claude]
+
+1. The card said both that nothing in `milestones.json` changes and that `base_artifact` is replaced. Fixed: the card writes `base_artifact` with the trunk note; only the two counts wait.
+2. "The same 512" for the artifact was inferred across runs at different reply limits. Fixed by measuring it: the artifact answers `m2-reply512` 512 of 512 at limit 48.
+3. Proposing 100 for a field labelled "genuinely fresh" overstated it. Fixed: the proposed value keeps and extends the field's note.
+4. The card did not say whether TRAIN ran under a D84-named program. It did not; that is now a stated limit and part of the question to the owner.
+5. The TRAIN generator's authorship and its separation from the fresh panel were not stated. Now stated, with what was estimated and not measured.
+6. The development count is in-distribution. Now said.
+7. Two of the panel's four controls were listed, without saying they are not reader runs. Fixed.
+8. The notebook row of 21 Nov says there is no D11 export. A dated follow-up row is added; the old row is not edited.
+
+Not checked by the reviewer: the `m2-format` generator against the panel generator (the panel's literals are sealed from this line), reader B's local reports, and the sheet's full text. [claude]

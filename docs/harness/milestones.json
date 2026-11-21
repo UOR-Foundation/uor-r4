@@ -131,7 +131,7 @@
       ],
       "panel": "m2-reply512",
       "fresh_panel": "m2-fresh256",
-      "base_artifact": "unselected; M1's language-base artifact does not automatically select M2",
+      "base_artifact": "Selected by the claude-443 decision card (docs/loop/tasks/m2-train-grounded-replies/claude-443/DECISION.md), 21 Nov 2026: D11 artifact uor-r4.lut-discrete-question-reader/1, sha256 604fcd03da9aa400a28756037e11fc5dce7bc95400ccac5c68a733c8d1a7e4dd, holding the saved question reader 44574adb84fd0c4cd30e8c182cf0f835b5d0348618b6b248b23c2c5742972c3c in front of the unchanged seed-1 M1 artifact 04652a3de8e966a23539b04fbd77c7d9872d9f13a541fcb224d48e766e2c147d. The trunk takes no part in the read, so this is not yet one unified model. The headline counts are not changed: the reader was trained and scored on CPU, and whether those counts stand is put to the owner under CHARTER 3.5.",
       "mechanisms": [
         "legal-construction",
         "carrier-credit",

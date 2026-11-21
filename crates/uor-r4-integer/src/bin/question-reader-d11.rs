@@ -5,7 +5,8 @@
 //! `question-reader-d11 words D11 PANEL_JSON LIMIT` loads the carrier with
 //! the integer client, answers every prompt through
 //! `IntegerDiscreteModel::question_reply`, and prints the SHA-256 of the
-//! reply ids and of the raw step words. Both are the streams
+//! reply ids and of the raw step words, and counts the replies that are
+//! token for token the panel row's reference. The two hashes are the streams
 //! `conjunction-probe reader-replay` and `reader-words` hash, so a reply
 //! served from the artifact can be held equal to the trained reader's.
 use sha2::{Digest, Sha256};
@@ -53,11 +54,13 @@ fn words(artifact_path: &str, panel_path: &str, limit: &str) -> Result<String, S
     let panel: Vec<PanelRow> = serde_json::from_slice(&panel_bytes).map_err(|e| e.to_string())?;
     let mut replies = Sha256::new();
     let mut reply_ids = 0u64;
+    let mut exact = 0u64;
     for row in &panel {
         let reply = model
             .question_reply(&row.prompt, limit)
             .map_err(|e| e.to_string())?;
         reply_ids += reply.len() as u64;
+        exact += u64::from(reply == row.reference);
         replies.update((reply.len() as u64).to_le_bytes());
         for id in reply {
             replies.update(id.to_le_bytes());
@@ -80,6 +83,7 @@ fn words(artifact_path: &str, panel_path: &str, limit: &str) -> Result<String, S
         "panel_sha256": sha(&panel_bytes),
         "prompts": found.prompts,
         "reply_ids": reply_ids,
+        "replies_equal_to_reference": exact,
         "steps": found.steps,
         "served_words_sha256": found.served_words_sha256,
         "forced_differs": found.prompts_forced_differs_from_served,
