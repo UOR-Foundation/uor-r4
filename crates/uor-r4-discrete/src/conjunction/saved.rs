@@ -737,13 +737,19 @@ impl Reader {
             });
         }
         if let Some(trunk) = trunk {
-            let trunk = trunk.checked()?;
             let named: [u8; 32] = input.take()?;
-            if trunk.roots.len() != vocabulary as usize || trunk.sha256() != named {
-                return Err(invalid(
-                    "the reader file was written beside another trunk key",
-                ));
+            // The digest names the tables and what of them keys a form, so
+            // the file says which key it was written under.
+            let mut found = None;
+            for by in super::trunk_key::Keyed::ALL {
+                let keyed = trunk.clone().keyed(by)?;
+                if keyed.sha256() == named {
+                    found = Some(keyed);
+                }
             }
+            let trunk = found
+                .filter(|trunk| trunk.roots.len() == vocabulary as usize)
+                .ok_or_else(|| invalid("the reader file was written beside another trunk key"))?;
             asked = asked.with_trunk(Some(trunk))?;
         }
 
@@ -972,6 +978,41 @@ mod tests {
             .seen
             .keys()
             .any(|form| !reader.asked.seen.contains_key(form)));
+        Ok(())
+    }
+
+    /// Keyed a kept token at a time (by the frame path or by the trunk
+    /// address) the reader replies alike, and its file says which key it was
+    /// written under: the bare tables read it back.
+    #[test]
+    fn a_reader_keyed_by_the_frame_path_or_the_address_names_its_key() -> Result<()> {
+        use crate::conjunction::trunk_key::Keyed;
+        let tables = crate::conjunction::trunk_key::tests::toy(64);
+        let (plain, prompts) = train()?;
+        let (frame, _) = train_beside(Some(tables.clone()))?;
+        let mut files = vec![frame.to_bytes(1).0];
+        for by in [Keyed::Path, Keyed::Address] {
+            let (reader, _) = train_beside(Some(tables.clone().keyed(by)?))?;
+            assert_eq!(reader.asked.forms(), plain.asked.forms());
+            assert!(reader
+                .asked
+                .seen
+                .keys()
+                .all(|form| form.gap_len & 0x20 != 0));
+            let (bytes, _) = reader.to_bytes(1);
+            let loaded = Reader::from_bytes_beside(&bytes, Some(tables.clone()))?;
+            assert_eq!(loaded.asked.trunk().map(|trunk| trunk.by), Some(by));
+            for prompt in &prompts {
+                assert_eq!(reader.reply(prompt, 8), plain.reply(prompt, 8));
+                assert_eq!(loaded.reply(prompt, 8), reader.reply(prompt, 8));
+            }
+            assert_eq!(loaded.to_bytes(1).0, bytes);
+            assert!(Reader::from_bytes(&bytes).is_err());
+            files.push(bytes);
+        }
+        // Three keys, three files.
+        assert_ne!(files[0], files[1]);
+        assert_ne!(files[1], files[2]);
         Ok(())
     }
 

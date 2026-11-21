@@ -494,18 +494,20 @@ impl Form {
     ) -> Self {
         let mut words = [1u128; 3];
         let kept = turn[..gap_at].iter().chain(&turn[gap_at + gap_len..]);
-        if let Some(trunk) = trunk {
+        let coded = trunk.filter(|trunk| !trunk.codes.is_empty());
+        if let (Some(trunk), None) = (trunk, coded) {
             let count = turn.len() - gap_len;
             return Self::framed(trunk, kept.copied(), count, gap_at as u8, gap_len as u8);
         }
         for (place, &token) in kept.enumerate() {
+            let code = coded.and_then(|trunk| trunk.code(token)).unwrap_or(token);
             let word = &mut words[place / 10];
-            *word = (*word << 12) | u128::from(token);
+            *word = (*word << 12) | u128::from(code);
         }
         Self {
             words,
             gap_at: gap_at as u8,
-            gap_len: gap_len as u8,
+            gap_len: gap_len as u8 | if coded.is_some() { TRUNK_FORM } else { 0 },
         }
     }
     /// Every form of `turn`: the whole turn, then shorter gaps before longer.
@@ -523,18 +525,20 @@ impl Form {
     fn open(turn: &[u32], head: usize, tail: usize, trunk: Option<&trunk_key::TrunkKey>) -> Self {
         let mut words = [1u128; 3];
         let kept = turn[..head].iter().chain(&turn[turn.len() - tail..]);
-        if let Some(trunk) = trunk {
+        let coded = trunk.filter(|trunk| !trunk.codes.is_empty());
+        if let (Some(trunk), None) = (trunk, coded) {
             let gap_len = OPEN_FORM | tail as u8;
             return Self::framed(trunk, kept.copied(), head + tail, head as u8, gap_len);
         }
         for (place, &token) in kept.enumerate() {
+            let code = coded.and_then(|trunk| trunk.code(token)).unwrap_or(token);
             let word = &mut words[place / 10];
-            *word = (*word << 12) | u128::from(token);
+            *word = (*word << 12) | u128::from(code);
         }
         Self {
             words,
             gap_at: head as u8,
-            gap_len: OPEN_FORM | tail as u8,
+            gap_len: OPEN_FORM | tail as u8 | if coded.is_some() { TRUNK_FORM } else { 0 },
         }
     }
     /// Every open form of a long `turn`, those that keep most first (the
@@ -1126,7 +1130,10 @@ impl Asked {
         if trunk.is_some() && !self.codes.is_empty() {
             return Err(invalid("class codes are not read beside a trunk key"));
         }
-        self.trunk = trunk.map(std::sync::Arc::new);
+        self.trunk = trunk
+            .map(trunk_key::TrunkKey::checked)
+            .transpose()?
+            .map(std::sync::Arc::new);
         Ok(self)
     }
     pub fn trunk(&self) -> Option<&trunk_key::TrunkKey> {

@@ -113,6 +113,8 @@ impl IntegerDiscreteModel {
             roots: self.codebook_roots.clone(),
             steps: trunk.step_candidates.to_vec(),
             compose: COMPOSE.to_vec(),
+            by: Default::default(),
+            codes: Vec::new(),
         }
         .checked()
         .map_err(|error| invalid(format!("trunk key: {error}")))
@@ -198,6 +200,8 @@ mod tests {
             roots: (0..64usize).map(|token| [(token % 16) as u8; 4]).collect(),
             steps: (0..64u8).collect(),
             compose: COMPOSE.to_vec(),
+            by: Default::default(),
+            codes: Vec::new(),
         }
         .checked()
         .unwrap();

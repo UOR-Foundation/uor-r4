@@ -467,7 +467,17 @@ fn reader(args: &[String]) -> Result<(), String> {
         // `question-reader-d11 trunk-key`.
         let trunk = match args.get(16).filter(|path| !replay && path.as_str() != "-") {
             None => None,
-            Some(path) => Some(trunk_key(path)?),
+            // `path:` or `address:` before the file keys a form a kept
+            // token at a time; the bare file keys it by the last frame.
+            Some(path) => {
+                use conjunction::trunk_key::Keyed;
+                let (by, path) = match path.split_once(':') {
+                    Some(("path", rest)) => (Keyed::Path, rest),
+                    Some(("address", rest)) => (Keyed::Address, rest),
+                    _ => (Keyed::Frame, path.as_str()),
+                };
+                Some(trunk_key(path)?.keyed(by).map_err(|e| e.to_string())?)
+            }
         };
         let trunk_sha256 = trunk.as_ref().map(|key| {
             key.sha256()

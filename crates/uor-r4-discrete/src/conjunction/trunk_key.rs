@@ -24,7 +24,25 @@ pub const FRAMES: usize = 64;
 /// The frame that leaves a block as it is.
 pub const IDENTITY: u8 = 0;
 
-/// The trunk tables a form's frame is composed from.
+/// What of the trunk state a form is keyed by.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Keyed {
+    /// The frame held after the last kept token.
+    #[default]
+    Frame,
+    /// The frame held after every kept token. The steps between them say
+    /// the same, so each kept token gives the code of its four step frames.
+    Path,
+    /// The trunk address of every kept token: its root in each block.
+    Address,
+}
+
+impl Keyed {
+    pub const ALL: [Self; 3] = [Self::Frame, Self::Path, Self::Address];
+}
+
+/// The trunk tables a form's key is read from.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TrunkKey {
     /// A token's root in each block: the trunk's address of the token.
@@ -33,12 +51,48 @@ pub struct TrunkKey {
     pub steps: Vec<u8>,
     /// `compose[a * 64 + b]`: the frame `a` after `b`.
     pub compose: Vec<u8>,
+    /// What a form is keyed by.
+    #[serde(default)]
+    pub by: Keyed,
+    /// A token's code under [`Keyed::Path`] or [`Keyed::Address`], filled by
+    /// [`TrunkKey::checked`]: the place of its step frames, or of its roots,
+    /// among the distinct ones in order.
+    #[serde(skip)]
+    pub codes: Vec<u16>,
+}
+
+/// Each row's place among the distinct rows in order; twelve bits hold it.
+fn ranked(rows: Vec<[u8; BLOCKS]>) -> Result<Vec<u16>> {
+    let distinct: std::collections::BTreeSet<[u8; BLOCKS]> = rows.iter().copied().collect();
+    if distinct.len() > 1 << 12 {
+        return Err(invalid("a trunk key code is past twelve bits"));
+    }
+    let place: std::collections::BTreeMap<[u8; BLOCKS], u16> = distinct
+        .into_iter()
+        .enumerate()
+        .map(|(at, row)| (row, at as u16))
+        .collect();
+    Ok(rows.iter().map(|row| place[row]).collect())
 }
 
 impl TrunkKey {
+    /// The same tables keyed by `by`.
+    pub fn keyed(mut self, by: Keyed) -> Result<Self> {
+        self.by = by;
+        self.checked()
+    }
+
+    /// A kept token's code where forms are keyed a token at a time, twelve
+    /// bits; none under [`Keyed::Frame`]. A token past the table has the
+    /// code of token zero.
+    pub fn code(&self, token: u32) -> Option<u32> {
+        let first = *self.codes.first()?;
+        Some(u32::from(*self.codes.get(token as usize).unwrap_or(&first)))
+    }
+
     /// Refuses tables of another size, a value past its range, or a
     /// composition under which [`IDENTITY`] is not the identity.
-    pub fn checked(self) -> Result<Self> {
+    pub fn checked(mut self) -> Result<Self> {
         if self.roots.is_empty() {
             return Err(invalid("a trunk key needs a root row for every token"));
         }
@@ -73,6 +127,18 @@ impl TrunkKey {
                 "frame zero is not the identity of the composition table",
             ));
         }
+        self.codes = match self.by {
+            Keyed::Frame => Vec::new(),
+            Keyed::Path => {
+                let stepped = self.roots.iter().map(|roots| {
+                    std::array::from_fn(|block| {
+                        self.steps[block * ROOTS + usize::from(roots[block])]
+                    })
+                });
+                ranked(stepped.collect())?
+            }
+            Keyed::Address => ranked(self.roots.clone())?,
+        };
         Ok(self)
     }
 
@@ -101,6 +167,12 @@ impl TrunkKey {
         }
         hash.update(&self.steps);
         hash.update(&self.compose);
+        // The frame key keeps the digest it had before the other keys.
+        match self.by {
+            Keyed::Frame => {}
+            Keyed::Path => hash.update([1u8]),
+            Keyed::Address => hash.update([2u8]),
+        }
         hash.finalize().into()
     }
 }
@@ -139,9 +211,41 @@ pub(crate) mod tests {
             roots,
             steps,
             compose,
+            by: Keyed::Frame,
+            codes: Vec::new(),
         }
         .checked()
         .expect("the toy trunk key is well formed")
+    }
+
+    #[test]
+    fn a_path_code_is_the_step_frames_and_an_address_code_the_roots() -> Result<()> {
+        // Two roots of a block that step alike: the path cannot tell the
+        // tokens apart, the address can.
+        let mut key = toy(40);
+        for block in 0..BLOCKS {
+            key.steps[block * ROOTS + (5 + block) % ROOTS] =
+                key.steps[block * ROOTS + (4 + block) % ROOTS];
+        }
+        let frame = key.clone().checked()?;
+        assert_eq!(frame.code(4), None);
+        let path = key.clone().keyed(Keyed::Path)?;
+        assert_eq!(path.code(4), path.code(5));
+        assert_ne!(path.code(4), path.code(6));
+        // Tokens sixteen apart share every root in the toy.
+        let address = key.keyed(Keyed::Address)?;
+        assert_ne!(address.code(4), address.code(5));
+        assert_eq!(address.code(4), address.code(20));
+        // Tokens that step alike hold the same frame after them.
+        assert_eq!(
+            frame.frame([4u32].into_iter()),
+            frame.frame([5u32].into_iter())
+        );
+        // Each key has its own digest; the frame key keeps the old one.
+        assert_ne!(path.sha256(), frame.sha256());
+        assert_ne!(address.sha256(), path.sha256());
+        assert_eq!(path.code(4000), path.code(0));
+        Ok(())
     }
 
     #[test]
